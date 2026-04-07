@@ -9,7 +9,7 @@ flowchart LR
         S1["🔌 API URL<br/><i>http://localhost:8000</i>"]
         S2["🔀 LLM Provider<br/>Ollama ↔ Gemini · live switch<br/><i>Active: qwen3:8b</i>"]
         S3["💚 Status<br/>🟢 healthy · ChromaDB ✅ · LLM ✅<br/><i>cached 30s</i>"]
-        S4["🎚️ Top-K Slider<br/><i>1 – 20 · default 10</i>"]
+        S4["⚙️ Erweitert: Retrieval-Tuning<br/><i>Kandidaten 15 · Final 8</i>"]
         S5["🎯 Quellen-Filter<br/>☑ 🗺️ Lore<br/>☑ 📖 Abenteuer<br/>☑ 📋 Regelwerk"]
         S6["📊 Index Stats<br/><i>1,247 Chunks</i>"]
         S7["🔄 Re-Index<br/>🗑️ Neue Session"]
@@ -53,9 +53,22 @@ Result of the `/health` endpoint, **cached for 30 seconds** (no poll on every re
 - 🟡 degraded: One component unreachable
 - 🔴 API unreachable: Backend down
 
-### Top-K Slider
-Controls how many chunks are passed as context to the LLM (after reranking).
-Default: 10. This value is sent as `top_k` in the query request and overrides the server default.
+### Retrieval-Tuning (Advanced Expander)
+Two sliders inside `st.expander("⚙️ Erweitert: Retrieval-Tuning")`, hidden by
+default to keep the sidebar uncluttered for non-tuning users:
+
+| Slider | Range | Default | Sent as | Meaning |
+|---|---|---|---|---|
+| **Kandidaten (Top-K)** | 1 – 50 | 15 | `top_k` | How many chunks the bi-encoder retrieves from ChromaDB (recall pool) |
+| **Finale Chunks (nach Reranking)** | 1 – `top_k` | min(8, top_k) | `top_k_rerank` | How many chunks the cross-encoder selects for the LLM prompt |
+
+Both defaults match `config/settings.yaml` (`retrieval.top_k: 15`,
+`retrieval.reranking.top_k_rerank: 8`), so untouched sliders mean "as
+configured". The second slider's `max_value` is bound to the first, which
+prevents the nonsensical case `top_k_rerank > top_k`.
+
+The values override the server defaults per request only — they do **not**
+mutate `settings.yaml`.
 
 ### Source Filter (Lore / Adventure / Rules)
 Three checkbox groups that restrict the vector search by `content_category`.

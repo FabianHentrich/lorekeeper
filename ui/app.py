@@ -111,7 +111,19 @@ with st.sidebar:
     st.divider()
 
     # Retrieval settings
-    top_k = st.slider("Top-K Chunks", min_value=1, max_value=20, value=10)
+    with st.expander("⚙️ Erweitert: Retrieval-Tuning"):
+        top_k = st.slider(
+            "Kandidaten (Top-K)",
+            min_value=1, max_value=50, value=15,
+            help="Wie viele Chunks der Vectorstore liefert (Bi-Encoder Recall). "
+                 "Mehr = höhere Wahrscheinlichkeit, dass die richtige Stelle dabei ist.",
+        )
+        top_k_rerank = st.slider(
+            "Finale Chunks für den LLM (nach Reranking)",
+            min_value=1, max_value=top_k, value=min(8, top_k),
+            help="Wie viele Chunks der Cross-Encoder am Ende auswählt und in den Prompt packt. "
+                 "Mehr = mehr Kontext, aber höhere Latenz und Token-Kosten.",
+        )
 
     # Source type filter
     st.subheader("Quellen")
@@ -203,6 +215,7 @@ if prompt := st.chat_input("Stelle eine Frage über deine Welt..."):
         "question": prompt,
         "session_id": st.session_state.session_id,
         "top_k": top_k,
+        "top_k_rerank": top_k_rerank,
     }
     if _category_filter is not None:
         request_body["metadata_filters"] = {"content_category": _category_filter}

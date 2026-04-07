@@ -110,11 +110,12 @@ class FakeRetriever:
         ]
         self.last_call: dict = {}
 
-    async def retrieve(self, query: str, top_k=None, metadata_filters=None):
+    async def retrieve(self, query: str, top_k=None, metadata_filters=None, top_k_rerank=None):
         self.last_call = {
             "query": query,
             "top_k": top_k,
             "metadata_filters": metadata_filters,
+            "top_k_rerank": top_k_rerank,
         }
         return self._chunks
 

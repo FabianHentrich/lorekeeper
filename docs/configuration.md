@@ -99,11 +99,11 @@ CHROMA_MODE=client
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `top_k` | `int` | `8` | Number of candidates from ChromaDB (before reranking) |
-| `score_threshold` | `float` | `0.0` | Minimum cosine similarity (0.0 = no filter, reranker takes over) |
+| `top_k` | `int` | `15` | Number of candidates from ChromaDB (before reranking) |
+| `score_threshold` | `float` | `0.5` | Minimum cosine similarity. 0.5 ≈ "similar"; 0.3 returns near-orthogonal noise |
 | `reranking.enabled` | `bool` | `true` | Enable cross-encoder reranking |
 | `reranking.model` | `str` | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` | Reranker model (multilingual) |
-| `reranking.top_k_rerank` | `int` | `5` | Final chunk count after reranking → LLM context |
+| `reranking.top_k_rerank` | `int` | `8` | Final chunk count after reranking → LLM context |
 
 **Rules of thumb:**
 - `top_k` should be at least twice `top_k_rerank`

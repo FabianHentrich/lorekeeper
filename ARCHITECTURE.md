@@ -452,16 +452,19 @@ Environment-Variable gesetzt — kein manuelles Editieren der `settings.yaml` n�
 ```yaml
 # settings.yaml
 retrieval:
-  top_k: 5                         # Anzahl zurückgegebener Chunks
-  score_threshold: 0.5              # Minimum Similarity Score (0–1). Cosine 0.5 ≈ "ähnlich",
+  top_k: 15                         # Bi-Encoder-Kandidaten aus ChromaDB (Recall-Pool)
+  score_threshold: 0.5              # Minimum Cosine-Score. 0.5 ≈ "ähnlich",
                                     # 0.3 wäre fast orthogonal. Für DE-Worldbuilding-Docs
                                     # ist 0.5–0.6 ein realistischer Default.
-  metadata_filters: []              # Optional: z.B. ["content_category:character"]
   reranking:
-    enabled: false                  # v2: Cross-Encoder Reranking
-    model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
-    top_k_rerank: 3
+    enabled: true                   # Cross-Encoder Reranking (Stage 2)
+    model: "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"   # multilingual
+    top_k_rerank: 8                 # Finale Chunks für den LLM
 ```
+
+Beide Werte sind pro Request über die `QueryRequest`-Felder `top_k` /
+`top_k_rerank` überschreibbar — die Streamlit-UI exponiert sie als zwei
+gekoppelte Slider im „⚙️ Erweitert: Retrieval-Tuning"-Expander.
 
 **Ablauf:**
 
@@ -879,12 +882,12 @@ vectorstore:
 
 # Retrieval
 retrieval:
-  top_k: 5
+  top_k: 15
   score_threshold: 0.5        # Cosine-Threshold. 0.5 ≈ "ähnlich", 0.3 wäre fast orthogonal.
   reranking:
-    enabled: false
-    model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
-    top_k_rerank: 3
+    enabled: true
+    model: "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+    top_k_rerank: 8
 
 # LLM
 llm:

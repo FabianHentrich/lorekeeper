@@ -67,6 +67,7 @@ async def query(request: QueryRequest):
         query=question,
         top_k=request.top_k,
         metadata_filters=request.metadata_filters,
+        top_k_rerank=request.top_k_rerank,
     )
 
     # Generate answer
@@ -132,6 +133,7 @@ async def query_stream(request: QueryRequest):
         query=question,
         top_k=request.top_k,
         metadata_filters=request.metadata_filters,
+        top_k_rerank=request.top_k_rerank,
     )
 
     sources = [

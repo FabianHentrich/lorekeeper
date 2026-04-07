@@ -6,6 +6,7 @@ class QueryRequest(BaseModel):
     session_id: str | None = None
     metadata_filters: dict | None = None
     top_k: int | None = None
+    top_k_rerank: int | None = None
 
 
 class SourceReference(BaseModel):

@@ -45,6 +45,7 @@ class Retriever:
         query: str,
         top_k: int | None = None,
         metadata_filters: dict | None = None,
+        top_k_rerank: int | None = None,
     ) -> list[RetrievedChunk]:
         top_k = top_k or self.config.top_k
         query_embedding = await self.embedding_service.embed_text(query)
@@ -98,19 +99,24 @@ class Retriever:
         )
 
         if self.config.reranking.enabled and chunks:
-            chunks = await self._rerank(query, chunks)
+            chunks = await self._rerank(query, chunks, top_k_rerank=top_k_rerank)
 
         logger.info(f"Retrieved {len(chunks)} chunks (query: {query[:60]}...)")
         return chunks
 
-    async def _rerank(self, query: str, chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+    async def _rerank(
+        self,
+        query: str,
+        chunks: list[RetrievedChunk],
+        top_k_rerank: int | None = None,
+    ) -> list[RetrievedChunk]:
         reranker = self._get_reranker()
         pairs = [[query, c.content] for c in chunks]
 
         scores = await run_in_threadpool(reranker.predict, pairs)
 
         ranked = sorted(zip(scores, chunks), key=lambda x: x[0], reverse=True)
-        top_k = self.config.reranking.top_k_rerank
+        top_k = top_k_rerank or self.config.reranking.top_k_rerank
         reranked = [chunk for _, chunk in ranked[:top_k]]
 
         if logger.isEnabledFor(logging.DEBUG):
