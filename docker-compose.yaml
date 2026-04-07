@@ -1,0 +1,80 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+      - hf_cache:/home/app/.cache/huggingface  # persist sentence-transformers models across rebuilds
+    environment:
+      - CHROMA_MODE=client
+      - LLM__PROVIDER=ollama
+      - LLM__OLLAMA__BASE_URL=http://ollama:11434
+    depends_on:
+      chromadb:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    restart: unless-stopped
+
+  chromadb:
+    image: chromadb/chroma:0.6.3
+    ports:
+      - "8100:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:0.5.7
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    # ─── GPU support ────────────────────────────────────────────────────
+    # The block below enables GPU passthrough. This project was developed
+    # on an AMD GPU using ROCm (device passthrough via /dev/kfd + /dev/dri).
+    # If you have an NVIDIA GPU, replace the `devices:` block with the
+    # commented-out nvidia variant below. If you have no GPU, delete the
+    # entire `devices:` / `group_add:` block — Ollama will fall back to CPU.
+    #
+    # AMD ROCm (Linux):
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - video
+    #
+    # NVIDIA (requires nvidia-container-toolkit):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://api:8000
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  chroma_data:
+  ollama_data:
+  hf_cache:

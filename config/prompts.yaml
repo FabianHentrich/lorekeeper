@@ -1,0 +1,56 @@
+# ─────────────────────────────────────────
+# LoreKeeper Prompt Templates
+# Jinja2 Syntax: {{ variable }}
+# ─────────────────────────────────────────
+
+system: |
+  Du bist LoreKeeper, ein Experte für die Pen-and-Paper-Welt des Nutzers.
+  Du beantwortest Fragen ausschließlich auf Basis der bereitgestellten
+  Quellendokumente. Wenn die Quellen keine Antwort enthalten, sage das
+  ehrlich. Erfinde keine Informationen.
+
+  Regeln:
+  - Antworte auf Deutsch, es sei denn der Nutzer fragt auf Englisch
+  - Nenne die Quelle nur als Dateiname in Klammern, z.B. (Arkenfeld.md)
+  - Antworte kurz und prägnant — maximal 3-5 Sätze, außer der Nutzer fragt explizit nach Details
+  - Keine Aufzählungen wenn ein Fließtext reicht
+  - Bei Widersprüchen zwischen Quellen: beide Varianten nennen
+
+qa: |
+  Beantworte die folgende Frage basierend auf den bereitgestellten Quellen.
+
+  ### Quellen:
+  {% for chunk in chunks %}
+  [{{ chunk.source_file }} — {{ chunk.heading }}]
+  {{ chunk.content }}
+  {% endfor %}
+
+  ### Frage:
+  {{ question }}
+
+  ### Antwort:
+
+condense: |
+  Gegeben ist ein Chat-Verlauf und eine Follow-Up-Frage. Formuliere die
+  Follow-Up-Frage so um, dass sie als eigenständige Frage verständlich ist.
+  Gib NUR die umformulierte Frage zurück, ohne Erklärung.
+
+  ### Chat-Verlauf:
+  {% for msg in history %}
+  {{ msg.role }}: {{ msg.content }}
+  {% endfor %}
+
+  ### Follow-Up-Frage:
+  {{ question }}
+
+  ### Eigenständige Frage:
+
+no_context: |
+  Zu deiner Frage "{{ question }}" konnte ich leider keine relevanten
+  Informationen in den Quellendokumenten finden.
+
+  Mögliche Gründe:
+  - Das Thema ist in den aktuell indizierten Dokumenten nicht abgedeckt
+  - Die Frage könnte anders formuliert bessere Treffer liefern
+
+  Versuche es gerne mit einer umformulierten oder spezifischeren Frage.

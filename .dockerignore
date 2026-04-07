@@ -1,0 +1,43 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+
+# Secrets & local config
+.env
+
+# Data (mounted as volume at runtime, not baked into image)
+data/
+chroma_data/
+logs/
+evaluation/results/
+
+# VCS
+.git/
+.gitignore
+.gitattributes
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docs & scripts not needed at runtime
+docs/
+tests/
+*.md
+!README.md
+start.ps1
+
+# OS junk
+.DS_Store
+Thumbs.db

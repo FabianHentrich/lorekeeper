@@ -1,0 +1,313 @@
+pairs:
+
+  # ─────────────────────────────────────────
+  # MARKDOWN (10 Fragen)
+  # ─────────────────────────────────────────
+
+  - id: m001
+    question: "Wo liegt Arkenfeld und was ist das für ein Ort?"
+    source_type: markdown
+    category: location
+    expected_sources: ["Orte/Arkenfeld.md"]
+    expected_answer_contains: ["Arkenfeld"]
+
+  - id: m002
+    question: "Wer ist Malek Nocthar und was ist sein Ziel?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["NPCs/Malek Nocthar.md"]
+    expected_answer_contains: ["Malek Nocthar"]
+
+  - id: m003
+    question: "Was ist der Schattenorden und welche Ziele verfolgt er?"
+    source_type: markdown
+    category: lore
+    expected_sources: ["Organisationen/Schattenorden/Schattenorden.md"]
+    expected_answer_contains: ["Schattenorden"]
+
+  - id: m004
+    question: "Welche Stats hat der Chaoskrieger?"
+    source_type: markdown
+    category: enemy
+    expected_sources: ["Gegner/Chaoskrieger.md"]
+    expected_answer_contains: ["Chaoskrieger"]
+
+  - id: m005
+    question: "Was ist der Heimkehrpfennig und was bewirkt er?"
+    source_type: markdown
+    category: item
+    expected_sources: ["Gegenstände/Heimkehrpfennig.md"]
+    expected_answer_contains: ["Heimkehrpfennig"]
+
+  - id: m006
+    question: "Wer ist Lyssara Vaydris?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["Organisationen/Schattenorden/Wichtige NPCs/Lyssara Vaydris.md"]
+    expected_answer_contains: ["Lyssara"]
+    notes: "NPC liegt tief verschachtelt unter Organisation"
+
+  - id: m007
+    question: "Was ist die Akademie von Morgenstern?"
+    source_type: markdown
+    category: location
+    expected_sources: ["Orte/Akademie von Morgenstern.md"]
+    expected_answer_contains: ["Akademie", "Morgenstern"]
+
+  - id: m008
+    question: "Welche Fähigkeiten hat der Bossgegner Ardomis?"
+    source_type: markdown
+    category: enemy
+    expected_sources: ["Gegner/Bossgegner/Ardomis – Der Erleuchtete.md"]
+    expected_answer_contains: ["Ardomis"]
+
+  - id: m009
+    question: "Was sind die Läuterer von Arkenis?"
+    source_type: markdown
+    category: lore
+    expected_sources: ["Organisationen/Läuterer von Arkenis/Läuterer von Arkenis.md"]
+    expected_answer_contains: ["Läuterer"]
+
+  - id: m010
+    question: "Wer ist Liora Veylan und zu welcher Organisation gehört sie?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["Organisationen/Chronos - Geheimbund der Zeit/Wichtige NPCs/Liora Veylan.md"]
+    expected_answer_contains: ["Liora"]
+    notes: "Testet ob Organisations-Kontext korrekt abgerufen wird"
+
+  # ─────────────────────────────────────────
+  # PDF — Regelbuch (10 Fragen)
+  # ─────────────────────────────────────────
+
+  - id: p001
+    question: "Was ist eine Marke und wie funktioniert sie?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Marke"]
+
+  - id: p002
+    question: "Welche Fähigkeiten hat die Klasse Mönch?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Mönch"]
+
+  - id: p003
+    question: "Wie funktioniert das Würfelsystem?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: []
+    notes: "Allgemeine Mechanik-Frage — answer_contains absichtlich leer"
+
+  - id: p004
+    question: "Was sind Fähigkeitspunkte und wie werden sie eingesetzt?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Aktionspunkte"]
+
+  - id: p005
+    question: "Wie funktionieren Aktion und Bonusaktion im Kampf?"
+    source_type: pdf
+    g: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Aktion", "Bonusaktion"]
+
+  - id: p006
+    question: "Was ist der Unterschied zwischen einer Fähigkeit und einem Talent?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Fähigkeit", "Talent"]
+
+  - id: p007
+    question: "Wie läuft eine Initiative-Runde ab?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Initiative"]
+
+  - id: p008
+    question: "Welche Klassen gibt es im Regelwerk?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: []
+    notes: "Breite Übersichtsfrage — testet ob Klassen-Kapitel gefunden wird"
+
+  - id: p009
+    question: "Was sind Zauberpunkte und wie erhält man sie zurück?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Zauberpunkte"]
+
+  - id: p010
+    question: "Wie funktioniert das Erlernen neuer Zauber?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Zauber"]
+
+  # ─────────────────────────────────────────
+  # IMAGE (10 Fragen)
+  # ─────────────────────────────────────────
+
+  - id: i001
+    question: "Zeig mir ein Bild von Malek Nocthar."
+    source_type: image
+    category: image
+    expected_sources: ["NPCs/Malek Nocthar.md"]
+    expected_answer_contains: ["Malek"]
+    notes: "Images excluded from retrieval — expects associated .md file"
+
+  - id: i002
+    question: "Wie sieht Lyssara Vaydris aus?"
+    source_type: image
+    category: image
+    expected_sources: ["Organisationen/Schattenorden/Wichtige NPCs/Lyssara Vaydris.md"]
+    expected_answer_contains: ["Lyssara"]
+    notes: "Images excluded from retrieval — expects associated .md file"
+
+  - id: i003
+    question: "Gibt es eine Karte von Arkenfeld?"
+    source_type: image
+    category: image
+    expected_sources: ["Orte/Arkenfeld.md"]
+    expected_answer_contains: ["Arkenfeld"]
+    notes: "Images excluded from retrieval — expects associated .md file"
+
+  - id: i004
+    question: "Wie sieht das Anwesen von Lilith von Lysander aus?"
+    source_type: image
+    category: image
+    expected_sources: ["Orte/Lysander-Anwesen.md"]
+    expected_answer_contains: ["Lysander"]
+    notes: "Images excluded from retrieval — expects associated .md file"
+
+  - id: i005
+    question: "Zeig mir ein Bild von Viktor von Brahmus."
+    source_type: image
+    category: image
+    expected_sources: ["NPCs/Neben NPCs/Viktor von Brahmus.md"]
+    expected_answer_contains: ["Viktor"]
+    notes: "Images excluded from retrieval — expects associated .md file"
+
+  - id: i006
+    question: "Wie sieht die Gruft aus dem Abenteuer Flüstern der Schatten aus?"
+    source_type: image
+    category: image
+    expected_sources: ["Geschichte - Söldner/Akt 1 - Erste Fäden/1. Das Flüstern der Schatten/Das Flüstern der Schatten.md"]
+    expected_answer_contains: ["Schatten"]
+    notes: "Images excluded from retrieval — expects associated .md file"
+
+  - id: i007
+    question: "Gibt es ein Bild von Escanor?"
+    source_type: image
+    category: image
+    expected_sources: ["Organisationen/Orden der letzten Dämmerung/Escanor, Flamme des Zeniths.md"]
+    expected_answer_contains: ["Escanor"]
+    notes: "Images excluded from retrieval — expects associated .md file"
+
+  - id: i008
+    question: "Wie sieht der Artefaktraum aus?"
+    source_type: image
+    category: image
+    expected_sources: ["Geschichte - Söldner/Akt 1 - Erste Fäden/4. Salon der Wissenden/Salon der Wissenden.md"]
+    expected_answer_contains: ["Artefakt"]
+    notes: "Images excluded from retrieval — expects associated .md file"
+
+  - id: i009
+    question: "Gibt es eine Karte oder ein Bild zu Schatten unter Morgenstern?"
+    source_type: image
+    category: image
+    expected_sources: ["Geschichte - Akademie/Die Schatten unter Morgenstern.md"]
+    expected_answer_contains: ["Morgenstern"]
+    notes: "Images excluded from retrieval — expects associated .md file"
+
+  - id: i010
+    question: "Zeig mir ein Bild von Amara Lindensporn."
+    source_type: image
+    category: image
+    expected_sources: ["NPCs/Neben NPCs/Amara Lindensporn.md"]
+    expected_answer_contains: ["Amara"]
+    notes: "Images excluded from retrieval — expects associated .md file"
+
+  # ─────────────────────────────────────────
+  # ABENTEUER (10 Fragen)
+  # ─────────────────────────────────────────
+
+  - id: a001
+    question: "Was ist das Ziel des Abenteuers Flüstern der Schatten?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Söldner/Akt 1 - Erste Fäden/1. Das Flüstern der Schatten/Das Flüstern der Schatten.md"]
+    expected_answer_contains: ["Schatten"]
+
+  - id: a002
+    question: "Welche Fraktionen spielen im Abenteuer Im Namen der Reinheit eine Rolle?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Söldner/Akt 1 - Erste Fäden/2. Im Namen der Reinheit/Im Namen der Reinheit.md"]
+    expected_answer_contains: ["Reinheit"]
+
+  - id: a003
+    question: "Worum geht es im Chronos-Protokoll?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Söldner/Akt 2 - Züge auf dem Zeitbrett/1. Chronos-Protokoll/Chronos-Protokoll - Die Glaszeit (II-1).md"]
+    expected_answer_contains: ["Chronos"]
+
+  - id: a004
+    question: "Was ist die Kampagnenstruktur der Söldner-Kampagne?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Söldner/Kampagnenstruktur (3 Akte, 12 Abenteuer).md"]
+    expected_answer_contains: ["Akt"]
+    notes: "Größte Datei im Vault — testet ob Übersichtsstruktur korrekt aufgeteilt wird"
+
+  - id: a005
+    question: "Was passiert im Abenteuer Scharlachofen?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Söldner/Akt 3 - Mandate der Macht/2. Scharlachofen/Scharlachofen (III-2).md"]
+    expected_answer_contains: ["Scharlachofen"]
+
+  - id: a006
+    question: "Wer ist der Auftraggeber im Abenteuer Relikt der verlorenen Stadt?"
+    source_type: pdf
+    category: adventure
+    expected_sources: ["Geschichte - Akademie/Auftragsbrief_Relikt_der_verlorenen_Stadt.pdf"]
+    expected_answer_contains: []
+    notes: "PDF-Auftragsbrief — answer_contains leer da Inhalt unbekannt"
+
+  - id: a007
+    question: "Was ist das Ziel der Abenteuer in Akt 3 der Söldner-Kampagne?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Söldner/Kampagnenstruktur (3 Akte, 12 Abenteuer).md"]
+    expected_answer_contains: ["Akt 3"]
+
+  - id: a008
+    question: "Was passiert im Abenteuer Venthir - Die Stadt der Unvollendeten?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Söldner/Akt 3 - Mandate der Macht/4. Venthir - Die Stadt der Unvollendeten/Venthir - Die Stadt der Unvollendeten (III-4).md"]
+    expected_answer_contains: ["Venthir"]
+
+  - id: a009
+    question: "Worum geht es in der Geschichte zur Grünen Treppe?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Söldner/Lore-Geschichten/Die Grüne Treppe - Geschichte.md"]
+    expected_answer_contains: ["Treppe"]
+
+  - id: a010
+    question: "Was ist der Maskenball des Winterkönigs?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Weihnachts-One-Shot/Der Maskenball des Winterkönigs.md"]
+    expected_answer_contains: ["Winterkönig"]

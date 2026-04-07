@@ -1,0 +1,105 @@
+# ─────────────────────────────────────────
+# LoreKeeper Configuration
+# ─────────────────────────────────────────
+
+# Ingestion
+ingestion:
+  document_paths:
+    - ./data/PnP-Welt
+    - ./data/rules
+  supported_formats: [".md", ".pdf", ".png", ".jpg", ".webp"]
+  exclude_patterns:
+    - ".obsidian/*"
+    - ".trash/*"
+    - "*alt.md"
+    - "*(1).md"
+    - "*.draft.*"
+  watch_for_changes: false
+
+# Chunking
+chunking:
+  strategy: heading_aware
+  max_chunk_size: 256           # ~900 Zeichen Fließtext; e5-base hat 512-Token-Limit
+  chunk_overlap: 30             # nur für Fließtext; Tabellen erhalten kein Overlap
+  min_chunk_size: 20
+
+# Embeddings
+embeddings:
+  model: "intfloat/multilingual-e5-base"
+  device: auto
+  batch_size: 64
+  normalize: true
+
+# Vector Store
+vectorstore:
+  provider: chroma
+  mode: embedded
+  persist_directory: ./chroma_data
+  chroma_host: chromadb
+  chroma_port: 8000
+  collection_name: lorekeeper
+  distance_metric: cosine
+
+# Retrieval
+retrieval:
+  top_k: 15          # fetch candidates; reranker selects best 8
+  score_threshold: 0.5
+  reranking:
+    enabled: true
+    model: "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"  # multilingual
+    top_k_rerank: 8
+
+# LLM
+llm:
+  provider: ollama
+  fallback_provider: gemini
+  fallback_enabled: false
+  ollama:
+    base_url: "http://localhost:11434"
+    model: "qwen3:8b"
+    temperature: 0.3
+    top_p: 0.9
+    max_tokens: 2048
+    timeout: 300
+  gemini:
+    model: "gemini-2.5-flash"
+    api_key_env: GEMINI_API_KEY
+    temperature: 0.3
+    top_p: 0.9
+    max_tokens: 1024
+    timeout: 30
+
+# Conversation
+conversation:
+  window_size: 8
+  max_context_tokens: 4096
+  condense_question: true
+  condense_model: null
+  session_timeout_minutes: 60
+  session_gc_interval_seconds: 300
+
+# API
+api:
+  host: "0.0.0.0"
+  port: 8000
+  reload: true
+
+# Logging
+logging:
+  level: INFO                       # DEBUG | INFO | WARNING | ERROR
+  file: logs/lorekeeper.log         # null = nur Console
+  max_bytes: 10485760               # 10 MB pro Logfile
+  backup_count: 5                   # Anzahl rotierter Logfiles
+  suppress:                         # Third-Party Logger auf WARNING setzen
+    - httpx
+    - httpcore
+    - chromadb
+    - huggingface_hub
+    - sentence_transformers
+    - openai
+
+# UI
+ui:
+  title: "LoreKeeper"
+  subtitle: "Frag deine Welt."
+  api_url: "http://localhost:8000"

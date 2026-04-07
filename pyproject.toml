@@ -1,0 +1,9 @@
+[project]
+name = "lorekeeper"
+version = "0.2.0"
+description = "RAG-based Q&A System for Structured Worldbuilding Documents"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

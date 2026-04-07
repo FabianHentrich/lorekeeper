@@ -1,0 +1,238 @@
+# LoreKeeper
+
+![Status](https://img.shields.io/badge/status-beta-orange)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi)
+![ChromaDB](https://img.shields.io/badge/ChromaDB-embedded%20%7C%20client-blueviolet)
+![LLM](https://img.shields.io/badge/LLM-Ollama%20%7C%20Gemini-412991)
+![Tests](https://img.shields.io/badge/tests-124%20passing-brightgreen)
+![License](https://img.shields.io/badge/license-MIT-green)
+
+**A production-grade RAG system for Obsidian-based tabletop-RPG worlds.**
+
+Ask natural-language questions about your campaign — NPCs, locations, rules,
+adventures, items, gods — and get grounded answers with source citations.
+Runs fully local via Ollama, or in the cloud via Google Gemini. Switch
+providers at runtime without a restart.
+
+<!-- TODO: replace with real screenshot/GIF -->
+<!-- ![LoreKeeper chat UI](docs/images/chat-demo.gif) -->
+
+---
+
+## Why LoreKeeper?
+
+TTRPG groups accumulate hundreds of Markdown files in an Obsidian vault:
+NPCs, locations, factions, rules, session notes. Generic RAG tools treat
+these as flat text, miss the semantic structure Obsidian adds (wikilinks,
+aliases, callouts, tags), and happily mix a rulebook class with a lore NPC
+of the same name.
+
+LoreKeeper is built from the ground up for this workflow:
+
+- **Obsidian-native parsing** — wikilinks, `![[embeds]]`, `> [!callouts]`,
+  `#tags`, and YAML frontmatter aliases are all extracted into searchable
+  metadata.
+- **Semantic source filtering** — the UI exposes three category toggles
+  (🗺️ Lore, 📖 Adventure, 📋 Rules) that restrict retrieval at the vectorstore
+  level. Ask "What can the time mage do?" and limit to Rules, and you won't
+  get the NPC named *Arkenfeld the Time Mage* polluting the context.
+- **Two-stage retrieval** — multilingual E5 bi-encoder for recall,
+  cross-encoder reranker for precision. Proper production RAG, not naive
+  top-k cosine.
+- **Identity-layer embedding** — filename stem + aliases are prepended to
+  every chunk before embedding. A stat table with no prose self-reference
+  still matches queries about its subject.
+- **Dual provider** — Ollama for privacy/cost, Gemini for quality/speed.
+  Switch live via a sidebar dropdown.
+- **Real streaming** — SSE token stream with sources attached to the
+  terminal event; multi-turn sessions with automatic GC.
+
+Built for German-language TTRPG content (the retrieval and LLM prompts are
+in German), but the architecture is language-agnostic — swap the
+multilingual E5 model and prompts for any other language.
+
+---
+
+## Features
+
+| | |
+|---|---|
+| 🧠 **Hybrid retrieval** | E5-base bi-encoder + mMiniLMv2 cross-encoder reranker |
+| 🔀 **Dual LLM providers** | Ollama (local) ↔ Gemini (cloud), switch at runtime |
+| 📜 **Obsidian-native** | Wikilinks, callouts, embeds, tags, aliases all parsed |
+| 🎯 **Category filtering** | Lore / Adventure / Rules filters restrict context |
+| 🌊 **SSE streaming** | Token-by-token with source citations in the done event |
+| 💬 **Multi-turn chat** | Sliding-window memory + automatic session GC |
+| 🔁 **Incremental indexing** | SHA-256 content hashing — only changed files re-embed |
+| 🐳 **Docker-ready** | API + ChromaDB + Ollama (GPU) + UI via `docker compose` |
+| ✅ **124 tests** | Unit + integration coverage including the full HTTP layer |
+
+---
+
+## Architecture
+
+```mermaid
+flowchart TB
+    UI["🖥️ Streamlit Chat UI<br/>SSE client · source filter"]
+
+    subgraph API["⚡ FastAPI Backend"]
+        direction TB
+        ROUTES["/query · /query/stream<br/>/ingest · /health<br/>/sessions · /provider · /stats"]
+        CONV["💬 Conversation Manager<br/>sliding window · async GC"]
+        ROUTES --- CONV
+    end
+
+    subgraph RAG["🔍 Retrieval Pipeline"]
+        direction TB
+        EMBED["E5 bi-encoder<br/>multilingual · 768-dim"]
+        RERANK["Cross-encoder rerank<br/>mmarco-mMiniLMv2"]
+        EMBED --> RERANK
+    end
+
+    subgraph GEN["🧠 Generation (hot-swappable)"]
+        direction LR
+        OLLAMA["🖥️ Ollama<br/>local · private"]
+        GEMINI["☁️ Gemini<br/>cloud · fast"]
+    end
+
+    subgraph INGEST["📥 Ingestion"]
+        direction TB
+        PARSE["Obsidian parser<br/>wikilinks · callouts · aliases"]
+        CHUNK["Heading-aware chunker<br/>atomic tables"]
+        PARSE --> CHUNK
+    end
+
+    VAULT[("📚 Obsidian Vault<br/>.md · .pdf · images")]
+    CHROMA[("🗃️ ChromaDB<br/>embedded / HTTP client")]
+
+    UI <-->|HTTP / SSE| API
+    API --> RAG
+    API --> GEN
+    RAG <--> CHROMA
+    VAULT --> INGEST
+    INGEST --> CHROMA
+
+    classDef store fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
+    classDef svc fill:#ede9fe,stroke:#7c3aed,color:#4c1d95
+    classDef ui fill:#d1fae5,stroke:#10b981,color:#064e3b
+    class CHROMA,VAULT store
+    class API,RAG,GEN,INGEST svc
+    class UI ui
+```
+
+Full details in [**ARCHITECTURE.md**](ARCHITECTURE.md) and
+[`docs/data-flow.md`](docs/data-flow.md).
+
+---
+
+## Quickstart (Local)
+
+```powershell
+# 1. Virtual environment
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+
+# 2. Pull the LLM model
+ollama pull qwen3:8b
+
+# 3. Configure
+copy .env.example .env
+# Edit config/settings.yaml → ingestion.document_paths to point at your vault
+
+# 4. Start backend + UI
+.\start.ps1
+# or manually:
+#   uvicorn src.main:app --reload --port 8000     (Terminal 1)
+#   streamlit run ui/app.py                        (Terminal 2)
+
+# 5. Index your vault (one-time)
+python -m src.ingestion.orchestrator
+```
+
+The UI is then available at **http://localhost:8501**.
+
+### Using Gemini instead of Ollama
+
+1. Get an API key from [Google AI Studio](https://aistudio.google.com/apikey).
+2. `GEMINI_API_KEY=...` in `.env`.
+3. Set `llm.provider: gemini` in `config/settings.yaml`, or switch live from
+   the Streamlit sidebar.
+
+---
+
+## Docker
+
+```bash
+docker compose up --build -d
+docker compose exec ollama ollama pull qwen3:8b
+docker compose exec api python -m src.ingestion.orchestrator
+```
+
+In Docker, ChromaDB runs as a separate service and the API talks to it over
+HTTP (`CHROMA_MODE=client`). Ollama is GPU-accelerated by default — see
+`docker-compose.yaml` for the device configuration.
+
+---
+
+## Screenshots
+
+<!-- TODO: add screenshots to docs/images/ and uncomment -->
+<!--
+| Chat with streaming response | Source filter (Lore / Adventure / Rules) |
+|---|---|
+| ![Chat](docs/images/chat.png) | ![Filter](docs/images/filter.png) |
+-->
+
+---
+
+## Documentation
+
+| Document | Contents |
+|----------|----------|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | System overview, components, data flow, config schema |
+| [docs/data-flow.md](docs/data-flow.md) | Ingestion and query pipelines (Mermaid) |
+| [docs/embedding-strategy.md](docs/embedding-strategy.md) | E5 asymmetry, identity layer, reranking — and **why** |
+| [docs/provider-strategy.md](docs/provider-strategy.md) | Ollama vs. Gemini, runtime switching |
+| [docs/ui-ux.md](docs/ui-ux.md) | Sidebar, chat, session state, performance |
+| [docs/configuration.md](docs/configuration.md) | Full `settings.yaml` reference + env variables |
+| [docs/prompts.md](docs/prompts.md) | Jinja2 templates, variables, customization |
+| [docs/operations.md](docs/operations.md) | Ingest, re-ingest, troubleshooting |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Dev setup, coding conventions, PR process |
+| [CHANGELOG.md](CHANGELOG.md) | Release notes |
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| Backend | FastAPI + Pydantic v2 |
+| UI | Streamlit |
+| Embeddings | sentence-transformers (`intfloat/multilingual-e5-base`, 768-dim, asymmetric) |
+| Reranker | sentence-transformers CrossEncoder (`cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`) |
+| Vector store | ChromaDB (embedded / HTTP client) |
+| LLM | Ollama (`qwen3:8b`) or Google Gemini (`gemini-2.5-flash`) |
+| Prompts | Jinja2 + YAML |
+| Tests | pytest + pytest-asyncio + httpx |
+
+---
+
+## Roadmap / Known Limitations
+
+- **German-first.** Prompts and category taxonomy are German. Multilingual
+  model handles the embedding side language-agnostically, but the prompt
+  templates in `config/prompts.yaml` would need translation for non-German
+  vaults.
+- **No hybrid keyword search.** Pure vector retrieval; BM25 + vector fusion
+  is on the roadmap.
+- **Single-user.** No auth, no per-user sessions beyond the in-memory
+  session manager. Designed for local / LAN use.
+- **`.tex` files are not parsed.** Only `.md`, `.pdf`, and images.
+
+---
+
+## License
+
+[MIT](LICENSE) © 2026 Fabian Hentrich

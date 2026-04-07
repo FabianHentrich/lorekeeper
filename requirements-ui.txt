@@ -1,0 +1,6 @@
+# Minimal dependencies for the Streamlit UI container.
+# The UI only talks to the API over HTTP/SSE — no embeddings, no ChromaDB,
+# no LLM SDKs needed. Keeps the UI image ~10× smaller than reusing the
+# full backend requirements.txt.
+streamlit>=1.42.0
+requests>=2.32.0
