@@ -127,6 +127,64 @@ Gemini is not supported for condensing.
 
 ---
 
+## Token Usage Reporting
+
+Both providers expose per-request token counts that LoreKeeper surfaces in
+the SSE `done` event (`usage`) and accumulates per session
+(`session_usage`). The UI renders these as a per-message caption and a
+header metric — see [`docs/ui-ux.md`](ui-ux.md) for the rendering details.
+This section covers what each provider actually reports and the
+provider-specific quirks.
+
+| Field | Ollama (Qwen3) | Gemini 2.5 |
+|---|---|---|
+| `tokens_in` | ✅ `prompt_tokens` (from OpenAI-compatible response) | ✅ `usage_metadata.prompt_token_count` |
+| `tokens_out` | ✅ `completion_tokens` | ✅ `usage_metadata.candidates_token_count` |
+| `tokens_thinking` | ❌ Always `0` — `/no_think` is set, see below | ✅ `usage_metadata.thoughts_token_count` (when thinking is enabled) |
+
+### Ollama specifics
+
+The OpenAI-compatible streaming API only emits a usage block when
+`stream_options={"include_usage": True}` is passed on the request. Without
+that flag the final stream chunk arrives with empty `usage` and
+LoreKeeper would report zeros. The flag is set in
+`OllamaProvider.generate_stream` and the resulting numbers are stored on
+`self._last_stream_usage`, which the `Generator` reads after the stream
+finishes.
+
+`tokens_thinking` is intentionally always `0` for Qwen3: LoreKeeper appends
+`/no_think` to user prompts (see `OllamaProvider._is_qwen3`) to skip the
+`<think>...</think>` block entirely. This trades off reasoning quality for
+latency and matches Ollama's local-first cost model — there is no $-per-token
+penalty to optimize against, so the goal is "answer fast".
+
+### Gemini specifics
+
+`google-genai` exposes `usage_metadata` on stream chunks, typically only on
+the final one. LoreKeeper reads it from any chunk that carries it, so the
+last non-null value wins.
+
+`thoughts_token_count` is the **cost-relevant** field on Gemini 2.5 models:
+when thinking is enabled (default for `gemini-2.5-flash` and
+`gemini-2.5-pro` on complex queries), thinking tokens are billed as output
+tokens but do not appear in `candidates_token_count`. They can easily
+exceed the visible output by a factor of 2–10× on reasoning-heavy
+questions, so the UI shows them as a separate `🧠 N think` segment in the
+per-message caption. **Watch this number** when comparing Gemini cost
+against Ollama — it is the most common source of "why is my bill higher
+than expected".
+
+### What this means for the cost comparison
+
+The per-session totals in the header metric give a rough live estimate of
+what a session would cost on a paid provider. For Ollama runs the numbers
+are still useful as a load indicator (input context size, generated length),
+but the cost column in the [Provider Comparison](#provider-comparison)
+table only kicks in when running on Gemini — and `tokens_thinking` is the
+column that decides whether the bill is small or surprising.
+
+---
+
 ## Adding a New Provider
 
 1. Create `src/generation/providers/my_provider.py`, implement `BaseLLMProvider`

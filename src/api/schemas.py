@@ -7,6 +7,7 @@ class QueryRequest(BaseModel):
     metadata_filters: dict | None = None
     top_k: int | None = None
     top_k_rerank: int | None = None
+    max_per_source: int | None = None
 
 
 class SourceReference(BaseModel):

@@ -33,6 +33,7 @@ class GeminiProvider(BaseLLMProvider):
         self._client = genai.Client(api_key=api_key)
         self._last_request_time: float = 0
         self._lock = asyncio.Lock()
+        self._last_stream_usage: dict = {}
 
     async def _rate_limit(self):
         async with self._lock:
@@ -99,11 +100,19 @@ class GeminiProvider(BaseLLMProvider):
 
         await self._rate_limit()
 
+        self._last_stream_usage = {}
         async for chunk in await self._client.aio.models.generate_content_stream(
             model=self.model,
             contents=prompt,
             config=gen_config,
         ):
+            um = getattr(chunk, "usage_metadata", None)
+            if um:
+                self._last_stream_usage = {
+                    "tokens_in": getattr(um, "prompt_token_count", 0) or 0,
+                    "tokens_out": getattr(um, "candidates_token_count", 0) or 0,
+                    "tokens_thinking": getattr(um, "thoughts_token_count", 0) or 0,
+                }
             if chunk.text:
                 yield chunk.text
 

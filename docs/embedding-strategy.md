@@ -47,6 +47,46 @@ directly scores relevance. It's ~20× slower per pair, so we only run it over th
 In practice: the bi-encoder gets you 90% of the way on recall; the cross-encoder
 fixes the ordering so the LLM's context window is used efficiently.
 
+### Why a per-source diversity cap?
+
+Cross-encoder scores are query-pair-relevance only — the model has no notion
+of "I already picked something similar". On a high-recall query like
+*"Was ist Arkenfeld?"* the bi-encoder happily returns 8 chunks all from
+`Arkenfeld.md`, the reranker scores them all highly, and the LLM gets a
+deep but **narrow** context: lots of Arkenfeld detail, zero from related
+docs (factions, campaign structure, NPCs).
+
+LoreKeeper applies a **`max_per_source` cap** (default `3`) after reranking,
+in **two passes**:
+
+1. **Diverse fill** — walk the score-sorted list and accept chunks until
+   each source hits `max_per_source`. Cap-blocked chunks are parked in an
+   `overflow` list (still in score order).
+2. **Backfill** — if pass 1 produced fewer than `top_k_rerank` results
+   (because the post-threshold pool was thin and dominated by one source),
+   fill the remaining slots from `overflow` in score order.
+
+The cap is therefore a **preference** for diversity, not a hard slot-killer.
+The retriever never silently returns fewer chunks than `top_k_rerank` when
+candidates are available — diversity is a quality goal, but starving the
+LLM of context is worse. After backfill, the final list is re-sorted by
+reranker score so the LLM still sees the most relevant chunks first.
+
+This is intentionally **not** a heading-level dedupe. The `heading_aware`
+chunker can legitimately produce multiple chunks under the same heading
+(`chunk_index 0..N` of one long section) — discarding them as duplicates
+would drop real content. The cap operates at the file level, where
+crowding-out actually happens.
+
+Tuning:
+
+- `max_per_source: 3` (default) — good balance for an Obsidian vault with
+  many small interlinked notes.
+- `max_per_source: 5+` — when individual files are large and authoritative
+  (e.g. a single rulebook PDF) and you'd rather pull more from one source
+  than dilute with weaker matches.
+- `max_per_source: 0` — disable the cap entirely; pure reranker order.
+
 ### Why the identity layer (`stem | aliases`)?
 
 This is the trick that matters most for entity-centric TTRPG content.
@@ -74,11 +114,19 @@ structure. Heading-aware chunking:
 
 1. Splits at `#`/`##`/`###` boundaries first.
 2. Keeps tables **atomic** — never splits between rows (a half-row is garbage).
-3. Merges too-small sections with siblings so no chunk is below `min_chunk_size`.
+   Tables stay in a single chunk up to `max_chunk_size * 3`; only very large
+   tables are split at row boundaries with the header repeated.
+3. Merges too-small sections **only within the same heading boundary** — a
+   tiny `### Bruchgraben` table will *not* absorb the next sibling section,
+   because the merged chunk would otherwise carry the wrong
+   `heading_hierarchy` and silently lie about its content. Sections under
+   different headings always stay separate, regardless of size.
 4. Preserves the heading path (`Arkenfeld > Geography`) in the chunk body so the
    LLM sees where the content came from.
 
-Result: each chunk is a semantically coherent unit, not a window of characters.
+Result: each chunk is a semantically coherent unit, not a window of characters,
+and its `heading_hierarchy` metadata is always truthful — which is what the
+reranker's `max_per_source` cap relies on to enforce diversity across files.
 
 ### Why SHA-256 content hashing for re-ingestion?
 

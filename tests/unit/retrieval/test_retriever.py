@@ -116,3 +116,65 @@ class TestRerank:
         assert len(results) == 2
         assert results[0].content == "chunk B"  # highest reranker score (0.9 at index 1)
         assert results[1].content == "chunk A"
+
+    @pytest.mark.asyncio
+    async def test_max_per_source_backfills_when_pool_thin(self, config, embed_service, vectorstore):
+        # Pool: 5 chunks from a.md, 1 from b.md. top_k_rerank=5, cap=2.
+        # Pass 1: 2× a.md + 1× b.md = 3 selected, 3 a.md chunks parked.
+        # Pass 2: backfill from overflow → 5 total. The cap must NOT reduce
+        # the result count below top_k_rerank when alternatives are exhausted.
+        config.reranking = RerankingConfig(
+            enabled=True, top_k_rerank=5, max_per_source=2,
+        )
+        vectorstore.query.return_value = [
+            {"id": "1", "content": "A1", "metadata": {"source_file": "a.md", "document_type": "markdown", "heading_hierarchy": "h1"}, "score": 0.95},
+            {"id": "2", "content": "A2", "metadata": {"source_file": "a.md", "document_type": "markdown", "heading_hierarchy": "h2"}, "score": 0.9},
+            {"id": "3", "content": "A3", "metadata": {"source_file": "a.md", "document_type": "markdown", "heading_hierarchy": "h3"}, "score": 0.85},
+            {"id": "4", "content": "A4", "metadata": {"source_file": "a.md", "document_type": "markdown", "heading_hierarchy": "h4"}, "score": 0.8},
+            {"id": "5", "content": "A5", "metadata": {"source_file": "a.md", "document_type": "markdown", "heading_hierarchy": "h5"}, "score": 0.75},
+            {"id": "6", "content": "B1", "metadata": {"source_file": "b.md", "document_type": "markdown", "heading_hierarchy": "x"}, "score": 0.7},
+        ]
+        retriever = Retriever(config=config, embedding_service=embed_service, vectorstore=vectorstore)
+        mock_reranker = MagicMock()
+        mock_reranker.predict.return_value = [0.95, 0.9, 0.85, 0.8, 0.75, 0.7]
+        retriever._reranker = mock_reranker
+
+        results = await retriever.retrieve("query")
+        # Must reach the requested count, not silently drop slots
+        assert len(results) == 5
+        sources = [r.source_file for r in results]
+        assert sources.count("a.md") == 4   # 2 from cap + 2 backfilled
+        assert sources.count("b.md") == 1
+        # Re-sorted by score: highest first
+        scores_descending = [r.score for r in results]
+        assert scores_descending == sorted(scores_descending, reverse=True)
+
+    @pytest.mark.asyncio
+    async def test_max_per_source_caps_single_file_when_diversity_available(
+        self, config, embed_service, vectorstore,
+    ):
+        # Pool: 3× a.md, 2× b.md, 1× c.md. top_k=5, cap=2.
+        # With enough diversity, the cap stays binding (no backfill needed).
+        config.reranking = RerankingConfig(
+            enabled=True, top_k_rerank=5, max_per_source=2,
+        )
+        vectorstore.query.return_value = [
+            {"id": "1", "content": "A1", "metadata": {"source_file": "a.md", "document_type": "markdown", "heading_hierarchy": "h1"}, "score": 0.95},
+            {"id": "2", "content": "A2", "metadata": {"source_file": "a.md", "document_type": "markdown", "heading_hierarchy": "h2"}, "score": 0.9},
+            {"id": "3", "content": "A3", "metadata": {"source_file": "a.md", "document_type": "markdown", "heading_hierarchy": "h3"}, "score": 0.85},
+            {"id": "4", "content": "B1", "metadata": {"source_file": "b.md", "document_type": "markdown", "heading_hierarchy": "x"}, "score": 0.8},
+            {"id": "5", "content": "B2", "metadata": {"source_file": "b.md", "document_type": "markdown", "heading_hierarchy": "y"}, "score": 0.75},
+            {"id": "6", "content": "C1", "metadata": {"source_file": "c.md", "document_type": "markdown", "heading_hierarchy": "z"}, "score": 0.7},
+        ]
+        retriever = Retriever(config=config, embedding_service=embed_service, vectorstore=vectorstore)
+        mock_reranker = MagicMock()
+        mock_reranker.predict.return_value = [0.95, 0.9, 0.85, 0.8, 0.75, 0.7]
+        retriever._reranker = mock_reranker
+
+        results = await retriever.retrieve("query")
+        sources = [r.source_file for r in results]
+        # Cap binding: A3 must be skipped because b.md and c.md provide diversity.
+        assert sources.count("a.md") == 2
+        assert "A3" not in [r.content for r in results]
+        assert "b.md" in sources
+        assert "c.md" in sources

@@ -289,7 +289,10 @@ chunking:
   strategy: heading_aware       # heading_aware | recursive | fixed_size
   max_chunk_size: 256           # geschätzte Tokens (~900 Zeichen Fließtext)
   chunk_overlap: 30             # nur für Fließtext; Tabellen erhalten kein Overlap
-  min_chunk_size: 20            # Chunks darunter werden mit Nachbar gemerged
+  min_chunk_size: 20            # Chunks darunter werden mit Vorgänger gemerged —
+                                # aber nur innerhalb derselben heading_hierarchy.
+                                # Cross-heading-Merges würden die Heading-Metadaten
+                                # über den halben Inhalt lügen lassen.
 ```
 
 > **Token-Schätzung:** `_estimate_tokens()` rechnet `len(text) / 3.5` (Zeichen pro Token).
@@ -460,11 +463,24 @@ retrieval:
     enabled: true                   # Cross-Encoder Reranking (Stage 2)
     model: "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"   # multilingual
     top_k_rerank: 8                 # Finale Chunks für den LLM
+    max_per_source: 3               # Soft cap auf Chunks pro Source-File (0 = unlimited).
+                                    # Zwei-Pass-Verfahren nach dem Reranking:
+                                    #   Pass 1 — diverse fill: pro File max. N Chunks
+                                    #     in Score-Reihenfolge; Cap-blockierte Chunks
+                                    #     wandern in eine Overflow-Liste.
+                                    #   Pass 2 — backfill: falls top_k_rerank nicht
+                                    #     erreicht wurde (Pool zu dünn), werden die
+                                    #     besten Overflow-Chunks nachgezogen.
+                                    # Diversität ist also eine Präferenz, kein
+                                    # Slot-Killer — der Retriever liefert nie weniger
+                                    # als top_k_rerank, solange Kandidaten da sind.
 ```
 
-Beide Werte sind pro Request über die `QueryRequest`-Felder `top_k` /
-`top_k_rerank` überschreibbar — die Streamlit-UI exponiert sie als zwei
-gekoppelte Slider im „⚙️ Erweitert: Retrieval-Tuning"-Expander.
+Diese Werte sind pro Request über die `QueryRequest`-Felder `top_k`,
+`top_k_rerank` und `max_per_source` überschreibbar — die Streamlit-UI
+exponiert sie als drei gekoppelte Slider im „⚙️ Erweitert:
+Retrieval-Tuning"-Expander (`max_per_source = 0` deaktiviert den Cap
+komplett für diesen Request).
 
 **Ablauf:**
 
@@ -472,8 +488,15 @@ gekoppelte Slider im „⚙️ Erweitert: Retrieval-Tuning"-Expander.
 2. ChromaDB Similarity Search → Top-K Chunks
 3. Optional: Metadaten-Filter (nur bestimmte Kategorien/Quellen)
 4. Score-Threshold Filterung (irrelevante Chunks raus)
-5. (v2) Reranking via Cross-Encoder
-6. Rückgabe: Chunks + Metadaten + Scores
+5. Reranking via Cross-Encoder (Score-sortierte Liste)
+6. **Soft per-source cap** (`max_per_source`):
+   - Pass 1 (diverse fill): pro Source-File max. N Chunks akzeptieren,
+     Cap-Überlauf in Overflow-Liste parken
+   - Pass 2 (backfill): falls `top_k_rerank` nicht erreicht, Overflow
+     in Score-Reihenfolge nachziehen
+   - Final-Re-Sort nach Reranker-Score, damit der LLM die relevantesten
+     Chunks zuerst sieht
+7. Rückgabe: Chunks + Metadaten + Scores
 
 ---
 
@@ -771,6 +794,7 @@ class QueryResponse(BaseModel):
 
 class SourceReference(BaseModel):
     file: str                               # Relativer Pfad
+    source_path: str = ""                   # Absoluter Pfad für klickbare file://-Links in der UI
     document_type: str                      # "markdown" | "pdf" | "image"
                                             # Erlaubt der UI, Bilder via st.image() zu rendern
     heading: str | None                     # Heading-Hierarchie
@@ -781,8 +805,18 @@ class SourceReference(BaseModel):
 # Request: QueryRequest (identisch zu /query)
 # Antwort-Events:
 #   data: {"type": "token", "content": "..."}\n\n   (pro Token)
-#   data: {"type": "done", "session_id": "...", "sources": [...], "model_used": "..."}\n\n
-# Das "done"-Event enthält session_id, damit der Client Folgefragen stellen kann.
+#   data: {"type": "done",
+#          "session_id": "...",
+#          "sources": [...],
+#          "model_used": "...",
+#          "usage": {"tokens_in": N, "tokens_out": N, "tokens_thinking": N},
+#          "session_usage": {"tokens_in": N, "tokens_out": N, "tokens_thinking": N}}\n\n
+# Das "done"-Event enthält:
+#   - session_id   → für Folgefragen
+#   - usage        → Token-Verbrauch dieser einzelnen Anfrage
+#   - session_usage → kumulierte Session-Totals (für die Header-Metric in der UI)
+# usage wird aus dem Stream extrahiert (Ollama: stream_options.include_usage,
+# Gemini: chunk.usage_metadata) und in Session.usage_totals akkumuliert.
 
 # POST /ingest  →  startet Background-Job, gibt job_id zurück
 class IngestJobResponse(BaseModel):
@@ -888,6 +922,7 @@ retrieval:
     enabled: true
     model: "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
     top_k_rerank: 8
+    max_per_source: 3           # Cap auf Chunks pro Source-File (0 = unlimited)
 
 # LLM
 llm:
@@ -1059,111 +1094,16 @@ OLLAMA_MODEL=gemma4:26b-a4b-q4_K_M python -m src.main
 
 ## 7. Evaluation
 
-### Golden Set (`evaluation/qa_pairs.yaml`)
+LoreKeeper hat ein Golden Set (`evaluation/qa_pairs.yaml`, 46 Fragen) und
+zwei Eval-Skripte:
 
-40 manuell erstellte Fragen, aufgeteilt nach Quellenart:
+- **`evaluation/evaluate_retrieval.py`** — schneller Loop ohne LLM, misst
+  Hit Rate@K direkt gegen ChromaDB + Reranker.
+- **`evaluation/evaluate.py`** — End-to-End via `/query`-API inkl.
+  LLM-Antwort und `answer_contains`-Metrik.
 
-| Kategorie   | Anzahl | Quellenart         | Beispiel                                      |
-|-------------|--------|--------------------|-----------------------------------------------|
-| `markdown`  | 10     | `.md` Vault-Dateien | NPCs, Orte, Organisationen, Gegner, Items     |
-| `pdf`       | 10     | `rules/pnp_regelbuch.pdf` | Spielmechaniken, Klassen, Regelwerk    |
-| `image`     | 10     | `.png/.jpg` Bilder | Porträts, Karten, Schauplätze                 |
-| `adventure` | 10     | `.md` + `.pdf`     | Abenteuerstruktur, Kampagne, One-Shots        |
-
-Jeder Eintrag hat folgende Felder:
-
-```yaml
-- id: m001
-  question: "Wo liegt Arkenfeld und was ist das für ein Ort?"
-  source_type: markdown          # markdown | pdf | image
-  category: location             # npc | location | enemy | item | organization |
-                                 # mechanic | lore | image | adventure
-  expected_sources:
-    - "Orte/Arkenfeld.md"        # Pfad relativ zu data/PnP-Welt/ bzw. data/rules/
-  expected_answer_contains:
-    - "Arkenfeld"                # Keywords die in der LLM-Antwort vorkommen sollen
-  notes: ""                      # optional
-```
-
-> `category` ist nur ein Label im Golden Set — dieser Wert wird nicht in ChromaDB
-> gespeichert. In ChromaDB wird `content_category` aus der Ordnerstruktur abgeleitet
-> (siehe Abschnitt 4.1).
-
-### Scripts
-
-#### `evaluate_retrieval.py` — Retrieval-Optimierung (schnell, kein LLM)
-
-Misst Hit Rate direkt gegen ChromaDB + Reranker. Kein LLM-Aufruf — ideal zum
-schnellen Durchprobieren von `top_k`, `top_k_rerank` und `score_threshold`.
-
-```bash
-# Mit Standardwerten aus settings.yaml
-python -m evaluation.evaluate_retrieval
-
-# Parameter überschreiben
-python -m evaluation.evaluate_retrieval --top-k 20 --top-k-rerank 12
-```
-
-Ausgabe:
-```
-Hit Rate (gesamt):  97.5%  (39/40)
-
-  markdown     94.7%  (18/19)
-  pdf          100.0%  (11/11)
-  image        100.0%  (10/10)
-  adventure    94.4%  (...)
-
-Misses:
-  [a009] Worum geht es in der Geschichte zur Grünen Treppe?
-        erwartet: ['Geschichte - Söldner/Lore-Geschichten/Die Grüne Treppe - Geschichte.md']
-        erhalten: ['Geschichte - Söldner/Akt 2/.../Die Grüne Treppe (II-3).md', ...]
-```
-
-> **Hinweis Image-Fragen:** Bilder sind absichtlich vom Retriever ausgeschlossen
-> (`document_type != image`). Image-Fragen im Golden Set erwarten daher die zugehörige
-> `.md`-Datei als `expected_sources`, nicht die `.png`-Datei.
-
-#### `evaluate.py` — End-to-End-Qualität (inkl. LLM-Antwort)
-
-Ruft die vollständige RAG-Pipeline via `/query`-API auf. Misst zusätzlich
-`answer_contains` (enthält die Antwort erwartete Keywords).
-
-```bash
-python -m evaluation.evaluate \
-    --qa-pairs evaluation/qa_pairs.yaml \
-    --output evaluation/results/
-```
-
-### Metriken
-
-| Metrik              | Script                  | Beschreibung                                    | Ziel   |
-|---------------------|-------------------------|-------------------------------------------------|--------|
-| **Hit Rate@K**      | `evaluate_retrieval.py` | Richtige Quelle in Top-K Chunks                 | > 0.8  |
-| **Answer Contains** | `evaluate.py`           | Erwartete Keywords in LLM-Antwort               | > 0.75 |
-| **Latency**         | `evaluate.py`           | Antwortzeit inkl. LLM                           | < 10s  |
-
-### Optimierungs-Workflow
-
-```mermaid
-flowchart LR
-    INGEST([Re-Ingest])
-    EVAL["evaluate_retrieval.py<br/><i>kein LLM · schnell</i>"]
-    ANALYZE["Misses analysieren"]
-    TUNE["Parameter anpassen<br/><b>top_k</b> · <b>top_k_rerank</b> · <b>score_threshold</b><br/><b>max_chunk_size</b> · <b>chunk_overlap</b>"]
-    STABLE{Hit Rate<br/>stabil?}
-    E2E([evaluate.py<br/>End-to-End mit LLM])
-
-    INGEST --> EVAL --> ANALYZE --> TUNE --> STABLE
-    STABLE -->|nein| EVAL
-    STABLE -->|ja| E2E
-
-    classDef io fill:#d1fae5,stroke:#10b981,color:#064e3b
-    classDef step fill:#ede9fe,stroke:#7c3aed,color:#4c1d95
-    classDef decision fill:#fef3c7,stroke:#d97706,color:#78350f
-    class INGEST,E2E io
-    class EVAL,ANALYZE,TUNE step
-    class STABLE decision
-```
+Vollständige Anleitung — Schema, CLI-Flags, Metriken, Workflow,
+Anleitung zum Erweitern des Golden Sets — in **[`docs/evaluation.md`](docs/evaluation.md)**.
 
 ---
 

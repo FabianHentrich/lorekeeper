@@ -9,7 +9,7 @@ flowchart LR
         S1["🔌 API URL<br/><i>http://localhost:8000</i>"]
         S2["🔀 LLM Provider<br/>Ollama ↔ Gemini · live switch<br/><i>Active: qwen3:8b</i>"]
         S3["💚 Status<br/>🟢 healthy · ChromaDB ✅ · LLM ✅<br/><i>cached 30s</i>"]
-        S4["⚙️ Erweitert: Retrieval-Tuning<br/><i>Kandidaten 15 · Final 8</i>"]
+        S4["⚙️ Erweitert: Retrieval-Tuning<br/><i>Kandidaten 15 · Final 8 · Cap 3</i>"]
         S5["🎯 Quellen-Filter<br/>☑ 🗺️ Lore<br/>☑ 📖 Abenteuer<br/>☑ 📋 Regelwerk"]
         S6["📊 Index Stats<br/><i>1,247 Chunks</i>"]
         S7["🔄 Re-Index<br/>🗑️ Neue Session"]
@@ -18,10 +18,10 @@ flowchart LR
 
     subgraph CHAT["💬 Chat Area"]
         direction TB
-        C1["📜 <b>LoreKeeper</b><br/>Ask your world."]
+        C1["📜 <b>LoreKeeper</b> · <i>Frag deine Welt.</i><br/>┃ Session-Tokens: <b>4.812</b>"]
         C2["[user] Was ist Arkenfeld?"]
-        C3["[assistant] Arkenfeld ist eine<br/>Handelsstadt im Norden... ▌"]
-        C4["📎 Quellen ▼<br/>📄 Locations/Arkenfeld.md<br/>Arkenfeld &gt; Overview · Score 0.82"]
+        C3["[assistant] Arkenfeld ist eine<br/>Handelsstadt im Tiefland... ▌<br/>⬇ 1.842 in · ⬆ 312 out"]
+        C4["📎 Quellen ▼<br/>📄 Locations/Arkenfeld.md · Best 0.82 · 2 Chunks<br/>↳ Overview (0.82)<br/>↳ History (0.71)"]
         C5["[ Stelle eine Frage über deine Welt... ]"]
         C1 --> C2 --> C3 --> C4 --> C5
     end
@@ -54,18 +54,20 @@ Result of the `/health` endpoint, **cached for 30 seconds** (no poll on every re
 - 🔴 API unreachable: Backend down
 
 ### Retrieval-Tuning (Advanced Expander)
-Two sliders inside `st.expander("⚙️ Erweitert: Retrieval-Tuning")`, hidden by
+Three sliders inside `st.expander("⚙️ Erweitert: Retrieval-Tuning")`, hidden by
 default to keep the sidebar uncluttered for non-tuning users:
 
 | Slider | Range | Default | Sent as | Meaning |
 |---|---|---|---|---|
 | **Kandidaten (Top-K)** | 1 – 50 | 15 | `top_k` | How many chunks the bi-encoder retrieves from ChromaDB (recall pool) |
 | **Finale Chunks (nach Reranking)** | 1 – `top_k` | min(8, top_k) | `top_k_rerank` | How many chunks the cross-encoder selects for the LLM prompt |
+| **Max. Chunks pro Quelle (Soft-Cap)** | 0 – `top_k_rerank` | min(3, top_k_rerank) | `max_per_source` | Per-file diversity cap. `0` disables the cap (pure reranker order). Soft: backfilled if otherwise fewer than `top_k_rerank` chunks would be returned |
 
-Both defaults match `config/settings.yaml` (`retrieval.top_k: 15`,
-`retrieval.reranking.top_k_rerank: 8`), so untouched sliders mean "as
-configured". The second slider's `max_value` is bound to the first, which
-prevents the nonsensical case `top_k_rerank > top_k`.
+Defaults match `config/settings.yaml` (`retrieval.top_k: 15`,
+`retrieval.reranking.top_k_rerank: 8`, `retrieval.reranking.max_per_source: 3`),
+so untouched sliders mean "as configured". The second slider's `max_value`
+is bound to the first, the third's to the second, which prevents the
+nonsensical cases `top_k_rerank > top_k` and `max_per_source > top_k_rerank`.
 
 The values override the server defaults per request only — they do **not**
 mutate `settings.yaml`.
@@ -111,11 +113,30 @@ without conversation history.
 
 ---
 
+## Header
+
+The page header is split into two columns:
+
+| Left | Right |
+|---|---|
+| `📜 LoreKeeper` title + `Frag deine Welt.` caption | **Session-Tokens metric** — total tokens consumed in the current session |
+
+The metric on the right shows the cumulative `tokens_in + tokens_out + tokens_thinking`
+of the active session, formatted with thousand separators. Hovering reveals
+the breakdown via tooltip (`In: … · Out: … · Thinking: …`). The counter is
+reset by the **🗑️ Neue Session** sidebar button.
+
+---
+
 ## Chat Area
 
 ### Message Rendering
 - Past messages are rendered from `st.session_state.messages`
-- Sources are displayed as a collapsible `st.expander("📎 Sources")`
+- Each assistant message shows a token-usage caption directly below the
+  answer text (`⬇ N in · ⬆ N out · 🧠 N think`, the thinking part only
+  appears if non-zero)
+- Sources are displayed as a collapsible `st.expander("📎 Quellen")` and
+  **grouped by file** (see below)
 
 ### Streaming
 
@@ -141,19 +162,49 @@ sequenceDiagram
         Note over UI: append to placeholder + ▌
     end
 
-    API-->>UI: data: {"type":"done","session_id":"...",<br/>"sources":[...],"model_used":"..."}
-    Note over UI: render sources expander<br/>store session_id
+    API-->>UI: data: {"type":"done","session_id":"...",<br/>"sources":[...],"model_used":"...",<br/>"usage":{...},"session_usage":{...}}
+    Note over UI: render sources (grouped)<br/>render token caption<br/>update session-tokens metric<br/>store session_id
 ```
 
-### Source Display
+The `done` event carries two usage payloads:
+
+| Field | Meaning |
+|---|---|
+| `usage` | Tokens consumed by **this single request** (`tokens_in`, `tokens_out`, `tokens_thinking`) |
+| `session_usage` | Cumulative session totals after this request, used to refresh the header metric |
+
+### Source Display (grouped by file)
+
+Sources are **grouped per document** in the expander, so multiple chunks from
+the same file appear under one heading instead of looking like duplicates:
+
+```
+📄 Locations/Arkenfeld.md — Best Score: 0.82 · 2 Chunks
+    ↳ Arkenfeld > Overview (Score: 0.82)
+       Arkenfeld is a mid-sized trading city...
+    ↳ Arkenfeld > History (Score: 0.71)
+       Founded during the Salt Wars...
+```
 
 | Document Type | Rendering |
-|--------------|-----------|
-| Markdown / PDF | `📄 [Filename — Heading](file:///...)` (clickable link) |
-| Image | `st.image(source_path)` with filename as caption |
+|---|---|
+| Markdown / PDF (single chunk) | `📄 [Filename](file:///...) — Best Score: 0.82` plus chunk preview |
+| Markdown / PDF (multiple chunks) | Same header with `· N Chunks` suffix; each chunk listed indented as `↳ Heading (Score)` + preview |
+| Image | `st.image(source_path)` with filename as caption (rendered separately, before grouped docs) |
 
 Links open the original file locally (e.g. in Obsidian if `.md` is associated with it).
 If `source_path` does not exist, a warning is shown.
+
+### Token Display
+
+| Location | Source | Format |
+|---|---|---|
+| Below each assistant message | `usage` field of the `done` event, persisted in `messages[*].usage` | `⬇ N in · ⬆ N out · 🧠 N think` (thinking only when > 0) |
+| Header metric (top right) | `session_usage` field of the `done` event, mirrored into `st.session_state.session_usage` | `Session-Tokens` metric with thousand separators and tooltip breakdown |
+
+`tokens_thinking` is populated by Gemini 2.5 (`thoughts_token_count`) when
+thinking is enabled. For Ollama with Qwen3, `/no_think` is set, so the value
+is always `0` and the icon is hidden.
 
 ---
 
@@ -176,8 +227,9 @@ the first query is therefore no slower than subsequent ones.
 
 | Key | Type | Meaning |
 |-----|------|---------|
-| `messages` | `list[dict]` | Full chat history including sources |
+| `messages` | `list[dict]` | Full chat history including `sources` and per-message `usage` |
 | `session_id` | `str \| None` | Backend session UUID for conversation context |
+| `session_usage` | `dict` | Cumulative `{tokens_in, tokens_out, tokens_thinking}` for the active session, displayed in the header metric |
 | `_selected_provider` | `str` | Currently selected provider (widget state) |
 | `_provider_switch_ok` | `bool` | Temporary flag: switch succeeded |
 | `_provider_switch_error` | `str` | Temporary flag: error message on switch failure |

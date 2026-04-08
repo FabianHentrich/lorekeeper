@@ -36,9 +36,16 @@ class FakeMessage:
 class FakeSession:
     session_id: str
     messages: list[FakeMessage] = field(default_factory=list)
+    usage_totals: dict = field(default_factory=lambda: {
+        "tokens_in": 0, "tokens_out": 0, "tokens_thinking": 0,
+    })
 
     def add_message(self, role: str, content: str) -> None:
         self.messages.append(FakeMessage(role=role, content=content))
+
+    def add_usage(self, usage: dict) -> None:
+        for k in ("tokens_in", "tokens_out", "tokens_thinking"):
+            self.usage_totals[k] += int(usage.get(k, 0) or 0)
 
 
 class FakeConversationManager:

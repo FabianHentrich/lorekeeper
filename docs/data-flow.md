@@ -52,7 +52,7 @@ flowchart TD
 
     RET --> CHROMA[("ChromaDB\nCosine search top_k=15\nFilter: document_type ≠ image\n+ optional category filter")]
 
-    CHROMA --> RERANK["CrossEncoder Reranking\nmmarco-mMiniLMv2-L12-H384-v1\npairs: query × chunk.content\n→ top_k_rerank=8"]
+    CHROMA --> RERANK["CrossEncoder Reranking\nmmarco-mMiniLMv2-L12-H384-v1\npairs: query × chunk.content\n→ top_k_rerank=8\n+ soft cap max_per_source=3\n(diverse fill → backfill)"]
 
     RERANK -->|"no chunks"| NOCX["render_no_context(question)\nreturn directly"]
     RERANK -->|"chunks found"| GEN

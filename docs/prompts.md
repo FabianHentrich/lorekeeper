@@ -19,22 +19,66 @@ no_context: "No relevant sources found..."   # fallback when no hits
 
 ### `system` — System Prompt
 
-Passed to every LLM call as a system message. Defines persona, language, and answer rules.
+Passed to every LLM call as a system message. Defines persona, language,
+**Telegram-style answer format**, length heuristics, and source citation
+rules.
 
 **No template variables** — static text.
 
-```yaml
-system: |
-  You are LoreKeeper, an expert on the user's pen-and-paper world.
-  You answer questions exclusively based on the provided source documents.
-  If the sources do not contain an answer, say so honestly. Do not invent information.
+The current system prompt instructs the model to:
 
-  Rules:
-  - Answer in German unless the user asks in English
-  - Cite the source only as a filename in parentheses, e.g. (Arkenfeld.md)
-  - Keep answers brief — at most 3–5 sentences, unless the user explicitly asks for details
-  - No bullet lists if running prose suffices
-  - If sources conflict: mention both versions
+- **Answer in German** by default (English when asked in English).
+- **Use a Telegram-messenger style**: short, scannable paragraphs (max 2–3
+  sentences each), separated by blank lines. Mobile-friendly, casual but
+  factual — no academic walls of text.
+- **Open with a one-line lead** that delivers the core answer, the way a
+  chat reply would.
+- **Use emoji headers** instead of classic Markdown headings — an emoji
+  plus bold text, e.g. `**⚔️ Fähigkeiten**`, `**📜 Hintergrund**`,
+  `**🤝 Beziehungen**`, `**📍 Ort**`, `**🎲 Regeln**`. The emoji is chosen
+  to fit the section's content.
+- **Use bullet lists** with `•` or `–` for enumerations (stats, members,
+  steps). One bullet = one line.
+- **Bold proper names, key terms, and numerical values**.
+- **Optionally close with `**🔗 Siehe auch:**`** when sources mention
+  related topics.
+- **Cite sources** as a filename in parentheses, e.g. `(Arkenfeld.md)`,
+  for any non-trivial claim.
+- **Acknowledge gaps explicitly** ("Quellen schweigen dazu …") instead of
+  inventing facts. On contradictions, name both variants and mark the
+  source of each.
+
+#### Length heuristics
+
+| Question type | Format |
+|---|---|
+| Factual lookup ("How old is X?") | 1–2 short sentences, no headers |
+| Open-ended ("Tell me about …") | Multiple paragraph chunks with emoji headers, scannable but never bloated |
+| Detail by type | NPCs → role · background · abilities · relationships; Locations → position · meaning · inhabitants · specifics; Rules → principle then concrete values as a list |
+
+The prompt explicitly forbids generating length by speculating beyond the
+sources.
+
+#### Example output (Telegram style)
+
+```markdown
+**Arkenfeld** ist eine mittelgroße Handelsstadt im zentralen Tiefland und
+ein Knotenpunkt für Karawanen aus dem Norden. (Arkenfeld.md)
+
+**📍 Lage**
+Im Schnittpunkt der Salzstraße und des Flusses Veren — strategisch
+zwischen den Eisbergen im Norden und den südlichen Königreichen.
+
+**🏛️ Bedeutung**
+• Größter Salzumschlagplatz der Region
+• Sitz der **Händlergilde der Sieben Siegel**
+• Neutraler Boden für Verhandlungen zwischen den Nordstämmen (Arkenfeld.md)
+
+**🤝 Bewohner**
+Etwa 12.000 Seelen, gemischt aus Menschen, Halblingen und einer kleinen
+Zwergenenklave aus den Eisbergen.
+
+**🔗 Siehe auch:** Salzstraße, Händlergilde der Sieben Siegel
 ```
 
 ---
@@ -176,8 +220,11 @@ reads the file once at server start. For live changes the server must be restart
 
 - **Enforce source citations:** The `system` prompt requires `(filename.md)` —
   this prevents the LLM from using training knowledge as a source
-- **Length control:** "at most 3–5 sentences" in the system prompt prevents verbose answers;
-  for detail questions the user explicitly asks for more
+- **Telegram-style formatting:** short paragraphs + emoji headers + bullets
+  produce answers that are scannable on mobile and visually structured
+  without forcing verbosity. The prompt shifted from "max 3–5 sentences"
+  (which produced flat 3-line prose blocks) to a structure-first format
+  with explicit length heuristics by question type
 - **Hallucination prevention:** "Do not invent information" + "say so honestly if no source exists" —
   together with the `no_context` fallback, this reduces hallucinations
 - **Language:** German as default with automatic English switch when the user asks in English

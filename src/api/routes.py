@@ -68,6 +68,7 @@ async def query(request: QueryRequest):
         top_k=request.top_k,
         metadata_filters=request.metadata_filters,
         top_k_rerank=request.top_k_rerank,
+        max_per_source=request.max_per_source,
     )
 
     # Generate answer
@@ -134,6 +135,7 @@ async def query_stream(request: QueryRequest):
         top_k=request.top_k,
         metadata_filters=request.metadata_filters,
         top_k_rerank=request.top_k_rerank,
+        max_per_source=request.max_per_source,
     )
 
     sources = [
@@ -171,11 +173,17 @@ async def query_stream(request: QueryRequest):
         session.add_message("user", request.question)
         session.add_message("assistant", full_answer)
 
+        usage = dict(getattr(gen, "last_usage", {}) or {})
+        if usage:
+            session.add_usage(usage)
+
         done_event = json.dumps({
             "type": "done",
             "session_id": session.session_id,
             "sources": sources,
             "model_used": prov.model if hasattr(prov, "model") else "unknown",
+            "usage": usage,
+            "session_usage": session.usage_totals,
         })
         yield f"data: {done_event}\n\n"
 

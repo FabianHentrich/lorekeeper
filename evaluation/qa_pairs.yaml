@@ -112,7 +112,7 @@ pairs:
   - id: p005
     question: "Wie funktionieren Aktion und Bonusaktion im Kampf?"
     source_type: pdf
-    g: mechanic
+    category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
     expected_answer_contains: ["Aktion", "Bonusaktion"]
 
@@ -311,3 +311,59 @@ pairs:
     category: adventure
     expected_sources: ["Geschichte - Weihnachts-One-Shot/Der Maskenball des Winterkönigs.md"]
     expected_answer_contains: ["Winterkönig"]
+
+  # ─────────────────────────────────────────
+  # STRUKTUR-TESTS (6 Fragen)
+  # Sub-Section-Recall, Multi-Source, Tabellen-Atomicity, Identity-Layer
+  # ─────────────────────────────────────────
+
+  - id: s001
+    question: "Welche vier Stadtviertel hat Arkenfeld?"
+    source_type: markdown
+    category: location
+    expected_sources: ["Orte/Arkenfeld.md"]
+    expected_answer_contains: ["Gotteslicht", "Sonnenhöhen", "Dachstein", "Bruchgraben"]
+    notes: "Sub-Section-Recall: testet ob alle vier Viertel-Chunks aus EINER großen Datei gleichzeitig im Top-K landen. Aufgedeckt durch Bug, bei dem _merge_small_chunks Sektionen über Heading-Grenzen hinweg verschmolzen hat."
+
+  - id: s002
+    question: "Was ist das Gotteslicht-Viertel und was verbirgt sich dort?"
+    source_type: markdown
+    category: location
+    expected_sources: ["Orte/Arkenfeld.md"]
+    expected_answer_contains: ["Gotteslicht", "Tempel"]
+    notes: "Sub-Section-Recall: gezielte Frage gegen einen tief verschachtelten ### Heading. Testet ob heading_aware-Chunking sauber trennt und der Bi-Encoder den richtigen Sub-Section-Chunk findet."
+
+  - id: s003
+    question: "Welche Organisationen und Fraktionen sind in Arkenfeld aktiv?"
+    source_type: markdown
+    category: lore
+    expected_sources:
+      - "Orte/Arkenfeld.md"
+      - "Organisationen/Läuterer von Arkenis/Läuterer von Arkenis.md"
+    expected_answer_contains: ["Läuterer"]
+    notes: "Multi-Source: erwartet Chunks aus mehreren Dateien gleichzeitig. Testet ob max_per_source-Soft-Cap korrekt diversifiziert statt eine einzelne Datei alle Slots belegen zu lassen."
+
+  - id: s004
+    question: "Welche Stats hat der Heimkehrpfennig?"
+    source_type: markdown
+    category: item
+    expected_sources: ["Gegenstände/Heimkehrpfennig.md"]
+    expected_answer_contains: ["Heimkehrpfennig"]
+    notes: "Tabellen-Atomicity: Frage gegen eine Stat-Tabelle ohne Fließtext. Testet ob die Tabelle als atomarer Chunk erhalten bleibt (nicht mid-row gesplittet) und über den Identity-Layer (filename stem) trotzdem matched."
+
+  - id: s005
+    question: "Wo wird Bruder Caelus erwähnt und welche Rolle spielt er?"
+    source_type: markdown
+    category: npc
+    expected_sources:
+      - "Orte/Arkenfeld.md"
+    expected_answer_contains: ["Caelus"]
+    notes: "Identity-Layer + Wikilink-Cross-Reference: Caelus wird in Arkenfeld.md nur als [[Bruder Caelus]] referenziert (kein eigener Steckbrief im Stadtviertel-Chunk). Testet ob der Wikilink-Kontext gefunden wird."
+
+  - id: s006
+    question: "Was ist der Veylana-Tempel und wo befindet er sich?"
+    source_type: markdown
+    category: location
+    expected_sources: ["Orte/Arkenfeld.md"]
+    expected_answer_contains: ["Veylana", "Gotteslicht"]
+    notes: "Tiefe Section: Information liegt sowohl in einer Tabellenzeile (Gotteslicht > Geheim) als auch in der Verborgenes-Erbe-Sektion. Testet ob Tabellen-Inhalte über den Identity-Layer trotz fehlendem Fließtext im Chunk auffindbar sind."

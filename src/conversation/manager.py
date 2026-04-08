@@ -21,10 +21,17 @@ class Session:
     session_id: str
     messages: list[Message] = field(default_factory=list)
     last_active: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    usage_totals: dict = field(default_factory=lambda: {
+        "tokens_in": 0, "tokens_out": 0, "tokens_thinking": 0,
+    })
 
     def add_message(self, role: str, content: str):
         self.messages.append(Message(role=role, content=content))
         self.last_active = datetime.now(timezone.utc)
+
+    def add_usage(self, usage: dict):
+        for k in ("tokens_in", "tokens_out", "tokens_thinking"):
+            self.usage_totals[k] += int(usage.get(k, 0) or 0)
 
 
 class ConversationManager:

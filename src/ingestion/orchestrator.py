@@ -32,9 +32,17 @@ CATEGORY_MAPPING = {
 def _get_content_category(file_path: Path, base_path: Path) -> str:
     try:
         relative = file_path.relative_to(base_path)
-        top_folder = relative.parts[0].lower() if len(relative.parts) > 1 else ""
     except ValueError:
         return "misc"
+
+    # If the file lives in a sub-folder, use that folder name as the category
+    # key. If the file sits directly in the document_path root (e.g. a single
+    # rulebook PDF in `data/rules/`), fall back to the document_path's own
+    # name — otherwise root-level files would silently land in "misc".
+    if len(relative.parts) > 1:
+        top_folder = relative.parts[0].lower()
+    else:
+        top_folder = base_path.name.lower()
 
     for prefix, category in CATEGORY_MAPPING.items():
         if top_folder.startswith(prefix):

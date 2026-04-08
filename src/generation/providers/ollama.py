@@ -42,6 +42,7 @@ class OllamaProvider(BaseLLMProvider):
             api_key="ollama",
             timeout=300,  # Generous timeout for slow local models
         )
+        self._last_stream_usage: dict = {}
 
     def _is_qwen3(self) -> bool:
         return "qwen3" in self.model.lower()
@@ -89,6 +90,7 @@ class OllamaProvider(BaseLLMProvider):
         user_content = prompt + " /no_think" if self._is_qwen3() else prompt
         messages.append({"role": "user", "content": user_content})
 
+        self._last_stream_usage = {}
         stream = await self._client.chat.completions.create(
             model=self.model,
             messages=messages,
@@ -96,10 +98,17 @@ class OllamaProvider(BaseLLMProvider):
             top_p=kwargs.get("top_p", self.top_p),
             max_tokens=kwargs.get("max_tokens", self.max_tokens),
             stream=True,
+            stream_options={"include_usage": True},
         )
 
         in_think_block = False
         async for chunk in stream:
+            if getattr(chunk, "usage", None):
+                self._last_stream_usage = {
+                    "tokens_in": chunk.usage.prompt_tokens or 0,
+                    "tokens_out": chunk.usage.completion_tokens or 0,
+                    "tokens_thinking": 0,
+                }
             if chunk.choices and chunk.choices[0].delta.content:
                 token = chunk.choices[0].delta.content
 

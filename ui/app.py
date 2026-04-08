@@ -6,32 +6,74 @@ import requests
 import streamlit as st
 
 
-def _render_source(src: dict):
-    """Render a single source reference with clickable link and image support."""
-    source_path = src.get("source_path", "")
-    file_label = src.get("file", "")
-    heading = f" — {src['heading']}" if src.get("heading") else ""
-    score = src.get("score", 0)
+def _render_sources(sources: list[dict]):
+    """Render sources grouped by file: one entry per document, chunks listed below."""
+    # Render images individually first
+    images = [s for s in sources if s.get("document_type") == "image"]
+    docs = [s for s in sources if s.get("document_type") != "image"]
 
-    if src.get("document_type") == "image":
+    for src in images:
+        source_path = src.get("source_path", "")
+        file_label = src.get("file", "")
         if source_path and Path(source_path).is_file():
             st.image(source_path, caption=file_label)
         else:
             st.warning(f"Bild nicht gefunden: {file_label}")
-    else:
+
+    # Group docs by file (preserve order of first appearance)
+    grouped: dict[str, list[dict]] = {}
+    for src in docs:
+        key = src.get("file", "")
+        grouped.setdefault(key, []).append(src)
+
+    for file_label, chunks in grouped.items():
+        source_path = chunks[0].get("source_path", "")
+        best_score = max(c.get("score", 0) for c in chunks)
+        n = len(chunks)
+        suffix = f" · {n} Chunks" if n > 1 else ""
         if source_path:
             file_url = "file:///" + quote(source_path.replace("\\", "/"), safe=":/")
-            st.markdown(
-                f"📄 [**{file_label}{heading}**]({file_url}) (Score: {score:.2f})"
-            )
+            header = f"📄 [**{file_label}**]({file_url}) — Best Score: {best_score:.2f}{suffix}"
         else:
-            st.markdown(f"📄 **{file_label}{heading}** (Score: {score:.2f})")
-        if src.get("chunk_preview"):
-            st.caption(src["chunk_preview"])
+            header = f"📄 **{file_label}** — Best Score: {best_score:.2f}{suffix}"
+        st.markdown(header)
+
+        for c in chunks:
+            heading = c.get("heading") or "—"
+            score = c.get("score", 0)
+            preview = c.get("chunk_preview", "")
+            st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;↳ *{heading}* (Score: {score:.2f})", unsafe_allow_html=True)
+            if preview:
+                st.caption(preview)
+
+def _fmt_usage(u: dict) -> str:
+    if not u:
+        return ""
+    tin = u.get("tokens_in", 0) or 0
+    tout = u.get("tokens_out", 0) or 0
+    tth = u.get("tokens_thinking", 0) or 0
+    parts = [f"⬇ {tin} in", f"⬆ {tout} out"]
+    if tth:
+        parts.append(f"🧠 {tth} think")
+    return " · ".join(parts)
+
 
 st.set_page_config(page_title="LoreKeeper", page_icon="📜", layout="wide")
-st.title("📜 LoreKeeper")
-st.caption("Frag deine Welt.")
+
+if "session_usage" not in st.session_state:
+    st.session_state.session_usage = {"tokens_in": 0, "tokens_out": 0, "tokens_thinking": 0}
+
+_title_col, _usage_col = st.columns([4, 1])
+with _title_col:
+    st.title("📜 LoreKeeper")
+    st.caption("Frag deine Welt.")
+with _usage_col:
+    su = st.session_state.session_usage
+    st.metric(
+        "Session-Tokens",
+        f"{(su['tokens_in'] + su['tokens_out'] + su['tokens_thinking']):,}".replace(",", "."),
+        help=f"In: {su['tokens_in']} · Out: {su['tokens_out']} · Thinking: {su['tokens_thinking']}",
+    )
 
 # ─── Sidebar ──────────────────────────────────────────────
 with st.sidebar:
@@ -124,6 +166,14 @@ with st.sidebar:
             help="Wie viele Chunks der Cross-Encoder am Ende auswählt und in den Prompt packt. "
                  "Mehr = mehr Kontext, aber höhere Latenz und Token-Kosten.",
         )
+        max_per_source = st.slider(
+            "Max. Chunks pro Quelle (Soft-Cap)",
+            min_value=0, max_value=top_k_rerank, value=min(3, top_k_rerank),
+            help="Soft-Cap auf Chunks aus einer einzelnen Datei. Verhindert, dass ein "
+                 "dichtes Dokument alle Slots belegt und andere Quellen verdrängt. "
+                 "0 = kein Cap (reine Reranker-Reihenfolge). Wird unterschritten, wenn "
+                 "sonst weniger als 'Finale Chunks' herauskämen (Backfill).",
+        )
 
     # Source type filter
     st.subheader("Quellen")
@@ -183,6 +233,7 @@ with st.sidebar:
     if st.button("🗑️ Neue Session"):
         st.session_state.messages = []
         st.session_state.session_id = None
+        st.session_state.session_usage = {"tokens_in": 0, "tokens_out": 0, "tokens_thinking": 0}
         st.rerun()
 
 
@@ -196,10 +247,11 @@ if "session_id" not in st.session_state:
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
+        if msg.get("usage"):
+            st.caption(_fmt_usage(msg["usage"]))
         if msg.get("sources"):
             with st.expander("📎 Quellen"):
-                for src in msg["sources"]:
-                    _render_source(src)
+                _render_sources(msg["sources"])
 
 # ─── Chat Input ───────────────────────────────────────────
 if prompt := st.chat_input("Stelle eine Frage über deine Welt..."):
@@ -216,6 +268,7 @@ if prompt := st.chat_input("Stelle eine Frage über deine Welt..."):
         "session_id": st.session_state.session_id,
         "top_k": top_k,
         "top_k_rerank": top_k_rerank,
+        "max_per_source": max_per_source,
     }
     if _category_filter is not None:
         request_body["metadata_filters"] = {"content_category": _category_filter}
@@ -233,6 +286,7 @@ if prompt := st.chat_input("Stelle eine Frage über deine Welt..."):
 
             full_response = ""
             sources = []
+            usage = {}
             placeholder = st.empty()
 
             for line in response.iter_lines(decode_unicode=True):
@@ -248,19 +302,27 @@ if prompt := st.chat_input("Stelle eine Frage über deine Welt..."):
                 elif data["type"] == "done":
                     st.session_state.session_id = data.get("session_id")
                     sources = data.get("sources", [])
+                    usage = data.get("usage", {}) or {}
+                    sess_usage = data.get("session_usage")
+                    if sess_usage:
+                        st.session_state.session_usage = sess_usage
 
             placeholder.markdown(full_response)
 
+            if usage:
+                st.caption(_fmt_usage(usage))
+
             if sources:
                 with st.expander("📎 Quellen"):
-                    for src in sources:
-                        _render_source(src)
+                    _render_sources(sources)
 
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": full_response,
                 "sources": sources,
+                "usage": usage,
             })
+            st.rerun()
 
         except requests.exceptions.ConnectionError:
             st.error("Verbindung zum Backend fehlgeschlagen. Läuft der Server?")

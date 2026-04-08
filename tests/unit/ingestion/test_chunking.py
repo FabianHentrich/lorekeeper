@@ -37,14 +37,28 @@ class TestChunking:
         chunks = chunk_documents(docs, config)
         assert len(chunks) > 1
 
-    def test_merges_small_chunks(self):
+    def test_merges_small_chunks_within_same_heading(self):
+        # Two tiny blocks under the same heading → merged
+        docs = [
+            _make_doc("Tiny.", heading=["A"]),
+            _make_doc("Also tiny.", heading=["A"]),
+        ]
+        config = ChunkingConfig(strategy="heading_aware", max_chunk_size=512, min_chunk_size=100)
+        chunks = chunk_documents(docs, config)
+        assert len(chunks) == 1
+
+    def test_does_not_merge_across_headings(self):
+        # Two tiny blocks under DIFFERENT headings → must stay separate,
+        # otherwise the merged chunk would lie about its heading_hierarchy.
         docs = [
             _make_doc("Tiny.", heading=["A"]),
             _make_doc("Also tiny.", heading=["B"]),
         ]
         config = ChunkingConfig(strategy="heading_aware", max_chunk_size=512, min_chunk_size=100)
         chunks = chunk_documents(docs, config)
-        assert len(chunks) == 1  # Merged because both < min_chunk_size
+        assert len(chunks) == 2
+        assert chunks[0].heading_hierarchy == ["A"]
+        assert chunks[1].heading_hierarchy == ["B"]
 
     def test_recursive_strategy(self):
         text = "\n\n".join([" ".join(["Wort"] * 50) for _ in range(5)])

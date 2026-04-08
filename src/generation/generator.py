@@ -16,6 +16,7 @@ class Generator:
     ):
         self.provider = provider
         self.fallback_provider = fallback_provider
+        self.last_usage: dict = {}
 
     async def generate(
         self,
@@ -35,14 +36,17 @@ class Generator:
         system_prompt: str,
         qa_prompt: str,
     ) -> AsyncGenerator[str, None]:
+        self.last_usage = {}
         try:
             async for token in self.provider.generate_stream(qa_prompt, system_prompt=system_prompt):
                 yield token
+            self.last_usage = dict(getattr(self.provider, "_last_stream_usage", {}) or {})
         except Exception as e:
             if self.fallback_provider:
                 logger.warning(f"Primary provider failed ({e}), trying fallback")
                 async for token in self.fallback_provider.generate_stream(qa_prompt, system_prompt=system_prompt):
                     yield token
+                self.last_usage = dict(getattr(self.fallback_provider, "_last_stream_usage", {}) or {})
             else:
                 raise
 

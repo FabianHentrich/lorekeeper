@@ -233,13 +233,24 @@ def _doc_to_chunk(doc: ParsedDocument, content: str) -> Chunk:
 
 
 def _merge_small_chunks(chunks: list[Chunk], min_size: int) -> list[Chunk]:
+    """Merge tiny chunks into the previous one — but only within the same
+    heading boundary. Merging across headings would make the chunk's
+    heading_hierarchy lie about half its content (e.g. a tiny "Bruchgraben"
+    table absorbing the next section "Verborgenes Erbe" and still being
+    labelled "Bruchgraben"), which corrupts both retrieval display and the
+    per-source diversity logic in the reranker."""
     if not chunks:
         return chunks
 
     merged = [chunks[0]]
     for chunk in chunks[1:]:
-        if _estimate_tokens(merged[-1].content) < min_size and merged[-1].source_file == chunk.source_file:
-            merged[-1].content += "\n\n" + chunk.content
+        prev = merged[-1]
+        same_section = (
+            prev.source_file == chunk.source_file
+            and prev.heading_hierarchy == chunk.heading_hierarchy
+        )
+        if _estimate_tokens(prev.content) < min_size and same_section:
+            prev.content += "\n\n" + chunk.content
         else:
             merged.append(chunk)
 

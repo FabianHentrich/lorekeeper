@@ -37,9 +37,18 @@ LoreKeeper is built from the ground up for this workflow:
   (🗺️ Lore, 📖 Adventure, 📋 Rules) that restrict retrieval at the vectorstore
   level. Ask "What can the time mage do?" and limit to Rules, and you won't
   get the NPC named *Arkenfeld the Time Mage* polluting the context.
-- **Two-stage retrieval** — multilingual E5 bi-encoder for recall,
-  cross-encoder reranker for precision. Proper production RAG, not naive
-  top-k cosine.
+- **Two-stage retrieval with soft diversity cap** — multilingual E5
+  bi-encoder for recall, cross-encoder reranker for precision, plus a
+  per-source soft cap (`max_per_source`, default 3) that prevents one
+  dense document from filling all top-K slots and crowding out related
+  sources. The cap is two-pass: first fills with diversity preference,
+  then backfills cap-blocked chunks if `top_k_rerank` would otherwise not
+  be reached — diversity is a preference, never a slot-killer. Proper
+  production RAG, not naive top-k cosine.
+- **Honest chunking** — heading-aware splits with atomic Markdown tables,
+  and small chunks only get merged with neighbors that share the same
+  heading. No silent heading drift, no chunks lying about which section
+  they belong to.
 - **Identity-layer embedding** — filename stem + aliases are prepended to
   every chunk before embedding. A stat table with no prose self-reference
   still matches queries about its subject.
@@ -47,6 +56,14 @@ LoreKeeper is built from the ground up for this workflow:
   Switch live via a sidebar dropdown.
 - **Real streaming** — SSE token stream with sources attached to the
   terminal event; multi-turn sessions with automatic GC.
+- **Telegram-style answers** — the system prompt enforces scannable,
+  chat-like formatting (short paragraphs, emoji headers like
+  `**⚔️ Fähigkeiten**`, bullet lists, source citations) instead of flat
+  prose blocks. Mobile-friendly and easy to skim during a session.
+- **Live token accounting** — every assistant message shows its own
+  `⬇ in · ⬆ out · 🧠 think` token usage, and the page header keeps a
+  running total for the current session. Backed by a Session GC that
+  resets the counter when sessions expire.
 
 Built for German-language TTRPG content (the retrieval and LLM prompts are
 in German), but the architecture is language-agnostic — swap the
@@ -58,12 +75,14 @@ multilingual E5 model and prompts for any other language.
 
 | | |
 |---|---|
-| 🧠 **Hybrid retrieval** | E5-base bi-encoder + mMiniLMv2 cross-encoder reranker |
+| 🧠 **Hybrid retrieval** | E5-base bi-encoder + mMiniLMv2 cross-encoder reranker + soft per-source diversity cap (two-pass with backfill) |
 | 🔀 **Dual LLM providers** | Ollama (local) ↔ Gemini (cloud), switch at runtime |
 | 📜 **Obsidian-native** | Wikilinks, callouts, embeds, tags, aliases all parsed |
 | 🎯 **Category filtering** | Lore / Adventure / Rules filters restrict context |
 | 🌊 **SSE streaming** | Token-by-token with source citations in the done event |
+| 📊 **Token accounting** | Per-message and per-session token usage (in / out / thinking), shown live in the UI |
 | 💬 **Multi-turn chat** | Sliding-window memory + automatic session GC |
+| 💬 **Telegram-style answers** | Scannable chat-like formatting: short paragraphs, emoji headers, bullets — instead of flat 3-line prose |
 | 🔁 **Incremental indexing** | SHA-256 content hashing — only changed files re-embed |
 | 🐳 **Docker-ready** | API + ChromaDB + Ollama (GPU) + UI via `docker compose` |
 | ✅ **124 tests** | Unit + integration coverage including the full HTTP layer |
@@ -199,8 +218,8 @@ HTTP (`CHROMA_MODE=client`). Ollama is GPU-accelerated by default — see
 | [docs/configuration.md](docs/configuration.md) | Full `settings.yaml` reference + env variables |
 | [docs/prompts.md](docs/prompts.md) | Jinja2 templates, variables, customization |
 | [docs/operations.md](docs/operations.md) | Ingest, re-ingest, troubleshooting |
+| [docs/evaluation.md](docs/evaluation.md) | Golden Set, retrieval/end-to-end eval scripts, metrics, workflow |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Dev setup, coding conventions, PR process |
-| [CHANGELOG.md](CHANGELOG.md) | Release notes |
 
 ---
 

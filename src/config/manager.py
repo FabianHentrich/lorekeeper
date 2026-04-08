@@ -41,6 +41,7 @@ class RerankingConfig(BaseModel):
     enabled: bool = True
     model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
     top_k_rerank: int = 8
+    max_per_source: int = 3          # cap number of chunks from any single file (0 = unlimited)
 
 
 class RetrievalConfig(BaseModel):

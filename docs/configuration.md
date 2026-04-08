@@ -42,7 +42,7 @@ Controls how documents are split into chunks.
 | `strategy` | `str` | `heading_aware` | `heading_aware` \| `recursive` \| `fixed_size` |
 | `max_chunk_size` | `int` | `256` | Max chunk size in estimated tokens (`len(text) / 3.5`); applies to prose only — tables are kept atomic |
 | `chunk_overlap` | `int` | `30` | Overlap in recursive prose splitting; tables never receive overlap |
-| `min_chunk_size` | `int` | `20` | Chunks below this size are merged with a neighbor |
+| `min_chunk_size` | `int` | `20` | Chunks below this size are merged with the previous chunk **only if both belong to the same `heading_hierarchy`** — merging across heading boundaries would make the chunk's heading metadata lie about half its content |
 
 **Strategies:**
 
@@ -104,6 +104,7 @@ CHROMA_MODE=client
 | `reranking.enabled` | `bool` | `true` | Enable cross-encoder reranking |
 | `reranking.model` | `str` | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` | Reranker model (multilingual) |
 | `reranking.top_k_rerank` | `int` | `8` | Final chunk count after reranking → LLM context |
+| `reranking.max_per_source` | `int` | `3` | Soft cap on chunks coming from a single source file (0 = unlimited). Prevents one dense document from filling all `top_k_rerank` slots and crowding out other relevant sources. Two-pass: first fills with diversity preference, then backfills cap-blocked chunks if `top_k_rerank` would otherwise not be reached — so the cap never silently returns fewer chunks than requested. |
 
 **Rules of thumb:**
 - `top_k` should be at least twice `top_k_rerank`
