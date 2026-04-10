@@ -198,8 +198,7 @@ no_context: |
 
 ## Customizing Prompts
 
-Changes to `prompts.yaml` take effect **without a restart** — wait, actually the `PromptManager`
-reads the file once at server start. For live changes the server must be restarted.
+Changes to `prompts.yaml` require a **server restart** — the `PromptManager` reads the file once at startup.
 
 **Jinja2 syntax:**
 ```jinja2

@@ -4,7 +4,7 @@
 
 ```mermaid
 flowchart TD
-    FS[("Filesystem\ndata/")] --> ORCH[IngestionOrchestrator]
+    FS[("Sources\nconfig/sources.yaml")] --> ORCH[IngestionOrchestrator]
 
     ORCH -->|".md"| MD[MarkdownParser\nFrontmatter · Headings · Obsidian syntax]
     ORCH -->|".pdf"| PDF[PDFParser\npymupdf4llm · heading-aware]

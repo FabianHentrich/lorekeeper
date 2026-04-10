@@ -171,31 +171,76 @@ class VectorStoreService:
 
         return items
 
-    def get_all_content_hashes(self) -> dict[str, str]:
-        """Returns {source_file: content_hash} for all stored chunks."""
+    def get_content_hashes_for_source(self, source_id: str) -> dict[str, str]:
+        """Returns {source_file: content_hash} scoped to a single source_id."""
         collection = self._get_collection()
         try:
-            all_data = collection.get(include=["metadatas"])
+            data = collection.get(where={"source_id": source_id}, include=["metadatas"])
         except Exception:
             return {}
 
-        hashes = {}
-        if all_data and all_data["metadatas"]:
-            for meta in all_data["metadatas"]:
-                source = meta.get("source_file", "")
-                content_hash = meta.get("content_hash", "")
-                if source and content_hash:
-                    hashes[source] = content_hash
-
+        hashes: dict[str, str] = {}
+        if data and data["metadatas"]:
+            for meta in data["metadatas"]:
+                src = meta.get("source_file", "")
+                h = meta.get("content_hash", "")
+                if src and h:
+                    hashes[src] = h
         return hashes
 
-    def delete_by_source(self, source_file: str):
+    def delete_by_source_file(self, source_id: str, source_file: str):
+        """Delete chunks scoped to (source_id, source_file). Avoids cross-source collisions."""
         collection = self._get_collection()
         try:
-            collection.delete(where={"source_file": source_file})
-            logger.info(f"Deleted chunks for: {source_file}")
+            collection.delete(where={"$and": [
+                {"source_id": source_id},
+                {"source_file": source_file},
+            ]})
+            logger.info(f"Deleted chunks: source_id={source_id} file={source_file}")
         except Exception as e:
-            logger.error(f"Error deleting chunks for {source_file}: {e}")
+            logger.error(f"Error deleting chunks for {source_id}/{source_file}: {e}")
+
+    def delete_by_source_id(self, source_id: str) -> int:
+        """Delete every chunk that belongs to a source. Returns count before deletion."""
+        collection = self._get_collection()
+        try:
+            existing = collection.get(where={"source_id": source_id}, include=[])
+            count = len(existing["ids"]) if existing and existing.get("ids") else 0
+            if count:
+                collection.delete(where={"source_id": source_id})
+            logger.info(f"Deleted {count} chunks for source_id={source_id}")
+            return count
+        except Exception as e:
+            logger.error(f"Error deleting source_id={source_id}: {e}")
+            return 0
+
+    def get_chunks_by_source_id(self, source_id: str) -> dict:
+        """Return raw chroma .get() result scoped to a source_id."""
+        collection = self._get_collection()
+        try:
+            return collection.get(where={"source_id": source_id}, include=["metadatas"])
+        except Exception:
+            return {"ids": [], "metadatas": []}
+
+    def update_metadata_batch(self, ids: list[str], metadatas: list[dict]) -> None:
+        """Update metadata for existing chunks without re-embedding."""
+        if not ids:
+            return
+        collection = self._get_collection()
+        batch = 5000
+        for i in range(0, len(ids), batch):
+            collection.update(ids=ids[i:i+batch], metadatas=metadatas[i:i+batch])
+        logger.info(f"Updated metadata for {len(ids)} chunks")
+
+    def wipe_collection(self) -> None:
+        """Drop and recreate the collection. Works in both embedded and client mode."""
+        client = self._get_client()
+        try:
+            client.delete_collection(name=self.config.collection_name)
+        except Exception:
+            pass
+        self._collection = None
+        logger.warning(f"Wiped collection: {self.config.collection_name}")
 
     def count(self) -> int:
         collection = self._get_collection()

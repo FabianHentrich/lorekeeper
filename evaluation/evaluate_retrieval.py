@@ -12,11 +12,14 @@ Usage:
 
 import argparse
 import json
+import logging
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 
 def load_qa_pairs(path: str) -> list[dict]:
@@ -24,80 +27,90 @@ def load_qa_pairs(path: str) -> list[dict]:
     return data.get("pairs", [])
 
 
-def run_evaluation(qa_pairs: list[dict], top_k: int, top_k_rerank: int) -> dict:
-    # Import here so settings are loaded before override
-    from src.config.manager import config_manager
-    from src.retrieval.embeddings import EmbeddingService
-    from src.retrieval.vectorstore import VectorStoreService
-    from src.retrieval.retriever import Retriever
-    import asyncio
+async def run_evaluation_with_retriever(
+    qa_pairs: list[dict],
+    retriever,
+    top_k: int,
+    top_k_rerank: int,
+    max_per_source: int = 3,
+    progress_callback=None,
+) -> dict:
+    """Run retrieval evaluation using an existing Retriever instance.
 
-    settings = config_manager.settings
-    cfg = settings.retrieval
+    Called by the API route (shared retriever) and by run_evaluation() (own retriever).
+    progress_callback(current, total) is called after each question.
+    """
+    results = []
+    hits = 0
+    total = len(qa_pairs)
 
-    embedding_service = EmbeddingService(settings.embeddings)
-    vectorstore = VectorStoreService(settings.vectorstore, embedding_service)
-    retriever = Retriever(cfg, embedding_service, vectorstore)
+    for idx, pair in enumerate(qa_pairs):
+        question = pair["question"]
+        expected_sources = pair.get("expected_sources", [])
+        source_type = pair.get("source_type", "unknown")
+        category = pair.get("category", "unknown")
 
-    async def _evaluate():
-        results = []
-        hits = 0
-
-        for pair in qa_pairs:
-            question = pair["question"]
-            expected_sources = pair.get("expected_sources", [])
-            source_type = pair.get("source_type", "unknown")
-            category = pair.get("category", "unknown")
-
-            start = time.time()
-            try:
-                chunks = await retriever.retrieve(
-                    query=question,
-                    top_k=top_k,
-                )
-                # Apply rerank top_k override
-                if cfg.reranking.enabled:
-                    chunks = chunks[:top_k_rerank]
-            except Exception as e:
-                results.append({
-                    "id": pair.get("id", "?"),
-                    "question": question,
-                    "source_type": source_type,
-                    "category": category,
-                    "error": str(e),
-                    "hit": False,
-                })
-                continue
-
-            latency_ms = (time.time() - start) * 1000
-            retrieved_files = [c.source_file for c in chunks]
-
-            # Hit: any expected source filename appears in retrieved source_files
-            hit = any(
-                any(exp.split("/")[-1] in rf for rf in retrieved_files)
-                for exp in expected_sources
+        start = time.time()
+        try:
+            chunks = await retriever.retrieve(
+                query=question,
+                top_k=top_k,
+                top_k_rerank=top_k_rerank,
+                max_per_source=max_per_source,
             )
-            if hit:
-                hits += 1
-
+        except Exception as e:
+            logger.error("Eval [%s/%s] id=%s error: %s", idx + 1, total, pair.get("id", "?"), e)
             results.append({
                 "id": pair.get("id", "?"),
                 "question": question,
                 "source_type": source_type,
                 "category": category,
-                "expected_sources": expected_sources,
-                "retrieved_files": retrieved_files,
-                "hit": hit,
-                "top_score": round(chunks[0].score, 4) if chunks else 0.0,
-                "latency_ms": round(latency_ms),
+                "error": str(e),
+                "hit": False,
             })
+            if progress_callback:
+                progress_callback(idx + 1, total)
+            continue
 
-        return results, hits
+        latency_ms = (time.time() - start) * 1000
+        retrieved_files = [c.source_file for c in chunks]
 
-    results, hits = asyncio.run(_evaluate())
+        # Hit: any expected source filename appears in retrieved source_files
+        hit = any(
+            any(exp.split("/")[-1] in rf for rf in retrieved_files)
+            for exp in expected_sources
+        )
+        if hit:
+            hits += 1
 
-    total = len(qa_pairs)
+        top_score = round(chunks[0].score, 4) if chunks else 0.0
+        logger.debug(
+            "Eval [%s/%s] id=%s %s score=%.4f latency=%dms",
+            idx + 1, total, pair.get("id", "?"),
+            "HIT" if hit else "MISS", top_score, round(latency_ms),
+        )
+
+        results.append({
+            "id": pair.get("id", "?"),
+            "question": question,
+            "source_type": source_type,
+            "category": category,
+            "expected_sources": expected_sources,
+            "retrieved_files": retrieved_files,
+            "hit": hit,
+            "top_score": top_score,
+            "latency_ms": round(latency_ms),
+        })
+
+        if progress_callback:
+            progress_callback(idx + 1, total)
+
     hit_rate = hits / total if total else 0
+    avg_latency = sum(r.get("latency_ms", 0) for r in results if "error" not in r) / max(len(results), 1)
+    logger.info(
+        "Retrieval eval complete: %d/%d hits (%.1f%%), Ø latency=%dms, top_k=%d, top_k_rerank=%d, max_per_source=%d",
+        hits, total, hit_rate * 100, avg_latency, top_k, top_k_rerank, max_per_source,
+    )
 
     # Per source_type breakdown
     breakdown: dict[str, dict] = {}
@@ -123,6 +136,7 @@ def run_evaluation(qa_pairs: list[dict], top_k: int, top_k_rerank: int) -> dict:
         "config": {
             "top_k": top_k,
             "top_k_rerank": top_k_rerank,
+            "max_per_source": max_per_source,
         },
         "total_questions": total,
         "hit_rate": round(hit_rate, 3),
@@ -131,6 +145,27 @@ def run_evaluation(qa_pairs: list[dict], top_k: int, top_k_rerank: int) -> dict:
         "errors": [r for r in results if "error" in r],
         "details": results,
     }
+
+
+def run_evaluation(qa_pairs: list[dict], top_k: int, top_k_rerank: int,
+                   max_per_source: int = 3) -> dict:
+    """CLI-compatible sync wrapper. Creates its own Retriever."""
+    from src.config.manager import config_manager
+    from src.retrieval.embeddings import EmbeddingService
+    from src.retrieval.vectorstore import VectorStoreService
+    from src.retrieval.retriever import Retriever
+    import asyncio
+
+    settings = config_manager.settings
+    cfg = settings.retrieval
+
+    embedding_service = EmbeddingService(settings.embeddings)
+    vectorstore = VectorStoreService(settings.vectorstore, embedding_service)
+    retriever = Retriever(cfg, embedding_service, vectorstore)
+
+    return asyncio.run(run_evaluation_with_retriever(
+        qa_pairs, retriever, top_k, top_k_rerank, max_per_source,
+    ))
 
 
 def main():

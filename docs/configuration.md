@@ -16,10 +16,54 @@ Controls which files are read.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `document_paths` | `list[str]` | `["./data/PnP-Welt"]` | Root directories for document discovery. Multiple paths supported. |
 | `supported_formats` | `list[str]` | `[".md", ".pdf", ".png", ".jpg", ".webp"]` | File extensions to process |
 | `exclude_patterns` | `list[str]` | see below | Glob patterns for files/folders to exclude |
 | `watch_for_changes` | `bool` | `false` | Not implemented (reserved for auto-reindex) |
+| `document_paths` | `list[str]` | `[]` | **Deprecated.** Replaced by `config/sources.yaml`. If set without a `sources.yaml`, the loader migrates them on the fly to sources with `group=lore` and warns. |
+
+### Sources sidecar — `config/sources.yaml`
+
+Sources are configured in a separate sidecar file (gitignored, user-specific).
+A source is either a folder or a single file and belongs to one of the three
+filter groups `lore`, `adventure`, `rules`.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `str` | yes | Stable identifier (used to scope reindex/delete and as `source_id` metadata on every chunk). Renaming = new source. |
+| `path` | `str` | yes | Absolute or relative path. May point at a folder OR a single file. |
+| `group` | `lore`\|`adventure`\|`rules` | yes | Default filter group for the three sidebar buttons. Can be overridden per folder in `category_map`. |
+| `default_category` | `str` | no (yes for file sources) | Fallback `content_category` when no entry of `category_map` matches. |
+| `category_map` | `dict[str, str\|dict]` | no | Top-level folder name → category (and optionally group). Values can be a plain string (`npc`) or a dict (`{category: story, group: adventure}`). String values inherit the source-level `group`. Case-insensitive lookup. Folder sources only. |
+| `exclude_patterns` | `list[str]` | no | Additive to global `ingestion.exclude_patterns`. |
+
+**Example:**
+```yaml
+# config/sources.yaml
+sources:
+  - id: pnp-welt
+    path: C:/Users/you/Obsidian/PnP-Welt
+    group: lore                          # fallback for unmapped folders
+    default_category: misc
+    category_map:
+      NPCs: npc                          # string shorthand → inherits group: lore
+      Orte: location
+      Gegner: enemy
+      Geschichte:                        # dict form → overrides group
+        category: story
+        group: adventure
+      Regelwerk:
+        category: rules
+        group: rules
+```
+
+**Managing sources:**
+- Edit `config/sources.yaml` directly, or
+- Use the Streamlit page **⚙ Sources** (`ui/pages/1_Sources.py`) to add / edit / reindex / recategorize / remove sources, or
+- Use the REST endpoints: `GET/PUT /sources`, `POST /sources/{id}/reindex`, `DELETE /sources/{id}`, `POST /sources/recategorize`, `POST /admin/wipe`.
+
+**Recategorize vs. Reindex:**
+- *Recategorize* — `python -m src.ingestion.recategorize` rewrites only the `group` / `content_category` / `source_id` metadata of existing chunks against the current `sources.yaml`. No re-embedding, runs in seconds.
+- *Reindex* — full delete + parse + chunk + embed for one source. Required when content or `path` changes.
 
 **Default excludes:**
 ```yaml
@@ -153,6 +197,22 @@ LLM__PROVIDER=ollama
 GEMINI_API_KEY=your-key-here   # in .env
 LLM__PROVIDER=gemini
 ```
+
+**Runtime API key (no .env required):**
+
+The Gemini API key can also be supplied at runtime from the Streamlit sidebar
+("LLM Provider" section). It is held in process memory only — never written to
+disk — and is lost on backend restart. Resolution order at provider creation:
+
+1. Runtime override (set via `POST /provider/gemini/key`)
+2. `os.environ[api_key_env]`
+3. `.env` file
+
+Endpoints:
+- `GET /provider/gemini/status` → `{has_key, source: env|runtime|none}`. Never returns the key itself.
+- `POST /provider/gemini/key` body `{"api_key": "..."}` — stores the key. If Gemini is the active provider, the provider + generator are rebuilt immediately so the new key applies. Pass `null` or an empty string to clear the override.
+
+This makes "start program → enter key in UI → use Gemini" possible without touching `.env`.
 
 ---
 

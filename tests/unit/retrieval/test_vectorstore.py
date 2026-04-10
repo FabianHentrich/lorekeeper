@@ -164,7 +164,7 @@ class TestQuery:
         assert kwargs["where"] == {"document_type": "markdown"}
 
 
-class TestGetAllContentHashes:
+class TestGetContentHashesForSource:
     def test_returns_mapping(self, service, mock_collection):
         mock_collection.get.return_value = {
             "metadatas": [
@@ -172,19 +172,19 @@ class TestGetAllContentHashes:
                 {"source_file": "b.md", "content_hash": "hash2"},
             ]
         }
-        result = service.get_all_content_hashes()
+        result = service.get_content_hashes_for_source("src1")
         assert result == {"a.md": "hash1", "b.md": "hash2"}
+        # Verify the where clause scopes by source_id
+        assert mock_collection.get.call_args[1]["where"] == {"source_id": "src1"}
 
     def test_skips_entries_without_hash(self, service, mock_collection):
-        mock_collection.get.return_value = {
-            "metadatas": [{"source_file": "a.md"}]
-        }
-        result = service.get_all_content_hashes()
+        mock_collection.get.return_value = {"metadatas": [{"source_file": "a.md"}]}
+        result = service.get_content_hashes_for_source("src1")
         assert result == {}
 
     def test_returns_empty_on_exception(self, service, mock_collection):
         mock_collection.get.side_effect = Exception("chroma down")
-        result = service.get_all_content_hashes()
+        result = service.get_content_hashes_for_source("src1")
         assert result == {}
 
 

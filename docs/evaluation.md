@@ -56,7 +56,7 @@ the entity tests miss:
   source_type: markdown          # markdown | pdf | image
   category: location             # label only — not stored in ChromaDB
   expected_sources:
-    - "Orte/Arkenfeld.md"        # path relative to data/PnP-Welt/ (or data/rules/)
+    - "Orte/Arkenfeld.md"        # path relative to source base path
   expected_answer_contains:
     - "Arkenfeld"                # substrings the LLM answer should contain
   notes: "optional"

@@ -65,7 +65,7 @@ def populated_vectorstore(vectorstore, embed_service):
             heading_hierarchy=["Orte", "Arkenfeld"],
             chunk_index=0,
             total_chunks=1,
-            metadata={"aliases": ["Arken"], "content_hash": "sha256:aaa"},
+            metadata={"aliases": ["Arken"], "content_hash": "sha256:aaa", "source_id": "test"},
         ),
         Chunk(
             content="Aldric is a veteran NPC blacksmith living in Arkenfeld.",
@@ -75,7 +75,7 @@ def populated_vectorstore(vectorstore, embed_service):
             heading_hierarchy=["NPCs", "Aldric"],
             chunk_index=0,
             total_chunks=1,
-            metadata={"content_hash": "sha256:bbb"},
+            metadata={"content_hash": "sha256:bbb", "source_id": "test"},
         ),
         Chunk(
             content="The Dragon of the North terrorises the mountain passes.",
@@ -85,7 +85,7 @@ def populated_vectorstore(vectorstore, embed_service):
             heading_hierarchy=["Gegner", "Drache"],
             chunk_index=0,
             total_chunks=1,
-            metadata={"content_hash": "sha256:ccc"},
+            metadata={"content_hash": "sha256:ccc", "source_id": "test"},
         ),
         Chunk(
             content="portrait_aldric.png",
@@ -94,7 +94,7 @@ def populated_vectorstore(vectorstore, embed_service):
             document_type="image",
             chunk_index=0,
             total_chunks=1,
-            metadata={"content_hash": "sha256:ddd"},
+            metadata={"content_hash": "sha256:ddd", "source_id": "test"},
         ),
     ]
     vectorstore.upsert_chunks(chunks)
@@ -172,7 +172,7 @@ class TestRetrieval:
 
 class TestContentHashLookup:
     def test_hash_returned_for_stored_file(self, populated_vectorstore):
-        hashes = populated_vectorstore.get_all_content_hashes()
+        hashes = populated_vectorstore.get_content_hashes_for_source("test")
         assert "Orte/Arkenfeld.md" in hashes
         assert hashes["Orte/Arkenfeld.md"] == "sha256:aaa"
 

@@ -117,7 +117,7 @@ class FakeRetriever:
         ]
         self.last_call: dict = {}
 
-    async def retrieve(self, query: str, top_k=None, metadata_filters=None, top_k_rerank=None):
+    async def retrieve(self, query: str, top_k=None, metadata_filters=None, top_k_rerank=None, max_per_source=None):
         self.last_call = {
             "query": query,
             "top_k": top_k,
@@ -169,6 +169,7 @@ def fake_services():
         settings=SimpleNamespace(
             llm=SimpleNamespace(provider="ollama"),
             conversation=SimpleNamespace(),
+            ingestion=SimpleNamespace(sources=[{"path": "/fake"}]),
         )
     )
     main_module.config = fake_config
@@ -191,9 +192,10 @@ def fake_services():
     main_module.vectorstore = fakes.vectorstore
     main_module.provider = fakes.provider
 
-    # Reset health cache between tests
+    # Seed health cache (background loop doesn't run in tests)
+    import time as _time
     from src.api import routes as routes_module
-    routes_module._health_cache.update({"ts": 0.0, "chroma": False, "llm": False})
+    routes_module._health_cache.update({"ts": _time.monotonic(), "chroma": True, "llm": True})
     routes_module._ingest_jobs.clear()
 
     yield fakes
@@ -319,13 +321,14 @@ def test_health_healthy(client, fake_services):
     response = client.get("/health")
     assert response.status_code == 200
     body = response.json()
-    assert body == {"status": "healthy", "chromadb": True, "llm": True}
+    assert body == {"status": "healthy", "chromadb": True, "llm": True, "sources_configured": True}
 
 
 def test_health_degraded_when_llm_down(client, fake_services):
-    fake_services.provider._healthy = False
+    from src.api import routes as routes_module
+    routes_module._health_cache["llm"] = False
     response = client.get("/health")
-    assert response.json() == {"status": "degraded", "chromadb": True, "llm": False}
+    assert response.json() == {"status": "degraded", "chromadb": True, "llm": False, "sources_configured": True}
 
 
 # ─── /sessions ─────────────────────────────────────────────────────────────

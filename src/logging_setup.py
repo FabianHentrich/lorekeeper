@@ -35,7 +35,7 @@ def setup_logging(config: LoggingConfig):
 
     # Suppress noisy third-party loggers
     for name in config.suppress:
-        logging.getLogger(name).setLevel(logging.WARNING)
+        logging.getLogger(name).setLevel(logging.ERROR)
 
     # uvicorn access logs are noisy, keep only errors
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)

@@ -69,7 +69,7 @@ def test_lifespan_startup_and_shutdown(patched_lifespan):
 
         # Startup side-effects happened
         patched_lifespan.embed.embed_text.assert_awaited_once_with("warmup")
-        patched_lifespan.vs.health_check.assert_called_once()
+        assert patched_lifespan.vs.health_check.call_count >= 1
 
         # App responds to a trivial request (middleware + router wired)
         response = client.get("/openapi.json")

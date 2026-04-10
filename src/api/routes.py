@@ -3,6 +3,7 @@ import json
 import logging
 import time
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -30,7 +31,6 @@ _ingest_jobs: dict[str, IngestStatusResponse] = {}
 
 # Health check cache (TTL = 30s)
 _health_cache: dict = {"ts": 0.0, "chroma": False, "llm": False}
-_HEALTH_TTL = 30.0
 
 
 def _get_services():
@@ -193,23 +193,33 @@ async def query_stream(request: QueryRequest):
 @router.post("/ingest", response_model=IngestJobResponse)
 async def ingest():
     from src.ingestion.orchestrator import IngestionOrchestrator
+    import src.main as main_module
     _, _, _, _, _, vs, _ = _get_services()
 
     job_id = str(uuid.uuid4())
     _ingest_jobs[job_id] = IngestStatusResponse(job_id=job_id, status="queued")
 
+    def _update_progress(result):
+        job = _ingest_jobs[job_id]
+        job.phase = result.phase
+        job.documents_processed = result.documents_processed
+        job.documents_total = result.documents_total
+        job.chunks_created = result.chunks_created
+        job.chunks_updated = result.chunks_updated
+        job.chunks_deleted = result.chunks_deleted
+        job.duration_seconds = result.duration_seconds
+
+    def _run_sync():
+        orchestrator = IngestionOrchestrator(config=main_module.config)
+        return orchestrator.run(vectorstore=vs, progress_callback=_update_progress)
+
     async def run_ingestion():
         _ingest_jobs[job_id].status = "running"
         try:
-            orchestrator = IngestionOrchestrator()
-            result = orchestrator.run(vectorstore=vs)
+            result = await asyncio.get_event_loop().run_in_executor(None, _run_sync)
+            _update_progress(result)
             _ingest_jobs[job_id].status = "done"
-            _ingest_jobs[job_id].documents_processed = result.documents_processed
-            _ingest_jobs[job_id].chunks_created = result.chunks_created
-            _ingest_jobs[job_id].chunks_updated = result.chunks_updated
-            _ingest_jobs[job_id].chunks_deleted = result.chunks_deleted
             _ingest_jobs[job_id].errors = result.errors
-            _ingest_jobs[job_id].duration_seconds = result.duration_seconds
         except Exception as e:
             _ingest_jobs[job_id].status = "error"
             _ingest_jobs[job_id].errors.append(str(e))
@@ -225,19 +235,28 @@ async def ingest_status(job_id: str):
     return _ingest_jobs[job_id]
 
 
+async def _health_loop(interval: float = 60.0):
+    """Background loop that refreshes the health cache periodically."""
+    while True:
+        try:
+            _, _, _, _, _, vs, prov = _get_services()
+            chroma_ok = vs.health_check()
+            llm_ok = await prov.health_check()
+            _health_cache.update({"ts": time.monotonic(), "chroma": chroma_ok, "llm": llm_ok})
+        except Exception as e:
+            logger.warning("Background health check failed: %s", e)
+        await asyncio.sleep(interval)
+
+
 @router.get("/health", response_model=HealthResponse)
 async def health():
-    now = time.monotonic()
-    if now - _health_cache["ts"] < _HEALTH_TTL:
-        chroma_ok, llm_ok = _health_cache["chroma"], _health_cache["llm"]
-    else:
-        _, _, _, _, _, vs, prov = _get_services()
-        chroma_ok = vs.health_check()
-        llm_ok = await prov.health_check()
-        _health_cache.update({"ts": now, "chroma": chroma_ok, "llm": llm_ok})
+    chroma_ok = _health_cache["chroma"]
+    llm_ok = _health_cache["llm"]
 
+    import src.main as main_module
+    has_sources = bool(main_module.config.settings.ingestion.sources)
     status = "healthy" if (chroma_ok and llm_ok) else "degraded"
-    return HealthResponse(status=status, chromadb=chroma_ok, llm=llm_ok)
+    return HealthResponse(status=status, chromadb=chroma_ok, llm=llm_ok, sources_configured=has_sources)
 
 
 @router.get("/sessions/{session_id}")
@@ -273,6 +292,209 @@ async def get_provider():
         provider=getattr(prov, "provider", "unknown") if hasattr(prov, "provider") else type(prov).__name__,
         model=getattr(prov, "model", "unknown"),
     )
+
+
+@router.get("/sources")
+async def list_sources():
+    import src.main as main_module
+    return {"sources": [s.model_dump() for s in main_module.config.settings.ingestion.sources]}
+
+
+def _scan_path(path: Path, supported_formats: set[str]) -> list[dict]:
+    """Scan top-level entries under a path. Shared by source and freeform scan."""
+    entries = []
+    for child in sorted(path.iterdir()):
+        if child.name.startswith("."):
+            continue
+        if child.is_dir():
+            entries.append({"name": child.name, "type": "folder"})
+        elif child.suffix.lower() in supported_formats:
+            entries.append({"name": child.name, "type": "file"})
+    logger.debug(f"Scanned {path}: {len(entries)} entries")
+    return entries
+
+
+@router.get("/sources/{source_id}/folders")
+async def list_source_folders(source_id: str):
+    """List top-level entries (folders and files) under a source's path."""
+    import src.main as main_module
+    source = next(
+        (s for s in main_module.config.settings.ingestion.sources if s.id == source_id),
+        None,
+    )
+    if source is None:
+        logger.warning(f"list_source_folders: unknown source_id={source_id}")
+        raise HTTPException(status_code=404, detail=f"Unknown source_id: {source_id}")
+
+    src_path = Path(source.path).resolve()
+    if not src_path.exists():
+        logger.warning(f"list_source_folders: path does not exist: {src_path} (source={source_id})")
+        return {"folders": [], "error": f"Path does not exist: {src_path}"}
+    if src_path.is_file():
+        return {"folders": [], "note": "File source — no subfolders"}
+
+    supported = set(main_module.config.settings.ingestion.supported_formats)
+    return {"folders": _scan_path(src_path, supported)}
+
+
+@router.post("/sources/scan")
+async def scan_path(payload: dict):
+    """Scan a freeform path (not yet a configured source). Body: {"path": "..."}."""
+    import src.main as main_module
+    raw_path = (payload or {}).get("path", "")
+    if not raw_path:
+        raise HTTPException(status_code=400, detail="Missing 'path' field")
+
+    p = Path(raw_path).resolve()
+    logger.info(f"Scanning path: {p}")
+    if not p.exists():
+        logger.warning(f"Scan: path does not exist: {p}")
+        return {"folders": [], "is_file": False, "error": f"Path does not exist: {p}"}
+    if p.is_file():
+        logger.info(f"Scan: path is a single file: {p}")
+        return {"folders": [], "is_file": True}
+
+    supported = set(main_module.config.settings.ingestion.supported_formats)
+    return {"folders": _scan_path(p, supported), "is_file": False}
+
+
+@router.put("/sources")
+async def update_sources(payload: dict):
+    """Replace the entire sources list. Body: {"sources": [SourceConfig, ...]}."""
+    import src.main as main_module
+    from src.config.manager import SourceConfig
+    raw_sources = payload.get("sources")
+    if raw_sources is None:
+        raise HTTPException(status_code=400, detail="Missing 'sources' field")
+    try:
+        new_sources = [SourceConfig(**s) for s in raw_sources]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid source config: {e}")
+    ids = [s.id for s in new_sources]
+    if len(ids) != len(set(ids)):
+        raise HTTPException(status_code=400, detail="Duplicate source ids")
+    main_module.config.settings.ingestion.sources = new_sources
+    main_module.config.save_sources()
+    return {"sources": [s.model_dump() for s in new_sources]}
+
+
+@router.post("/sources/{source_id}/reindex", response_model=IngestJobResponse)
+async def reindex_source(source_id: str):
+    """Delete + re-ingest a single source."""
+    from src.ingestion.orchestrator import IngestionOrchestrator
+    import src.main as main_module
+    _, _, _, _, _, vs, _ = _get_services()
+
+    if not any(s.id == source_id for s in main_module.config.settings.ingestion.sources):
+        raise HTTPException(status_code=404, detail=f"Unknown source_id: {source_id}")
+
+    job_id = str(uuid.uuid4())
+    _ingest_jobs[job_id] = IngestStatusResponse(job_id=job_id, status="queued")
+
+    def _update_progress(result):
+        job = _ingest_jobs[job_id]
+        job.phase = result.phase
+        job.documents_processed = result.documents_processed
+        job.documents_total = result.documents_total
+        job.chunks_created = result.chunks_created
+        job.chunks_updated = result.chunks_updated
+        job.chunks_deleted = result.chunks_deleted
+        job.duration_seconds = result.duration_seconds
+
+    def _run_sync():
+        vs.delete_by_source_id(source_id)
+        return IngestionOrchestrator(config=main_module.config).run(
+            vectorstore=vs, only_source_id=source_id, progress_callback=_update_progress)
+
+    async def run():
+        _ingest_jobs[job_id].status = "running"
+        try:
+            result = await asyncio.get_event_loop().run_in_executor(None, _run_sync)
+            _update_progress(result)
+            _ingest_jobs[job_id].status = "done"
+            _ingest_jobs[job_id].errors = result.errors
+        except Exception as e:
+            _ingest_jobs[job_id].status = "error"
+            _ingest_jobs[job_id].errors.append(str(e))
+
+    asyncio.create_task(run())
+    return IngestJobResponse(job_id=job_id, status="queued")
+
+
+@router.delete("/sources/{source_id}")
+async def delete_source(source_id: str):
+    """Remove a source from config and delete all its chunks."""
+    import src.main as main_module
+    _, _, _, _, _, vs, _ = _get_services()
+
+    sources = main_module.config.settings.ingestion.sources
+    if not any(s.id == source_id for s in sources):
+        raise HTTPException(status_code=404, detail=f"Unknown source_id: {source_id}")
+
+    deleted = vs.delete_by_source_id(source_id)
+    main_module.config.settings.ingestion.sources = [s for s in sources if s.id != source_id]
+    main_module.config.save_sources()
+    return {"deleted_chunks": deleted}
+
+
+@router.post("/sources/recategorize")
+async def recategorize_endpoint():
+    from src.ingestion.recategorize import recategorize
+    _, _, _, _, _, vs, _ = _get_services()
+    return recategorize(vectorstore=vs)
+
+
+@router.get("/provider/gemini/status")
+async def gemini_key_status():
+    """Report whether a Gemini API key is available, without exposing it."""
+    import src.main as main_module
+    from src.generation.providers.gemini import get_api_key_status
+    return get_api_key_status(main_module.config.settings.llm.gemini)
+
+
+@router.post("/provider/gemini/key")
+async def set_gemini_key(payload: dict):
+    """Set a runtime Gemini API key (process-local, not persisted to disk).
+
+    Body: {"api_key": "..."}  — pass an empty string or null to clear.
+    If the active provider is currently Gemini, it is rebuilt so the new key
+    takes effect immediately.
+    """
+    import src.main as main_module
+    from src.generation.provider_factory import ProviderFactory
+    from src.generation.providers.gemini import set_runtime_api_key
+
+    key = (payload or {}).get("api_key")
+    if key is not None and not isinstance(key, str):
+        raise HTTPException(status_code=400, detail="api_key must be a string")
+
+    set_runtime_api_key(key.strip() if isinstance(key, str) else None)
+
+    # Hot-rebuild the active provider if it's Gemini, so the new key applies.
+    settings = main_module.config.settings
+    rebuilt = False
+    if settings.llm.provider == "gemini":
+        try:
+            main_module.provider = ProviderFactory.create(settings.llm)
+            main_module.generator = Generator(
+                provider=main_module.provider,
+                fallback_provider=ProviderFactory.create_fallback(settings.llm),
+            )
+            rebuilt = True
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Key rejected by provider: {e}")
+
+    return {"status": "ok", "rebuilt_active_provider": rebuilt}
+
+
+@router.post("/admin/wipe")
+async def wipe_collection(payload: dict):
+    """Drop the entire ChromaDB collection. Requires confirm='DELETE' in body."""
+    if payload.get("confirm") != "DELETE":
+        raise HTTPException(status_code=400, detail="Set confirm='DELETE' to proceed")
+    _, _, _, _, _, vs, _ = _get_services()
+    vs.wipe_collection()
+    return {"status": "wiped"}
 
 
 @router.post("/provider", response_model=ProviderInfo)

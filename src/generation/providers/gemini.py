@@ -19,6 +19,27 @@ MAX_RPM = 15
 MIN_REQUEST_INTERVAL = 60.0 / MAX_RPM  # 4 seconds between requests
 
 
+# Runtime override: lets the user supply a Gemini API key from the UI without
+# touching .env. Held in process memory only — never persisted.
+_runtime_api_key: str | None = None
+
+
+def set_runtime_api_key(key: str | None) -> None:
+    """Store/clear the runtime Gemini API key (process-local, not persisted)."""
+    global _runtime_api_key
+    _runtime_api_key = key or None
+
+
+def get_api_key_status(config: GeminiConfig) -> dict:
+    """Return whether a Gemini API key is available and where it came from.
+    Never returns the key itself."""
+    if _runtime_api_key:
+        return {"has_key": True, "source": "runtime"}
+    if os.environ.get(config.api_key_env) or dotenv_values(".env").get(config.api_key_env):
+        return {"has_key": True, "source": "env"}
+    return {"has_key": False, "source": "none"}
+
+
 class GeminiProvider(BaseLLMProvider):
     provider = "gemini"
 
@@ -26,9 +47,13 @@ class GeminiProvider(BaseLLMProvider):
         self.config = config
         self.model = config.model
 
-        api_key = os.environ.get(config.api_key_env, "") or dotenv_values(".env").get(config.api_key_env, "")
+        api_key = (
+            _runtime_api_key
+            or os.environ.get(config.api_key_env, "")
+            or dotenv_values(".env").get(config.api_key_env, "")
+        )
         if not api_key:
-            raise ValueError(f"Environment variable {config.api_key_env} is not set")
+            raise ValueError(f"No Gemini API key — set {config.api_key_env} or supply one via the UI")
 
         self._client = genai.Client(api_key=api_key)
         self._last_request_time: float = 0

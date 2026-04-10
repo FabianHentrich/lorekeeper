@@ -4,8 +4,7 @@ __pycache__/
 .env
 chroma_data/*
 !chroma_data/.gitkeep
-data/PnP-Welt/
-data/rules/
+data/
 .idea/
 *.egg-info/
 dist/
@@ -16,3 +15,4 @@ evaluation/results/*
 logs/
 CLAUDE.md
 /.claude/
+config/sources.yaml

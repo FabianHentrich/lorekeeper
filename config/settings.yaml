@@ -3,10 +3,9 @@
 # ─────────────────────────────────────────
 
 # Ingestion
+# Sources are configured in config/sources.yaml (sidecar, gitignored).
+# document_paths is DEPRECATED — use config/sources.yaml instead.
 ingestion:
-  document_paths:
-    - ./data/PnP-Welt
-    - ./data/rules
   supported_formats: [".md", ".pdf", ".png", ".jpg", ".webp"]
   exclude_patterns:
     - ".obsidian/*"

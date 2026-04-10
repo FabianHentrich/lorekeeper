@@ -172,7 +172,7 @@ flowchart LR
 | **How it works** | Query & document encoded separately → cosine comparison | Query + document encoded together → direct interaction |
 | **Advantage** | Vectors precomputed → extremely fast | Understands relationship between query and text |
 | **Disadvantage** | Loses interaction context | Too slow for the full index |
-| **Role** | Find candidates (top 8) | Re-rank candidates (top 5) |
+| **Role** | Find candidates (top 15) | Re-rank candidates (top 8) |
 
 ---
 

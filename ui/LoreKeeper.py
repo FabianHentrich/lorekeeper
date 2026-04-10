@@ -83,10 +83,15 @@ with st.sidebar:
 
     # Provider-Umschaltung
     st.subheader("LLM Provider")
+
+    @st.cache_data(ttl=30, show_spinner=False)
+    def _fetch_provider(api_url: str):
+        return requests.get(f"{api_url}/provider", timeout=5).json()
+
     current_provider = None
     current_model = None
     try:
-        pinfo = requests.get(f"{API_URL}/provider", timeout=5).json()
+        pinfo = _fetch_provider(API_URL)
         current_provider = pinfo.get("provider", "unknown")
         current_model = pinfo.get("model", "unknown")
     except Exception:
@@ -109,6 +114,7 @@ with st.sidebar:
             )
             resp.raise_for_status()
             st.session_state["_provider_switch_ok"] = True
+            _fetch_provider.clear()
         except Exception as e:
             st.session_state["_provider_switch_error"] = str(e)
             # Revert: will take effect on next rerun
@@ -130,6 +136,55 @@ with st.sidebar:
     if current_model:
         st.caption(f"Aktiv: **{current_model}**")
 
+    # Gemini API key entry — only relevant for the Gemini provider.
+    # The status endpoint never exposes the key itself.
+    @st.cache_data(ttl=60, show_spinner=False)
+    def _fetch_gemini_status(api_url: str):
+        return requests.get(f"{api_url}/provider/gemini/status", timeout=5).json()
+
+    try:
+        gem_status = _fetch_gemini_status(API_URL)
+    except Exception:
+        gem_status = {"has_key": False, "source": "none"}
+
+    if gem_status.get("has_key"):
+        src_label = {"env": "Umgebungsvariable", "runtime": "UI-Eingabe"}.get(gem_status.get("source"), "?")
+        st.caption(f"🔑 Gemini-Key: ✅ ({src_label})")
+        with st.expander("Gemini-Key überschreiben"):
+            new_key_override = st.text_input(
+                "Neuer API-Key", type="password", key="_gemini_key_override",
+                help="Wird nur im Speicher gehalten, nicht in .env geschrieben.",
+            )
+            if st.button("Key setzen", key="_gemini_set_override"):
+                try:
+                    r = requests.post(f"{API_URL}/provider/gemini/key",
+                                      json={"api_key": new_key_override}, timeout=10)
+                    r.raise_for_status()
+                    st.success("Gemini-Key aktualisiert.")
+                    _fetch_gemini_status.clear()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Fehler: {e}")
+    else:
+        st.warning("🔑 Gemini-Key fehlt — Provider 'gemini' ist nicht nutzbar.")
+        new_key = st.text_input(
+            "Gemini API-Key eingeben", type="password", key="_gemini_key_new",
+            help="Wird nur im Speicher gehalten, nicht in .env geschrieben.",
+        )
+        if st.button("Key speichern", key="_gemini_set_new"):
+            if not new_key.strip():
+                st.error("Kein Key eingegeben.")
+            else:
+                try:
+                    r = requests.post(f"{API_URL}/provider/gemini/key",
+                                      json={"api_key": new_key}, timeout=10)
+                    r.raise_for_status()
+                    st.success("Gemini-Key gesetzt.")
+                    _fetch_gemini_status.clear()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Fehler: {e}")
+
     st.divider()
 
     # Provider status (cached 30s to avoid hammering the API)
@@ -137,96 +192,81 @@ with st.sidebar:
     def _fetch_health(api_url: str):
         return requests.get(f"{api_url}/health", timeout=5).json()
 
-    @st.cache_data(ttl=60, show_spinner=False)
-    def _fetch_stats(api_url: str):
-        return requests.get(f"{api_url}/stats", timeout=5).json()
-
     try:
         health = _fetch_health(API_URL)
         status_emoji = "🟢" if health["status"] == "healthy" else "🟡"
         st.markdown(f"{status_emoji} **Status:** {health['status']}")
         st.markdown(f"ChromaDB: {'✅' if health['chromadb'] else '❌'}")
         st.markdown(f"LLM: {'✅' if health['llm'] else '❌'}")
+        if not health.get("sources_configured", True):
+            st.warning(
+                "Keine Quellen konfiguriert. Lege unter **Sources** "
+                "mindestens einen Pfad zu deinen Dokumenten an und starte "
+                "dann die Indizierung."
+            )
     except Exception:
         st.markdown("🔴 **API nicht erreichbar**")
 
     st.divider()
-
-    # Retrieval settings
-    with st.expander("⚙️ Erweitert: Retrieval-Tuning"):
-        top_k = st.slider(
-            "Kandidaten (Top-K)",
-            min_value=1, max_value=50, value=15,
-            help="Wie viele Chunks der Vectorstore liefert (Bi-Encoder Recall). "
-                 "Mehr = höhere Wahrscheinlichkeit, dass die richtige Stelle dabei ist.",
-        )
-        top_k_rerank = st.slider(
-            "Finale Chunks für den LLM (nach Reranking)",
-            min_value=1, max_value=top_k, value=min(8, top_k),
-            help="Wie viele Chunks der Cross-Encoder am Ende auswählt und in den Prompt packt. "
-                 "Mehr = mehr Kontext, aber höhere Latenz und Token-Kosten.",
-        )
-        max_per_source = st.slider(
-            "Max. Chunks pro Quelle (Soft-Cap)",
-            min_value=0, max_value=top_k_rerank, value=min(3, top_k_rerank),
-            help="Soft-Cap auf Chunks aus einer einzelnen Datei. Verhindert, dass ein "
-                 "dichtes Dokument alle Slots belegt und andere Quellen verdrängt. "
-                 "0 = kein Cap (reine Reranker-Reihenfolge). Wird unterschritten, wenn "
-                 "sonst weniger als 'Finale Chunks' herauskämen (Backfill).",
-        )
 
     # Source type filter
     st.subheader("Quellen")
     st.caption("Schränkt die Suche auf bestimmte Dokumenttypen ein. Nützlich um "
                "z.B. den Regelwerk-Zeitmagier vom Lore-NPC zu trennen.")
     _SOURCE_GROUPS = {
-        "🗺️ Lore": (
-            ["npc", "location", "enemy", "item", "organization", "daemon", "god", "backstory", "misc"],
-            "NPCs, Orte, Gegenstände, Organisationen, Götter, Dämonen, Hintergrund",
-        ),
-        "📖 Abenteuer": (
-            ["story"],
-            "Abenteuer- und Story-Dokumente",
-        ),
-        "📋 Regelwerk": (
-            ["tool", "rules"],
-            "Spielregeln, Klassen, Mechaniken, Tools",
-        ),
+        "🗺️ Lore": ("lore", "Welt-Lore: NPCs, Orte, Items, Organisationen, …"),
+        "📖 Abenteuer": ("adventure", "Abenteuer- und Story-Dokumente"),
+        "📋 Regelwerk": ("rules", "Regelbuch, Klassen, Mechaniken, Tools"),
     }
     selected_groups = []
     selected_labels = []
-    for label, (_cats, _help) in _SOURCE_GROUPS.items():
+    for label, (group_id, _help) in _SOURCE_GROUPS.items():
         if st.checkbox(label, value=True, key=f"src_{label}", help=_help):
-            selected_groups.extend(_cats)
+            selected_groups.append(group_id)
             selected_labels.append(label)
 
-    # Build filter: None = no filter (all selected), $in = subset, blocked = none
-    all_categories = [c for cats, _ in _SOURCE_GROUPS.values() for c in cats]
+    all_groups = [g for g, _ in _SOURCE_GROUPS.values()]
     if not selected_groups:
         st.warning("⚠️ Mindestens eine Quellenart auswählen, sonst werden Anfragen blockiert.")
         _category_filter = "__BLOCKED__"
-    elif set(selected_groups) == set(all_categories):
+    elif set(selected_groups) == set(all_groups):
         _category_filter = None
     else:
         _category_filter = {"$in": selected_groups}
         st.caption(f"🔍 Suche eingeschränkt auf: {', '.join(selected_labels)}")
 
-    st.divider()
-
-    # Index stats
-    try:
-        stats = _fetch_stats(API_URL)
-        st.metric("Indizierte Chunks", stats["chunk_count"])
-    except Exception:
-        pass
-
-    # Ingestion trigger
-    if st.button("🔄 Dokumente neu indizieren"):
+    # Optional: further narrow by content_category
+    @st.cache_data(ttl=30, show_spinner=False)
+    def _fetch_available_categories(api_url: str):
+        """Derive available content_category values from configured sources."""
         try:
-            resp = requests.post(f"{API_URL}/ingest", timeout=10).json()
-            st.info(f"Ingestion gestartet (Job: {resp['job_id'][:8]}...)")
-        except Exception as e:
-            st.error(f"Fehler: {e}")
+            sources = requests.get(f"{api_url}/sources", timeout=5).json()["sources"]
+        except Exception:
+            return []
+        cats = set()
+        for s in sources:
+            if s.get("default_category"):
+                cats.add(s["default_category"])
+            for v in (s.get("category_map") or {}).values():
+                if isinstance(v, dict):
+                    cats.add(v["category"])
+                else:
+                    cats.add(v)
+        return sorted(cats)
+
+    available_cats = _fetch_available_categories(API_URL)
+    _content_category_filter = None
+    if available_cats:
+        with st.expander("Kategorie-Filter (optional)"):
+            selected_cats = st.multiselect(
+                "Kategorien",
+                options=available_cats,
+                default=available_cats,
+                help="Schränkt die Suche zusätzlich auf bestimmte Inhaltskategorien ein.",
+            )
+            if selected_cats and set(selected_cats) != set(available_cats):
+                _content_category_filter = {"$in": selected_cats}
+                st.caption(f"🏷 Kategorie: {', '.join(selected_cats)}")
 
     st.divider()
 
@@ -262,16 +302,18 @@ if prompt := st.chat_input("Stelle eine Frage über deine Welt..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Build request
+    # Build request (retrieval params use server defaults from settings.yaml)
     request_body = {
         "question": prompt,
         "session_id": st.session_state.session_id,
-        "top_k": top_k,
-        "top_k_rerank": top_k_rerank,
-        "max_per_source": max_per_source,
     }
+    _filters = {}
     if _category_filter is not None:
-        request_body["metadata_filters"] = {"content_category": _category_filter}
+        _filters["group"] = _category_filter
+    if _content_category_filter is not None:
+        _filters["content_category"] = _content_category_filter
+    if _filters:
+        request_body["metadata_filters"] = _filters
 
     # Stream response
     with st.chat_message("assistant"):

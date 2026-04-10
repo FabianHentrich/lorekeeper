@@ -7,8 +7,8 @@
 copy .env.example .env
 # Enter GEMINI_API_KEY (optional, only for Gemini provider)
 
-# 2. Set document paths
-# config/settings.yaml → ingestion.document_paths
+# 2. Configure sources
+# config/sources.yaml — see docs/configuration.md "Sources sidecar"
 
 # 3. Pull Ollama model
 ollama pull qwen3:8b
@@ -103,7 +103,7 @@ Afterwards it is cached at `~/.cache/huggingface/`.
 
 ### Retrieval returns wrong document
 1. Check if re-ingest is needed (delete `chroma_data` + re-ingest)
-2. Check `score_threshold` in `settings.yaml` (default: 0.0 = no filter)
+2. Check `score_threshold` in `settings.yaml` (default: 0.5)
 3. Increase `top_k` (more candidates for the reranker)
 4. Disable the category filter in the sidebar
 

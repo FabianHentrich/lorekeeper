@@ -36,7 +36,9 @@ class IngestJobResponse(BaseModel):
 class IngestStatusResponse(BaseModel):
     job_id: str
     status: str
+    phase: str = "starting"
     documents_processed: int = 0
+    documents_total: int = 0
     chunks_created: int = 0
     chunks_updated: int = 0
     chunks_deleted: int = 0
@@ -48,6 +50,7 @@ class HealthResponse(BaseModel):
     status: str
     chromadb: bool
     llm: bool
+    sources_configured: bool = True
 
 
 class StatsResponse(BaseModel):

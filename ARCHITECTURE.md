@@ -236,18 +236,45 @@ lorekeeper/
 
 #### Dokumentquellen
 
-Mehrere Pfade konfigurierbar — ermöglicht die Anbindung an externe Repos wie den
-Combat Tracker, ohne Dateien zu kopieren:
+Sources werden in `config/sources.yaml` (Sidecar, gitignored) konfiguriert.
+Eine Source ist entweder ein **Ordner** oder eine **einzelne Datei**. Jede
+Source hat eine `group` (`lore` / `adventure` / `rules`) als Fallback für die
+UI-Filter „🗺️ Lore / 📖 Abenteuer / 📋 Regelwerk". Über `category_map`
+kann die `group` **pro Top-Level-Ordner** überschrieben werden — so lässt sich
+ein einzelner Obsidian-Vault sauber auf alle drei Gruppen verteilen.
 
 ```yaml
-# settings.yaml
-ingestion:
-  document_paths:
-    - ./data/PnP-Welt                    # Obsidian Vault (Primärquelle)
-    # - /path/to/Combat_Tracker_PnP/library  # Externe Anbindung (optional)
-  supported_formats: [".md", ".pdf", ".png", ".jpg", ".webp"]
-  watch_for_changes: false               # v2: Filesystem Watcher
+# config/sources.yaml
+sources:
+  - id: pnp-welt                         # stabile ID — wird für Reindex/Delete benutzt
+    path: C:/Users/you/Obsidian/PnP-Welt  # beliebiger absoluter oder relativer Pfad
+    group: lore                          # Fallback-Group für unmapped Ordner
+    default_category: misc               # Fallback-Kategorie
+    category_map:
+      NPCs: npc                          # String-Kurzform → erbt group: lore
+      Orte: location
+      Gegner: enemy
+      Geschichte:                        # Dict-Form → überschreibt group
+        category: story
+        group: adventure
+      Regelwerk:
+        category: rules
+        group: rules
 ```
+
+`config/settings.yaml → ingestion.supported_formats / exclude_patterns` bleiben
+global. `ingestion.document_paths` ist **deprecated**: wenn `sources.yaml` fehlt
+und `document_paths` gesetzt ist, baut der ConfigManager beim Start automatisch
+einen Migrations-Shim (alle Pfade → `group=lore`) und loggt eine Warnung.
+
+**Sources verwalten** geht entweder per Editor (`config/sources.yaml`), per
+REST (`GET/PUT /sources`, `POST /sources/{id}/reindex`, `DELETE /sources/{id}`,
+`POST /sources/recategorize`, `POST /admin/wipe`) oder über die Streamlit-Seite
+**⚙ Sources** (siehe `ui/pages/`).
+
+**Recategorize** (`python -m src.ingestion.recategorize` bzw. UI-Button) wendet
+geänderte `category_map` / `group`-Werte auf bestehende Chunks an, ohne neu zu
+embedden — sekundenschnell, da nur Metadata-Update.
 
 #### Parser-Strategie
 
@@ -354,7 +381,7 @@ Der Wert wird aus dem **obersten** Ordnernamen unterhalb des jeweiligen `documen
 | `rules/`                 | `rules`              | 📋 Regelwerk    |
 | *(unbekannt)*            | `misc`               | 🗺️ Lore         |
 
-> Die UI-Gruppen (🗺️ Lore / 📖 Abenteuer / 📋 Regelwerk) in `ui/app.py` filtern direkt
+> Die UI-Gruppen (🗺️ Lore / 📖 Abenteuer / 📋 Regelwerk) in `ui/LoreKeeper.py` filtern direkt
 > auf diese `content_category`-Werte via ChromaDB-Metadaten-Filter.
 
 #### Inkrementelle Re-Ingestion
@@ -569,8 +596,20 @@ llm:
     timeout: 30
 ```
 
-Nutzt das `google-genai` SDK. API-Key wird aus Environment-Variable geladen
-(nicht in Config hartcodiert).
+Nutzt das `google-genai` SDK. API-Key-Auflösung in dieser Reihenfolge:
+
+1. **Runtime-Override** (Process-lokal, gesetzt via `POST /provider/gemini/key` aus der UI)
+2. `os.environ[api_key_env]`
+3. `.env`-Datei
+
+Der Runtime-Override wird **nicht** auf Disk persistiert — er überlebt keinen
+Backend-Neustart. Das ist Absicht: das ermöglicht "Programm starten → Key in der
+UI eintragen → loslegen" ohne `.env` anfassen zu müssen, schreibt aber keine
+Secrets in versionierte oder unversionierte Dateien. Statusabfrage über
+`GET /provider/gemini/status` liefert nur `{has_key, source: env|runtime|none}`,
+niemals den Key selbst. Wird Gemini gerade als aktiver Provider benutzt, baut
+der `POST`-Endpoint Provider + `Generator` direkt neu, sodass der neue Key sofort
+greift.
 
 #### Provider Factory
 
@@ -742,6 +781,11 @@ class ConfigManager:
 2. `.env` Datei (für Secrets wie `GEMINI_API_KEY`)
 3. Environment-Variablen (höchste Priorität, für Docker/CI)
 
+Für `GEMINI_API_KEY` gibt es zusätzlich einen **Runtime-Override** (process-lokal,
+über die UI bzw. `POST /provider/gemini/key` setzbar). Der überschreibt env/.env
+während der laufenden Session, wird aber nicht auf Disk persistiert. Siehe
+§4.5 Gemini Provider.
+
 **Namenskonvention für Env-Var-Overrides:**
 
 Verschachtelte YAML-Keys werden mit doppeltem Underscore (`__`) als Trennzeichen
@@ -862,7 +906,7 @@ Für normale Abfragen `requests`, für Streaming `requests` mit `stream=True` + 
 Kein direkter Import von Backend-Modulen — saubere Trennung.
 
 ```
-Streamlit (ui/app.py) ──HTTP/SSE──▶ FastAPI (src/main.py) ──▶ Backend-Logik
+Streamlit (ui/LoreKeeper.py) ──HTTP/SSE──▶ FastAPI (src/main.py) ──▶ Backend-Logik
 ```
 
 ---
@@ -876,19 +920,17 @@ Streamlit (ui/app.py) ──HTTP/SSE──▶ FastAPI (src/main.py) ──▶ Ba
 # LoreKeeper Configuration
 # ─────────────────────────────────────────
 
-# Ingestion
+# Ingestion — Sources liegen in config/sources.yaml (Sidecar, gitignored)
+# document_paths ist DEPRECATED, nur noch als Migrations-Shim aktiv.
 ingestion:
-  document_paths:
-    - ./data/PnP-Welt                   # Obsidian Vault
-    # - /path/to/Combat_Tracker_PnP/library    # Externe Anbindung (optional)
   supported_formats: [".md", ".pdf", ".png", ".jpg", ".webp"]
   exclude_patterns:
-    - ".obsidian/*"        # Obsidian-Konfigurationsdateien
-    - ".trash/*"           # Obsidian-Papierkorb
-    - "*alt.md"            # Alte Versionen (z.B. "Salon der Wissenden alt.md")
-    - "*(1).md"            # Obsidian-Duplikate
-    - "*.draft.*"          # Entwürfe
-  watch_for_changes: false          # v2: Filesystem Watcher
+    - ".obsidian/*"
+    - ".trash/*"
+    - "*alt.md"
+    - "*(1).md"
+    - "*.draft.*"
+  watch_for_changes: false
 
 # Chunking
 chunking:
@@ -1150,7 +1192,7 @@ ollama pull qwen3:8b
 # 5. Config anpassen
 copy .env.example .env
 # → .env öffnen: GEMINI_API_KEY eintragen (optional)
-# → config/settings.yaml: document_paths anpassen
+# → config/sources.yaml: Sources anlegen (siehe §4 Ingestion)
 ```
 
 #### Starten (nach Einrichtung)
@@ -1163,7 +1205,7 @@ copy .env.example .env
 uvicorn src.main:app --reload --port 8000
 
 # Terminal 2: Streamlit UI
-streamlit run ui/app.py
+streamlit run ui/LoreKeeper.py
 ```
 
 > Ollama läuft als Windows-Dienst im Hintergrund — kein manuelles Starten nötig.

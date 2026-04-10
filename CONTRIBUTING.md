@@ -34,7 +34,7 @@ cp .env.example .env   # fill in GEMINI_API_KEY if using Gemini
 uvicorn src.main:app --reload --port 8000
 
 # Frontend (separate terminal)
-streamlit run ui/app.py
+streamlit run ui/LoreKeeper.py
 ```
 
 ### Docker

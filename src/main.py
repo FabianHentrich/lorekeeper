@@ -2,12 +2,14 @@ import asyncio
 import logging
 import shutil
 import subprocess
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
 from fastapi import FastAPI
 
+from src.api.eval_routes import eval_router
 from src.api.routes import router
 from src.config.manager import ConfigManager
 from src.conversation.manager import ConversationManager
@@ -127,10 +129,22 @@ async def lifespan(app: FastAPI):
     # Start session GC
     gc_task = asyncio.create_task(conversation_manager.start_gc())
 
+    # Start background health checker
+    from src.api.routes import _health_loop, _health_cache
+    # Seed cache with initial state (vectorstore + provider already initialized)
+    try:
+        chroma_ok = vectorstore.health_check()
+        llm_ok = await provider.health_check()
+        _health_cache.update({"ts": time.monotonic(), "chroma": chroma_ok, "llm": llm_ok})
+    except Exception:
+        pass
+    health_task = asyncio.create_task(_health_loop())
+
     logger.info(f"LoreKeeper ready (provider={settings.llm.provider}, model={getattr(provider, 'model', '?')})")
 
     yield
 
+    health_task.cancel()
     gc_task.cancel()
 
     if _ollama_process:
@@ -162,3 +176,4 @@ async def request_logging(request, call_next):
 
 
 app.include_router(router)
+app.include_router(eval_router)

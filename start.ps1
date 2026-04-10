@@ -39,7 +39,7 @@ if (-not $ready) {
 }
 
 Write-Host "Starting Streamlit UI..." -ForegroundColor Cyan
-$uiCmd = "cd '$ROOT'; .venv\Scripts\Activate.ps1; streamlit run ui/app.py"
+$uiCmd = "cd '$ROOT'; .venv\Scripts\Activate.ps1; streamlit run ui/LoreKeeper.py"
 Start-Process powershell -ArgumentList "-NoExit", "-Command", $uiCmd
 
 Write-Host ""

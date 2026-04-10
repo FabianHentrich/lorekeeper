@@ -5,7 +5,7 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi)
 ![ChromaDB](https://img.shields.io/badge/ChromaDB-embedded%20%7C%20client-blueviolet)
 ![LLM](https://img.shields.io/badge/LLM-Ollama%20%7C%20Gemini-412991)
-![Tests](https://img.shields.io/badge/tests-124%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-132-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 **A production-grade RAG system for Obsidian-based tabletop-RPG worlds.**
@@ -33,10 +33,16 @@ LoreKeeper is built from the ground up for this workflow:
 - **Obsidian-native parsing** — wikilinks, `![[embeds]]`, `> [!callouts]`,
   `#tags`, and YAML frontmatter aliases are all extracted into searchable
   metadata.
-- **Semantic source filtering** — the UI exposes three category toggles
-  (🗺️ Lore, 📖 Adventure, 📋 Rules) that restrict retrieval at the vectorstore
-  level. Ask "What can the time mage do?" and limit to Rules, and you won't
-  get the NPC named *Arkenfeld the Time Mage* polluting the context.
+- **Semantic source filtering** — every chunk inherits a `group` tag (`lore` /
+  `adventure` / `rules`) from the source it was ingested from. The three UI
+  toggles (🗺️ Lore, 📖 Adventure, 📋 Rules) restrict retrieval at the
+  vectorstore level. Ask "What can the time mage do?" and limit to Rules, and
+  you won't get the NPC named *Arkenfeld the Time Mage* polluting the context.
+- **Self-service source management** — sources are defined in
+  `config/sources.yaml` (folder OR single file), and the **⚙ Sources** UI page
+  lets you add, edit, reindex, recategorize, or remove them without touching
+  YAML. Recategorize rewrites only the metadata of existing chunks, so changing
+  category mappings is a sub-second operation, not a re-embedding.
 - **Two-stage retrieval with soft diversity cap** — multilingual E5
   bi-encoder for recall, cross-encoder reranker for precision, plus a
   per-source soft cap (`max_per_source`, default 3) that prevents one
@@ -85,7 +91,8 @@ multilingual E5 model and prompts for any other language.
 | 💬 **Telegram-style answers** | Scannable chat-like formatting: short paragraphs, emoji headers, bullets — instead of flat 3-line prose |
 | 🔁 **Incremental indexing** | SHA-256 content hashing — only changed files re-embed |
 | 🐳 **Docker-ready** | API + ChromaDB + Ollama (GPU) + UI via `docker compose` |
-| ✅ **124 tests** | Unit + integration coverage including the full HTTP layer |
+| ⚙ **Self-service setup** | Sources (folder OR single file), provider switch, and Gemini API-key entry — all from the UI, no YAML required |
+| ✅ **132 tests** | Unit + integration coverage including the full HTTP layer |
 
 ---
 
@@ -97,7 +104,7 @@ flowchart TB
 
     subgraph API["⚡ FastAPI Backend"]
         direction TB
-        ROUTES["/query · /query/stream<br/>/ingest · /health<br/>/sessions · /provider · /stats"]
+        ROUTES["/query · /query/stream<br/>/ingest · /sources · /health<br/>/sessions · /provider · /stats"]
         CONV["💬 Conversation Manager<br/>sliding window · async GC"]
         ROUTES --- CONV
     end
@@ -158,13 +165,27 @@ ollama pull qwen3:8b
 
 # 3. Configure
 copy .env.example .env
-# Edit config/settings.yaml → ingestion.document_paths to point at your vault
+# Create config/sources.yaml pointing at your vault(s). Each source has:
+# id, path (absolute or relative), group (lore|adventure|rules), default_category,
+# and optionally a category_map (folder → category, or folder → {category, group}).
+#
+#   sources:
+#     - id: pnp-welt
+#       path: C:/Users/you/Obsidian/PnP-Welt
+#       group: lore
+#       default_category: misc
+#       category_map:
+#         NPCs: npc
+#         Geschichte: {category: story, group: adventure}
+#         Regelwerk: {category: rules, group: rules}
+#
+# Sources can also be managed live in the UI under "Sources".
 
 # 4. Start backend + UI
 .\start.ps1
 # or manually:
 #   uvicorn src.main:app --reload --port 8000     (Terminal 1)
-#   streamlit run ui/app.py                        (Terminal 2)
+#   streamlit run ui/LoreKeeper.py                        (Terminal 2)
 
 # 5. Index your vault (one-time)
 python -m src.ingestion.orchestrator
@@ -175,9 +196,17 @@ The UI is then available at **http://localhost:8501**.
 ### Using Gemini instead of Ollama
 
 1. Get an API key from [Google AI Studio](https://aistudio.google.com/apikey).
-2. `GEMINI_API_KEY=...` in `.env`.
+2. Provide the key — pick **one**:
+   - Put `GEMINI_API_KEY=...` in `.env` (persistent across restarts), **or**
+   - Paste it into the Streamlit sidebar under "LLM Provider → Gemini API-Key".
+     The UI sends it to `POST /provider/gemini/key`; the backend keeps it in
+     process memory only — nothing is written to disk, so it is lost on restart.
+     Use this if you want a zero-config first start.
 3. Set `llm.provider: gemini` in `config/settings.yaml`, or switch live from
    the Streamlit sidebar.
+
+The sidebar shows whether a key is currently available and whether it came from
+env or from UI input. The key itself is never returned by any endpoint.
 
 ---
 
@@ -214,8 +243,8 @@ HTTP (`CHROMA_MODE=client`). Ollama is GPU-accelerated by default — see
 | [docs/data-flow.md](docs/data-flow.md) | Ingestion and query pipelines (Mermaid) |
 | [docs/embedding-strategy.md](docs/embedding-strategy.md) | E5 asymmetry, identity layer, reranking — and **why** |
 | [docs/provider-strategy.md](docs/provider-strategy.md) | Ollama vs. Gemini, runtime switching |
-| [docs/ui-ux.md](docs/ui-ux.md) | Sidebar, chat, session state, performance |
-| [docs/configuration.md](docs/configuration.md) | Full `settings.yaml` reference + env variables |
+| [docs/ui-ux.md](docs/ui-ux.md) | Sidebar, chat, ⚙ Sources page, Gemini key entry, session state, performance |
+| [docs/configuration.md](docs/configuration.md) | Full `settings.yaml` reference, `sources.yaml` schema, env variables, runtime API key |
 | [docs/prompts.md](docs/prompts.md) | Jinja2 templates, variables, customization |
 | [docs/operations.md](docs/operations.md) | Ingest, re-ingest, troubleshooting |
 | [docs/evaluation.md](docs/evaluation.md) | Golden Set, retrieval/end-to-end eval scripts, metrics, workflow |
