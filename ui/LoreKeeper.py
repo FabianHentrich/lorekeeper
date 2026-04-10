@@ -75,206 +75,184 @@ with _usage_col:
         help=f"In: {su['tokens_in']} · Out: {su['tokens_out']} · Thinking: {su['tokens_thinking']}",
     )
 
-# ─── Sidebar ──────────────────────────────────────────────
-with st.sidebar:
-    st.header("Einstellungen")
+# ─── Sidebar (fragment: only re-renders itself, not the chat area) ────
+@st.cache_data(ttl=30, show_spinner=False)
+def _fetch_sidebar_state(api_url: str):
+    return requests.get(f"{api_url}/sidebar-state", timeout=5).json()
 
-    API_URL = st.text_input("API URL", value="http://localhost:8000")
 
-    # Provider-Umschaltung
-    st.subheader("LLM Provider")
+@st.fragment
+def _render_sidebar():
+    with st.sidebar:
+        st.header("Einstellungen")
 
-    @st.cache_data(ttl=30, show_spinner=False)
-    def _fetch_provider(api_url: str):
-        return requests.get(f"{api_url}/provider", timeout=5).json()
+        API_URL = st.text_input("API URL", value="http://localhost:8000")
+        st.session_state["_api_url"] = API_URL
 
-    current_provider = None
-    current_model = None
-    try:
-        pinfo = _fetch_provider(API_URL)
-        current_provider = pinfo.get("provider", "unknown")
-        current_model = pinfo.get("model", "unknown")
-    except Exception:
-        pass
-
-    provider_options = ["ollama", "gemini"]
-
-    # Sync with backend on first load (before widget is created)
-    if "_selected_provider" not in st.session_state:
-        if current_provider in provider_options:
-            st.session_state["_selected_provider"] = current_provider
-
-    def _on_provider_change():
-        new_provider = st.session_state["_selected_provider"]
         try:
-            resp = requests.post(
-                f"{API_URL}/provider",
-                json={"provider": new_provider},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            st.session_state["_provider_switch_ok"] = True
-            _fetch_provider.clear()
-        except Exception as e:
-            st.session_state["_provider_switch_error"] = str(e)
-            # Revert: will take effect on next rerun
-            st.session_state["_selected_provider"] = current_provider
+            _sidebar = _fetch_sidebar_state(API_URL)
+        except Exception:
+            _sidebar = None
 
-    selected_provider = st.selectbox(
-        "Provider",
-        options=provider_options,
-        key="_selected_provider",
-        format_func=lambda x: f"{'🖥️' if x == 'ollama' else '☁️'} {x.capitalize()}",
-        on_change=_on_provider_change,
-    )
+        # Provider-Umschaltung
+        st.subheader("LLM Provider")
 
-    if st.session_state.pop("_provider_switch_ok", False):
-        st.success(f"Provider gewechselt zu **{selected_provider}**")
-    if err := st.session_state.pop("_provider_switch_error", None):
-        st.error(f"Wechsel fehlgeschlagen: {err}")
+        current_provider = None
+        current_model = None
+        if _sidebar:
+            pinfo = _sidebar.get("provider", {})
+            current_provider = pinfo.get("provider", "unknown")
+            current_model = pinfo.get("model", "unknown")
 
-    if current_model:
-        st.caption(f"Aktiv: **{current_model}**")
+        provider_options = ["ollama", "gemini"]
 
-    # Gemini API key entry — only relevant for the Gemini provider.
-    # The status endpoint never exposes the key itself.
-    @st.cache_data(ttl=60, show_spinner=False)
-    def _fetch_gemini_status(api_url: str):
-        return requests.get(f"{api_url}/provider/gemini/status", timeout=5).json()
+        if "_selected_provider" not in st.session_state:
+            if current_provider in provider_options:
+                st.session_state["_selected_provider"] = current_provider
 
-    try:
-        gem_status = _fetch_gemini_status(API_URL)
-    except Exception:
-        gem_status = {"has_key": False, "source": "none"}
+        def _on_provider_change():
+            new_provider = st.session_state["_selected_provider"]
+            try:
+                resp = requests.post(
+                    f"{API_URL}/provider",
+                    json={"provider": new_provider},
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                st.session_state["_provider_switch_ok"] = True
+                _fetch_sidebar_state.clear()
+            except Exception as e:
+                st.session_state["_provider_switch_error"] = str(e)
+                st.session_state["_selected_provider"] = current_provider
 
-    if gem_status.get("has_key"):
-        src_label = {"env": "Umgebungsvariable", "runtime": "UI-Eingabe"}.get(gem_status.get("source"), "?")
-        st.caption(f"🔑 Gemini-Key: ✅ ({src_label})")
-        with st.expander("Gemini-Key überschreiben"):
-            new_key_override = st.text_input(
-                "Neuer API-Key", type="password", key="_gemini_key_override",
+        selected_provider = st.selectbox(
+            "Provider",
+            options=provider_options,
+            key="_selected_provider",
+            format_func=lambda x: f"{'🖥️' if x == 'ollama' else '☁️'} {x.capitalize()}",
+            on_change=_on_provider_change,
+        )
+
+        if st.session_state.pop("_provider_switch_ok", False):
+            st.success(f"Provider gewechselt zu **{selected_provider}**")
+        if err := st.session_state.pop("_provider_switch_error", None):
+            st.error(f"Wechsel fehlgeschlagen: {err}")
+
+        if current_model:
+            st.caption(f"Aktiv: **{current_model}**")
+
+        # Gemini API key
+        gem_status = _sidebar.get("gemini_status", {}) if _sidebar else {"has_key": False, "source": "none"}
+
+        if gem_status.get("has_key"):
+            src_label = {"env": "Umgebungsvariable", "runtime": "UI-Eingabe"}.get(gem_status.get("source"), "?")
+            st.caption(f"🔑 Gemini-Key: ✅ ({src_label})")
+            with st.expander("Gemini-Key überschreiben"):
+                new_key_override = st.text_input(
+                    "Neuer API-Key", type="password", key="_gemini_key_override",
+                    help="Wird nur im Speicher gehalten, nicht in .env geschrieben.",
+                )
+                if st.button("Key setzen", key="_gemini_set_override"):
+                    try:
+                        r = requests.post(f"{API_URL}/provider/gemini/key",
+                                          json={"api_key": new_key_override}, timeout=10)
+                        r.raise_for_status()
+                        st.success("Gemini-Key aktualisiert.")
+                        _fetch_sidebar_state.clear()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Fehler: {e}")
+        else:
+            st.warning("🔑 Gemini-Key fehlt — Provider 'gemini' ist nicht nutzbar.")
+            new_key = st.text_input(
+                "Gemini API-Key eingeben", type="password", key="_gemini_key_new",
                 help="Wird nur im Speicher gehalten, nicht in .env geschrieben.",
             )
-            if st.button("Key setzen", key="_gemini_set_override"):
-                try:
-                    r = requests.post(f"{API_URL}/provider/gemini/key",
-                                      json={"api_key": new_key_override}, timeout=10)
-                    r.raise_for_status()
-                    st.success("Gemini-Key aktualisiert.")
-                    _fetch_gemini_status.clear()
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Fehler: {e}")
-    else:
-        st.warning("🔑 Gemini-Key fehlt — Provider 'gemini' ist nicht nutzbar.")
-        new_key = st.text_input(
-            "Gemini API-Key eingeben", type="password", key="_gemini_key_new",
-            help="Wird nur im Speicher gehalten, nicht in .env geschrieben.",
-        )
-        if st.button("Key speichern", key="_gemini_set_new"):
-            if not new_key.strip():
-                st.error("Kein Key eingegeben.")
-            else:
-                try:
-                    r = requests.post(f"{API_URL}/provider/gemini/key",
-                                      json={"api_key": new_key}, timeout=10)
-                    r.raise_for_status()
-                    st.success("Gemini-Key gesetzt.")
-                    _fetch_gemini_status.clear()
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Fehler: {e}")
-
-    st.divider()
-
-    # Provider status (cached 30s to avoid hammering the API)
-    @st.cache_data(ttl=30, show_spinner=False)
-    def _fetch_health(api_url: str):
-        return requests.get(f"{api_url}/health", timeout=5).json()
-
-    try:
-        health = _fetch_health(API_URL)
-        status_emoji = "🟢" if health["status"] == "healthy" else "🟡"
-        st.markdown(f"{status_emoji} **Status:** {health['status']}")
-        st.markdown(f"ChromaDB: {'✅' if health['chromadb'] else '❌'}")
-        st.markdown(f"LLM: {'✅' if health['llm'] else '❌'}")
-        if not health.get("sources_configured", True):
-            st.warning(
-                "Keine Quellen konfiguriert. Lege unter **Sources** "
-                "mindestens einen Pfad zu deinen Dokumenten an und starte "
-                "dann die Indizierung."
-            )
-    except Exception:
-        st.markdown("🔴 **API nicht erreichbar**")
-
-    st.divider()
-
-    # Source type filter
-    st.subheader("Quellen")
-    st.caption("Schränkt die Suche auf bestimmte Dokumenttypen ein. Nützlich um "
-               "z.B. den Regelwerk-Zeitmagier vom Lore-NPC zu trennen.")
-    _SOURCE_GROUPS = {
-        "🗺️ Lore": ("lore", "Welt-Lore: NPCs, Orte, Items, Organisationen, …"),
-        "📖 Abenteuer": ("adventure", "Abenteuer- und Story-Dokumente"),
-        "📋 Regelwerk": ("rules", "Regelbuch, Klassen, Mechaniken, Tools"),
-    }
-    selected_groups = []
-    selected_labels = []
-    for label, (group_id, _help) in _SOURCE_GROUPS.items():
-        if st.checkbox(label, value=True, key=f"src_{label}", help=_help):
-            selected_groups.append(group_id)
-            selected_labels.append(label)
-
-    all_groups = [g for g, _ in _SOURCE_GROUPS.values()]
-    if not selected_groups:
-        st.warning("⚠️ Mindestens eine Quellenart auswählen, sonst werden Anfragen blockiert.")
-        _category_filter = "__BLOCKED__"
-    elif set(selected_groups) == set(all_groups):
-        _category_filter = None
-    else:
-        _category_filter = {"$in": selected_groups}
-        st.caption(f"🔍 Suche eingeschränkt auf: {', '.join(selected_labels)}")
-
-    # Optional: further narrow by content_category
-    @st.cache_data(ttl=30, show_spinner=False)
-    def _fetch_available_categories(api_url: str):
-        """Derive available content_category values from configured sources."""
-        try:
-            sources = requests.get(f"{api_url}/sources", timeout=5).json()["sources"]
-        except Exception:
-            return []
-        cats = set()
-        for s in sources:
-            if s.get("default_category"):
-                cats.add(s["default_category"])
-            for v in (s.get("category_map") or {}).values():
-                if isinstance(v, dict):
-                    cats.add(v["category"])
+            if st.button("Key speichern", key="_gemini_set_new"):
+                if not new_key.strip():
+                    st.error("Kein Key eingegeben.")
                 else:
-                    cats.add(v)
-        return sorted(cats)
+                    try:
+                        r = requests.post(f"{API_URL}/provider/gemini/key",
+                                          json={"api_key": new_key}, timeout=10)
+                        r.raise_for_status()
+                        st.success("Gemini-Key gesetzt.")
+                        _fetch_sidebar_state.clear()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Fehler: {e}")
 
-    available_cats = _fetch_available_categories(API_URL)
-    _content_category_filter = None
-    if available_cats:
-        with st.expander("Kategorie-Filter (optional)"):
-            selected_cats = st.multiselect(
-                "Kategorien",
-                options=available_cats,
-                default=available_cats,
-                help="Schränkt die Suche zusätzlich auf bestimmte Inhaltskategorien ein.",
-            )
-            if selected_cats and set(selected_cats) != set(available_cats):
-                _content_category_filter = {"$in": selected_cats}
-                st.caption(f"🏷 Kategorie: {', '.join(selected_cats)}")
+        st.divider()
 
-    st.divider()
+        # Provider status
+        if _sidebar:
+            health = _sidebar.get("health", {})
+            status_emoji = "🟢" if health.get("status") == "healthy" else "🟡"
+            st.markdown(f"{status_emoji} **Status:** {health.get('status', '?')}")
+            st.markdown(f"ChromaDB: {'✅' if health.get('chromadb') else '❌'}")
+            st.markdown(f"LLM: {'✅' if health.get('llm') else '❌'}")
+            if not health.get("sources_configured", True):
+                st.warning(
+                    "Keine Quellen konfiguriert. Lege unter **Sources** "
+                    "mindestens einen Pfad zu deinen Dokumenten an und starte "
+                    "dann die Indizierung."
+                )
+        else:
+            st.markdown("🔴 **API nicht erreichbar**")
 
-    if st.button("🗑️ Neue Session"):
-        st.session_state.messages = []
-        st.session_state.session_id = None
-        st.session_state.session_usage = {"tokens_in": 0, "tokens_out": 0, "tokens_thinking": 0}
-        st.rerun()
+        st.divider()
+
+        # Source type filter
+        st.subheader("Quellen")
+        st.caption("Schränkt die Suche auf bestimmte Dokumenttypen ein. Nützlich um "
+                   "z.B. den Regelwerk-Zeitmagier vom Lore-NPC zu trennen.")
+        _SOURCE_GROUPS = {
+            "🗺️ Lore": ("lore", "Welt-Lore: NPCs, Orte, Items, Organisationen, …"),
+            "📖 Abenteuer": ("adventure", "Abenteuer- und Story-Dokumente"),
+            "📋 Regelwerk": ("rules", "Regelbuch, Klassen, Mechaniken, Tools"),
+        }
+        selected_groups = []
+        selected_labels = []
+        for label, (group_id, _help) in _SOURCE_GROUPS.items():
+            if st.checkbox(label, value=True, key=f"src_{label}", help=_help):
+                selected_groups.append(group_id)
+                selected_labels.append(label)
+
+        all_groups = [g for g, _ in _SOURCE_GROUPS.values()]
+        if not selected_groups:
+            st.warning("⚠️ Mindestens eine Quellenart auswählen, sonst werden Anfragen blockiert.")
+            st.session_state["_category_filter"] = "__BLOCKED__"
+        elif set(selected_groups) == set(all_groups):
+            st.session_state["_category_filter"] = None
+        else:
+            st.session_state["_category_filter"] = {"$in": selected_groups}
+            st.caption(f"🔍 Suche eingeschränkt auf: {', '.join(selected_labels)}")
+
+        # Optional: further narrow by content_category
+        available_cats = _sidebar.get("available_categories", []) if _sidebar else []
+        st.session_state["_content_category_filter"] = None
+        if available_cats:
+            with st.expander("Kategorie-Filter (optional)"):
+                selected_cats = st.multiselect(
+                    "Kategorien",
+                    options=available_cats,
+                    default=available_cats,
+                    help="Schränkt die Suche zusätzlich auf bestimmte Inhaltskategorien ein.",
+                )
+                if selected_cats and set(selected_cats) != set(available_cats):
+                    st.session_state["_content_category_filter"] = {"$in": selected_cats}
+                    st.caption(f"🏷 Kategorie: {', '.join(selected_cats)}")
+
+        st.divider()
+
+        if st.button("🗑️ Neue Session"):
+            st.session_state.messages = []
+            st.session_state.session_id = None
+            st.session_state.session_usage = {"tokens_in": 0, "tokens_out": 0, "tokens_thinking": 0}
+            st.rerun()
+
+
+_render_sidebar()
 
 
 # ─── Session State ────────────────────────────────────────
@@ -283,8 +261,25 @@ if "messages" not in st.session_state:
 if "session_id" not in st.session_state:
     st.session_state.session_id = None
 
+# Read sidebar outputs from session_state
+API_URL = st.session_state.get("_api_url", "http://localhost:8000")
+_category_filter = st.session_state.get("_category_filter")
+_content_category_filter = st.session_state.get("_content_category_filter")
+
 # ─── Chat History ─────────────────────────────────────────
-for msg in st.session_state.messages:
+_MAX_VISIBLE_MESSAGES = 50
+_all_messages = st.session_state.messages
+if len(_all_messages) > _MAX_VISIBLE_MESSAGES:
+    _hidden = len(_all_messages) - _MAX_VISIBLE_MESSAGES
+    with st.expander(f"Ältere Nachrichten ({_hidden} ausgeblendet)"):
+        for msg in _all_messages[:_hidden]:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+    _visible = _all_messages[_hidden:]
+else:
+    _visible = _all_messages
+
+for msg in _visible:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
         if msg.get("usage"):

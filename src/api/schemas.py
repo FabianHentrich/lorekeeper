@@ -62,5 +62,17 @@ class ProviderInfo(BaseModel):
     model: str
 
 
+class GeminiKeyStatus(BaseModel):
+    has_key: bool
+    source: str = "none"
+
+
+class SidebarState(BaseModel):
+    health: HealthResponse
+    provider: ProviderInfo
+    gemini_status: GeminiKeyStatus
+    available_categories: list[str]
+
+
 class SwitchProviderRequest(BaseModel):
     provider: str  # "ollama" | "gemini"

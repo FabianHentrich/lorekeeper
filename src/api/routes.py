@@ -9,12 +9,14 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from src.api.schemas import (
+    GeminiKeyStatus,
     HealthResponse,
     IngestJobResponse,
     IngestStatusResponse,
     ProviderInfo,
     QueryRequest,
     QueryResponse,
+    SidebarState,
     SourceReference,
     StatsResponse,
     SwitchProviderRequest,
@@ -257,6 +259,49 @@ async def health():
     has_sources = bool(main_module.config.settings.ingestion.sources)
     status = "healthy" if (chroma_ok and llm_ok) else "degraded"
     return HealthResponse(status=status, chromadb=chroma_ok, llm=llm_ok, sources_configured=has_sources)
+
+
+@router.get("/sidebar-state", response_model=SidebarState)
+async def sidebar_state():
+    """Combined endpoint for all sidebar data — one round-trip instead of four."""
+    import src.main as main_module
+    from src.generation.providers.gemini import get_api_key_status
+
+    # Health (from background cache)
+    chroma_ok = _health_cache["chroma"]
+    llm_ok = _health_cache["llm"]
+    has_sources = bool(main_module.config.settings.ingestion.sources)
+    h_status = "healthy" if (chroma_ok and llm_ok) else "degraded"
+    health = HealthResponse(status=h_status, chromadb=chroma_ok, llm=llm_ok, sources_configured=has_sources)
+
+    # Provider info
+    _, _, _, _, _, _, prov = _get_services()
+    provider = ProviderInfo(
+        provider=getattr(prov, "provider", "unknown") if hasattr(prov, "provider") else type(prov).__name__,
+        model=getattr(prov, "model", "unknown"),
+    )
+
+    # Gemini key status
+    gem_raw = get_api_key_status(main_module.config.settings.llm.gemini)
+    gemini_status = GeminiKeyStatus(**gem_raw)
+
+    # Available categories (derived from sources config)
+    cats: set[str] = set()
+    for s in main_module.config.settings.ingestion.sources:
+        if s.default_category:
+            cats.add(s.default_category)
+        for v in (s.category_map or {}).values():
+            if isinstance(v, dict):
+                cats.add(v["category"])
+            else:
+                cats.add(v)
+
+    return SidebarState(
+        health=health,
+        provider=provider,
+        gemini_status=gemini_status,
+        available_categories=sorted(cats),
+    )
 
 
 @router.get("/sessions/{session_id}")
