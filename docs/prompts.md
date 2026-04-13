@@ -198,7 +198,61 @@ no_context: |
 
 ## Customizing Prompts
 
-Changes to `prompts.yaml` require a **server restart** — the `PromptManager` reads the file once at startup.
+### Via the UI (recommended)
+
+The **✏ Prompts** page in the Streamlit UI provides a full prompt editor with
+three tabs:
+
+| Tab | Purpose |
+|-----|---------|
+| **Aktive Prompts** | Edit the four active templates directly. Each template has a help tooltip showing available Jinja2 variables. A "Preview" expander renders the template with sample data before saving. |
+| **Varianten** | Save the current active prompts as a named variant, browse/edit/activate/delete saved variants. Variants are stored as YAML files in `config/prompts/`. |
+| **Vergleichen** | Side-by-side comparison of any two variants (or active vs. variant). Templates that differ are marked with ⚠. |
+
+Changes take effect **immediately** — the backend hot-reloads the `PromptManager`
+on save, no server restart required.
+
+### Via the API
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/prompts/active` | Read active prompts |
+| PUT | `/prompts/active` | Update active prompts (validates Jinja2, hot-reloads) |
+| GET | `/prompts/variants` | List saved variants |
+| GET | `/prompts/variants/{name}` | Load a single variant |
+| PUT | `/prompts/variants/{name}` | Create or update a variant |
+| DELETE | `/prompts/variants/{name}` | Delete a variant |
+| POST | `/prompts/activate/{name}` | Activate a variant (overwrites `prompts.yaml` + hot-reload) |
+| POST | `/prompts/preview` | Render a Jinja2 template with sample data |
+
+All write endpoints validate Jinja2 syntax before saving — a template with
+syntax errors returns HTTP 422.
+
+### Variant storage
+
+Variants are saved in `config/prompts/` as YAML files (e.g. `concise.yaml`).
+Each file has the same structure as `prompts.yaml` plus an optional `_meta` key:
+
+```yaml
+_meta:
+  name: "Concise German"
+  description: "Kürzere, knackigere Antworten"
+system: |
+  ...
+qa: |
+  ...
+condense: |
+  ...
+no_context: |
+  ...
+```
+
+The `_meta` key is stripped when loading templates into the `PromptManager`.
+
+### Via YAML (manual)
+
+Edit `config/prompts.yaml` directly. Note that manual edits require a server
+restart unless you also call `PUT /prompts/active` to trigger the hot-reload.
 
 **Jinja2 syntax:**
 ```jinja2

@@ -8,6 +8,7 @@ class QueryRequest(BaseModel):
     top_k: int | None = None
     top_k_rerank: int | None = None
     max_per_source: int | None = None
+    hybrid_search: bool | None = None
 
 
 class SourceReference(BaseModel):

@@ -1,0 +1,203 @@
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+from src.config.manager import PdfConfig
+from src.ingestion.parsers.pdf import (
+    PDFParser,
+    _apply_toc_headings,
+    _extract_image_docs,
+    _normalize_pdf_headings,
+)
+
+
+@pytest.fixture
+def pdf_parser():
+    return PDFParser()
+
+
+@pytest.fixture
+def pdf_parser_no_ocr():
+    return PDFParser(pdf_config=PdfConfig(ocr_enabled=False, extract_images=False))
+
+
+class TestNormalizePdfHeadings:
+    def test_promote_numbered_heading(self):
+        text = "## **5.4 Mönch**\nSome content."
+        result = _normalize_pdf_headings(text)
+        assert result.startswith("# **5.4 Mönch**")
+
+    def test_leave_non_numbered_heading(self):
+        text = "## Einleitung\nSome content."
+        result = _normalize_pdf_headings(text)
+        assert result == text
+
+    def test_promote_multiple(self):
+        text = "## **1. Rassen**\nText.\n## **1.1 Elfen**\nMehr."
+        result = _normalize_pdf_headings(text)
+        assert result.count("# **1. Rassen**") == 1
+        assert result.count("# **1.1 Elfen**") == 1
+
+
+class TestApplyTocHeadings:
+    def test_correct_heading_levels(self):
+        md = "## Kapitel Eins\nText.\n## Unterabschnitt\nMehr."
+        toc = [[1, "Kapitel Eins", 1], [2, "Unterabschnitt", 1]]
+        result = _apply_toc_headings(md, toc)
+        assert "# Kapitel Eins" in result
+        assert "## Unterabschnitt" in result
+
+    def test_no_toc_returns_unchanged(self):
+        md = "## Heading\nContent."
+        result = _apply_toc_headings(md, [])
+        assert result == md
+
+    def test_bold_heading_matched(self):
+        md = "## **Götter**\nText."
+        toc = [[1, "Götter", 1]]
+        result = _apply_toc_headings(md, toc)
+        assert result.startswith("# **Götter**")
+
+    def test_unmatched_heading_unchanged(self):
+        md = "## Unbekannt\nText."
+        toc = [[1, "Kapitel", 1]]
+        result = _apply_toc_headings(md, toc)
+        assert "## Unbekannt" in result
+
+
+class TestExtractImageDocs:
+    def test_extract_existing_image(self, tmp_path):
+        img = tmp_path / "image1.png"
+        img.write_bytes(b"fake png")
+
+        md = f"Text davor.\n![Ein Bild]({img})\nText danach."
+        cleaned, docs = _extract_image_docs(md, tmp_path, "test.pdf", "/path/test.pdf")
+
+        assert len(docs) == 1
+        assert docs[0].document_type == "image"
+        assert "Ein Bild" in docs[0].content
+        assert docs[0].metadata["extracted_from_pdf"] is True
+        assert "[Bild: Ein Bild]" in cleaned
+        assert "![" not in cleaned
+
+    def test_missing_image_removed(self, tmp_path):
+        md = "![alt](nonexistent.png)"
+        cleaned, docs = _extract_image_docs(md, tmp_path, "test.pdf", "/path/test.pdf")
+        assert len(docs) == 0
+        assert cleaned == ""
+
+    def test_relative_path_resolved(self, tmp_path):
+        img = tmp_path / "page1-0.png"
+        img.write_bytes(b"fake")
+
+        md = "![](page1-0.png)"
+        cleaned, docs = _extract_image_docs(md, tmp_path, "test.pdf", "/path/test.pdf")
+        assert len(docs) == 1
+        assert "page1 0" in docs[0].content
+
+
+class TestPDFParser:
+    def test_can_parse(self, pdf_parser):
+        assert pdf_parser.can_parse(Path("rules.pdf"))
+        assert pdf_parser.can_parse(Path("RULES.PDF"))
+        assert not pdf_parser.can_parse(Path("notes.md"))
+
+    def test_default_config(self, pdf_parser):
+        cfg = pdf_parser._config
+        assert cfg.ocr_enabled is True
+        assert cfg.ocr_language == "deu"
+        assert cfg.extract_images is True
+
+    def test_custom_config(self, pdf_parser_no_ocr):
+        cfg = pdf_parser_no_ocr._config
+        assert cfg.ocr_enabled is False
+        assert cfg.extract_images is False
+
+    @patch("src.ingestion.parsers.pdf.pymupdf4llm.to_markdown")
+    def test_ocr_params_passed(self, mock_to_md, pdf_parser):
+        mock_to_md.return_value = [{"text": "# Title\nContent.", "toc_items": []}]
+
+        pdf_parser.parse(Path("test.pdf"))
+
+        call_kwargs = mock_to_md.call_args[1]
+        assert call_kwargs["use_ocr"] is True
+        assert call_kwargs["ocr_language"] == "deu"
+        assert call_kwargs["ocr_dpi"] == 300
+        assert call_kwargs["page_chunks"] is True
+        assert call_kwargs["ignore_code"] is True
+
+    @patch("src.ingestion.parsers.pdf.pymupdf4llm.to_markdown")
+    def test_ocr_disabled_params(self, mock_to_md, pdf_parser_no_ocr):
+        mock_to_md.return_value = [{"text": "Content.", "toc_items": []}]
+
+        pdf_parser_no_ocr.parse(Path("test.pdf"))
+
+        call_kwargs = mock_to_md.call_args[1]
+        assert call_kwargs["use_ocr"] is False
+        assert "ocr_language" not in call_kwargs
+        assert "write_images" not in call_kwargs
+
+    @patch("src.ingestion.parsers.pdf.pymupdf4llm.to_markdown")
+    def test_sections_split_by_headings(self, mock_to_md, pdf_parser_no_ocr):
+        mock_to_md.return_value = [
+            {"text": "# Kapitel 1\nErster Absatz.\n## Abschnitt A\nDetails.", "toc_items": []},
+        ]
+
+        docs = pdf_parser_no_ocr.parse(Path("test.pdf"))
+        text_docs = [d for d in docs if d.document_type == "pdf"]
+
+        assert len(text_docs) >= 2
+        headings = [d.heading_hierarchy for d in text_docs]
+        assert ["Kapitel 1", "Abschnitt A"] in headings
+
+    @patch("src.ingestion.parsers.pdf.pymupdf4llm.to_markdown")
+    def test_toc_items_fix_heading_levels(self, mock_to_md, pdf_parser_no_ocr):
+        mock_to_md.return_value = [
+            {
+                "text": "## Rassen\nIntro.\n## Elfen\nSpitze Ohren.",
+                "toc_items": [[1, "Rassen", 1], [2, "Elfen", 1]],
+            },
+        ]
+
+        docs = pdf_parser_no_ocr.parse(Path("test.pdf"))
+        text_docs = [d for d in docs if d.document_type == "pdf"]
+
+        headings = [d.heading_hierarchy for d in text_docs]
+        assert ["Rassen", "Elfen"] in headings
+
+    @patch("src.ingestion.parsers.pdf.pymupdf4llm.to_markdown")
+    def test_empty_pdf(self, mock_to_md, pdf_parser_no_ocr):
+        mock_to_md.return_value = [{"text": "", "toc_items": []}]
+
+        docs = pdf_parser_no_ocr.parse(Path("empty.pdf"))
+        assert len(docs) == 1
+        assert docs[0].content == "(empty PDF)"
+
+    @patch("src.ingestion.parsers.pdf.pymupdf4llm.to_markdown")
+    def test_fallback_on_ocr_error(self, mock_to_md, pdf_parser):
+        """If OCR fails, parser retries without OCR."""
+        mock_to_md.side_effect = [
+            RuntimeError("OCR engine not found"),
+            [{"text": "# Fallback\nContent.", "toc_items": []}],
+        ]
+
+        docs = pdf_parser.parse(Path("test.pdf"))
+        assert len(docs) >= 1
+        assert any("Content" in d.content for d in docs)
+        # Second call should have use_ocr=False
+        assert mock_to_md.call_args[1]["use_ocr"] is False
+
+    @patch("src.ingestion.parsers.pdf.pymupdf4llm.to_markdown")
+    def test_multi_page_combined(self, mock_to_md, pdf_parser_no_ocr):
+        mock_to_md.return_value = [
+            {"text": "# Seite 1\nErster Text.", "toc_items": []},
+            {"text": "# Seite 2\nZweiter Text.", "toc_items": []},
+        ]
+
+        docs = pdf_parser_no_ocr.parse(Path("test.pdf"))
+        text_docs = [d for d in docs if d.document_type == "pdf"]
+        all_content = " ".join(d.content for d in text_docs)
+
+        assert "Erster Text" in all_content
+        assert "Zweiter Text" in all_content

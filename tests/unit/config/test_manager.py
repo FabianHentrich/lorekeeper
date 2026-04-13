@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+import yaml
 
 from src.config.manager import ConfigManager, Settings
 
@@ -36,6 +37,37 @@ class TestConfigManager:
         assert cm.settings.chunking.max_chunk_size == 256
         # Defaults still work
         assert cm.settings.chunking.chunk_overlap == 30
+
+
+    def test_save_prompts(self, tmp_path):
+        settings = tmp_path / "settings.yaml"
+        settings.write_text("", encoding="utf-8")
+        prompts = tmp_path / "prompts.yaml"
+        prompts.write_text("system: 'Original'\n", encoding="utf-8")
+
+        cm = ConfigManager(settings_path=settings, prompts_path=prompts)
+        assert cm.prompts["system"] == "Original"
+
+        cm.save_prompts({"system": "Updated", "qa": "Q", "condense": "C", "no_context": "N"})
+
+        assert cm.prompts["system"] == "Updated"
+        assert cm.prompts["qa"] == "Q"
+        # File was written
+        reloaded = yaml.safe_load(prompts.read_text(encoding="utf-8"))
+        assert reloaded["system"] == "Updated"
+
+    def test_save_prompts_strips_meta(self, tmp_path):
+        settings = tmp_path / "settings.yaml"
+        settings.write_text("", encoding="utf-8")
+        prompts = tmp_path / "prompts.yaml"
+        prompts.write_text("system: 'X'\n", encoding="utf-8")
+
+        cm = ConfigManager(settings_path=settings, prompts_path=prompts)
+        cm.save_prompts({"_meta": {"name": "test"}, "system": "S", "qa": "Q"})
+
+        reloaded = yaml.safe_load(prompts.read_text(encoding="utf-8"))
+        assert "_meta" not in reloaded
+        assert reloaded["system"] == "S"
 
 
 class TestSettings:

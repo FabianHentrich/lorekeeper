@@ -1,13 +1,47 @@
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 from fastapi.concurrency import run_in_threadpool
 
 from src.config.manager import RetrievalConfig
+from src.retrieval.bm25_index import BM25Index
 from src.retrieval.embeddings import EmbeddingService
 from src.retrieval.vectorstore import VectorStoreService
 
 logger = logging.getLogger(__name__)
+
+
+def _rrf_merge(
+    vector_results: list[dict[str, Any]],
+    bm25_results: list[dict[str, Any]],
+    bm25_weight: float,
+    k: int = 60,
+) -> list[dict[str, Any]]:
+    """Reciprocal Rank Fusion. Higher bm25_weight → more keyword influence."""
+    vector_weight = 1.0 - bm25_weight
+
+    scores: dict[str, float] = {}
+    items: dict[str, dict[str, Any]] = {}
+
+    for rank, item in enumerate(vector_results):
+        doc_id = item["id"]
+        scores[doc_id] = vector_weight / (k + rank + 1)
+        items[doc_id] = item
+
+    for rank, item in enumerate(bm25_results):
+        doc_id = item["id"]
+        scores.setdefault(doc_id, 0.0)
+        scores[doc_id] += bm25_weight / (k + rank + 1)
+        if doc_id not in items:
+            items[doc_id] = item
+
+    ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+
+    return [
+        {**items[doc_id], "score": fused_score}
+        for doc_id, fused_score in ranked
+    ]
 
 
 @dataclass
@@ -26,10 +60,12 @@ class Retriever:
         config: RetrievalConfig,
         embedding_service: EmbeddingService,
         vectorstore: VectorStoreService,
+        bm25_index: BM25Index | None = None,
     ):
         self.config = config
         self.embedding_service = embedding_service
         self.vectorstore = vectorstore
+        self.bm25_index = bm25_index or BM25Index()
         self._reranker = None
 
     def _get_reranker(self):
@@ -47,6 +83,7 @@ class Retriever:
         metadata_filters: dict | None = None,
         top_k_rerank: int | None = None,
         max_per_source: int | None = None,
+        hybrid: bool | None = None,
     ) -> list[RetrievedChunk]:
         top_k = top_k or self.config.top_k
         query_embedding = await self.embedding_service.embed_text(query)
@@ -61,25 +98,56 @@ class Retriever:
         else:
             where = text_filter
 
+        # Resolve hybrid flag: per-request override > config default
+        use_hybrid = hybrid if hybrid is not None else self.config.hybrid.enabled
+
         logger.debug(
-            f"Retrieval query: {query!r} | top_k={top_k} | "
+            f"Retrieval query: {query!r} | top_k={top_k} | hybrid={use_hybrid} | "
             f"score_threshold={self.config.score_threshold} | where={where}"
         )
 
-        results = self.vectorstore.query(
+        # 1. Vector search (always)
+        vector_results = self.vectorstore.query(
             query_embedding=query_embedding,
             top_k=top_k,
             where=where,
         )
 
         if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"Vectorstore returned {len(results)} candidates (pre-threshold):")
-            for i, item in enumerate(results):
+            logger.debug(f"Vectorstore returned {len(vector_results)} candidates (pre-threshold):")
+            for i, item in enumerate(vector_results):
                 logger.debug(
                     f"  [{i}] score={item['score']:.4f} "
                     f"file={item['metadata'].get('source_file', '?')} "
                     f"heading={item['metadata'].get('heading_hierarchy', '')[:60]}"
                 )
+
+        # 2. BM25 search + RRF fusion (if hybrid enabled)
+        if use_hybrid:
+            if not self.bm25_index.is_built:
+                logger.info("Building BM25 index from vectorstore (lazy init)...")
+                await run_in_threadpool(
+                    self.bm25_index.build_from_vectorstore, self.vectorstore
+                )
+
+            bm25_results = self.bm25_index.query(
+                query_text=query,
+                top_k=self.config.hybrid.bm25_top_k,
+                where=where,
+            )
+
+            bm25_only = len([r for r in bm25_results if r["id"] not in {v["id"] for v in vector_results}])
+            logger.info(
+                f"Hybrid search: {len(vector_results)} vector + {len(bm25_results)} bm25 "
+                f"candidates ({bm25_only} bm25-only)"
+            )
+
+            results = _rrf_merge(
+                vector_results, bm25_results,
+                bm25_weight=self.config.hybrid.bm25_weight,
+            )
+        else:
+            results = vector_results
 
         chunks = [
             RetrievedChunk(

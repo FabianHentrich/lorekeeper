@@ -63,7 +63,7 @@ def _poll_ingest_job(api_url: str, job_id: str, label: str = "Indizierung"):
 
 st.set_page_config(page_title="Sources — LoreKeeper", page_icon="⚙", layout="wide")
 
-API_URL = st.session_state.get("api_url", "http://localhost:8000")
+API_URL = st.session_state.get("_api_url", "http://localhost:8000")
 
 st.title("⚙ Sources")
 st.caption(

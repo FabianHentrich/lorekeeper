@@ -75,6 +75,42 @@ exclude_patterns:
   - "*.draft.*"     # Drafts
 ```
 
+### PDF parsing — `ingestion.pdf`
+
+Controls OCR and image extraction for PDF files. Requires `rapidocr_onnxruntime`
+(installed via `requirements.txt`).
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `ocr_enabled` | `bool` | `true` | Run OCR on text-less regions in PDFs |
+| `ocr_language` | `str` | `deu` | Language code for OCR engine (ISO 639-3) |
+| `ocr_dpi` | `int` | `300` | DPI for OCR rendering (higher = better quality, slower) |
+| `extract_images` | `bool` | `true` | Extract embedded images as separate index entries |
+| `image_format` | `str` | `png` | Image format for extraction (`png`, `jpg`) |
+
+**Example:**
+```yaml
+ingestion:
+  pdf:
+    ocr_enabled: true
+    ocr_language: "deu"
+    ocr_dpi: 300
+    extract_images: true
+    image_format: "png"
+```
+
+**How it works:**
+
+1. pymupdf4llm converts each PDF page to Markdown with `page_chunks=True`
+2. If `ocr_enabled`, RapidOCR runs on regions without extractable text
+3. Heading hierarchy is corrected using TOC data from the PDF (most reliable), with a numbered-heading regex as fallback
+4. `ignore_code=True` prevents monospace text in rulebooks from being misidentified as code blocks
+5. Extracted images become separate `ParsedDocument` entries with `document_type="image"`
+6. If OCR fails (engine not installed, corrupt page), the parser retries without OCR automatically
+
+> **Note:** Changes to `ingestion.pdf` require a re-ingest of affected PDFs.
+> Incremental ingest handles this automatically (content hash changes).
+
 ---
 
 ## `chunking`

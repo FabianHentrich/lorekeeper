@@ -37,6 +37,14 @@ class SourceConfig(BaseModel):
         return v
 
 
+class PdfConfig(BaseModel):
+    ocr_enabled: bool = True
+    ocr_language: str = "deu"
+    ocr_dpi: int = 300
+    extract_images: bool = True
+    image_format: str = "png"
+
+
 class IngestionConfig(BaseModel):
     sources: list[SourceConfig] = []
     # DEPRECATED — kept only for backwards compatibility. If sources is empty
@@ -45,6 +53,7 @@ class IngestionConfig(BaseModel):
     supported_formats: list[str] = [".md", ".pdf", ".png", ".jpg", ".webp"]
     exclude_patterns: list[str] = [".obsidian/*", ".trash/*", "*alt.md", "*(1).md", "*.draft.*"]
     watch_for_changes: bool = False
+    pdf: PdfConfig = PdfConfig()
 
 
 class ChunkingConfig(BaseModel):
@@ -78,10 +87,17 @@ class RerankingConfig(BaseModel):
     max_per_source: int = 3          # cap number of chunks from any single file (0 = unlimited)
 
 
+class HybridSearchConfig(BaseModel):
+    enabled: bool = False
+    bm25_weight: float = 0.3         # BM25 share in RRF (0.0 = pure vector, 1.0 = pure BM25)
+    bm25_top_k: int = 15             # how many BM25 candidates to fetch
+
+
 class RetrievalConfig(BaseModel):
     top_k: int = 15
     score_threshold: float = 0.5
     reranking: RerankingConfig = RerankingConfig()
+    hybrid: HybridSearchConfig = HybridSearchConfig()
 
 
 class OllamaConfig(BaseModel):
@@ -179,6 +195,7 @@ class ConfigManager:
     ):
         self._settings_path = settings_path
         self._sources_path = sources_path
+        self._prompts_path = prompts_path
 
         yaml_data = {}
         if settings_path.exists():
@@ -242,6 +259,16 @@ class ConfigManager:
             yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
             encoding="utf-8",
         )
+
+    def save_prompts(self, prompts_dict: dict) -> None:
+        """Persist prompts to config/prompts.yaml."""
+        self._prompts_path.parent.mkdir(parents=True, exist_ok=True)
+        clean = {k: v for k, v in prompts_dict.items() if not k.startswith("_")}
+        self._prompts_path.write_text(
+            yaml.safe_dump(clean, sort_keys=False, allow_unicode=True, default_flow_style=False),
+            encoding="utf-8",
+        )
+        self._prompts_raw = clean
 
     @property
     def prompts(self):

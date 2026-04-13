@@ -151,7 +151,8 @@ lorekeeper/
 │
 ├── config/
 │   ├── settings.yaml              # Zentrale Konfiguration
-│   └── prompts.yaml               # Alle Prompt-Templates
+│   ├── prompts.yaml               # Aktive Prompt-Templates
+│   └── prompts/                   # Gespeicherte Prompt-Varianten (*.yaml)
 │
 ├── src/
 │   ├── __init__.py
@@ -199,10 +200,17 @@ lorekeeper/
 │   └── api/
 │       ├── __init__.py
 │       ├── routes.py               # Endpoints: /query, /query/stream, /ingest, /ingest/status, /health, /sessions
-│       └── schemas.py              # Pydantic Request/Response Models
+│       ├── schemas.py              # Pydantic Request/Response Models
+│       ├── prompt_routes.py        # Endpoints: /prompts/* (active, variants, preview)
+│       ├── prompt_schemas.py       # Pydantic Models für Prompt-Endpoints
+│       └── eval_routes.py          # Endpoints: /eval/*
 │
 ├── ui/
-│   └── app.py                     # Streamlit Chat-Oberfläche
+│   ├── LoreKeeper.py              # Streamlit Chat-Oberfläche
+│   └── pages/
+│       ├── 1_Sources.py            # Source-Verwaltung
+│       ├── 2_Evaluation.py         # Evaluation-Seite
+│       └── 3_Prompts.py            # Prompt-Editor + Varianten
 │
 ├── evaluation/
 │   ├── qa_pairs.yaml              # Golden Set: 40 Fragen (markdown/pdf/image/adventure)
@@ -738,17 +746,29 @@ async def _gc_loop(self):
 ### 4.6 Prompt Manager
 
 **Aufgabe:** Alle Prompts zentral in `prompts.yaml` verwalten, via Jinja2 rendern.
+Prompts können zur Laufzeit über die UI oder die `/prompts/*` API-Endpoints
+bearbeitet und hot-reloaded werden — kein Neustart nötig.
 
 ```python
 class PromptManager:
-    def __init__(self, prompts_path: Path):
-        self.templates = yaml.safe_load(prompts_path.read_text())
+    def __init__(self, prompts_dict: dict):
+        self.templates = prompts_dict
         self.jinja_env = Environment()
 
     def render(self, template_name: str, **kwargs) -> str:
         template = self.jinja_env.from_string(self.templates[template_name])
         return template.render(**kwargs)
 ```
+
+**Hot-Reload:** Beim Speichern über die UI/API wird `config/prompts.yaml`
+geschrieben und der globale `PromptManager` in `src.main` durch eine neue
+Instanz ersetzt — analog zum Provider-Switching.
+
+**Varianten:** Neben den aktiven Prompts können benannte Varianten in
+`config/prompts/` als YAML gespeichert, geladen, editiert und aktiviert werden.
+Jede Variante enthält die gleichen vier Template-Keys plus einen optionalen
+`_meta`-Key (Name, Beschreibung). Beim Aktivieren wird die Variante nach
+`prompts.yaml` kopiert und der PromptManager neu geladen.
 
 **Template-Typen (siehe Abschnitt 5.2 für vollständige Templates):**
 
@@ -818,6 +838,14 @@ in Env-Variablen übersetzt. Pydantic-Settings liest diese automatisch:
 | GET    | `/sessions/{id}`          | Session-History abrufen                             |
 | DELETE | `/sessions/{id}`          | Session löschen                                     |
 | GET    | `/stats`                  | Index-Statistiken (Chunk-Count etc.)                |
+| GET    | `/prompts/active`         | Aktive Prompts lesen                                |
+| PUT    | `/prompts/active`         | Aktive Prompts speichern + Hot-Reload               |
+| GET    | `/prompts/variants`       | Gespeicherte Varianten auflisten                    |
+| GET    | `/prompts/variants/{name}`| Einzelne Variante laden                             |
+| PUT    | `/prompts/variants/{name}`| Variante erstellen / aktualisieren                  |
+| DELETE | `/prompts/variants/{name}`| Variante löschen                                    |
+| POST   | `/prompts/activate/{name}`| Variante aktivieren (→ prompts.yaml + Reload)       |
+| POST   | `/prompts/preview`        | Jinja2-Template mit Beispieldaten rendern            |
 
 #### Request/Response Schemas
 
@@ -898,6 +926,11 @@ class IngestStatusResponse(BaseModel):
   - Provider umschalten (Ollama / Gemini)
   - Top-K Retrieval anpassen
   - Metadaten-Filter setzen (z.B. nur Charaktere, nur Regionen)
+- **✏ Prompts** Seite (`ui/pages/3_Prompts.py`):
+  - Aktive Prompts inline bearbeiten mit Jinja2-Preview
+  - Varianten speichern, laden, editieren, aktivieren, löschen
+  - Side-by-side Vergleich zweier Varianten
+  - Hot-Reload: Änderungen sofort wirksam, kein Neustart nötig
 
 #### Kommunikation
 
@@ -1009,7 +1042,14 @@ ui:
   api_url: "http://localhost:8000"
 ```
 
-### 5.2 prompts.yaml
+### 5.2 prompts.yaml + Varianten
+
+Die aktiven Prompts liegen in `config/prompts.yaml`. Zusätzlich können
+benannte Varianten in `config/prompts/` gespeichert werden. Beide können
+über die UI (✏ Prompts Seite) oder die `/prompts/*` API bearbeitet werden.
+Änderungen werden sofort hot-reloaded — kein Neustart nötig.
+
+Detaillierte Dokumentation: [docs/prompts.md](docs/prompts.md)
 
 ```yaml
 # ─────────────────────────────────────────

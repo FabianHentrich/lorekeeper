@@ -101,6 +101,12 @@ Occurs when the backend and ingestion script run simultaneously (embedded mode):
 On first start, LoreKeeper downloads `intfloat/multilingual-e5-base` (~1.1 GB) and `mmarco-mMiniLMv2-L12-H384-v1` (~120 MB) from HuggingFace.
 Afterwards it is cached at `~/.cache/huggingface/`.
 
+### PDF OCR not working
+- Verify `rapidocr_onnxruntime` is installed: `pip show rapidocr_onnxruntime`
+- Check logs for `pymupdf4llm failed for ... retrying without OCR` — the parser falls back automatically
+- For non-German PDFs, change `ingestion.pdf.ocr_language` in `settings.yaml` (uses ISO 639-3 codes: `eng`, `fra`, `deu`, etc.)
+- OCR is CPU-intensive; large scanned PDFs may take significantly longer than text PDFs
+
 ### Retrieval returns wrong document
 1. Check if re-ingest is needed (delete `chroma_data` + re-ingest)
 2. Check `score_threshold` in `settings.yaml` (default: 0.5)

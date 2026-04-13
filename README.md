@@ -5,7 +5,7 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi)
 ![ChromaDB](https://img.shields.io/badge/ChromaDB-embedded%20%7C%20client-blueviolet)
 ![LLM](https://img.shields.io/badge/LLM-Ollama%20%7C%20Gemini-412991)
-![Tests](https://img.shields.io/badge/tests-132-brightgreen)
+![Tests](https://img.shields.io/badge/tests-147-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 **A production-grade RAG system for Obsidian-based tabletop-RPG worlds.**
@@ -33,6 +33,10 @@ LoreKeeper is built from the ground up for this workflow:
 - **Obsidian-native parsing** — wikilinks, `![[embeds]]`, `> [!callouts]`,
   `#tags`, and YAML frontmatter aliases are all extracted into searchable
   metadata.
+- **PDF OCR & structure** — PDFs are parsed with OCR support
+  (via RapidOCR), TOC-based heading hierarchy, embedded image extraction,
+  and layout-aware code block suppression. Configurable per
+  `ingestion.pdf` in `settings.yaml`.
 - **Semantic source filtering** — every chunk inherits a `group` tag (`lore` /
   `adventure` / `rules`) from the source it was ingested from. The three UI
   toggles (🗺️ Lore, 📖 Adventure, 📋 Rules) restrict retrieval at the
@@ -84,6 +88,7 @@ multilingual E5 model and prompts for any other language.
 | 🧠 **Hybrid retrieval** | E5-base bi-encoder + mMiniLMv2 cross-encoder reranker + soft per-source diversity cap (two-pass with backfill) |
 | 🔀 **Dual LLM providers** | Ollama (local) ↔ Gemini (cloud), switch at runtime |
 | 📜 **Obsidian-native** | Wikilinks, callouts, embeds, tags, aliases all parsed |
+| 📄 **PDF OCR + structure** | RapidOCR for scanned regions, TOC-based heading hierarchy, embedded image extraction |
 | 🎯 **Category filtering** | Lore / Adventure / Rules filters restrict context |
 | 🌊 **SSE streaming** | Token-by-token with source citations in the done event |
 | 📊 **Token accounting** | Per-message and per-session token usage (in / out / thinking), shown live in the UI |
@@ -91,8 +96,9 @@ multilingual E5 model and prompts for any other language.
 | 💬 **Telegram-style answers** | Scannable chat-like formatting: short paragraphs, emoji headers, bullets — instead of flat 3-line prose |
 | 🔁 **Incremental indexing** | SHA-256 content hashing — only changed files re-embed |
 | 🐳 **Docker-ready** | API + ChromaDB + Ollama (GPU) + UI via `docker compose` |
+| ✏ **Prompt management** | Edit active prompts, save/load/compare variants, Jinja2 preview — all from the UI with instant hot-reload |
 | ⚙ **Self-service setup** | Sources (folder OR single file), provider switch, and Gemini API-key entry — all from the UI, no YAML required |
-| ✅ **132 tests** | Unit + integration coverage including the full HTTP layer |
+| ✅ **147 tests** | Unit + integration coverage including the full HTTP layer |
 
 ---
 
@@ -104,7 +110,7 @@ flowchart TB
 
     subgraph API["⚡ FastAPI Backend"]
         direction TB
-        ROUTES["/query · /query/stream<br/>/ingest · /sources · /health<br/>/sessions · /provider · /stats"]
+        ROUTES["/query · /query/stream<br/>/ingest · /sources · /health<br/>/sessions · /provider · /prompts · /stats"]
         CONV["💬 Conversation Manager<br/>sliding window · async GC"]
         ROUTES --- CONV
     end
@@ -124,7 +130,7 @@ flowchart TB
 
     subgraph INGEST["📥 Ingestion"]
         direction TB
-        PARSE["Obsidian parser<br/>wikilinks · callouts · aliases"]
+        PARSE["Obsidian + PDF parser<br/>wikilinks · callouts · OCR"]
         CHUNK["Heading-aware chunker<br/>atomic tables"]
         PARSE --> CHUNK
     end
@@ -240,12 +246,13 @@ HTTP (`CHROMA_MODE=client`). Ollama is GPU-accelerated by default — see
 | Document | Contents |
 |----------|----------|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System overview, components, data flow, config schema |
+| [docs/parsing.md](docs/parsing.md) | Markdown (Obsidian syntax), PDF (OCR, TOC headings, images), Image parsers |
 | [docs/data-flow.md](docs/data-flow.md) | Ingestion and query pipelines (Mermaid) |
 | [docs/embedding-strategy.md](docs/embedding-strategy.md) | E5 asymmetry, identity layer, reranking — and **why** |
 | [docs/provider-strategy.md](docs/provider-strategy.md) | Ollama vs. Gemini, runtime switching |
-| [docs/ui-ux.md](docs/ui-ux.md) | Sidebar, chat, ⚙ Sources page, Gemini key entry, session state, performance |
+| [docs/ui-ux.md](docs/ui-ux.md) | Sidebar, chat, ⚙ Sources page, ✏ Prompts page, Gemini key entry, session state, performance |
 | [docs/configuration.md](docs/configuration.md) | Full `settings.yaml` reference, `sources.yaml` schema, env variables, runtime API key |
-| [docs/prompts.md](docs/prompts.md) | Jinja2 templates, variables, customization |
+| [docs/prompts.md](docs/prompts.md) | Jinja2 templates, variables, UI editing, variant management |
 | [docs/operations.md](docs/operations.md) | Ingest, re-ingest, troubleshooting |
 | [docs/evaluation.md](docs/evaluation.md) | Golden Set, retrieval/end-to-end eval scripts, metrics, workflow |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Dev setup, coding conventions, PR process |
@@ -263,6 +270,7 @@ HTTP (`CHROMA_MODE=client`). Ollama is GPU-accelerated by default — see
 | Vector store | ChromaDB (embedded / HTTP client) |
 | LLM | Ollama (`qwen3:8b`) or Google Gemini (`gemini-2.5-flash`) |
 | Prompts | Jinja2 + YAML |
+| OCR | RapidOCR (via `rapidocr_onnxruntime`, pure Python) |
 | Tests | pytest + pytest-asyncio + httpx |
 
 ---

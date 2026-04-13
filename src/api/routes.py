@@ -71,6 +71,7 @@ async def query(request: QueryRequest):
         metadata_filters=request.metadata_filters,
         top_k_rerank=request.top_k_rerank,
         max_per_source=request.max_per_source,
+        hybrid=request.hybrid_search,
     )
 
     # Generate answer
@@ -138,6 +139,7 @@ async def query_stream(request: QueryRequest):
         metadata_filters=request.metadata_filters,
         top_k_rerank=request.top_k_rerank,
         max_per_source=request.max_per_source,
+        hybrid=request.hybrid_search,
     )
 
     sources = [
@@ -222,6 +224,8 @@ async def ingest():
             _update_progress(result)
             _ingest_jobs[job_id].status = "done"
             _ingest_jobs[job_id].errors = result.errors
+            # Invalidate BM25 index so it rebuilds on next hybrid query
+            main_module.bm25_index.invalidate()
         except Exception as e:
             _ingest_jobs[job_id].status = "error"
             _ingest_jobs[job_id].errors.append(str(e))
@@ -458,6 +462,7 @@ async def reindex_source(source_id: str):
             _update_progress(result)
             _ingest_jobs[job_id].status = "done"
             _ingest_jobs[job_id].errors = result.errors
+            main_module.bm25_index.invalidate()
         except Exception as e:
             _ingest_jobs[job_id].status = "error"
             _ingest_jobs[job_id].errors.append(str(e))

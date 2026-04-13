@@ -92,7 +92,7 @@ class IngestionOrchestrator:
         self.config = config or config_manager
         self.parsers: list[BaseParser] = [
             MarkdownParser(),
-            PDFParser(),
+            PDFParser(pdf_config=self.config.settings.ingestion.pdf),
             ImageMetaParser(),
         ]
 

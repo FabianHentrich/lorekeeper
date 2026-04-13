@@ -10,6 +10,7 @@ import httpx
 from fastapi import FastAPI
 
 from src.api.eval_routes import eval_router
+from src.api.prompt_routes import prompt_router
 from src.api.routes import router
 from src.config.manager import ConfigManager
 from src.conversation.manager import ConversationManager
@@ -17,6 +18,7 @@ from src.generation.generator import Generator
 from src.generation.provider_factory import ProviderFactory
 from src.generation.providers.base import BaseLLMProvider
 from src.prompts.manager import PromptManager
+from src.retrieval.bm25_index import BM25Index
 from src.retrieval.embeddings import EmbeddingService
 from src.retrieval.retriever import Retriever
 from src.retrieval.vectorstore import VectorStoreService
@@ -29,6 +31,7 @@ conversation_manager: ConversationManager = None  # type: ignore
 prompt_manager: PromptManager = None  # type: ignore
 embedding_service: EmbeddingService = None  # type: ignore
 vectorstore: VectorStoreService = None  # type: ignore
+bm25_index: BM25Index = None  # type: ignore
 retriever: Retriever = None  # type: ignore
 provider: BaseLLMProvider = None  # type: ignore
 condense_provider: BaseLLMProvider | None = None
@@ -83,7 +86,7 @@ async def _ensure_ollama(base_url: str, timeout: float = 30.0) -> subprocess.Pop
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global config, conversation_manager, prompt_manager
-    global embedding_service, vectorstore, retriever
+    global embedding_service, vectorstore, bm25_index, retriever
     global provider, condense_provider, generator
     global _ollama_process
 
@@ -116,7 +119,8 @@ async def lifespan(app: FastAPI):
     vectorstore.health_check()  # pre-connect ChromaDB
 
     # Retrieval
-    retriever = Retriever(settings.retrieval, embedding_service, vectorstore)
+    bm25_index = BM25Index()
+    retriever = Retriever(settings.retrieval, embedding_service, vectorstore, bm25_index)
     if settings.retrieval.reranking.enabled:
         retriever._get_reranker()  # pre-load reranker model at startup
 
@@ -177,3 +181,4 @@ async def request_logging(request, call_next):
 
 app.include_router(router)
 app.include_router(eval_router)
+app.include_router(prompt_router)

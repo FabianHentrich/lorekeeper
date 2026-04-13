@@ -353,6 +353,120 @@ the first query is therefore no slower than subsequent ones.
 
 ---
 
+## Prompts Page (`ui/pages/3_Prompts.py`)
+
+A dedicated Streamlit page for editing prompt templates, managing variants,
+and comparing prompts side-by-side — no YAML editing required.
+
+### Tab 1: Aktive Prompts
+
+Four `st.text_area` widgets (height 300px) for the active templates: System,
+QA, Condense, No-Context. Each field shows a help tooltip listing the
+available Jinja2 variables for that template.
+
+Below each template, a **Preview** expander renders the template with sample
+data (via `POST /prompts/preview`), so you can verify the output before
+saving.
+
+**💾 Aktive Prompts speichern** writes to `config/prompts.yaml` and
+hot-reloads the `PromptManager` — the next query uses the updated templates
+immediately.
+
+### Tab 2: Varianten
+
+**Save active as variant:** A compact row (Name + Description + Button) saves
+a copy of the current active prompts as a named variant in `config/prompts/`.
+
+**Saved variants list:** Each variant renders as an `st.expander` containing:
+- Four editable `st.text_area` fields (height 250px) for all templates
+- An editable description field
+- Three action buttons:
+  - **💾 Speichern** — saves edits to the variant file
+  - **Aktivieren** — overwrites `prompts.yaml` with this variant and
+    hot-reloads the PromptManager
+  - **🗑 Löschen** — deletes the variant file
+
+Active variants are marked with ✅ in the list header (detected via MD5 hash
+comparison with `prompts.yaml`).
+
+### Tab 3: Vergleichen
+
+Two selectboxes choose variants (or "(Aktiv)" for the current prompts). For
+each of the four templates, a side-by-side `st.columns(2)` view shows both
+texts. Templates that differ are marked ⚠ unterschiedlich, identical ones ✅.
+
+### Caching
+
+All fetch functions use `@st.cache_data(ttl=10)` with `.clear()` after
+mutations. This means the page shows fresh data within 10 seconds of external
+changes, and immediately after in-page edits.
+
+---
+
+## Evaluation Page (`ui/pages/2_Evaluation.py`)
+
+A dedicated Streamlit page for managing the Golden Set, testing retrieval,
+running evaluations, and comparing results. Five tabs:
+
+### Tab 1: Golden Set
+
+Editable `st.data_editor` table with all QA pairs from `evaluation/qa_pairs.yaml`.
+Columns: ID, Question, Source Type (markdown/pdf/image), Category, Expected
+Sources (comma-separated), Answer Contains (keywords for E2E), Notes.
+
+**💾 Golden Set speichern** writes via `PUT /eval/qa-pairs`. Rows without ID
+or question are silently skipped.
+
+### Tab 2: Frage testen
+
+Single-question retrieval preview. Enter a question, optionally adjust
+retrieval parameters (Top-K, Rerank, Max-per-Source via shared sliders), and
+click **🔍 Testen**. Shows the returned chunks as a table (Score, Source,
+Heading, Preview) with latency.
+
+Below the results, a convenience section lets you add the tested question
+directly to the Golden Set — the Expected Sources field is pre-filled with the
+top 3 retrieved files.
+
+### Tab 3: Retrieval Eval
+
+Runs the full Golden Set through the retriever (no LLM). Configurable
+retrieval parameters via the same shared sliders. Starts as a background job
+(`POST /eval/run` with `eval_type: retrieval`), polled via
+`GET /eval/status/{job_id}`.
+
+Results show: Hit Rate metric, breakdown by source type, and per-question
+expandable details (expected vs. retrieved sources, scores).
+
+### Tab 4: End-to-End
+
+Runs the full Golden Set through the complete pipeline including LLM. Shows
+Hit Rate, Answer Contains Rate, and average latency. Per-question details
+include the generated answer and source comparison.
+
+Warning: slow and consumes LLM tokens.
+
+### Tab 5: Ergebnisse
+
+Lists saved evaluation results (max 3 per type). Each result shows filename,
+type, hit rate, question count, and config. Delete button per result.
+
+**Ergebnisse vergleichen**: Select two results for a side-by-side comparison.
+Shows hit rate difference and lists all questions where the hit/miss status
+changed between runs.
+
+### Shared Components
+
+**`_render_tuning_sliders(prefix)`**: Three linked sliders (Kandidaten,
+Finale Chunks, Max pro Quelle) reused across the Frage testen and Retrieval
+Eval tabs. The sliders are bound: `top_k_rerank ≤ top_k` and
+`max_per_source ≤ top_k_rerank`.
+
+**`_poll_eval_job(job_id)`**: Polls `GET /eval/status/{job_id}` every 1s
+inside a `st.status` widget until done or error.
+
+---
+
 ## Session State Overview
 
 | Key | Type | Meaning |
