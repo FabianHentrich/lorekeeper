@@ -93,6 +93,7 @@ async def retrieval_preview(req: RetrievalPreviewRequest):
         top_k=req.top_k,
         top_k_rerank=req.top_k_rerank,
         max_per_source=req.max_per_source,
+        hybrid=req.hybrid,
     )
     latency_ms = (time.time() - start) * 1000
 
@@ -183,6 +184,7 @@ async def _run_retrieval_eval(job: EvalJobStatus, qa_pairs: list[dict], req: Eva
             top_k=req.top_k,
             top_k_rerank=req.top_k_rerank,
             max_per_source=req.max_per_source,
+            hybrid=req.hybrid,
             progress_callback=_progress,
         )
 

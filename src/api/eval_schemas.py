@@ -20,6 +20,7 @@ class RetrievalPreviewRequest(BaseModel):
     top_k: int = 15
     top_k_rerank: int = 8
     max_per_source: int = 3
+    hybrid: bool | None = None
 
 
 class RetrievedChunkResponse(BaseModel):
@@ -40,6 +41,7 @@ class EvalJobRequest(BaseModel):
     top_k_rerank: int = 8
     max_per_source: int = 3
     eval_type: str = "retrieval"
+    hybrid: bool | None = None
 
 
 class EvalJobResponse(BaseModel):

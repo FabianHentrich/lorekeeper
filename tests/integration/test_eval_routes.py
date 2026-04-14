@@ -39,7 +39,7 @@ class FakeRetrievedChunk:
 class FakeRetriever:
     """Mock stub intercepting similarity searches."""
     async def retrieve(self, query, top_k=None, metadata_filters=None,
-                       top_k_rerank=None, max_per_source=None):
+                       top_k_rerank=None, max_per_source=None, hybrid=None):
         return [FakeRetrievedChunk()]
 
 

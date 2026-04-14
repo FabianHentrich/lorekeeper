@@ -152,6 +152,262 @@ pairs:
     expected_sources: ["pnp_regelbuch.pdf"]
     expected_answer_contains: ["Zauber"]
 
+  # — Grundregeln (Kapitel 1) —
+
+  - id: p011
+    question: "Was ist die Ass-Regel und wie funktionieren explodierende Würfel?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Ass"]
+    notes: "Kapitel 1.3 — distinktes Regelmechanik-Label, gut für BM25."
+
+  - id: p012
+    question: "Wie funktioniert ein Kombinationswurf?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Kombination"]
+    notes: "Kapitel 1.5"
+
+  - id: p013
+    question: "Wann wird nicht gewürfelt?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: []
+    notes: "Kapitel 1.7 — Meta-Regel, answer_contains leer."
+
+  # — Charaktergrundlagen (Kapitel 2) —
+
+  - id: p014
+    question: "Was sind Talentpunkte und wie funktioniert der Benchmark?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Talentpunkte"]
+    notes: "Kapitel 2.4"
+
+  - id: p015
+    question: "Was ist der Legendäre Rang (Rang 6)?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Legendär"]
+    notes: "Kapitel 2.7 — distinkter Rang-Name."
+
+  - id: p016
+    question: "Welche Ressourcen hat ein Charakter?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Ressourcen"]
+    notes: "Kapitel 2.5"
+
+  # — Talente (Kapitel 3) —
+
+  - id: p017
+    question: "Was sind legendäre Effekte von Talenten?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["legendär"]
+    notes: "Kapitel 3.5"
+
+  - id: p018
+    question: "Wie funktioniert eine Talentprobe?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Talent"]
+    notes: "Kapitel 3.3"
+
+  # — Kampfregeln (Kapitel 4) —
+
+  - id: p019
+    question: "Wie funktionieren Rüstung und magischer Schild?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Rüstung"]
+    notes: "Kapitel 4.7"
+
+  - id: p020
+    question: "Welche Schadenstypen gibt es?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Schaden"]
+    notes: "Kapitel 4.8"
+
+  - id: p021
+    question: "Welche Statuseffekte gibt es?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Status"]
+    notes: "Kapitel 4.9"
+
+  - id: p022
+    question: "Wie funktioniert Bewegung im Kampf?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Bewegung"]
+    notes: "Kapitel 4.4"
+
+  - id: p023
+    question: "Wann genau greifen Schaden und Statuseffekte?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Zeitpunkt"]
+    notes: "Kapitel 4.10 — sub-section recall."
+
+  # — Klassen nicht-magisch (Kapitel 5.4) —
+
+  - id: p024
+    question: "Welche Fähigkeiten hat die Klasse Krieger?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Krieger"]
+    notes: "Kapitel 5.4.1"
+
+  - id: p025
+    question: "Was kann die Klasse Schurke?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Schurke"]
+    notes: "Kapitel 5.4.2"
+
+  - id: p026
+    question: "Welche Fähigkeiten hat der Waldläufer?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Waldläufer"]
+    notes: "Kapitel 5.4.3"
+
+  - id: p027
+    question: "Was zeichnet die Klasse Gladiator aus?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Gladiator"]
+    notes: "Kapitel 5.4.4"
+
+  - id: p028
+    question: "Welche Fähigkeiten hat der Alchemist?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Alchemist"]
+    notes: "Kapitel 5.4.6"
+
+  # — Magische Klassen (Kapitel 5.5) —
+
+  - id: p029
+    question: "Wie funktioniert Elementarmagie?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Elementar"]
+    notes: "Kapitel 5.5.2"
+
+  - id: p030
+    question: "Was kann die Tiermagie?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Tiermagie"]
+    notes: "Kapitel 5.5.3"
+
+  - id: p031
+    question: "Welche Fähigkeiten hat ein Zauberschmied?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Zauberschmied"]
+    notes: "Kapitel 5.5.4 — distinkter Klassen-Eigenname, BM25-affin."
+
+  - id: p032
+    question: "Wie funktioniert Golemmagie?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Golem"]
+    notes: "Kapitel 5.5.5"
+
+  - id: p033
+    question: "Was zeichnet Dunkle Magie aus?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Dunkle"]
+    notes: "Kapitel 5.5.6"
+
+  - id: p034
+    question: "Welche Fähigkeiten bietet die Zeitmagie?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Zeitmagie"]
+    notes: "Kapitel 5.5.7"
+
+  - id: p035
+    question: "Was ist die magische Basisausrüstung?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Basisausrüstung"]
+    notes: "Kapitel 5.5.1 — sub-section in 5.5"
+
+  # — Basis-Skills & Zauber —
+
+  - id: p036
+    question: "Welche Basis-Skills stehen jedem Charakter zur Verfügung?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Basis-Skills"]
+    notes: "Kapitel 5.2"
+
+  - id: p037
+    question: "Welche Basis-Zauber gibt es?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Basis-Zauber"]
+    notes: "Kapitel 5.3"
+
+  # — Eigenheiten (Kapitel 6) —
+
+  - id: p038
+    question: "Welche Eigenheiten gibt es für Geist und Psyche?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Geist"]
+    notes: "Kapitel 6.1"
+
+  - id: p039
+    question: "Welche Eigenheiten zu Kampf und Taktik gibt es?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Kampf"]
+    notes: "Kapitel 6.3"
+
+  - id: p040
+    question: "Welche Eigenheiten hängen mit Flüchen und Übernatürlichem zusammen?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Flüche"]
+    notes: "Kapitel 6.4"
+
   # ─────────────────────────────────────────
   # IMAGE (10 Fragen)
   # ─────────────────────────────────────────
@@ -367,3 +623,325 @@ pairs:
     expected_sources: ["Orte/Arkenfeld.md"]
     expected_answer_contains: ["Veylana", "Gotteslicht"]
     notes: "Tiefe Section: Information liegt sowohl in einer Tabellenzeile (Gotteslicht > Geheim) als auch in der Verborgenes-Erbe-Sektion. Testet ob Tabellen-Inhalte über den Identity-Layer trotz fehlendem Fließtext im Chunk auffindbar sind."
+
+  # ─────────────────────────────────────────
+  # KEYWORD-FOCUS (6 Fragen)
+  # Designed to reward BM25 over pure vector search — exact terms,
+  # rare proper nouns, numeric/rule terminology. Use for hybrid A/B runs.
+  # ─────────────────────────────────────────
+
+  - id: k001
+    question: "Wie viel kostet ein Langschwert?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Langschwert"]
+    notes: "Keyword-case: exakter Item-Name + Preis-Frage. Vektor-Suche schwächelt auf kurzen, sehr spezifischen Begriffen — BM25 sollte den Waffen-Preis-Chunk direkt treffen."
+
+  - id: k002
+    question: "Was bedeutet Vorteil und Nachteil beim Würfeln?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Vorteil", "Nachteil"]
+    notes: "Keyword-case: kurze Regel-Fachbegriffe mit hoher Alltagswort-Überlagerung. Semantische Suche drifted gern in 'Vorteile einer Klasse'-Chunks ab — BM25 verankert auf dem exakten Term."
+
+  - id: k003
+    question: "Was ist eine Marke genau?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Marke"]
+    notes: "Keyword-case: 'Marke' ist ein sehr kurzer, spezifischer Regelbegriff. Overlap mit p001, aber Formulierung zielt auf Definition — BM25 sollte den Definitions-Chunk über Lexikalmatch finden."
+
+  - id: k004
+    question: "Welche Stats hat Ardomis im Detail?"
+    source_type: markdown
+    category: enemy
+    expected_sources: ["Gegner/Bossgegner/Ardomis – Der Erleuchtete.md"]
+    expected_answer_contains: ["Ardomis"]
+    notes: "Keyword-case: seltener Eigenname 'Ardomis' ist sehr distinct im Vault. Testet Hybrid-Verhalten bei Stats/Tabellen-Chunks — BM25 auf dem Namen, Vektor auf 'Stats'."
+
+  - id: k005
+    question: "Was ist der Heimkehrpfennig genau?"
+    source_type: markdown
+    category: item
+    expected_sources: ["Gegenstände/Heimkehrpfennig.md"]
+    expected_answer_contains: ["Heimkehrpfennig"]
+    notes: "Keyword-case: Kompositum-Eigenname, der mangels Trainings-Kontext in E5-Embeddings schwach fokussiert. BM25 sollte via exaktem Tokenmatch vor Vektor-Suche treffen."
+
+  - id: k006
+    question: "Wie wird die Bonusaktion im Kampf eingesetzt?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Bonusaktion"]
+    notes: "Keyword-case: exakter Regelbegriff. Overlap mit p005, aber fokussiert auf Einzelterm statt Paarbegriff — prüft ob Hybrid-Ranking den Bonusaktion-Chunk vor reinen Aktions-Chunks priorisiert."
+
+  - id: k007
+    question: "Was ist der Blaue Monolith?"
+    source_type: markdown
+    category: item
+    expected_sources: ["Gegenstände/Blauer Monolith.md"]
+    expected_answer_contains: ["Monolith"]
+    notes: "Keyword-case: eines von sieben Farb-Monolith-Artefakten. Reine Vektor-Suche drifted zu 'Roter/Grüner Monolith' ab (semantisch fast identisch), BM25 verankert auf 'Blauer'."
+
+  - id: k008
+    question: "Was ist der Ephraskal-Handschuh?"
+    source_type: markdown
+    category: item
+    expected_sources: ["Gegenstände/Ephraskal-Handschuh.md"]
+    expected_answer_contains: ["Ephraskal"]
+    notes: "Keyword-case: Kompositum aus seltenem Demon-Namen + Handschuh. Ohne BM25 matcht Vektor eher generische Handschuh-Chunks."
+
+  - id: k009
+    question: "Was kann der Nahlith-Fokus?"
+    source_type: markdown
+    category: item
+    expected_sources: ["Gegenstände/Nahlith-Fokus.md"]
+    expected_answer_contains: ["Nahlith"]
+    notes: "Keyword-case: distinkter Fantasie-Eigenname, kein Trainingsvokabular — BM25 sollte über Exaktmatch treffen."
+
+  - id: k010
+    question: "Was bewirkt der Glutschmiedehammer?"
+    source_type: markdown
+    category: item
+    expected_sources: ["Gegenstände/Glutschmiedehammer.md"]
+    expected_answer_contains: ["Glutschmiedehammer"]
+    notes: "Keyword-case: dreiteiliges Kompositum, BM25-affin."
+
+  - id: k011
+    question: "Was ist der Sequenz-Schlüssel?"
+    source_type: markdown
+    category: item
+    expected_sources: ["Gegenstände/Sequenz-Schlüssel.md"]
+    expected_answer_contains: ["Sequenz"]
+    notes: "Keyword-case: abstraktes Kompositum, semantisch nahe an 'Schlüssel'-Kontexten — BM25 verankert auf 'Sequenz'."
+
+  - id: k012
+    question: "Was kann der Mantel der Zwischenzeit?"
+    source_type: markdown
+    category: item
+    expected_sources: ["Gegenstände/Mantel der Zwischenzeit (Legendär).md"]
+    expected_answer_contains: ["Zwischenzeit"]
+    notes: "Keyword-case: legendäres Artefakt mit sehr spezifischem Begriff 'Zwischenzeit'."
+
+  - id: k013
+    question: "Was ist das Schicksalsdeck?"
+    source_type: markdown
+    category: item
+    expected_sources: ["Gegenstände/Schicksalsdeck.md"]
+    expected_answer_contains: ["Schicksalsdeck"]
+    notes: "Keyword-case: kurzer, hochspezifischer Kompositum-Term."
+
+  - id: k014
+    question: "Was ist das Siegelrunen-Schwert?"
+    source_type: markdown
+    category: item
+    expected_sources: ["Gegenstände/Siegelrunen-Schwert.md"]
+    expected_answer_contains: ["Siegelrunen"]
+    notes: "Keyword-case: Kompositum mit Bindestrich — reine Vektor-Suche droht auf 'Schwert'-Allgemeinheit abzudriften."
+
+  - id: k015
+    question: "Wer ist Thaloran Windseele?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["NPCs/Thaloran Windseele.md"]
+    expected_answer_contains: ["Thaloran"]
+    notes: "Keyword-case: seltener zweiteiliger Eigenname, BM25-affin."
+
+  - id: k016
+    question: "Wer ist Rhaz'Muell der Knotenfürst?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["Dämonen/Infernum/Rhaz'Muell, der Knotenfürst.md"]
+    expected_answer_contains: ["Rhaz"]
+    notes: "Keyword-case: Apostroph-Name, Tokenisierungs-Test für BM25."
+
+  - id: k017
+    question: "Was ist das Chronoversum?"
+    source_type: markdown
+    category: lore
+    expected_sources: ["Dämonen/Chronoversum/Chronoversum.md"]
+    expected_answer_contains: ["Chronoversum"]
+    notes: "Keyword-case: hochspezifischer Einzelbegriff, distinct im Vault."
+
+  - id: k018
+    question: "Wer ist die Rosenwitwe Serapha?"
+    source_type: markdown
+    category: enemy
+    expected_sources: ["Gegner/Bossgegner/Rosenwitwe Serapha.md"]
+    expected_answer_contains: ["Serapha"]
+    notes: "Keyword-case: Titel+Name-Kombination, exakter Match wünschenswert."
+
+  - id: k019
+    question: "Was ist die Venthir-Siegelnetz-Blaupause?"
+    source_type: markdown
+    category: item
+    expected_sources: ["Gegenstände/Venthir-Siegelnetz-Blaupause.md"]
+    expected_answer_contains: ["Venthir"]
+    notes: "Keyword-case: dreifaches Kompositum, hochspezifisch. Vektor zerfällt in Allgemein-Embeddings, BM25 matcht Tokens direkt."
+
+  - id: k020
+    question: "Wer ist Artheon Knisterhand Faraday?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["NPCs/Artheon „Knisterhand“ Faraday.md"]
+    expected_answer_contains: ["Artheon"]
+    notes: "Keyword-case: Name mit Spitznamen in Anführungszeichen — Tokenisierungs-Robustheit."
+
+  # ─────────────────────────────────────────
+  # ERWEITERTE MARKDOWN-ENTITÄTEN (m011–m025)
+  # Größere Coverage der Vault-Struktur: Organisationen, Orte, Dämonen,
+  # weitere Schattenorden-NPCs. Verdoppelt die Nicht-PDF-Hit-Rate-Basis
+  # und stellt sicher, dass nicht nur Stammbeispiele aus der Ursprungsliste
+  # getroffen werden.
+  # ─────────────────────────────────────────
+
+  - id: m011
+    question: "Was ist das Kollegium der Stillen Flamme?"
+    source_type: markdown
+    category: location
+    expected_sources: ["Orte/Kollegium der Stillen Flamme.md"]
+    expected_answer_contains: ["Flamme"]
+
+  - id: m012
+    question: "Was ist das Venthir-Konsortium und welche Rolle spielt es?"
+    source_type: markdown
+    category: lore
+    expected_sources: ["Organisationen/Venthir-Konsortium.md"]
+    expected_answer_contains: ["Venthir"]
+
+  - id: m013
+    question: "Was ist Haus Brahmus?"
+    source_type: markdown
+    category: lore
+    expected_sources: ["Organisationen/Haus Brahmus/Haus Brahmus.md"]
+    expected_answer_contains: ["Brahmus"]
+
+  - id: m014
+    question: "Was ist die Weiße Kanzlei?"
+    source_type: markdown
+    category: lore
+    expected_sources: ["Organisationen/Weiße Kanzlei/Weiße Kanzlei.md"]
+    expected_answer_contains: ["Kanzlei"]
+
+  - id: m015
+    question: "Was ist der Orden der Letzten Dämmerung?"
+    source_type: markdown
+    category: lore
+    expected_sources: ["Organisationen/Orden der letzten Dämmerung/Orden der Letzten Dämmerung.md"]
+    expected_answer_contains: ["Dämmerung"]
+
+  - id: m016
+    question: "Was ist Chronos, der Geheimbund der Zeit?"
+    source_type: markdown
+    category: lore
+    expected_sources: ["Organisationen/Chronos - Geheimbund der Zeit/Chronos.md"]
+    expected_answer_contains: ["Chronos"]
+
+  - id: m017
+    question: "Was ist Solcaris für ein Ort?"
+    source_type: markdown
+    category: location
+    expected_sources: ["Orte/Solcaris.md"]
+    expected_answer_contains: ["Solcaris"]
+
+  - id: m018
+    question: "Was ist die Bergfeste Rotgrat?"
+    source_type: markdown
+    category: location
+    expected_sources: ["Orte/Bergfeste Rotgrat.md"]
+    expected_answer_contains: ["Rotgrat"]
+
+  - id: m019
+    question: "Was ist Grenzwacht?"
+    source_type: markdown
+    category: location
+    expected_sources: ["Orte/Grenzwacht.md"]
+    expected_answer_contains: ["Grenzwacht"]
+
+  - id: m020
+    question: "Wer ist Sir Talvar von Eichenwacht?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["NPCs/Sir Talvar von Eichenwacht, Ritter der Morgenklinge.md"]
+    expected_answer_contains: ["Talvar"]
+
+  - id: m021
+    question: "Wer ist Fennrik Fuchs Loras?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["NPCs/Fennrik „Fuchs“ Loras, Kundschafter der Schattenpfade.md"]
+    expected_answer_contains: ["Fennrik"]
+
+  - id: m022
+    question: "Wer ist Alaric von Lysander im Schattenorden?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["Organisationen/Schattenorden/Wichtige NPCs/Alaric von Lysander.md"]
+    expected_answer_contains: ["Alaric"]
+    notes: "Tiefe Verschachtelung in Organisations-Unterordner."
+
+  - id: m023
+    question: "Wer oder was ist Ephraskal?"
+    source_type: markdown
+    category: lore
+    expected_sources: ["Dämonen/Mendacium/Ephraskal.md"]
+    expected_answer_contains: ["Ephraskal"]
+
+  - id: m024
+    question: "Was ist Thal'Emyra?"
+    source_type: markdown
+    category: location
+    expected_sources: ["Orte/Verlorene Magierstädte/Thal'Emyra.md"]
+    expected_answer_contains: ["Thal"]
+    notes: "Apostroph-Name in Unterordner — testet Pfad- und Token-Robustheit."
+
+  - id: m025
+    question: "Was ist Venthir, die verlorene Magierstadt?"
+    source_type: markdown
+    category: location
+    expected_sources: ["Orte/Verlorene Magierstädte/Venthir.md"]
+    expected_answer_contains: ["Venthir"]
+    notes: "Konflikt-Test: Venthir als Ort vs. Venthir-Konsortium (m012) vs. Venthir-Abenteuer (a008) — erwartet den Orts-Chunk."
+
+  # ─────────────────────────────────────────
+  # ERWEITERTE ABENTEUER (a011–a015)
+  # Abdeckung der bisher ausgelassenen Akt-Einträge.
+  # ─────────────────────────────────────────
+
+  - id: a011
+    question: "Was passiert im Abenteuer Der Preis des Lebens?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Söldner/Akt 1 - Erste Fäden/3. Der Preis des Lebens/Der Preis des Lebens.md"]
+    expected_answer_contains: ["Preis"]
+
+  - id: a012
+    question: "Worum geht es im Abenteuer Gelber Gewahrsam?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Söldner/Akt 2 - Züge auf dem Zeitbrett/2. Gelber Gewahrsam/Gelber Gewahrsam (II-2).md"]
+    expected_answer_contains: ["Gewahrsam"]
+
+  - id: a013
+    question: "Was passiert im Abenteuer Die Schwarze Fakultät?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Söldner/Akt 2 - Züge auf dem Zeitbrett/4. Die Schwarze Fakultät/Die Schwarze Fakultät (II-4).md"]
+    expected_answer_contains: ["Fakultät"]
+
+  - id: a014
+    question: "Worum geht es im Abenteuer Weißer Schirm?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Söldner/Akt 3 - Mandate der Macht/1. Weißer Schirm/Weißer Schirm (III-1).md"]
+    expected_answer_contains: ["Schirm"]
+
+  - id: a015
+    question: "Was passiert im Abenteuer Spiegelbruch?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Söldner/Akt 3 - Mandate der Macht/3. Spiegelbruch/Spiegelbruch (III-3).md"]
+    expected_answer_contains: ["Spiegelbruch"]

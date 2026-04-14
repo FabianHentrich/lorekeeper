@@ -2,8 +2,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.config.manager import RerankingConfig, RetrievalConfig
-from src.retrieval.retriever import Retriever, RetrievedChunk
+from src.config.manager import HybridSearchConfig, RerankingConfig, RetrievalConfig
+from src.retrieval.bm25_index import BM25Index
+from src.retrieval.retriever import Retriever, RetrievedChunk, _rrf_merge
 
 
 @pytest.fixture
@@ -196,3 +197,204 @@ class TestRerank:
         assert "A3" not in [r.content for r in results]
         assert "b.md" in sources
         assert "c.md" in sources
+
+
+class TestRRFMerge:
+    """Test suite validating the Reciprocal Rank Fusion primitive."""
+
+    def test_empty_inputs(self):
+        """Verify fusion of two empty lists yields an empty list."""
+        assert _rrf_merge([], [], bm25_weight=0.3) == []
+
+    def test_vector_only(self):
+        """Verify a vector-only input preserves rank order and returns all items."""
+        vector = [
+            {"id": "a", "content": "A", "metadata": {}, "score": 0.9},
+            {"id": "b", "content": "B", "metadata": {}, "score": 0.8},
+        ]
+        merged = _rrf_merge(vector, [], bm25_weight=0.3)
+        assert [m["id"] for m in merged] == ["a", "b"]
+        assert merged[0]["score"] > merged[1]["score"]
+
+    def test_overlap_boosts_shared_item(self):
+        """Verify items appearing in both lists rank above singletons of equal standalone rank."""
+        vector = [
+            {"id": "a", "content": "A", "metadata": {}, "score": 0.9},
+            {"id": "b", "content": "B", "metadata": {}, "score": 0.8},
+        ]
+        bm25 = [
+            {"id": "b", "content": "B", "metadata": {}, "score": 5.0},
+            {"id": "c", "content": "C", "metadata": {}, "score": 3.0},
+        ]
+        merged = _rrf_merge(vector, bm25, bm25_weight=0.5)
+        ids = [m["id"] for m in merged]
+        # b appears in both lists → fused score > singleton a or c at same rank.
+        assert ids[0] == "b"
+        assert set(ids) == {"a", "b", "c"}
+
+    def test_weight_shifts_balance(self):
+        """Verify bm25_weight close to 1 lets the BM25 list dominate ordering."""
+        vector = [{"id": "a", "content": "A", "metadata": {}, "score": 0.9}]
+        bm25 = [{"id": "b", "content": "B", "metadata": {}, "score": 5.0}]
+        merged_bm_heavy = _rrf_merge(vector, bm25, bm25_weight=0.9)
+        assert merged_bm_heavy[0]["id"] == "b"
+        merged_vec_heavy = _rrf_merge(vector, bm25, bm25_weight=0.1)
+        assert merged_vec_heavy[0]["id"] == "a"
+
+
+class TestHybridRetrieve:
+    """Test suite verifying BM25 fusion wiring, thresholding and toggle semantics in retrieve()."""
+
+    @pytest.fixture
+    def hybrid_config(self):
+        """Retrieval config with hybrid enabled by default and reranking off."""
+        return RetrievalConfig(
+            top_k=5,
+            score_threshold=0.5,
+            reranking=RerankingConfig(enabled=False),
+            hybrid=HybridSearchConfig(enabled=True, bm25_weight=0.3, bm25_top_k=5),
+        )
+
+    def _make_bm25(self, docs):
+        """Build an in-memory BM25 index from inline dicts, skipping the vectorstore."""
+        from rank_bm25 import BM25Okapi
+        from src.retrieval.bm25_index import _tokenize
+        idx = BM25Index()
+        idx._documents = docs
+        corpus = [_tokenize(d["content"]) for d in docs]
+        idx._index = BM25Okapi(corpus) if corpus else None
+        idx._doc_token_sets = [set(toks) for toks in corpus]
+        idx._is_built = True
+        return idx
+
+    @pytest.mark.asyncio
+    async def test_hybrid_merges_vector_and_bm25(self, hybrid_config, embed_service):
+        """Verify BM25-only candidates reach the output when hybrid is active."""
+        vs = MagicMock()
+        vs.query.return_value = [
+            {"id": "v1", "content": "semantic hit about the city",
+             "metadata": {"source_file": "v.md", "document_type": "markdown", "heading_hierarchy": ""}, "score": 0.9},
+        ]
+        bm25 = self._make_bm25([
+            {"id": "v1", "content": "semantic hit about the city",
+             "metadata": {"source_file": "v.md", "document_type": "markdown"}},
+            {"id": "b1", "content": "Langschwert 15 Gold exact match",
+             "metadata": {"source_file": "weapons.md", "document_type": "markdown"}},
+        ])
+        retriever = Retriever(config=hybrid_config, embedding_service=embed_service,
+                              vectorstore=vs, bm25_index=bm25)
+
+        results = await retriever.retrieve("Langschwert Gold")
+        sources = [r.source_file for r in results]
+        assert "v.md" in sources
+        assert "weapons.md" in sources  # BM25-only hit survived fusion
+
+    @pytest.mark.asyncio
+    async def test_hybrid_disabled_skips_bm25(self, hybrid_config, embed_service):
+        """Verify hybrid=False bypasses BM25 completely, never calling query()."""
+        hybrid_config.hybrid.enabled = False
+        vs = MagicMock()
+        vs.query.return_value = [
+            {"id": "v1", "content": "hit",
+             "metadata": {"source_file": "v.md", "document_type": "markdown", "heading_hierarchy": ""}, "score": 0.9},
+        ]
+        bm25 = MagicMock(spec=BM25Index)
+        bm25.is_built = True
+        retriever = Retriever(config=hybrid_config, embedding_service=embed_service,
+                              vectorstore=vs, bm25_index=bm25)
+
+        await retriever.retrieve("anything")
+        bm25.query.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_hybrid_flag_override_forces_bm25(self, hybrid_config, embed_service):
+        """Verify per-request hybrid=True overrides a disabled config default."""
+        hybrid_config.hybrid.enabled = False
+        vs = MagicMock()
+        vs.query.return_value = [
+            {"id": "v1", "content": "hit",
+             "metadata": {"source_file": "v.md", "document_type": "markdown", "heading_hierarchy": ""}, "score": 0.9},
+        ]
+        bm25 = self._make_bm25([
+            {"id": "b1", "content": "exact keyword match",
+             "metadata": {"source_file": "kw.md", "document_type": "markdown"}},
+        ])
+        retriever = Retriever(config=hybrid_config, embedding_service=embed_service,
+                              vectorstore=vs, bm25_index=bm25)
+
+        results = await retriever.retrieve("exact keyword", hybrid=True)
+        sources = [r.source_file for r in results]
+        assert "kw.md" in sources
+
+    @pytest.mark.asyncio
+    async def test_hybrid_does_not_nullify_threshold(self, hybrid_config, embed_service):
+        """Regression: score_threshold=0.5 must not wipe hybrid results despite tiny RRF scores."""
+        vs = MagicMock()
+        vs.query.return_value = [
+            {"id": "v1", "content": "Arkenfeld details",
+             "metadata": {"source_file": "Arkenfeld.md", "document_type": "markdown", "heading_hierarchy": ""}, "score": 0.9},
+            {"id": "v2", "content": "low score noise",
+             "metadata": {"source_file": "noise.md", "document_type": "markdown", "heading_hierarchy": ""}, "score": 0.2},
+        ]
+        bm25 = self._make_bm25([
+            {"id": "b1", "content": "Arkenfeld keyword",
+             "metadata": {"source_file": "kw.md", "document_type": "markdown"}},
+        ])
+        retriever = Retriever(config=hybrid_config, embedding_service=embed_service,
+                              vectorstore=vs, bm25_index=bm25)
+
+        results = await retriever.retrieve("Arkenfeld")
+        # High-score vector hit + BM25 hit must survive; low-score vector noise drops.
+        sources = [r.source_file for r in results]
+        assert "Arkenfeld.md" in sources
+        assert "noise.md" not in sources
+        assert len(results) >= 2
+
+    @pytest.mark.asyncio
+    async def test_hybrid_lazy_builds_index(self, hybrid_config, embed_service):
+        """Verify the BM25 index is built on first hybrid call if not already built."""
+        vs = MagicMock()
+        vs.query.return_value = []
+        # Minimal fake collection for build_from_vectorstore.
+        collection = MagicMock()
+        collection.get.return_value = {
+            "ids": ["b1"],
+            "documents": ["keyword content"],
+            "metadatas": [{"source_file": "kw.md", "document_type": "markdown"}],
+        }
+        vs._get_collection.return_value = collection
+
+        bm25 = BM25Index()
+        assert bm25.is_built is False
+        retriever = Retriever(config=hybrid_config, embedding_service=embed_service,
+                              vectorstore=vs, bm25_index=bm25)
+
+        await retriever.retrieve("anything")
+        assert bm25.is_built is True
+
+    @pytest.mark.asyncio
+    async def test_hybrid_results_reach_reranker(self, hybrid_config, embed_service):
+        """Verify BM25-only candidates are passed into the cross-encoder reranker."""
+        hybrid_config.reranking = RerankingConfig(enabled=True, top_k_rerank=3)
+        vs = MagicMock()
+        vs.query.return_value = [
+            {"id": "v1", "content": "vector hit",
+             "metadata": {"source_file": "v.md", "document_type": "markdown", "heading_hierarchy": ""}, "score": 0.9},
+        ]
+        bm25 = self._make_bm25([
+            {"id": "b1", "content": "BM25-only exact keyword",
+             "metadata": {"source_file": "kw.md", "document_type": "markdown"}},
+        ])
+        retriever = Retriever(config=hybrid_config, embedding_service=embed_service,
+                              vectorstore=vs, bm25_index=bm25)
+        mock_reranker = MagicMock()
+        mock_reranker.predict.return_value = [0.6, 0.8]  # rerank passes both
+        retriever._reranker = mock_reranker
+
+        results = await retriever.retrieve("exact keyword")
+        # The reranker was called with both vector and BM25 candidates.
+        pairs = mock_reranker.predict.call_args[0][0]
+        contents = [p[1] for p in pairs]
+        assert "vector hit" in contents
+        assert "BM25-only exact keyword" in contents
+        assert len(results) == 2

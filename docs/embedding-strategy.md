@@ -70,16 +70,35 @@ fixes the ordering so the LLM's context window is used efficiently.
 
 ### Why BM25 Hybrid Search?
 
-BM25 is a strong keyword-based retrieval model. In scenarios where exact matches
-or specific keywords are crucial, BM25 can outperform dense vector searches,
-which might generalize too much.
+Dense vector search generalises well semantically but loses precision on exact
+terms — proper nouns, numbers, and rule-specific vocabulary ("Langschwert",
+"Bonusaktion", "Marke") can drift into neighbouring chunks even when the term
+appears verbatim. BM25 is a lexical ranker that rewards exact token overlap
+with length-normalised TF-IDF, so it nails these cases.
 
-The hybrid approach first filters with BM25 to narrow down the candidate pool
-to the most relevant documents based on keyword matching. The top candidates
-are then re-ranked using the bi-encoder, which considers semantic similarity.
+LoreKeeper runs both in **parallel**, not as a pre-filter:
 
-This two-step process ensures efficiency and quality, leveraging the strengths
-of both keyword and vector-based retrieval.
+1. Vector search queries ChromaDB for the top-K nearest embeddings and applies
+   `score_threshold` on the cosine scores. This drops irrelevant vector hits
+   while they're still on a comparable scale.
+2. BM25 queries an in-memory `rank_bm25` index built lazily from the same
+   ChromaDB collection (invalidated after ingestion). Metadata filters are
+   applied post-hoc with ChromaDB-compatible operators (`$eq`, `$ne`, `$in`,
+   `$and`).
+3. Both result lists are merged via **Reciprocal Rank Fusion**:
+   `score = weight / (k + rank + 1)`, with `bm25_weight` tuning the balance
+   (0.3 by default) and `k=60` dampening the advantage of the top ranks.
+4. The fused candidate pool goes to the cross-encoder reranker as before.
+
+RRF scores live on a different scale from cosine (max ≈ 1/61), so thresholding
+must happen on the vector side *before* fusion — never on the fused score.
+BM25 has no comparable absolute threshold; we trust `bm25_top_k` to cap noise
+on the keyword side.
+
+Hybrid can be toggled per request via `hybrid_search` on `QueryRequest`,
+overriding the `retrieval.hybrid.enabled` config default. The Evaluation page
+exposes a three-way selector (Config default / Vector only / Hybrid) and a
+one-click A/B run that executes both modes against the Golden Set.
 
 ### Why a per-source diversity cap?
 

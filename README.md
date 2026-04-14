@@ -85,7 +85,7 @@ multilingual E5 model and prompts for any other language.
 
 | | |
 |---|---|
-| 🧠 **Hybrid retrieval** | E5-base bi-encoder + mMiniLMv2 cross-encoder reranker + soft per-source diversity cap (two-pass with backfill) |
+| 🧠 **Hybrid retrieval** | E5-base bi-encoder + BM25 keyword index fused via Reciprocal Rank Fusion, then mMiniLMv2 cross-encoder rerank + soft per-source diversity cap (two-pass with backfill) |
 | 🔀 **Dual LLM providers** | Ollama (local) ↔ Gemini (cloud), switch at runtime |
 | 📜 **Obsidian-native** | Wikilinks, callouts, embeds, tags, aliases all parsed |
 | 📄 **PDF OCR + structure** | RapidOCR for scanned regions, TOC-based heading hierarchy, embedded image extraction |
@@ -247,8 +247,6 @@ For a complete walkthrough of the chat interface, token accounting, evaluation t
   model handles the embedding side language-agnostically, but the prompt
   templates in `config/prompts.yaml` would need translation for non-German
   vaults.
-- **No hybrid keyword search.** Pure vector retrieval; BM25 + vector fusion
-  is on the roadmap.
 - **Single-user.** No auth, no per-user sessions beyond the in-memory
   session manager. Designed for local / LAN use.
 - **`.tex` files are not parsed.** Only `.md`, `.pdf`, and images.

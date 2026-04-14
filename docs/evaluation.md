@@ -26,7 +26,7 @@ prompts — to catch regressions before they bite during a session.
 ## TL;DR
 
 ```bash
-# Fast loop: retrieval only, no LLM call (~10s for 46 questions)
+# Fast loop: retrieval only, no LLM call (~20s for 116 questions)
 python -m evaluation.evaluate_retrieval
 
 # Override per-run parameters
@@ -42,15 +42,16 @@ Reports are written to `evaluation/results/` as timestamped JSON.
 
 ## The Golden Set (`evaluation/qa_pairs.yaml`)
 
-46 manually-curated questions covering:
+116 manually-curated questions covering:
 
 | Block | Count | What it tests |
 |---|---|---|
-| `markdown` (m001–m010) | 10 | Entity-centric Q→file recall (NPC, location, organisation, item, enemy) |
-| `pdf` (p001–p010) | 10 | Rulebook PDF — mechanics, classes, abilities |
+| `markdown` (m001–m025) | 25 | Entity-centric Q→file recall (NPC, location, organisation, item, enemy). Covers all major vault folders — Orte, NPCs, Organisationen, Dämonen, verlorene Magierstädte. |
+| `pdf` (p001–p040) | 40 | Rulebook PDF covering all 6 chapters — Grundregeln (Ass-Regel, Kombinationswürfe), Charaktergrundlagen (Talentpunkte, Legendärer Rang), Talente, Kampfregeln (Schadenstypen, Statuseffekte, Rüstung), alle 6 nicht-magischen Klassen (Krieger, Schurke, Waldläufer, Gladiator, Mönch, Alchemist), alle 7 Magieschulen (Elementar, Tier, Zauberschmied, Golem, Dunkle, Zeit, Basisausrüstung), and 3 Eigenheiten-Kategorien. |
 | `image` (i001–i010) | 10 | Image questions resolve to the **associated `.md` file** (images are excluded from retrieval — see `embedding-strategy.md`) |
-| `adventure` (a001–a010) | 10 | Adventure/campaign structure, multi-act recall |
+| `adventure` (a001–a015) | 15 | Adventure/campaign structure, multi-act recall. Covers all 12 Söldner-Kampagnen-Abenteuer plus Weihnachts-One-Shot and Akademie-Auftragsbrief. |
 | `s001–s006` **structure tests** | 6 | Sub-section recall, multi-source diversity, table atomicity, identity-layer, wikilink cross-references |
+| `k001–k020` **keyword tests** | 20 | Exact-term questions designed to reward BM25 over pure vector — rare proper nouns (Rhaz'Muell, Thal'Emyra, Artheon Knisterhand Faraday), distinct compounds (Ephraskal-Handschuh, Venthir-Siegelnetz-Blaupause, Sequenz-Schlüssel), and single-color variant collisions (Blauer/Roter/Grüner Monolith). Use with the A/B run to measure hybrid lift. |
 
 The structure tests (`s00x`) exist specifically to catch failure modes that
 the entity tests miss:
@@ -111,8 +112,22 @@ CLI flags:
 |---|---|---|
 | `--top-k` | from `settings.yaml` | Bi-encoder candidate count |
 | `--top-k-rerank` | from `settings.yaml` | Final chunk count after reranking |
+| `--hybrid` / `--no-hybrid` | from `settings.yaml` | Force hybrid retrieval on/off for this run, overriding `retrieval.hybrid.enabled`. Omit both to use the config default. |
 | `--qa-pairs` | `evaluation/qa_pairs.yaml` | Path to the question set |
 | `--output` | `evaluation/results/` | Where to write the JSON report |
+
+For A/B comparisons, run the same Golden Set twice and diff the JSON reports:
+
+```bash
+python -m evaluation.evaluate_retrieval --no-hybrid --output evaluation/results/
+python -m evaluation.evaluate_retrieval --hybrid    --output evaluation/results/
+```
+
+The Streamlit Evaluation page has a one-click equivalent: in the "Retrieval
+Eval" tab, the **⚖ A/B starten (Vektor vs. Hybrid)** button runs both modes
+sequentially and shows the hit-rate delta plus the list of questions where
+Hybrid wins or loses. The "Frage testen" and "Retrieval Eval" tabs each
+carry a three-way mode selector (Config default / Vector only / Hybrid).
 
 > **`max_per_source` is not (yet) a CLI flag** for the eval script. To
 > sweep it, edit `config/settings.yaml` (or set

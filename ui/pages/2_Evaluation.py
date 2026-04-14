@@ -40,6 +40,35 @@ def _render_tuning_sliders(prefix: str) -> tuple[int, int, int]:
     return top_k, top_k_rerank, max_per_source
 
 
+_HYBRID_LABELS = ["Config-Default", "Vektor only", "Hybrid (BM25 + Vektor)"]
+
+
+def _render_hybrid_selector(prefix: str) -> bool | None:
+    """Retrieval-mode selector: None = config default, False = pure vector, True = hybrid."""
+    mode = st.radio(
+        "Retrieval-Modus",
+        _HYBRID_LABELS,
+        index=0,
+        horizontal=True,
+        help="Per-Request Override. 'Config-Default' nutzt retrieval.hybrid.enabled aus settings.yaml.",
+        key=f"{prefix}_hybrid_mode",
+    )
+    if mode == "Vektor only":
+        return False
+    if mode.startswith("Hybrid"):
+        return True
+    return None
+
+
+def _hybrid_label(value) -> str:
+    """Format the hybrid config flag for display in result summaries."""
+    if value is True:
+        return "on"
+    if value is False:
+        return "off"
+    return "default"
+
+
 def _poll_eval_job(job_id: str, label: str = "Evaluation"):
     """
     Poll an active background evaluation job.
@@ -94,7 +123,11 @@ def _render_retrieval_result(result: dict):
     c2.metric("Fragen", result.get("total_questions", 0))
     avg_lat = sum(d.get("latency_ms", 0) for d in details) / max(len(details), 1)
     c3.metric("Ø Latenz", f"{avg_lat:.0f} ms")
-    c4.metric("Config", f"K={config.get('top_k', '?')} R={config.get('top_k_rerank', '?')} C={config.get('max_per_source', '?')}")
+    c4.metric(
+        "Config",
+        f"K={config.get('top_k', '?')} R={config.get('top_k_rerank', '?')} "
+        f"C={config.get('max_per_source', '?')} H={_hybrid_label(config.get('hybrid'))}",
+    )
 
     # Breakdown
     if breakdown:
@@ -250,6 +283,7 @@ with tab_test:
 
     with st.expander("Retrieval-Parameter", expanded=False):
         t_top_k, t_top_k_rerank, t_max_per_source = _render_tuning_sliders("test")
+        t_hybrid = _render_hybrid_selector("test")
 
     if st.button("🔍 Testen", key="test_run", disabled=not test_question.strip()):
         try:
@@ -260,6 +294,7 @@ with tab_test:
                     "top_k": t_top_k,
                     "top_k_rerank": t_top_k_rerank,
                     "max_per_source": t_max_per_source,
+                    "hybrid": t_hybrid,
                 },
                 timeout=30,
             )
@@ -335,32 +370,120 @@ with tab_test:
 
 # ═══ Tab 3: Retrieval Evaluation ═════════════════════════════════════
 
+def _start_retrieval_eval(top_k, top_k_rerank, max_per_source, hybrid, label):
+    """POST a retrieval-eval job, poll it to completion, and return the saved result file."""
+    resp = requests.post(
+        f"{API_URL}/eval/run",
+        json={
+            "top_k": top_k,
+            "top_k_rerank": top_k_rerank,
+            "max_per_source": max_per_source,
+            "eval_type": "retrieval",
+            "hybrid": hybrid,
+        },
+        timeout=10,
+    )
+    resp.raise_for_status()
+    job_id = resp.json()["job_id"]
+    return _poll_eval_job(job_id, label=label)
+
+
 with tab_ret:
     st.markdown("Führt das komplette Golden Set durch den Retriever (kein LLM).")
 
     with st.expander("Retrieval-Parameter", expanded=False):
         r_top_k, r_top_k_rerank, r_max_per_source = _render_tuning_sliders("ret")
+        r_hybrid = _render_hybrid_selector("ret")
 
-    if st.button("▶ Retrieval Evaluation starten", type="primary", key="ret_run"):
+    col_single, col_ab = st.columns([1, 1])
+
+    with col_single:
+        run_single = st.button("▶ Evaluation starten", type="primary", key="ret_run")
+
+    with col_ab:
+        run_ab = st.button(
+            "⚖ A/B starten (Vektor vs. Hybrid)",
+            key="ret_ab",
+            help="Führt die Evaluation zweimal aus — einmal ohne, einmal mit Hybrid — und zeigt den Vergleich direkt an.",
+        )
+
+    if run_single:
         try:
-            resp = requests.post(
-                f"{API_URL}/eval/run",
-                json={
-                    "top_k": r_top_k,
-                    "top_k_rerank": r_top_k_rerank,
-                    "max_per_source": r_max_per_source,
-                    "eval_type": "retrieval",
-                },
-                timeout=10,
+            result_file = _start_retrieval_eval(
+                r_top_k, r_top_k_rerank, r_max_per_source, r_hybrid,
+                label="Retrieval Evaluation",
             )
-            resp.raise_for_status()
-            job_id = resp.json()["job_id"]
-            result_file = _poll_eval_job(job_id, label="Retrieval Evaluation")
             _fetch_eval_results.clear()
-
             if result_file:
                 result = requests.get(f"{API_URL}/eval/results/{result_file}", timeout=10).json()
                 _render_retrieval_result(result)
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None and e.response.status_code == 409:
+                st.warning("Es läuft bereits eine Evaluation.")
+            else:
+                st.error(f"Fehler: {e}")
+        except Exception as e:
+            st.error(f"Fehler: {e}")
+
+    if run_ab:
+        try:
+            # Sequential runs — backend enforces a single running job at a time.
+            file_vec = _start_retrieval_eval(
+                r_top_k, r_top_k_rerank, r_max_per_source, hybrid=False,
+                label="A/B — Vektor only",
+            )
+            file_hyb = None
+            if file_vec:
+                file_hyb = _start_retrieval_eval(
+                    r_top_k, r_top_k_rerank, r_max_per_source, hybrid=True,
+                    label="A/B — Hybrid",
+                )
+            _fetch_eval_results.clear()
+
+            if file_vec and file_hyb:
+                res_a = requests.get(f"{API_URL}/eval/results/{file_vec}", timeout=10).json()
+                res_b = requests.get(f"{API_URL}/eval/results/{file_hyb}", timeout=10).json()
+
+                hr_a = res_a.get("hit_rate", 0)
+                hr_b = res_b.get("hit_rate", 0)
+
+                st.subheader("A/B-Vergleich")
+                mc1, mc2, mc3 = st.columns(3)
+                mc1.metric("Vektor only", f"{hr_a:.1%}")
+                mc2.metric("Hybrid", f"{hr_b:.1%}", delta=f"{(hr_b - hr_a):+.1%}")
+                mc3.metric("Fragen", res_a.get("total_questions", 0))
+
+                details_a = {d.get("id", d.get("question", "")): d for d in res_a.get("details", [])}
+                details_b = {d.get("id", d.get("question", "")): d for d in res_b.get("details", [])}
+                flipped = []
+                for qid in sorted(set(details_a.keys()) | set(details_b.keys())):
+                    da = details_a.get(qid)
+                    db = details_b.get(qid)
+                    if da and db and da.get("hit") != db.get("hit"):
+                        flipped.append({
+                            "ID": qid,
+                            "Frage": (da.get("question") or "")[:60],
+                            "Vektor": "✅" if da.get("hit") else "❌",
+                            "Hybrid": "✅" if db.get("hit") else "❌",
+                        })
+
+                if flipped:
+                    wins = sum(1 for f in flipped if f["Hybrid"] == "✅")
+                    losses = len(flipped) - wins
+                    st.markdown(
+                        f"**{len(flipped)} Fragen geändert** — "
+                        f"Hybrid gewinnt: **{wins}**, verliert: **{losses}**"
+                    )
+                    st.dataframe(pd.DataFrame(flipped), hide_index=True, use_container_width=True)
+                else:
+                    st.info("Keine Unterschiede bei Hit/Miss zwischen Vektor und Hybrid.")
+
+                with st.expander("Einzelergebnisse einsehen"):
+                    st.markdown("**Vektor only**")
+                    _render_retrieval_result(res_a)
+                    st.divider()
+                    st.markdown("**Hybrid**")
+                    _render_retrieval_result(res_b)
 
         except requests.exceptions.HTTPError as e:
             if e.response is not None and e.response.status_code == 409:

@@ -137,6 +137,16 @@ class Retriever:
                     f"heading={item['metadata'].get('heading_hierarchy', '')[:60]}"
                 )
 
+        # Apply cosine score_threshold to vector hits up front. RRF fuses ranks,
+        # not absolute scores, so we cannot threshold the fused list (RRF scores
+        # max out around 1/(60+1) ≈ 0.016 and would be wiped by any cosine-scale
+        # threshold). BM25 scores live on their own scale and are not thresholded
+        # here — we trust bm25_top_k to cap noise on the keyword side.
+        vector_results = [
+            r for r in vector_results
+            if r["score"] >= self.config.score_threshold
+        ]
+
         # 2. BM25 search + RRF fusion (if hybrid enabled)
         if use_hybrid:
             if not self.bm25_index.is_built:
@@ -174,13 +184,7 @@ class Retriever:
                 metadata=item["metadata"],
             )
             for item in results
-            if item["score"] >= self.config.score_threshold
         ]
-
-        logger.debug(
-            f"After score_threshold ({self.config.score_threshold}): "
-            f"{len(chunks)}/{len(results)} chunks kept"
-        )
 
         if self.config.reranking.enabled and chunks:
             chunks = await self._rerank(query, chunks, top_k_rerank=top_k_rerank, max_per_source=max_per_source)

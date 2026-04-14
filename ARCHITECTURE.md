@@ -492,9 +492,10 @@ Environment-Variable gesetzt — kein manuelles Editieren der `settings.yaml` n�
 retrieval:
   top_k: 15                         # Kandidaten aus der Suche (Recall-Pool)
   score_threshold: 0.5              # Minimum Cosine-Score für Vektor-Suche. 0.5 ≈ "ähnlich"
-  bm25:
-    enabled: true                   # Hybrid Search (BM25 + Vector) an/aus
-    weight: 0.3                     # Gewichtung von BM25 ggü. Vector (0.0 = nur Vector, 1.0 = nur BM25)
+  hybrid:
+    enabled: false                  # Hybrid Search (BM25 + Vector) an/aus; per-Request via hybrid_search überschreibbar
+    bm25_weight: 0.3                # BM25-Anteil in RRF (0.0 = nur Vector, 1.0 = nur BM25)
+    bm25_top_k: 15                  # Wie viele BM25-Kandidaten geholt werden
   reranking:
     enabled: true                   # Cross-Encoder Reranking (Stage 2)
     model: "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"   # multilingual
@@ -520,10 +521,10 @@ komplett für diesen Request).
 
 **Ablauf (Hybrid Search):**
 
-1. **Vektor-Suche**: Query wird embedded (gleiches Modell wie Dokumente). ChromaDB Similarity Search → Top-K Chunks. Score-Threshold Filterung auf Vektor-Ergebnisse (irrelevante Chunks raus).
-2. **Lexikalische Suche (BM25)**: Query wird tokenisiert. BM25-Index liefert Keyword-Matches in den lokalen Metadaten/Texten.
-3. **Score-Fusion**: Ergebnisse beider Suchen werden über Reciprocal Rank Fusion (RRF) kombiniert (`bm25.weight` regelt den Einfluss).
-4. Optional: Metadaten-Filter (nur bestimmte Kategorien/Quellen).
+1. **Vektor-Suche** (immer): Query wird embedded (gleiches Modell wie Dokumente). ChromaDB Similarity Search → Top-K Chunks. Score-Threshold Filterung **auf die Cosine-Scores, bevor die Fusion passiert** — RRF-Scores liegen auf anderer Skala und wären durch den Threshold sonst komplett weggefiltert.
+2. **Lexikalische Suche (BM25)** (nur wenn Hybrid aktiv): Query wird tokenisiert (Whitespace + Lowercase). In-Memory-Index von `rank_bm25`, lazy aus der ChromaDB-Collection gebaut, nach Ingestion invalidiert. Post-hoc Metadaten-Filter (ChromaDB-kompatible `$eq`/`$ne`/`$in`/`$and`-Operatoren).
+3. **Score-Fusion**: Ergebnisse beider Suchen werden über Reciprocal Rank Fusion (RRF) kombiniert (`hybrid.bm25_weight` regelt den Einfluss). BM25-only-Kandidaten werden mit aufgenommen.
+4. Optional: Metadaten-Filter (nur bestimmte Kategorien/Quellen) — wird sowohl an Vektor-Query als auch an BM25 durchgereicht.
 5. Reranking via Cross-Encoder (Score-sortierte Liste).
 6. **Soft per-source cap** (`max_per_source`):
    - Pass 1 (diverse fill): pro Source-File max. N Chunks akzeptieren,
@@ -994,9 +995,10 @@ vectorstore:
 retrieval:
   top_k: 15
   score_threshold: 0.5        # Cosine-Threshold. 0.5 ≈ "ähnlich", 0.3 wäre fast orthogonal.
-  bm25:
-    enabled: true
-    weight: 0.3               # Gewichtung von BM25 ggü. Vector (0.0 = nur Vector, 1.0 = nur BM25)
+  hybrid:
+    enabled: false            # Hybrid Search (BM25 + Vector) an/aus
+    bm25_weight: 0.3          # BM25-Anteil in RRF (0.0 = nur Vector, 1.0 = nur BM25)
+    bm25_top_k: 15            # Wie viele BM25-Kandidaten geholt werden
   reranking:
     enabled: true
     model: "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"

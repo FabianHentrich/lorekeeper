@@ -34,6 +34,7 @@ async def run_evaluation_with_retriever(
     top_k: int,
     top_k_rerank: int,
     max_per_source: int = 3,
+    hybrid: bool | None = None,
     progress_callback=None,
 ) -> dict:
     """Run retrieval evaluation using an existing Retriever instance.
@@ -58,6 +59,7 @@ async def run_evaluation_with_retriever(
                 top_k=top_k,
                 top_k_rerank=top_k_rerank,
                 max_per_source=max_per_source,
+                hybrid=hybrid,
             )
         except Exception as e:
             logger.error("Eval [%s/%s] id=%s error: %s", idx + 1, total, pair.get("id", "?"), e)
@@ -138,6 +140,7 @@ async def run_evaluation_with_retriever(
             "top_k": top_k,
             "top_k_rerank": top_k_rerank,
             "max_per_source": max_per_source,
+            "hybrid": hybrid,
         },
         "total_questions": total,
         "hit_rate": round(hit_rate, 3),
@@ -149,7 +152,7 @@ async def run_evaluation_with_retriever(
 
 
 def run_evaluation(qa_pairs: list[dict], top_k: int, top_k_rerank: int,
-                   max_per_source: int = 3) -> dict:
+                   max_per_source: int = 3, hybrid: bool | None = None) -> dict:
     """CLI-compatible sync wrapper that instantiates its own Retriever.
 
     Loads configuration settings, creates the necessary Embedding and VectorStore dependencies,
@@ -169,7 +172,7 @@ def run_evaluation(qa_pairs: list[dict], top_k: int, top_k_rerank: int,
     retriever = Retriever(cfg, embedding_service, vectorstore)
 
     return asyncio.run(run_evaluation_with_retriever(
-        qa_pairs, retriever, top_k, top_k_rerank, max_per_source,
+        qa_pairs, retriever, top_k, top_k_rerank, max_per_source, hybrid=hybrid,
     ))
 
 
@@ -182,6 +185,10 @@ def main():
     parser.add_argument("--output", default="evaluation/results/")
     parser.add_argument("--top-k", type=int, default=None)
     parser.add_argument("--top-k-rerank", type=int, default=None)
+    parser.add_argument("--hybrid", dest="hybrid", action="store_true", default=None,
+                        help="Force hybrid BM25+vector retrieval on (overrides config)")
+    parser.add_argument("--no-hybrid", dest="hybrid", action="store_false",
+                        help="Force pure vector retrieval (overrides config)")
     args = parser.parse_args()
 
     qa_pairs = load_qa_pairs(args.qa_pairs)
@@ -192,9 +199,11 @@ def main():
     top_k = args.top_k or cfg.top_k
     top_k_rerank = args.top_k_rerank or cfg.reranking.top_k_rerank
 
-    print(f"Evaluating {len(qa_pairs)} questions (top_k={top_k}, top_k_rerank={top_k_rerank})...")
+    hybrid_label = "config" if args.hybrid is None else ("on" if args.hybrid else "off")
+    print(f"Evaluating {len(qa_pairs)} questions "
+          f"(top_k={top_k}, top_k_rerank={top_k_rerank}, hybrid={hybrid_label})...")
 
-    report = run_evaluation(qa_pairs, top_k, top_k_rerank)
+    report = run_evaluation(qa_pairs, top_k, top_k_rerank, hybrid=args.hybrid)
 
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
