@@ -23,6 +23,7 @@ def _normalize_pdf_headings(md_text: str) -> str:
     makes subsections correctly nest beneath their parent class/section.
     """
     def promote(m: re.Match) -> str:
+        """Replace the leading `##` with `#` to raise a numbered heading one level."""
         return f"#{m.group(2)}{m.group(3)}"
 
     return _NUMBERED_HEADING.sub(promote, md_text)
@@ -46,6 +47,7 @@ def _apply_toc_headings(md_text: str, toc_items: list[list]) -> str:
         toc_levels[normalised] = level
 
     def _fix_heading(m: re.Match) -> str:
+        """Rewrite this heading's level to match the TOC, or leave it as-is when no match."""
         hashes, rest = m.group(1), m.group(2)
         # Strip bold markers for lookup
         clean = re.sub(r'\*{1,2}', '', rest).strip()
@@ -69,6 +71,7 @@ def _extract_image_docs(md_text: str, image_dir: Path, source_file: str,
     image_docs: list[ParsedDocument] = []
 
     def _replace_image(m: re.Match) -> str:
+        """Emit a ParsedDocument for the referenced image and return a short placeholder."""
         alt_text = m.group(1)
         img_path = Path(m.group(2))
 
@@ -106,6 +109,7 @@ class PDFParser(BaseParser):
     to the MarkdownParser logic.
     """
     def __init__(self, pdf_config: PdfConfig | None = None):
+        """Store OCR/image options and reuse MarkdownParser for heading-based slicing."""
         self._md_parser = MarkdownParser()
         self._config = pdf_config or PdfConfig()
 

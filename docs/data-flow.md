@@ -1,5 +1,16 @@
 # Data Flow
 
+This document provides visual representations of LoreKeeper's core pipelines and lifecycles using Mermaid diagrams. It covers the ingestion process, the hybrid retrieval query path, embed text construction, session management, and health checking.
+
+## Table of Contents
+1. [Ingestion Pipeline](#ingestion-pipeline)
+2. [Query Pipeline](#query-pipeline)
+3. [Embed Text vs. Stored Content](#embed-text-vs-stored-content)
+4. [Session Lifecycle](#session-lifecycle)
+5. [Health Check Caching](#health-check-caching)
+
+---
+
 ## Ingestion Pipeline
 
 ```mermaid
@@ -39,7 +50,7 @@ not the enriched `embed_text`.
 
 ```mermaid
 flowchart TD
-    USER([User question]) --> API["POST /query/stream\n{question, session_id, metadata_filters}"]
+    USER([User question]) --> API["POST /query/stream\n{question, session_id, metadata_filters, hybrid_search}"]
 
     API --> CM["ConversationManager\nget_or_create_session()"]
 
@@ -48,11 +59,15 @@ flowchart TD
 
     COND --> RET
 
-    RET["Retrieval\nembed_text(question)\n→ e5-base 'query: '+text\n→ 768-dim vector"]
+    RET["Retrieval Engine"]
 
-    RET --> CHROMA[("ChromaDB\nCosine search top_k=15\nFilter: document_type ≠ image\n+ optional category filter")]
+    RET --> VEC[("ChromaDB Vector Search\nembed_text(query) → e5-base\nCosine top_k=15")]
+    RET -.->|"if hybrid=true"| BM25[("BM25 Keyword Search\nrank_bm25 top_k=15\n(lazy initialized)")]
 
-    CHROMA --> RERANK["CrossEncoder Reranking\nmmarco-mMiniLMv2-L12-H384-v1\npairs: query × chunk.content\n→ top_k_rerank=8\n+ soft cap max_per_source=3\n(diverse fill → backfill)"]
+    VEC --> RRF["Reciprocal Rank Fusion (RRF)\nMerge & rescore candidates"]
+    BM25 -.->|"results"| RRF
+
+    RRF --> RERANK["CrossEncoder Reranking\nmmarco-mMiniLMv2-L12-H384-v1\npairs: query × chunk.content\n→ top_k_rerank=8\n+ soft cap max_per_source=3\n(diverse fill → backfill)"]
 
     RERANK -->|"no chunks"| NOCX["render_no_context(question)\nreturn directly"]
     RERANK -->|"chunks found"| GEN
@@ -63,7 +78,8 @@ flowchart TD
 
     SSE --> UI["Streamlit UI\ntoken-by-token · sources expander"]
 
-    style CHROMA fill:#dbeafe,stroke:#3b82f6
+    style VEC fill:#dbeafe,stroke:#3b82f6
+    style BM25 fill:#dbeafe,stroke:#3b82f6
     style NOCX fill:#fef3c7,stroke:#f59e0b
     style UI fill:#d1fae5,stroke:#10b981
 ```

@@ -47,9 +47,7 @@ def _resolve_category(file_path: Path, source: SourceConfig) -> tuple[str, str]:
 
 
 def _compute_content_hash(file_path: Path) -> str:
-    """Read the file content and compute a SHA-256 hash to detect changes
-    across ingestion runs, avoiding re-embedding unmodified files.
-    """
+    """SHA-256 of file bytes; used to skip re-embedding unchanged files across runs."""
     content = file_path.read_bytes()
     return f"sha256:{hashlib.sha256(content).hexdigest()}"
 
@@ -83,6 +81,7 @@ class IngestionResult:
     ingestion job, including document and chunk counts and timing.
     """
     def __init__(self):
+        """Start an empty result bag with the current UTC start timestamp."""
         self.documents_processed: int = 0
         self.documents_total: int = 0
         self.chunks_created: int = 0
@@ -95,6 +94,7 @@ class IngestionResult:
 
     @property
     def duration_seconds(self) -> float:
+        """Elapsed seconds since start; live until end_time is set."""
         end = self.end_time or datetime.now(timezone.utc)
         return (end - self.start_time).total_seconds()
 
@@ -105,6 +105,7 @@ class IngestionOrchestrator:
     syncing the results (upserts and deletes) with the vector store.
     """
     def __init__(self, config: ConfigManager | None = None):
+        """Register the built-in parsers (Markdown, PDF, image metadata)."""
         self.config = config or config_manager
         self.parsers: list[BaseParser] = [
             MarkdownParser(),
@@ -113,6 +114,7 @@ class IngestionOrchestrator:
         ]
 
     def _get_parser(self, file_path: Path) -> BaseParser | None:
+        """Return the first registered parser that accepts this file, or None."""
         for parser in self.parsers:
             if parser.can_parse(file_path):
                 return parser
@@ -172,6 +174,7 @@ class IngestionOrchestrator:
         settings = self.config.settings
 
         def _report():
+            """Push the live IngestionResult to the caller, if a callback was provided."""
             if progress_callback:
                 progress_callback(result)
 

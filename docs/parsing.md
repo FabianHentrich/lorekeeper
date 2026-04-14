@@ -1,5 +1,18 @@
 # Parsing Pipeline
 
+This document explains how LoreKeeper extracts text, metadata, and structural information from different file formats before they enter the chunking and embedding phases. It covers the specific handling of Obsidian Markdown syntax, the advanced PDF OCR and structure extraction, and image metadata parsing.
+
+## Table of Contents
+1. [Overview](#overview)
+2. [Markdown (Obsidian)](#markdown-obsidian)
+3. [PDF](#pdf)
+4. [Images](#images)
+5. [How parsing flows into chunking](#how-parsing-flows-into-chunking)
+
+---
+
+## Overview
+
 LoreKeeper supports three document types: Markdown (Obsidian), PDF, and images.
 Each has a dedicated parser that produces `ParsedDocument` entries, which then
 flow into the [chunking pipeline](../ARCHITECTURE.md) and vector store.

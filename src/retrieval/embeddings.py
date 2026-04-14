@@ -10,15 +10,16 @@ logger = logging.getLogger(__name__)
 
 
 class EmbeddingService:
-    """Provides semantic embedding capabilities via local sentence-transformers models.
+    """Wraps a sentence-transformers model to turn text into dense vectors.
 
-    This service is responsible for converting raw text (both queries and document chunks)
-    into fixed-size dense vectors. It supports dynamic prompt prefixing required by models
-    like intfloat/multilingual-e5-large (e.g. 'query:' vs 'passage:'). It also ensures CPU-bound
-    encoding tasks are properly offloaded to the asyncio threadpool to avoid blocking FastAPI.
+    Applies the E5-style ``query:`` / ``passage:`` prefixes automatically for E5 models.
+    Exposes an async entry point (``embed_text``) for request handlers — which offloads
+    the blocking encode call to a thread — and a sync one (``embed_texts_sync``) for
+    ingestion code that already runs off the event loop.
     """
 
     def __init__(self, config: EmbeddingsConfig):
+        """Store config and defer model loading until the first embed call."""
         self.config = config
         self._model: SentenceTransformer | None = None
         self._is_e5 = "e5" in config.model.lower()
@@ -43,11 +44,7 @@ class EmbeddingService:
         return f"passage: {text}" if self._is_e5 else text
 
     async def embed_text(self, text: str) -> list[float]:
-        """Embed a single query string asynchronously.
-
-        Always wrapped in `run_in_threadpool` because `model.encode()` is highly CPU-bound
-        and would otherwise halt the entire FastAPI event loop for concurrent users.
-        """
+        """Embed a single query string, offloading the blocking encode() to a thread."""
         model = self._get_model()
         embedding = await run_in_threadpool(
             model.encode,
@@ -57,12 +54,7 @@ class EmbeddingService:
         return embedding.tolist()
 
     def embed_texts_sync(self, texts: list[str]) -> list[list[float]]:
-        """Embed a list of passage strings synchronously.
-
-        Typically used in background tasks like the document Ingestion Orchestrator,
-        where blocking a specific thread is perfectly acceptable. Applies the
-        configured batch size processing.
-        """
+        """Batch-embed passages synchronously. Only call from worker threads, never from the event loop."""
         model = self._get_model()
         prefixed = [self._with_passage_prefix(t) for t in texts]
         embeddings = model.encode(

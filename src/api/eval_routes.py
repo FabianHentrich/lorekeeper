@@ -33,6 +33,21 @@ _RESULTS_DIR = _BASE_DIR / "results"
 _eval_jobs: dict[str, EvalJobStatus] = {}
 _MAX_RESULTS = 3
 
+# Guards the check-then-create window in start_eval so two concurrent POSTs
+# can't both slip past _has_running_job().
+_eval_start_lock = asyncio.Lock()
+
+# Strong refs to running eval tasks — without this the asyncio GC may cancel them.
+_eval_tasks: set[asyncio.Task] = set()
+
+
+def _spawn_eval_task(coro) -> asyncio.Task:
+    """Schedule a background eval task while retaining a strong reference."""
+    task = asyncio.create_task(coro)
+    _eval_tasks.add(task)
+    task.add_done_callback(_eval_tasks.discard)
+    return task
+
 
 def _get_retriever():
     """Retrieve the global retriever instance."""
@@ -117,9 +132,6 @@ def _cleanup_results(eval_type: str):
 @eval_router.post("/run", response_model=EvalJobResponse)
 async def start_eval(req: EvalJobRequest):
     """Start an asynchronous evaluation job processing the entire golden set."""
-    if _has_running_job():
-        raise HTTPException(status_code=409, detail="An evaluation is already running")
-
     if not _QA_PATH.exists():
         raise HTTPException(status_code=404, detail="No qa_pairs.yaml found")
 
@@ -128,21 +140,26 @@ async def start_eval(req: EvalJobRequest):
     if not qa_pairs:
         raise HTTPException(status_code=400, detail="Golden Set is empty")
 
-    job_id = str(uuid.uuid4())
-    job = EvalJobStatus(job_id=job_id, status="queued", total=len(qa_pairs))
-    _eval_jobs[job_id] = job
-
-    logger.info(
-        "Eval job started: job_id=%s, type=%s, questions=%d, top_k=%d, top_k_rerank=%d, max_per_source=%d",
-        job_id, req.eval_type, len(qa_pairs), req.top_k, req.top_k_rerank, req.max_per_source,
-    )
-
-    if req.eval_type == "retrieval":
-        asyncio.create_task(_run_retrieval_eval(job, qa_pairs, req))
-    elif req.eval_type == "e2e":
-        asyncio.create_task(_run_e2e_eval(job, qa_pairs))
-    else:
+    if req.eval_type not in ("retrieval", "e2e"):
         raise HTTPException(status_code=400, detail=f"Unknown eval_type: {req.eval_type}")
+
+    async with _eval_start_lock:
+        if _has_running_job():
+            raise HTTPException(status_code=409, detail="An evaluation is already running")
+
+        job_id = str(uuid.uuid4())
+        job = EvalJobStatus(job_id=job_id, status="queued", total=len(qa_pairs))
+        _eval_jobs[job_id] = job
+
+        logger.info(
+            "Eval job started: job_id=%s, type=%s, questions=%d, top_k=%d, top_k_rerank=%d, max_per_source=%d",
+            job_id, req.eval_type, len(qa_pairs), req.top_k, req.top_k_rerank, req.max_per_source,
+        )
+
+        if req.eval_type == "retrieval":
+            _spawn_eval_task(_run_retrieval_eval(job, qa_pairs, req))
+        else:
+            _spawn_eval_task(_run_e2e_eval(job, qa_pairs))
 
     return EvalJobResponse(job_id=job_id, status="queued")
 
@@ -155,6 +172,7 @@ async def _run_retrieval_eval(job: EvalJobStatus, qa_pairs: list[dict], req: Eva
     retriever = _get_retriever()
 
     def _progress(current, total):
+        """Mirror evaluator progress onto the tracked job status."""
         job.progress = current
         job.total = total
 
@@ -191,6 +209,7 @@ async def _run_e2e_eval(job: EvalJobStatus, qa_pairs: list[dict]):
     job.status = "running"
 
     def _run_sync():
+        """Blocking evaluator invocation, offloaded to a worker thread."""
         return evaluate("http://localhost:8000", qa_pairs)
 
     try:

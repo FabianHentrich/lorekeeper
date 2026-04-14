@@ -12,21 +12,19 @@ logger = logging.getLogger(__name__)
 
 
 class VectorStoreService:
-    """Manages the connection and interactions with the ChromaDB vector store.
+    """ChromaDB wrapper handling both embedded (PersistentClient) and client (HttpClient) modes.
 
-    Handles both embedded (local SQLite) and client (HTTP container) modes, mapping
-    concept chunks (from ingestion) to embedded vectors, performing similarity searches,
-    and managing the chunk lifecycle (upserts, metadata updates, wipes, and orphaned file deletions).
+    Covers the chunk lifecycle — upsert, similarity query, metadata-only update, delete, wipe.
     """
     def __init__(self, config: VectorStoreConfig, embedding_service: EmbeddingService):
+        """Retain config + embedding service; the ChromaDB client is connected lazily."""
         self.config = config
         self.embedding_service = embedding_service
         self._client: chromadb.ClientAPI | None = None
         self._collection = None
 
     def _get_client(self) -> chromadb.ClientAPI:
-        """Lazily initialize and return the correct ChromaDB client based on configuration.
-        Switches between HttpClient and PersistentClient depending on `mode`."""
+        """Return the ChromaDB client, connecting on first call (HttpClient in client mode, otherwise PersistentClient)."""
         if self._client is None:
             if self.config.mode == "client":
                 self._client = chromadb.HttpClient(
@@ -41,8 +39,7 @@ class VectorStoreService:
         return self._client
 
     def _get_collection(self):
-        """Get or create the target collection within ChromaDB context, setting up
-        the necessary distance metric (e.g. cosine similarity)."""
+        """Return (or create on first call) the configured collection with the right distance metric."""
         if self._collection is None:
             client = self._get_client()
             metadata = {}
@@ -55,8 +52,7 @@ class VectorStoreService:
         return self._collection
 
     def _chunk_id(self, chunk: Chunk) -> str:
-        """Deterministically compute a unique chunk ID derived from the source
-        file path and the chunk's sequential slice index."""
+        """Stable MD5 ID from ``source_file::chunk_index`` so re-ingestion overwrites instead of duplicating."""
         raw = f"{chunk.source_file}::{chunk.chunk_index}"
         return hashlib.md5(raw.encode()).hexdigest()
 
@@ -99,11 +95,11 @@ class VectorStoreService:
         return "\n\n".join(parts)
 
     def upsert_chunks(self, chunks: list[Chunk]):
-        """Embed and insert/update a batch of processed document chunks into the database.
+        """Embed the enriched text of each chunk and insert/update it in the collection.
 
-        The text passed to the embedding model is enriched with file names and aliases
-        (_build_embed_text), while the actual raw 'content' is saved for context window delivery.
-        It flattens metadata dictionaries since ChromaDB only accepts flat primitives.
+        The raw chunk content is stored as the document body (what the LLM later sees),
+        while ``_build_embed_text`` augments the *embedded* text with filename and aliases.
+        Chunk metadata is flattened — ChromaDB only accepts str/int/float/bool values.
         """
         if not chunks:
             return
@@ -161,12 +157,7 @@ class VectorStoreService:
         top_k: int = 5,
         where: dict | None = None,
     ) -> list[dict[str, Any]]:
-        """Perform a semantic similarity search using the embedded query.
-
-        Converts the returned distances into standard similarity scores
-        (assuming cosine config: similarity = 1 - distance).
-        Matches can be filtered pre-search using Chroma metadata tags via `where`.
-        """
+        """Similarity search; returns hits with ``score = 1 - distance`` (assumes cosine)."""
         collection = self._get_collection()
 
         query_params = {
@@ -196,11 +187,7 @@ class VectorStoreService:
         return items
 
     def get_content_hashes_for_source(self, source_id: str) -> dict[str, str]:
-        """Returns {source_file: content_hash} scoped to a single source_id.
-
-        Used heavily during ingestion to identify if a file has changed. By scoping to source_id,
-        it prevents collisions if the user maps multiple sources to visually identical structural folders.
-        """
+        """Return ``{source_file: content_hash}`` for one source, used by ingestion to skip unchanged files."""
         collection = self._get_collection()
         try:
             data = collection.get(where={"source_id": source_id}, include=["metadatas"])
@@ -238,11 +225,7 @@ class VectorStoreService:
         return count
 
     def update_metadata_batch(self, ids: list[str], metadatas: list[dict]) -> None:
-        """Update metadata for existing chunks without re-embedding.
-
-        This is a lightweight operation (used for things like mass tag/category updates)
-        that modifies database objects without wasting CPU on embedding calls.
-        """
+        """Update metadata for existing chunks in batches of 5000, without re-embedding."""
         if not ids:
             return
         collection = self._get_collection()
@@ -252,8 +235,7 @@ class VectorStoreService:
         logger.info(f"Updated metadata for {len(ids)} chunks")
 
     def wipe_collection(self) -> None:
-        """Drop and recreate the collection. Works in both embedded and client mode.
-        This wipes the entire database context for the active collection."""
+        """Delete the active collection entirely. The next call recreates it empty."""
         client = self._get_client()
         try:
             client.delete_collection(name=self.config.collection_name)

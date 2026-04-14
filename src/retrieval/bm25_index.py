@@ -45,7 +45,14 @@ def _matches_filter(metadata: dict, where: dict | None) -> bool:
 
 
 class BM25Index:
+    """In-memory BM25 keyword index built lazily from the ChromaDB collection.
+
+    Used as the lexical half of hybrid retrieval: results are merged with
+    vector-search hits via Reciprocal Rank Fusion in ``Retriever``.
+    """
+
     def __init__(self):
+        """Create an empty, not-yet-built index. Call build_from_vectorstore() to populate."""
         self._index: BM25Okapi | None = None
         self._documents: list[dict[str, Any]] = []
         self._doc_token_sets: list[set[str]] = []
@@ -53,6 +60,7 @@ class BM25Index:
 
     @property
     def is_built(self) -> bool:
+        """True once the index has been populated (or verified empty)."""
         return self._is_built
 
     def build_from_vectorstore(self, vectorstore) -> None:

@@ -1,5 +1,20 @@
 # UI / UX
 
+Das Benutzerinterface von LoreKeeper ist vollständig in Streamlit geschrieben. Dieses Dokument beschreibt den Aufbau der Seiten, die UX-Konzepte, die Integration mit der FastAPI-Backend-Schicht und den Umgang mit dem Session-State.
+
+## Inhaltsverzeichnis
+1. [Streamlit Chat Interface](#streamlit-chat-interface)
+2. [Sidebar Elements](#sidebar-elements)
+3. [Header](#header)
+4. [Chat Area](#chat-area)
+5. [Sources Page (1_Sources.py)](#sources-page-uipages1_sourcespy)
+6. [Performance Characteristics](#performance-characteristics)
+7. [Prompts Page (3_Prompts.py)](#prompts-page-uipages3_promptspy)
+8. [Evaluation Page (2_Evaluation.py)](#evaluation-page-uipages2_evaluationpy)
+9. [Session State Overview](#session-state-overview)
+
+---
+
 ## Streamlit Chat Interface
 
 ```mermaid
@@ -124,7 +139,7 @@ rulebook chunks at the vectorstore level, before the LLM ever sees them.
 | Nothing checked | Request blocked at chat input with `st.error` (no API call made) |
 
 When a subset is active, the sidebar shows a "🔍 Suche eingeschränkt auf: ..."
-caption listing the selected groups so the filter state stays visible during
+caption listing the selected groups so the filter state stays visible während
 the conversation.
 
 The retriever combines this with the hard-coded `document_type != "image"`

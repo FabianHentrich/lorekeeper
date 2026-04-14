@@ -1,5 +1,21 @@
 # Evaluation
 
+This document describes the offline evaluation framework for LoreKeeper. It covers the Golden Set of test questions, the evaluation scripts for fast retrieval testing and full end-to-end (LLM) testing, target metrics, and the recommended iterative workflow.
+
+## Table of Contents
+1. [Overview](#overview)
+2. [TL;DR](#tldr)
+3. [The Golden Set (`evaluation/qa_pairs.yaml`)](#the-golden-set-evaluationqa_pairsyaml)
+4. [`evaluate_retrieval.py` — fast loop](#evaluate_retrievalpy--fast-loop)
+5. [`evaluate.py` — end-to-end](#evaluatepy--end-to-end)
+6. [Metrics & targets](#metrics--targets)
+7. [Workflow](#workflow)
+8. [Adding new questions](#adding-new-questions)
+
+---
+
+## Overview
+
 LoreKeeper ships with a Golden Set and two evaluation scripts to measure
 retrieval quality without guesswork. Use them whenever you change anything
 that touches retrieval — chunking, embedding, reranking, the soft cap,

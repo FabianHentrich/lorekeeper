@@ -1,3 +1,12 @@
+"""
+Main module for the LoreKeeper application.
+
+This module configures and starts the FastAPI application, manages the lifecycle
+of shared resources, and sets up background tasks for health checking and session
+garbage collection. It also handles the auto-start of the Ollama service if
+configured as the LLM provider.
+"""
+
 import asyncio
 import logging
 import shutil

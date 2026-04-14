@@ -41,9 +41,12 @@ def get_api_key_status(config: GeminiConfig) -> dict:
 
 
 class GeminiProvider(BaseLLMProvider):
+    """LLM provider for Google Gemini, with built-in rate limiting and 429 retry logic."""
+
     provider = "gemini"
 
     def __init__(self, config: GeminiConfig):
+        """Resolve the API key (runtime override > env > .env) and build the genai client."""
         self.config = config
         self.model = config.model
 
@@ -60,6 +63,7 @@ class GeminiProvider(BaseLLMProvider):
         self._lock = asyncio.Lock()
 
     async def _rate_limit(self):
+        """Sleep if needed so we never issue requests faster than Gemini's 15 RPM free tier."""
         async with self._lock:
             now = time.monotonic()
             elapsed = now - self._last_request_time
@@ -70,6 +74,7 @@ class GeminiProvider(BaseLLMProvider):
             self._last_request_time = time.monotonic()
 
     async def _retry_on_429(self, coro_fn, max_retries: int = 3):
+        """Invoke `coro_fn`, retrying with exponential backoff on 429 quota errors."""
         for attempt in range(max_retries + 1):
             await self._rate_limit()
             try:
@@ -83,6 +88,7 @@ class GeminiProvider(BaseLLMProvider):
                     raise
 
     def _build_config(self, **kwargs) -> types.GenerateContentConfig:
+        """Assemble the per-request GenerateContentConfig from defaults + per-call overrides."""
         return types.GenerateContentConfig(
             temperature=kwargs.get("temperature", self.config.temperature),
             top_p=kwargs.get("top_p", self.config.top_p),
@@ -91,11 +97,13 @@ class GeminiProvider(BaseLLMProvider):
         )
 
     async def generate(self, prompt: str, system_prompt: str = "", **kwargs) -> LLMResponse:
+        """Produce a complete, non-streamed Gemini response with rate limiting and 429 retries."""
         gen_config = self._build_config(system_prompt=system_prompt or None, **kwargs)
 
         start = time.time()
 
         async def _call():
+            """Single Gemini API invocation — wrapped so _retry_on_429 can retry it."""
             return await self._client.aio.models.generate_content(
                 model=self.model,
                 contents=prompt,
@@ -126,6 +134,7 @@ class GeminiProvider(BaseLLMProvider):
         stream_result: StreamResult | None = None,
         **kwargs,
     ) -> AsyncGenerator[str, None]:
+        """Stream Gemini tokens, updating ``stream_result`` with usage metadata as it arrives."""
         gen_config = self._build_config(system_prompt=system_prompt or None, **kwargs)
 
         await self._rate_limit()
@@ -146,6 +155,7 @@ class GeminiProvider(BaseLLMProvider):
                 yield chunk.text
 
     async def health_check(self) -> bool:
+        """Return True if Gemini accepts a trivial model-info call with the configured key."""
         try:
             await self._client.aio.models.get(model=self.model)
             return True

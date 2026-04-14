@@ -15,13 +15,17 @@ THINK_PATTERN = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
 
 
 def _strip_thinking(text: str) -> str:
+    """Remove Qwen3 <think>...</think> reasoning blocks from a complete response."""
     return THINK_PATTERN.sub("", text).strip()
 
 
 class OllamaProvider(BaseLLMProvider):
+    """LLM provider talking to a local Ollama daemon via its OpenAI-compatible API."""
+
     provider = "ollama"
 
     def __init__(self, config: OllamaConfig):
+        """Store generation params and build the AsyncOpenAI client pointed at Ollama."""
         self.base_url = config.base_url
         self.model = config.model
         self.temperature = config.temperature
@@ -36,9 +40,11 @@ class OllamaProvider(BaseLLMProvider):
         )
 
     def _is_qwen3(self) -> bool:
+        """True when the configured model is a Qwen3 variant (affects /no_think handling)."""
         return "qwen3" in self.model.lower()
 
     async def generate(self, prompt: str, system_prompt: str = "", **kwargs) -> LLMResponse:
+        """Produce a complete, non-streamed response and return it wrapped in an LLMResponse."""
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
@@ -81,6 +87,12 @@ class OllamaProvider(BaseLLMProvider):
         stream_result: StreamResult | None = None,
         **kwargs,
     ) -> AsyncGenerator[str, None]:
+        """Stream tokens incrementally, filtering Qwen3 <think> blocks that may span chunks.
+
+        Uses a rolling buffer so <think>...</think> markers split across chunks
+        (e.g. "<th" + "ink>") are still detected. Token-usage data from the final
+        chunk is written back into ``stream_result`` when provided.
+        """
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
@@ -148,6 +160,7 @@ class OllamaProvider(BaseLLMProvider):
             yield buffer
 
     async def health_check(self) -> bool:
+        """Return True if the Ollama daemon responds to /api/tags within the timeout."""
         try:
             import httpx
             async with httpx.AsyncClient(timeout=3.0) as client:

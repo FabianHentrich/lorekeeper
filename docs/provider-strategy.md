@@ -1,5 +1,21 @@
 # Provider Strategy
 
+This document details the Language Model (LLM) providers supported by LoreKeeper, how to configure them, how fallback and condense mechanisms work, and how token usage is tracked.
+
+## Table of Contents
+1. [Overview](#overview)
+2. [Provider Comparison](#provider-comparison)
+3. [Configuration](#configuration)
+   - [Ollama](#ollama)
+   - [Gemini](#gemini)
+4. [Switching Providers at Runtime](#switching-providers-at-runtime)
+5. [Fallback Provider](#fallback-provider)
+6. [Condense Provider](#condense-provider)
+7. [Token Usage Reporting](#token-usage-reporting)
+8. [Adding a New Provider](#adding-a-new-provider)
+
+---
+
 ## Overview
 
 LoreKeeper abstracts LLM access behind a unified `BaseLLMProvider` interface.

@@ -48,28 +48,31 @@ class Generator:
     ) -> AsyncGenerator[str, None]:
         """Stream generated response tokens back as they are produced by the LLM.
 
-        Yields tokens incrementally to be sent via Server-Sent Events (SSE). If the primary
-        provider crashes mid-stream or during initialization, it intercepts the error and
-        attempts to fail over to the fallback provider if one is set.
+        Yields tokens incrementally to be sent via Server-Sent Events (SSE). Falls back to
+        the secondary provider only if the primary fails before emitting any tokens —
+        once tokens are already on the wire, re-running from scratch would duplicate output.
         """
+        emitted = False
         try:
             async for token in self.provider.generate_stream(
                 qa_prompt,
                 system_prompt=system_prompt,
                 stream_result=stream_result,
             ):
+                emitted = True
                 yield token
         except Exception as e:
-            if self.fallback_provider:
-                logger.warning(f"Primary provider failed ({e}), trying fallback")
-                async for token in self.fallback_provider.generate_stream(
-                    qa_prompt,
-                    system_prompt=system_prompt,
-                    stream_result=stream_result,
-                ):
-                    yield token
-            else:
+            if emitted or not self.fallback_provider:
+                if emitted:
+                    logger.error(f"Primary provider failed mid-stream ({e}); cannot fall back safely")
                 raise
+            logger.warning(f"Primary provider failed before emitting tokens ({e}), trying fallback")
+            async for token in self.fallback_provider.generate_stream(
+                qa_prompt,
+                system_prompt=system_prompt,
+                stream_result=stream_result,
+            ):
+                yield token
 
     async def condense_question(
         self,

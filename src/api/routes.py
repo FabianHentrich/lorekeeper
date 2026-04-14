@@ -32,6 +32,17 @@ router = APIRouter()
 # Ingestion job storage (in-memory)
 _ingest_jobs: dict[str, IngestStatusResponse] = {}
 
+# Keep strong refs to background tasks so the GC can't cancel them mid-run.
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _spawn_background(coro) -> asyncio.Task:
+    """Create a background task and retain a strong reference until it completes."""
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task
+
 # Health check cache (TTL = 30s)
 _health_cache: dict = {"ts": 0.0, "chroma": False, "llm": False}
 
@@ -143,6 +154,7 @@ async def query_stream(request: QueryRequest):
     sources = [_chunk_to_source_dict(c) for c in chunks]
 
     async def event_stream():
+        """Yield SSE 'token' events during generation and a final 'done' event with metadata."""
         full_answer = ""
         stream_ctx = StreamResult()
 
@@ -189,6 +201,7 @@ def _start_ingest_job(run_sync) -> str:
     _ingest_jobs[job_id] = IngestStatusResponse(job_id=job_id, status="queued")
 
     def _update_progress(result):
+        """Copy orchestrator progress fields onto the tracked job status."""
         job = _ingest_jobs[job_id]
         job.phase = result.phase
         job.documents_processed = result.documents_processed
@@ -199,6 +212,7 @@ def _start_ingest_job(run_sync) -> str:
         job.duration_seconds = result.duration_seconds
 
     async def _runner():
+        """Run the sync orchestrator off-thread and update job state on success/error."""
         _ingest_jobs[job_id].status = "running"
         try:
             result = await asyncio.get_event_loop().run_in_executor(
@@ -212,7 +226,7 @@ def _start_ingest_job(run_sync) -> str:
             _ingest_jobs[job_id].status = "error"
             _ingest_jobs[job_id].errors.append(str(e))
 
-    asyncio.create_task(_runner())
+    _spawn_background(_runner())
     return job_id
 
 
@@ -224,6 +238,7 @@ async def ingest():
     _, _, _, _, _, vs, _ = _get_services()
 
     def _run(progress_cb):
+        """Run full ingestion across all configured sources."""
         return IngestionOrchestrator(config=main_module.config).run(
             vectorstore=vs, progress_callback=progress_cb,
         )
@@ -436,6 +451,7 @@ async def reindex_source(source_id: str):
         raise HTTPException(status_code=404, detail=f"Unknown source_id: {source_id}")
 
     def _run(progress_cb):
+        """Drop existing chunks for this source, then re-ingest just its files."""
         vs.delete_by_source_id(source_id)
         return IngestionOrchestrator(config=main_module.config).run(
             vectorstore=vs, only_source_id=source_id, progress_callback=progress_cb,

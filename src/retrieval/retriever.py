@@ -18,12 +18,12 @@ def _rrf_merge(
     bm25_weight: float,
     k: int = 60,
 ) -> list[dict[str, Any]]:
-    """Combine results from vector search and keyword search using Reciprocal Rank Fusion (RRF).
+    """Fuse vector and BM25 hit lists via Reciprocal Rank Fusion.
 
-    RRF assigns a score to each document based on its rank in both the vector and BM25 result lists.
-    The `bm25_weight` parameter controls the balance between the two methods; a higher value
-    gives keyword matches more influence over the final ranking. The constant `k` mitigates the
-    impact of extreme outliers by softening the rank decay curve.
+    Each document's fused score sums ``weight / (k + rank + 1)`` contributions from
+    the two lists. ``bm25_weight`` (0..1) tilts the balance; ``k`` dampens the
+    advantage of the top ranks so lower-ranked but commonly-retrieved docs can
+    still surface.
     """
     vector_weight = 1.0 - bm25_weight
 
@@ -61,13 +61,7 @@ class RetrievedChunk:
 
 
 class Retriever:
-    """Orchestrates the semantic retrieval process by combining dense vector
-    search with optional BM25 keyword matching and cross-encoder reranking.
-
-    This class is responsible for filtering out unsupported document types (like images), applying
-    metadata constraints, executing hybrid search (if enabled), applying configured score
-    thresholds, and finally re-ordering the context chunks to maximize relevance and diversity.
-    """
+    """Runs vector search (optionally fused with BM25 via RRF) and an optional cross-encoder rerank."""
     def __init__(
         self,
         config: RetrievalConfig,
@@ -75,6 +69,7 @@ class Retriever:
         vectorstore: VectorStoreService,
         bm25_index: BM25Index | None = None,
     ):
+        """Wire up the embedding, vector, and BM25 dependencies; reranker is lazy-loaded."""
         self.config = config
         self.embedding_service = embedding_service
         self.vectorstore = vectorstore

@@ -23,6 +23,7 @@ class MarkdownParser(BaseParser):
     It builds a structural hierarchy by tracking Markdown heading levels (H1-H6).
     """
     def can_parse(self, file_path: Path) -> bool:
+        """True for `.md` files."""
         return file_path.suffix.lower() == ".md"
 
     def parse(self, file_path: Path, base_path: Path | None = None) -> list[ParsedDocument]:
@@ -106,6 +107,7 @@ class MarkdownParser(BaseParser):
 
         # Replace wikilinks with display text
         def replace_wikilink(m):
+            """Render a wikilink as its alias if present, otherwise its target name."""
             alias = m.group(2)
             return alias if alias else m.group(1)
 

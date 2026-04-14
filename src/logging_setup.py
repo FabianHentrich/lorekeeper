@@ -7,6 +7,7 @@ from src.config.manager import LoggingConfig
 
 
 def setup_logging(config: LoggingConfig):
+    """Wire up console + rotating file handlers and silence noisy third-party loggers."""
     root = logging.getLogger()
     root.setLevel(config.level.upper())
 

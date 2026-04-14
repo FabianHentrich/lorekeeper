@@ -1,5 +1,23 @@
 # Prompt System
 
+This document explains how LoreKeeper handles LLM prompts using Jinja2 templates, including their structure, available variables, and how to manage and customize prompt variants via the UI or API.
+
+## Table of Contents
+1. [Overview](#overview)
+2. [Templates in Detail](#templates-in-detail)
+   - [`system` — System Prompt](#system--system-prompt)
+   - [`qa` — Main QA Template](#qa--main-qa-template)
+   - [`condense` — Question Condensing](#condense--question-condensing)
+   - [`no_context` — Fallback Without Hits](#no_context--fallback-without-hits)
+3. [Customizing Prompts](#customizing-prompts)
+   - [Via the UI (recommended)](#via-the-ui-recommended)
+   - [Via the API](#via-the-api)
+   - [Variant storage](#variant-storage)
+   - [Via YAML (manual)](#via-yaml-manual)
+4. [Prompt Design Notes](#prompt-design-notes)
+
+---
+
 ## Overview
 
 All prompts live in `config/prompts.yaml` as Jinja2 templates.

@@ -490,10 +490,11 @@ Environment-Variable gesetzt — kein manuelles Editieren der `settings.yaml` n�
 ```yaml
 # settings.yaml
 retrieval:
-  top_k: 15                         # Bi-Encoder-Kandidaten aus ChromaDB (Recall-Pool)
-  score_threshold: 0.5              # Minimum Cosine-Score. 0.5 ≈ "ähnlich",
-                                    # 0.3 wäre fast orthogonal. Für DE-Worldbuilding-Docs
-                                    # ist 0.5–0.6 ein realistischer Default.
+  top_k: 15                         # Kandidaten aus der Suche (Recall-Pool)
+  score_threshold: 0.5              # Minimum Cosine-Score für Vektor-Suche. 0.5 ≈ "ähnlich"
+  bm25:
+    enabled: true                   # Hybrid Search (BM25 + Vector) an/aus
+    weight: 0.3                     # Gewichtung von BM25 ggü. Vector (0.0 = nur Vector, 1.0 = nur BM25)
   reranking:
     enabled: true                   # Cross-Encoder Reranking (Stage 2)
     model: "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"   # multilingual
@@ -517,13 +518,13 @@ exponiert sie als drei gekoppelte Slider im „⚙️ Erweitert:
 Retrieval-Tuning"-Expander (`max_per_source = 0` deaktiviert den Cap
 komplett für diesen Request).
 
-**Ablauf:**
+**Ablauf (Hybrid Search):**
 
-1. Query wird embedded (gleiches Modell wie Dokumente)
-2. ChromaDB Similarity Search → Top-K Chunks
-3. Optional: Metadaten-Filter (nur bestimmte Kategorien/Quellen)
-4. Score-Threshold Filterung (irrelevante Chunks raus)
-5. Reranking via Cross-Encoder (Score-sortierte Liste)
+1. **Vektor-Suche**: Query wird embedded (gleiches Modell wie Dokumente). ChromaDB Similarity Search → Top-K Chunks. Score-Threshold Filterung auf Vektor-Ergebnisse (irrelevante Chunks raus).
+2. **Lexikalische Suche (BM25)**: Query wird tokenisiert. BM25-Index liefert Keyword-Matches in den lokalen Metadaten/Texten.
+3. **Score-Fusion**: Ergebnisse beider Suchen werden über Reciprocal Rank Fusion (RRF) kombiniert (`bm25.weight` regelt den Einfluss).
+4. Optional: Metadaten-Filter (nur bestimmte Kategorien/Quellen).
+5. Reranking via Cross-Encoder (Score-sortierte Liste).
 6. **Soft per-source cap** (`max_per_source`):
    - Pass 1 (diverse fill): pro Source-File max. N Chunks akzeptieren,
      Cap-Überlauf in Overflow-Liste parken
@@ -993,6 +994,9 @@ vectorstore:
 retrieval:
   top_k: 15
   score_threshold: 0.5        # Cosine-Threshold. 0.5 ≈ "ähnlich", 0.3 wäre fast orthogonal.
+  bm25:
+    enabled: true
+    weight: 0.3               # Gewichtung von BM25 ggü. Vector (0.0 = nur Vector, 1.0 = nur BM25)
   reranking:
     enabled: true
     model: "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"

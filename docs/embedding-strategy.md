@@ -1,9 +1,30 @@
 # Embedding Strategy
 
+This document details LoreKeeper's retrieval architecture, explaining the choices behind embedding models, reranking, hybrid search (BM25 + Vector), and how text chunks are constructed to maximize match quality.
+
+## Table of Contents
+1. [Overview](#overview)
+2. [Why these choices?](#why-these-choices)
+   - [Why `multilingual-e5-base`?](#why-multilingual-e5-base-not-all-minilm-l6-v2-or-openai)
+   - [Why a cross-encoder rerank stage?](#why-a-cross-encoder-rerank-stage)
+   - [Why BM25 Hybrid Search?](#why-bm25-hybrid-search)
+   - [Why a per-source diversity cap?](#why-a-per-source-diversity-cap)
+   - [Why the identity layer?](#why-the-identity-layer-stem--aliases)
+   - [Why `heading_aware` chunking?](#why-heading_aware-chunking-not-recursive-character)
+   - [Why SHA-256 for re-ingestion?](#why-sha-256-content-hashing-for-re-ingestion)
+   - [Why exclude images?](#why-exclude-images-from-retrieval)
+3. [Retrieval Pipeline](#retrieval-pipeline)
+4. [Embed Text Construction](#embed-text-construction)
+5. [Document Types](#document-types)
+6. [What Is NOT in the Embedding](#what-is-not-in-the-embedding)
+7. [Re-ingest After Changes](#re-ingest-after-changes)
+
+---
+
 ## Overview
 
 LoreKeeper uses `intfloat/multilingual-e5-base` (768 dimensions, 512-token context,
-cosine similarity) for all document embeddings. The model is **asymmetric**: queries
+cosine similarity) for all document embeddings, optionally combined with a **BM25 keyword index** for hybrid retrieval. The embedding model is **asymmetric**: queries
 get a `"query: "` prefix, passages get a `"passage: "` prefix — this is applied
 automatically by `EmbeddingService` when the model name contains `"e5"`.
 
@@ -46,6 +67,19 @@ directly scores relevance. It's ~20× slower per pair, so we only run it over th
 
 In practice: the bi-encoder gets you 90% of the way on recall; the cross-encoder
 fixes the ordering so the LLM's context window is used efficiently.
+
+### Why BM25 Hybrid Search?
+
+BM25 is a strong keyword-based retrieval model. In scenarios where exact matches
+or specific keywords are crucial, BM25 can outperform dense vector searches,
+which might generalize too much.
+
+The hybrid approach first filters with BM25 to narrow down the candidate pool
+to the most relevant documents based on keyword matching. The top candidates
+are then re-ranked using the bi-encoder, which considers semantic similarity.
+
+This two-step process ensures efficiency and quality, leveraging the strengths
+of both keyword and vector-based retrieval.
 
 ### Why a per-source diversity cap?
 

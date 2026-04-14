@@ -24,6 +24,7 @@ class SourceConfig(BaseModel):
     @field_validator("category_map")
     @classmethod
     def _validate_category_map(cls, v: dict) -> dict:
+        """Reject malformed category_map entries — each value must be a string or a dict with 'category'."""
         valid_groups = {"lore", "adventure", "rules"}
         for folder, entry in v.items():
             if isinstance(entry, str):
@@ -209,6 +210,7 @@ class ConfigManager:
         prompts_path: Path = Path("config/prompts.yaml"),
         sources_path: Path = Path("config/sources.yaml"),
     ):
+        """Load settings, sources sidecar, and prompts from the given paths."""
         self._settings_path = settings_path
         self._sources_path = sources_path
         self._prompts_path = prompts_path
@@ -288,6 +290,7 @@ class ConfigManager:
 
     @property
     def prompts(self):
+        """Raw prompts dict as loaded from config/prompts.yaml."""
         return self._prompts_raw
 
 
@@ -307,9 +310,7 @@ def get_default_config() -> ConfigManager:
 
 
 def __getattr__(name: str):
-    # Backwards-compat shim: `from src.config.manager import config_manager`
-    # continues to work, but the ConfigManager is only constructed on first
-    # access (not on module import).
+    """Lazy attribute hook so `from src.config.manager import config_manager` still works without import-time IO."""
     if name == "config_manager":
         return get_default_config()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

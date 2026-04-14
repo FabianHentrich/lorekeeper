@@ -14,6 +14,7 @@ class ImageMetaParser(BaseParser):
     having them in the vector store allows their names to be searched via UI references.
     """
     def can_parse(self, file_path: Path) -> bool:
+        """True for common raster image formats (png/jpg/jpeg/webp/gif)."""
         return file_path.suffix.lower() in IMAGE_EXTENSIONS
 
     def parse(self, file_path: Path, base_path: Path | None = None) -> list[ParsedDocument]:

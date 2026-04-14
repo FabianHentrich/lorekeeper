@@ -153,80 +153,46 @@ flowchart TB
     class UI ui
 ```
 
-Full details in [**ARCHITECTURE.md**](ARCHITECTURE.md) and
-[`docs/data-flow.md`](docs/data-flow.md).
+For a comprehensive deep dive into the system design, RAG pipeline, module boundaries, and config schemas, please read [**ARCHITECTURE.md**](ARCHITECTURE.md). 
+For the exact data flow of queries and ingestion, see [`docs/data-flow.md`](docs/data-flow.md).
 
 ---
 
 ## Quickstart (Local)
 
-```powershell
-# 1. Virtual environment
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
+1. **Virtual environment**
+   ```powershell
+   python -m venv .venv
+   .venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
 
-# 2. Pull the LLM model
-ollama pull qwen3:8b
+2. **Pull the LLM model**
+   ```powershell
+   ollama pull qwen3:8b
+   ```
 
-# 3. Configure
-copy .env.example .env
-# Create config/sources.yaml pointing at your vault(s). Each source has:
-# id, path (absolute or relative), group (lore|adventure|rules), default_category,
-# and optionally a category_map (folder → category, or folder → {category, group}).
-#
-#   sources:
-#     - id: pnp-welt
-#       path: C:/Users/you/Obsidian/PnP-Welt
-#       group: lore
-#       default_category: misc
-#       category_map:
-#         NPCs: npc
-#         Geschichte: {category: story, group: adventure}
-#         Regelwerk: {category: rules, group: rules}
-#
-# Sources can also be managed live in the UI under "Sources".
+3. **Configure**
+   ```powershell
+   copy .env.example .env
+   ```
+   *Note:* Set up your sources in the UI, or create a `config/sources.yaml` pointing at your vault(s). For full details on configuration, the `settings.yaml`, and managing multiple sources, see [docs/configuration.md](docs/configuration.md).
 
-# 4. Start backend + UI
-.\start.ps1
-# or manually:
-#   uvicorn src.main:app --reload --port 8000     (Terminal 1)
-#   streamlit run ui/LoreKeeper.py                        (Terminal 2)
+4. **Start backend + UI**
+   ```powershell
+   .\start.ps1
+   ```
+   The UI is then available at **http://localhost:8501**.
 
-# 5. Index your vault (one-time)
-python -m src.ingestion.orchestrator
-```
+5. **Index your vault (one-time)**
+   ```powershell
+   python -m src.ingestion.orchestrator
+   ```
+   *You can also do this directly from the **⚙ Sources** section in the UI!* 
 
-The UI is then available at **http://localhost:8501**.
+For instructions on using Google Gemini, running via Docker, or handling advanced operations, see [docs/operations.md](docs/operations.md) and [docs/provider-strategy.md](docs/provider-strategy.md).
 
-### Using Gemini instead of Ollama
-
-1. Get an API key from [Google AI Studio](https://aistudio.google.com/apikey).
-2. Provide the key — pick **one**:
-   - Put `GEMINI_API_KEY=...` in `.env` (persistent across restarts), **or**
-   - Paste it into the Streamlit sidebar under "LLM Provider → Gemini API-Key".
-     The UI sends it to `POST /provider/gemini/key`; the backend keeps it in
-     process memory only — nothing is written to disk, so it is lost on restart.
-     Use this if you want a zero-config first start.
-3. Set `llm.provider: gemini` in `config/settings.yaml`, or switch live from
-   the Streamlit sidebar.
-
-The sidebar shows whether a key is currently available and whether it came from
-env or from UI input. The key itself is never returned by any endpoint.
-
----
-
-## Docker
-
-```bash
-docker compose up --build -d
-docker compose exec ollama ollama pull qwen3:8b
-docker compose exec api python -m src.ingestion.orchestrator
-```
-
-In Docker, ChromaDB runs as a separate service and the API talks to it over
-HTTP (`CHROMA_MODE=client`). Ollama is GPU-accelerated by default — see
-`docker-compose.yaml` for the device configuration.
+For a complete walkthrough of the chat interface, token accounting, evaluation tabs, and prompt management pages, see the [UI/UX Documentation](docs/ui-ux.md).
 
 ---
 
@@ -245,15 +211,15 @@ HTTP (`CHROMA_MODE=client`). Ollama is GPU-accelerated by default — see
 
 | Document | Contents |
 |----------|----------|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | System overview, components, data flow, config schema |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Entry point for system design, components, RAG setup |
+| [docs/ui-ux.md](docs/ui-ux.md) | **UI deep dive**: Sidebar, chat, ⚙ Sources page, ✏ Prompts page, Evaluation tab, usage metrics |
 | [docs/parsing.md](docs/parsing.md) | Markdown (Obsidian syntax), PDF (OCR, TOC headings, images), Image parsers |
 | [docs/data-flow.md](docs/data-flow.md) | Ingestion and query pipelines (Mermaid) |
 | [docs/embedding-strategy.md](docs/embedding-strategy.md) | E5 asymmetry, identity layer, reranking — and **why** |
-| [docs/provider-strategy.md](docs/provider-strategy.md) | Ollama vs. Gemini, runtime switching |
-| [docs/ui-ux.md](docs/ui-ux.md) | Sidebar, chat, ⚙ Sources page, ✏ Prompts page, Gemini key entry, session state, performance |
+| [docs/provider-strategy.md](docs/provider-strategy.md) | Ollama vs. Gemini, runtime switching, fallback configuration |
 | [docs/configuration.md](docs/configuration.md) | Full `settings.yaml` reference, `sources.yaml` schema, env variables, runtime API key |
 | [docs/prompts.md](docs/prompts.md) | Jinja2 templates, variables, UI editing, variant management |
-| [docs/operations.md](docs/operations.md) | Ingest, re-ingest, troubleshooting |
+| [docs/operations.md](docs/operations.md) | Ingest flows, Docker workflows, re-indexing, troubleshooting |
 | [docs/evaluation.md](docs/evaluation.md) | Golden Set, retrieval/end-to-end eval scripts, metrics, workflow |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Dev setup, coding conventions, PR process |
 

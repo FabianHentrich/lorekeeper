@@ -20,10 +20,13 @@ class StreamResult:
 
 
 class BaseLLMProvider(ABC):
+    """Abstract interface every LLM backend (Ollama, Gemini, ...) must implement."""
+
     provider: str = "unknown"
 
     @abstractmethod
-    async def generate(self, prompt: str, **kwargs) -> LLMResponse: ...
+    async def generate(self, prompt: str, **kwargs) -> LLMResponse:
+        """Return a full, non-streamed completion for ``prompt``."""
 
     @abstractmethod
     async def generate_stream(
@@ -31,7 +34,9 @@ class BaseLLMProvider(ABC):
         prompt: str,
         stream_result: StreamResult | None = None,
         **kwargs,
-    ) -> AsyncGenerator[str, None]: ...
+    ) -> AsyncGenerator[str, None]:
+        """Yield tokens one by one; populate ``stream_result.usage`` when known."""
 
     @abstractmethod
-    async def health_check(self) -> bool: ...
+    async def health_check(self) -> bool:
+        """Return True if the backend is reachable and ready to serve requests."""

@@ -1,5 +1,25 @@
 # Configuration Reference
 
+This document provides a comprehensive reference for configuring LoreKeeper. It details the setup for ingestion, chunking, embeddings, LLM providers, conversation settings, and how these values can be overridden using environment variables.
+
+## Table of Contents
+1. [`ingestion`](#ingestion)
+   - [Sources sidecar — `config/sources.yaml`](#sources-sidecar--configsourcesyaml)
+   - [PDF parsing — `ingestion.pdf`](#pdf-parsing--ingestionpdf)
+2. [`chunking`](#chunking)
+3. [`embeddings`](#embeddings)
+4. [`vectorstore`](#vectorstore)
+5. [`retrieval`](#retrieval)
+6. [`llm`](#llm)
+   - [`llm.ollama`](#llmollama)
+   - [`llm.gemini`](#llmgemini)
+7. [`conversation`](#conversation)
+8. [`logging`](#logging)
+9. [`api`](#api)
+10. [Full Env Variable Reference](#full-env-variable-reference)
+
+---
+
 All settings live in `config/settings.yaml`. Env variables and the `.env` file
 override YAML values (double underscore for nesting: `LLM__OLLAMA__MODEL`).
 
@@ -185,6 +205,9 @@ CHROMA_MODE=client
 | `reranking.model` | `str` | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` | Reranker model (multilingual) |
 | `reranking.top_k_rerank` | `int` | `8` | Final chunk count after reranking → LLM context |
 | `reranking.max_per_source` | `int` | `3` | Soft cap on chunks coming from a single source file (0 = unlimited). Prevents one dense document from filling all `top_k_rerank` slots and crowding out other relevant sources. Two-pass: first fills with diversity preference, then backfills cap-blocked chunks if `top_k_rerank` would otherwise not be reached — so the cap never silently returns fewer chunks than requested. |
+| `hybrid.enabled` | `bool` | `false` | Enable BM25 hybrid search as a pre-filter before reranking |
+| `hybrid.bm25_weight` | `float` | `0.3` | BM25 share in RRF scoring (0.0 = pure vector, 1.0 = pure BM25) |
+| `hybrid.bm25_top_k` | `int` | `15` | How many BM25 candidates to fetch before merging with vector candidates |
 
 **Rules of thumb:**
 - `top_k` should be at least twice `top_k_rerank`

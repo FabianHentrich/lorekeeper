@@ -27,9 +27,7 @@ class Session:
     })
 
     def add_message(self, role: str, content: str):
-        """Append a new user or assistant message to the session's chat history
-        and update the last active timestamp.
-        """
+        """Append a message and bump ``last_active``."""
         self.messages.append(Message(role=role, content=content))
         self.last_active = datetime.now(timezone.utc)
 
@@ -40,10 +38,9 @@ class Session:
 
 
 class ConversationManager:
-    """Manages chat sessions across multiple users, including creation, retrieval,
-    and automatic garbage collection (GC) of expired sessions from memory.
-    """
+    """In-memory registry of chat sessions with a background GC for idle entries."""
     def __init__(self, config: ConversationConfig):
+        """Initialize an empty session store using the given conversation config."""
         self.config = config
         self._sessions: dict[str, Session] = {}
 
@@ -75,11 +72,7 @@ class ConversationManager:
         return False
 
     def get_history(self, session_id: str) -> list[Message]:
-        """Fetch the recent chat history for a given session.
-
-        This trims the list to respect the configured `window_size` (which limits
-        the maximum number of recent QA pairs to return) preventing infinite context growth.
-        """
+        """Return the last ``window_size`` QA pairs from the session, or [] if unknown."""
         session = self._sessions.get(session_id)
         if not session:
             return []
@@ -93,20 +86,12 @@ class ConversationManager:
         return messages
 
     def get_history_for_condense(self, session_id: str) -> list[dict[str, str]]:
-        """Returns history formatted for the condense prompt template.
-
-        This reformats the active `window_size` Message objects into a plain dictionary
-        format {"role": ..., "content": ...} required by Jinja templating.
-        """
+        """Same as ``get_history`` but as plain {role, content} dicts for Jinja templates."""
         messages = self.get_history(session_id)
         return [{"role": m.role, "content": m.content} for m in messages]
 
     async def start_gc(self):
-        """Background asyncio loop that periodically purges old, inactive sessions.
-
-        Intended to run as a long-lived task initialized during application startup.
-        Will sleep for the configured GC interval between cleanups.
-        """
+        """Long-lived task that evicts idle sessions every ``session_gc_interval_seconds``."""
         logger.info("Session GC started")
         try:
             while True:
@@ -117,11 +102,7 @@ class ConversationManager:
             raise
 
     def _cleanup_expired(self):
-        """Synchronous implementation of the GC loop deleting old sessions.
-
-        Iterates over the dict deciding which entries have eclipsed the `session_timeout_minutes`
-        limit and evicts them from the manager's memory.
-        """
+        """Drop sessions whose ``last_active`` exceeds ``session_timeout_minutes``."""
         now = datetime.now(timezone.utc)
         timeout = self.config.session_timeout_minutes * 60
 

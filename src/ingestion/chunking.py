@@ -6,11 +6,7 @@ from src.ingestion.parsers.base import ParsedDocument
 
 @dataclass
 class Chunk:
-    """Represents a discrete sequence of text ready for embedding and insertion into the vector store.
-
-    Contains the extracted raw text along with inherited metadata (like file source and heading hierarchy)
-    that allows the LLM and the UI to trace the information back to its origin.
-    """
+    """A text slice ready for embedding, carrying source/heading metadata for traceability in the UI."""
     content: str
     source_file: str
     source_path: str
@@ -38,12 +34,7 @@ def chunk_documents(documents: list[ParsedDocument], config: ChunkingConfig) -> 
 
 
 def _heading_aware_chunking(documents: list[ParsedDocument], config: ChunkingConfig) -> list[Chunk]:
-    """Each ParsedDocument section becomes a chunk; tables are kept atomic,
-    oversized prose sections get split recursively.
-
-    This is the preferred strategy because it naturally bounds context to structural sections
-    defined by the author (like Markdown headings).
-    """
+    """Preferred strategy: one chunk per heading section. Tables stay atomic; oversized prose splits recursively."""
     chunks = []
     for doc in documents:
         text = doc.content.strip()
@@ -71,9 +62,7 @@ def _heading_aware_chunking(documents: list[ParsedDocument], config: ChunkingCon
 
 
 def _recursive_chunking(documents: list[ParsedDocument], config: ChunkingConfig) -> list[Chunk]:
-    """Split documents using a sequence of separators (e.g. paragraphs, then sentences, then words),
-    attempting to keep chunks under the maximum size limit with overlap.
-    """
+    """Split by paragraph → line → sentence → word until each piece fits ``max_chunk_size``, with overlap."""
     chunks = []
     for doc in documents:
         text = doc.content.strip()
@@ -174,11 +163,13 @@ def _split_table_by_rows(text: str, max_size: int) -> list[str]:
 
 
 def _recursive_split(text: str, max_size: int, overlap: int) -> list[str]:
+    """Split long text by trying paragraph → line → sentence → word separators in order."""
     separators = ["\n\n", "\n", ". ", " "]
     return _split_with_separators(text, max_size, overlap, separators)
 
 
 def _split_with_separators(text: str, max_size: int, overlap: int, separators: list[str]) -> list[str]:
+    """Recursively split by the first separator that keeps every piece under max_size."""
     if _estimate_tokens(text) <= max_size:
         return [text]
 
@@ -220,6 +211,7 @@ def _split_with_separators(text: str, max_size: int, overlap: int, separators: l
 
 
 def _get_overlap_text(text: str, overlap_tokens: int) -> str:
+    """Return the last `overlap_tokens` words of text, used to bridge successive chunks."""
     words = text.split()
     if len(words) <= overlap_tokens:
         return text
@@ -232,13 +224,11 @@ def _estimate_tokens(text: str) -> int:
 
 
 def _doc_to_chunk(doc: ParsedDocument, content: str) -> Chunk:
-    """Convert a ParsedDocument slice into a Chunk object, injecting heading paths.
+    """Wrap a text slice in a Chunk, prepending the heading path.
 
-    Prepend heading path so document title/section is part of the embedded text.
-    Without this, a chunk from 'Arkenfeld.md > Steckbrief' contains no mention
-    of 'Arkenfeld' and an embedding search for 'was ist Arkenfeld?' finds nothing.
+    Without the prefix, a chunk from 'Arkenfeld.md > Steckbrief' contains no
+    mention of 'Arkenfeld' and searches like 'was ist Arkenfeld?' miss it.
     """
-    # Prepend heading path so document title/section is part of the embedded text.
     if doc.heading_hierarchy:
         heading_prefix = " > ".join(doc.heading_hierarchy)
         content = f"{heading_prefix}\n\n{content}"

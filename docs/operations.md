@@ -1,5 +1,27 @@
 # Operations
 
+This document covers operational instructions for LoreKeeper: initial setup workflows, running ingestion manually or via API, troubleshooting common issues, and Docker execution.
+
+## Table of Contents
+1. [Initial Setup](#initial-setup)
+2. [Ingestion](#ingestion)
+   - [Normal Ingest (incremental)](#normal-ingest-incremental)
+   - [Full Re-ingest](#full-re-ingest)
+   - [Ingest via API (asynchronous)](#ingest-via-api-asynchronous)
+   - [Exclusion Patterns](#exclusion-patterns)
+3. [Configuration](#configuration)
+4. [Common Issues](#common-issues)
+   - [Ollama not responding](#ollama-not-responding)
+   - [ChromaDB file lock](#chromadb-file-lock)
+   - [Gemini 429 (rate limit)](#gemini-429-rate-limit)
+   - [Reranker model not found](#reranker-model-not-found)
+   - [PDF OCR not working](#pdf-ocr-not-working)
+   - [Retrieval returns wrong document](#retrieval-returns-wrong-document)
+5. [Docker](#docker)
+6. [Logs](#logs)
+
+---
+
 ## Initial Setup
 
 ```powershell
@@ -149,5 +171,4 @@ Log level in `settings.yaml`:
 ```yaml
 logging:
   level: INFO   # DEBUG | INFO | WARNING | ERROR
-  file: logs/lorekeeper.log
 ```
