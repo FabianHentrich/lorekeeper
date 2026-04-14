@@ -117,6 +117,7 @@ def retriever(populated_vectorstore, embed_service):
 
 @pytest.fixture
 def mock_llm_provider():
+    """Mock the LLM to avoid test dependency on external Ollama/Gemini services."""
     provider = AsyncMock()
     provider.generate.return_value = LLMResponse(
         content="Arkenfeld is a fortified city in the east.",
@@ -131,25 +132,30 @@ def mock_llm_provider():
 # ---------------------------------------------------------------------------
 
 class TestUpsertAndCount:
+    """Verify that chunks are properly inserted into the ephemeral ChromaDB collection."""
     def test_chunks_stored(self, populated_vectorstore):
         assert populated_vectorstore.count() >= 4
 
 
 class TestRetrieval:
+    """Test the vector similarity search, metadata filtering, and thresholding."""
     @pytest.mark.asyncio
     async def test_relevant_chunk_returned(self, retriever):
+        """Ensure standard vector proximity works."""
         results = await retriever.retrieve("Tell me about Arkenfeld")
         contents = [r.content for r in results]
         assert any("Arkenfeld" in c for c in contents)
 
     @pytest.mark.asyncio
     async def test_images_excluded(self, retriever):
+        """Ensure images are ignored by context retrieval due to hardcoded filters."""
         results = await retriever.retrieve("portrait aldric")
         for r in results:
             assert r.document_type != "image"
 
     @pytest.mark.asyncio
     async def test_npc_query(self, retriever):
+        """Ensure specific context properties (like NPC identity) are found reliably."""
         results = await retriever.retrieve("Aldric NPC blacksmith")
         assert any("Aldric" in r.content for r in results)
 
@@ -171,6 +177,7 @@ class TestRetrieval:
 
 
 class TestContentHashLookup:
+    """Verify that source file changes can be efficiently identified."""
     def test_hash_returned_for_stored_file(self, populated_vectorstore):
         hashes = populated_vectorstore.get_content_hashes_for_source("test")
         assert "Orte/Arkenfeld.md" in hashes
@@ -178,6 +185,7 @@ class TestContentHashLookup:
 
 
 class TestFullPipeline:
+    """Integration test combining retrieval and bounded text generation."""
     @pytest.mark.asyncio
     async def test_retrieve_then_generate(self, retriever, mock_llm_provider):
         """End-to-end: retrieve context, pass to generator, get response."""

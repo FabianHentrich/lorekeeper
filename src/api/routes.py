@@ -23,6 +23,7 @@ from src.api.schemas import (
 )
 
 from src.generation.generator import Generator
+from src.generation.providers.base import StreamResult
 
 logger = logging.getLogger(__name__)
 
@@ -49,22 +50,20 @@ def _get_services():
     return conversation_manager, generator, condense_provider, prompt_manager, retriever, vectorstore, provider
 
 
-@router.post("/query", response_model=QueryResponse)
-async def query(request: QueryRequest):
-    start = time.time()
-    cm, gen, condense_prov, pm, ret, vs, prov = _get_services()
+async def _prepare_query(request: QueryRequest):
+    """Shared condense+retrieve step. Returns (session, chunks, chunk_dicts,
+    system_prompt, qa_prompt) — qa_prompt is None when no chunks passed the
+    threshold."""
+    cm, gen, condense_prov, pm, ret, _vs, _prov = _get_services()
 
     session = cm.get_or_create_session(request.session_id)
-
     question = request.question
 
-    # Condense question if there's conversation history
     history = cm.get_history_for_condense(session.session_id)
     if history and cm.config.condense_question:
         condense_prompt = pm.render_condense(history=history, question=question)
         question = await gen.condense_question(condense_prompt, condense_prov)
 
-    # Retrieve relevant chunks
     chunks = await ret.retrieve(
         query=question,
         top_k=request.top_k,
@@ -74,7 +73,6 @@ async def query(request: QueryRequest):
         hybrid=request.hybrid_search,
     )
 
-    # Generate answer
     if chunks:
         chunk_dicts = [
             {"source_file": c.source_file, "heading": c.heading, "content": c.content}
@@ -82,6 +80,34 @@ async def query(request: QueryRequest):
         ]
         system_prompt = pm.get_system_prompt()
         qa_prompt = pm.render_qa(chunks=chunk_dicts, question=request.question)
+    else:
+        chunk_dicts = []
+        system_prompt = ""
+        qa_prompt = None
+
+    return session, chunks, system_prompt, qa_prompt
+
+
+def _chunk_to_source_dict(c) -> dict:
+    """Format a retrieved chunk into a source dictionary for the API response."""
+    return {
+        "file": c.source_file,
+        "source_path": c.metadata.get("source_path", ""),
+        "document_type": c.document_type,
+        "heading": c.heading,
+        "chunk_preview": c.content[:100],
+        "score": c.score,
+    }
+
+
+@router.post("/query", response_model=QueryResponse)
+async def query(request: QueryRequest):
+    """Execute a query against the knowledge base and return the generated answer and sources."""
+    start = time.time()
+    _, gen, _, pm, _, _, _ = _get_services()
+    session, chunks, system_prompt, qa_prompt = await _prepare_query(request)
+
+    if qa_prompt is not None:
         try:
             response = await gen.generate(system_prompt=system_prompt, qa_prompt=qa_prompt)
             answer = response.content
@@ -93,22 +119,10 @@ async def query(request: QueryRequest):
         answer = pm.render_no_context(question=request.question)
         model_used = "none"
 
-    # Update session
     session.add_message("user", request.question)
     session.add_message("assistant", answer)
 
-    sources = [
-        SourceReference(
-            file=c.source_file,
-            source_path=c.metadata.get("source_path", ""),
-            document_type=c.document_type,
-            heading=c.heading,
-            chunk_preview=c.content[:100],
-            score=c.score,
-        )
-        for c in chunks
-    ]
-
+    sources = [SourceReference(**_chunk_to_source_dict(c)) for c in chunks]
     latency_ms = (time.time() - start) * 1000
 
     return QueryResponse(
@@ -123,49 +137,21 @@ async def query(request: QueryRequest):
 
 @router.post("/query/stream")
 async def query_stream(request: QueryRequest):
-    cm, gen, condense_prov, pm, ret, vs, prov = _get_services()
-
-    session = cm.get_or_create_session(request.session_id)
-    question = request.question
-
-    history = cm.get_history_for_condense(session.session_id)
-    if history and cm.config.condense_question:
-        condense_prompt = pm.render_condense(history=history, question=question)
-        question = await gen.condense_question(condense_prompt, condense_prov)
-
-    chunks = await ret.retrieve(
-        query=question,
-        top_k=request.top_k,
-        metadata_filters=request.metadata_filters,
-        top_k_rerank=request.top_k_rerank,
-        max_per_source=request.max_per_source,
-        hybrid=request.hybrid_search,
-    )
-
-    sources = [
-        {
-            "file": c.source_file,
-            "source_path": c.metadata.get("source_path", ""),
-            "document_type": c.document_type,
-            "heading": c.heading,
-            "chunk_preview": c.content[:100],
-            "score": c.score,
-        }
-        for c in chunks
-    ]
+    """Execute a query and stream the generated answer tokens over server-sent events (SSE)."""
+    _, gen, _, pm, _, _, prov = _get_services()
+    session, chunks, system_prompt, qa_prompt = await _prepare_query(request)
+    sources = [_chunk_to_source_dict(c) for c in chunks]
 
     async def event_stream():
         full_answer = ""
+        stream_ctx = StreamResult()
 
-        if chunks:
-            chunk_dicts = [
-                {"source_file": c.source_file, "heading": c.heading, "content": c.content}
-                for c in chunks
-            ]
-            system_prompt = pm.get_system_prompt()
-            qa_prompt = pm.render_qa(chunks=chunk_dicts, question=request.question)
-
-            async for token in gen.generate_stream(system_prompt=system_prompt, qa_prompt=qa_prompt):
+        if qa_prompt is not None:
+            async for token in gen.generate_stream(
+                system_prompt=system_prompt,
+                qa_prompt=qa_prompt,
+                stream_result=stream_ctx,
+            ):
                 full_answer += token
                 event = json.dumps({"type": "token", "content": token})
                 yield f"data: {event}\n\n"
@@ -177,7 +163,7 @@ async def query_stream(request: QueryRequest):
         session.add_message("user", request.question)
         session.add_message("assistant", full_answer)
 
-        usage = dict(getattr(gen, "last_usage", {}) or {})
+        usage = dict(stream_ctx.usage)
         if usage:
             session.add_usage(usage)
 
@@ -185,7 +171,7 @@ async def query_stream(request: QueryRequest):
             "type": "done",
             "session_id": session.session_id,
             "sources": sources,
-            "model_used": prov.model if hasattr(prov, "model") else "unknown",
+            "model_used": getattr(prov, "model", "unknown"),
             "usage": usage,
             "session_usage": session.usage_totals,
         })
@@ -194,11 +180,10 @@ async def query_stream(request: QueryRequest):
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
-@router.post("/ingest", response_model=IngestJobResponse)
-async def ingest():
-    from src.ingestion.orchestrator import IngestionOrchestrator
+def _start_ingest_job(run_sync) -> str:
+    """Create a job, launch the sync orchestrator run in a thread, and return
+    the job_id. `run_sync` is a zero-arg callable returning an IngestionResult."""
     import src.main as main_module
-    _, _, _, _, _, vs, _ = _get_services()
 
     job_id = str(uuid.uuid4())
     _ingest_jobs[job_id] = IngestStatusResponse(job_id=job_id, status="queued")
@@ -213,29 +198,42 @@ async def ingest():
         job.chunks_deleted = result.chunks_deleted
         job.duration_seconds = result.duration_seconds
 
-    def _run_sync():
-        orchestrator = IngestionOrchestrator(config=main_module.config)
-        return orchestrator.run(vectorstore=vs, progress_callback=_update_progress)
-
-    async def run_ingestion():
+    async def _runner():
         _ingest_jobs[job_id].status = "running"
         try:
-            result = await asyncio.get_event_loop().run_in_executor(None, _run_sync)
+            result = await asyncio.get_event_loop().run_in_executor(
+                None, run_sync, _update_progress
+            )
             _update_progress(result)
             _ingest_jobs[job_id].status = "done"
             _ingest_jobs[job_id].errors = result.errors
-            # Invalidate BM25 index so it rebuilds on next hybrid query
             main_module.bm25_index.invalidate()
         except Exception as e:
             _ingest_jobs[job_id].status = "error"
             _ingest_jobs[job_id].errors.append(str(e))
 
-    asyncio.create_task(run_ingestion())
-    return IngestJobResponse(job_id=job_id, status="queued")
+    asyncio.create_task(_runner())
+    return job_id
+
+
+@router.post("/ingest", response_model=IngestJobResponse)
+async def ingest():
+    """Start an asynchronous ingestion job to process and embed all configured sources."""
+    from src.ingestion.orchestrator import IngestionOrchestrator
+    import src.main as main_module
+    _, _, _, _, _, vs, _ = _get_services()
+
+    def _run(progress_cb):
+        return IngestionOrchestrator(config=main_module.config).run(
+            vectorstore=vs, progress_callback=progress_cb,
+        )
+
+    return IngestJobResponse(job_id=_start_ingest_job(_run), status="queued")
 
 
 @router.get("/ingest/status/{job_id}", response_model=IngestStatusResponse)
 async def ingest_status(job_id: str):
+    """Get the current progress and status of an ingestion job."""
     if job_id not in _ingest_jobs:
         raise HTTPException(status_code=404, detail="Job not found")
     return _ingest_jobs[job_id]
@@ -256,6 +254,7 @@ async def _health_loop(interval: float = 60.0):
 
 @router.get("/health", response_model=HealthResponse)
 async def health():
+    """Check the health status of the database and LLM provider."""
     chroma_ok = _health_cache["chroma"]
     llm_ok = _health_cache["llm"]
 
@@ -280,10 +279,7 @@ async def sidebar_state():
 
     # Provider info
     _, _, _, _, _, _, prov = _get_services()
-    provider = ProviderInfo(
-        provider=getattr(prov, "provider", "unknown") if hasattr(prov, "provider") else type(prov).__name__,
-        model=getattr(prov, "model", "unknown"),
-    )
+    provider = ProviderInfo(provider=prov.provider, model=prov.model)
 
     # Gemini key status
     gem_raw = get_api_key_status(main_module.config.settings.llm.gemini)
@@ -310,6 +306,7 @@ async def sidebar_state():
 
 @router.get("/sessions/{session_id}")
 async def get_session(session_id: str):
+    """Retrieve the chat history and details for a specific session."""
     cm, *_ = _get_services()
     session = cm.get_session(session_id)
     if not session:
@@ -322,6 +319,7 @@ async def get_session(session_id: str):
 
 @router.delete("/sessions/{session_id}")
 async def delete_session(session_id: str):
+    """Delete a specific session and its history from the manager."""
     cm, *_ = _get_services()
     if not cm.delete_session(session_id):
         raise HTTPException(status_code=404, detail="Session not found")
@@ -330,21 +328,21 @@ async def delete_session(session_id: str):
 
 @router.get("/stats", response_model=StatsResponse)
 async def stats():
+    """Get statistics about the vector store, like total chunk count."""
     _, _, _, _, _, vs, _ = _get_services()
     return StatsResponse(chunk_count=vs.count())
 
 
 @router.get("/provider", response_model=ProviderInfo)
 async def get_provider():
+    """Get information about the currently active LLM provider and model."""
     _, _, _, _, _, _, prov = _get_services()
-    return ProviderInfo(
-        provider=getattr(prov, "provider", "unknown") if hasattr(prov, "provider") else type(prov).__name__,
-        model=getattr(prov, "model", "unknown"),
-    )
+    return ProviderInfo(provider=prov.provider, model=prov.model)
 
 
 @router.get("/sources")
 async def list_sources():
+    """List all currently configured sources."""
     import src.main as main_module
     return {"sources": [s.model_dump() for s in main_module.config.settings.ingestion.sources]}
 
@@ -437,38 +435,13 @@ async def reindex_source(source_id: str):
     if not any(s.id == source_id for s in main_module.config.settings.ingestion.sources):
         raise HTTPException(status_code=404, detail=f"Unknown source_id: {source_id}")
 
-    job_id = str(uuid.uuid4())
-    _ingest_jobs[job_id] = IngestStatusResponse(job_id=job_id, status="queued")
-
-    def _update_progress(result):
-        job = _ingest_jobs[job_id]
-        job.phase = result.phase
-        job.documents_processed = result.documents_processed
-        job.documents_total = result.documents_total
-        job.chunks_created = result.chunks_created
-        job.chunks_updated = result.chunks_updated
-        job.chunks_deleted = result.chunks_deleted
-        job.duration_seconds = result.duration_seconds
-
-    def _run_sync():
+    def _run(progress_cb):
         vs.delete_by_source_id(source_id)
         return IngestionOrchestrator(config=main_module.config).run(
-            vectorstore=vs, only_source_id=source_id, progress_callback=_update_progress)
+            vectorstore=vs, only_source_id=source_id, progress_callback=progress_cb,
+        )
 
-    async def run():
-        _ingest_jobs[job_id].status = "running"
-        try:
-            result = await asyncio.get_event_loop().run_in_executor(None, _run_sync)
-            _update_progress(result)
-            _ingest_jobs[job_id].status = "done"
-            _ingest_jobs[job_id].errors = result.errors
-            main_module.bm25_index.invalidate()
-        except Exception as e:
-            _ingest_jobs[job_id].status = "error"
-            _ingest_jobs[job_id].errors.append(str(e))
-
-    asyncio.create_task(run())
-    return IngestJobResponse(job_id=job_id, status="queued")
+    return IngestJobResponse(job_id=_start_ingest_job(_run), status="queued")
 
 
 @router.delete("/sources/{source_id}")
@@ -489,6 +462,7 @@ async def delete_source(source_id: str):
 
 @router.post("/sources/recategorize")
 async def recategorize_endpoint():
+    """Trigger a recategorization task to update metadata for existing configurations."""
     from src.ingestion.recategorize import recategorize
     _, _, _, _, _, vs, _ = _get_services()
     return recategorize(vectorstore=vs)
@@ -549,6 +523,7 @@ async def wipe_collection(payload: dict):
 
 @router.post("/provider", response_model=ProviderInfo)
 async def switch_provider(request: SwitchProviderRequest):
+    """Dynamically switch the active LLM provider at runtime."""
     import src.main as main_module
     from src.generation.provider_factory import ProviderFactory
 
@@ -579,6 +554,6 @@ async def switch_provider(request: SwitchProviderRequest):
         raise HTTPException(status_code=500, detail=f"Provider-Wechsel fehlgeschlagen: {e}")
 
     return ProviderInfo(
-        provider=request.provider,
-        model=getattr(main_module.provider, "model", "unknown"),
+        provider=main_module.provider.provider,
+        model=main_module.provider.model,
     )

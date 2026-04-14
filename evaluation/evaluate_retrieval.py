@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 def load_qa_pairs(path: str) -> list[dict]:
+    """Parse the configured YAML file returning a list of dicts with questions and expected formats."""
     data = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
     return data.get("pairs", [])
 
@@ -149,7 +150,11 @@ async def run_evaluation_with_retriever(
 
 def run_evaluation(qa_pairs: list[dict], top_k: int, top_k_rerank: int,
                    max_per_source: int = 3) -> dict:
-    """CLI-compatible sync wrapper. Creates its own Retriever."""
+    """CLI-compatible sync wrapper that instantiates its own Retriever.
+
+    Loads configuration settings, creates the necessary Embedding and VectorStore dependencies,
+    and runs the asynchronous evaluation process blocking the thread until completion.
+    """
     from src.config.manager import config_manager
     from src.retrieval.embeddings import EmbeddingService
     from src.retrieval.vectorstore import VectorStoreService
@@ -169,6 +174,9 @@ def run_evaluation(qa_pairs: list[dict], top_k: int, top_k_rerank: int,
 
 
 def main():
+    """CLI entry-point. Parses command line arguments to conduct a pure retrieval evaluation.
+    Outputs a consolidated JSON report and a console summary detailing Hit Rate@K.
+    """
     parser = argparse.ArgumentParser(description="LoreKeeper Retrieval Evaluation")
     parser.add_argument("--qa-pairs", default="evaluation/qa_pairs.yaml")
     parser.add_argument("--output", default="evaluation/results/")

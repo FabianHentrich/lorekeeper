@@ -14,7 +14,10 @@ import streamlit as st
 
 
 def _poll_ingest_job(api_url: str, job_id: str, label: str = "Indizierung"):
-    """Poll an ingest job until done/error and show live progress."""
+    """
+    Poll an active ingest job endpoint until terminal state is reached.
+    Renders live progress updates showing chunks processed versus total files.
+    """
     with st.status(f"{label} läuft...", expanded=True) as status:
         progress_line = st.empty()
         while True:
@@ -76,16 +79,19 @@ st.caption(
 # ─── Load current sources ───────────────────────────────────────────────
 @st.cache_data(ttl=5)
 def _fetch_sources():
+    """Fetch all configuring Document ingestion sources from the backend API."""
     return requests.get(f"{API_URL}/sources", timeout=5).json()["sources"]
 
 
 def _refresh():
+    """Clear the local component cache and trigger a full UI reload."""
     _fetch_sources.clear()
     st.rerun()
 
 
 @st.cache_data(ttl=30, show_spinner=False)
 def _fetch_stats(api_url: str):
+    """Retrieve aggregate VectorStore telemetry (e.g. total indexed chunks)."""
     return requests.get(f"{api_url}/stats", timeout=5).json()
 
 

@@ -19,10 +19,11 @@ import src.main as main_module
 from src.api.eval_routes import eval_router, _eval_jobs, _QA_PATH, _RESULTS_DIR
 
 
-# ─── Fakes ────────────────────────────────────────────────────────────
+# ─── Fakes ──────────────────────────────────────────────────────────────────────
 
 @dataclass
 class FakeRetrievedChunk:
+    """Mock stub for the search engine's context output."""
     content: str = "Test content about Arkenfeld."
     source_file: str = "Orte/Arkenfeld.md"
     document_type: str = "markdown"
@@ -36,16 +37,17 @@ class FakeRetrievedChunk:
 
 
 class FakeRetriever:
+    """Mock stub intercepting similarity searches."""
     async def retrieve(self, query, top_k=None, metadata_filters=None,
                        top_k_rerank=None, max_per_source=None):
         return [FakeRetrievedChunk()]
 
 
-# ─── Fixtures ─────────────────────────────────────────────────────────
+# ─── Fixtures ───────────────────────────────────────────────────────────────────
 
 @pytest.fixture
 def tmp_eval_dir(tmp_path, monkeypatch):
-    """Redirect QA path and results dir to a temp directory."""
+    """Redirect QA path and results dir to a temp directory to protect workspace files."""
     import src.api.eval_routes as mod
 
     qa_path = tmp_path / "qa_pairs.yaml"
@@ -60,6 +62,7 @@ def tmp_eval_dir(tmp_path, monkeypatch):
 
 @pytest.fixture
 def fake_retriever(monkeypatch):
+    """Inject a static mock retriever into the main module namespace."""
     original = main_module.retriever
     main_module.retriever = FakeRetriever()
     yield
@@ -68,21 +71,24 @@ def fake_retriever(monkeypatch):
 
 @pytest.fixture
 def client(tmp_eval_dir, fake_retriever):
+    """A clear-state TestClient for the evaluation router."""
     _eval_jobs.clear()
     app = FastAPI()
     app.include_router(eval_router)
     return TestClient(app)
 
 
-# ─── QA Pairs CRUD ───────────────────────────────────────────────────
+# ─── QA Pairs CRUD ──────────────────────────────────────────────────────────────
 
 def test_get_qa_pairs_empty(client):
+    """Ensure fetching pairs from an empty (new) temp file returns an empty list."""
     resp = client.get("/eval/qa-pairs")
     assert resp.status_code == 200
     assert resp.json()["pairs"] == []
 
 
 def test_put_and_get_qa_pairs(client):
+    """Verify writing configuration overwrites the YAML correctly and can be re-fetched."""
     pairs = [
         {
             "id": "t001",
@@ -104,9 +110,10 @@ def test_put_and_get_qa_pairs(client):
     assert result[0]["expected_sources"] == ["Orte/Arkenfeld.md"]
 
 
-# ─── Preview ──────────────────────────────────────────────────────────
+# ─── Preview ────────────────────────────────────────────────────────────────────
 
 def test_preview(client):
+    """Ensure retrieving context directly proxies to the internal retriever mechanics."""
     resp = client.post("/eval/preview", json={
         "question": "Was ist Arkenfeld?",
         "top_k": 10,
@@ -120,9 +127,10 @@ def test_preview(client):
     assert data["latency_ms"] >= 0
 
 
-# ─── Retrieval Eval Job ──────────────────────────────────────────────
+# ─── Retrieval Eval Job ─────────────────────────────────────────────────────────
 
 def test_retrieval_eval_run(client, tmp_eval_dir):
+    """End-to-end integration mapping over evaluating the expected list of files."""
     # Write a minimal golden set
     import yaml
     pairs = [{"id": "t001", "question": "Was ist Arkenfeld?",
@@ -158,7 +166,7 @@ def test_retrieval_eval_run(client, tmp_eval_dir):
 
 
 def test_reject_concurrent_eval(client, tmp_eval_dir):
-    """409 when an eval is already running."""
+    """409 when an eval is already running to prevent OOM errors and lock contention."""
     import yaml
     pairs = [{"id": "t001", "question": "test", "source_type": "markdown",
               "category": "x", "expected_sources": [], "expected_answer_contains": [],
@@ -177,9 +185,10 @@ def test_reject_concurrent_eval(client, tmp_eval_dir):
     _eval_jobs.clear()
 
 
-# ─── Results ──────────────────────────────────────────────────────────
+# ─── Results ────────────────────────────────────────────────────────────────────
 
 def test_list_results_empty(client):
+    """Fetching list from empty directory acts as an empty array, not 404."""
     resp = client.get("/eval/results")
     assert resp.status_code == 200
     assert resp.json() == []
@@ -206,6 +215,7 @@ def test_results_cap_at_3(tmp_eval_dir):
 
 
 def test_delete_result(client, tmp_eval_dir):
+    """Ensure deleting an existing evaluation artifact sweeps the disk."""
     f = tmp_eval_dir.results_dir / "retrieval_test.json"
     f.write_text(json.dumps({"hit_rate": 0.5}))
 
@@ -215,5 +225,6 @@ def test_delete_result(client, tmp_eval_dir):
 
 
 def test_delete_nonexistent_result(client):
+    """Ensure non-existent files trigger logical HTTP 404s."""
     resp = client.delete("/eval/results/nope.json")
     assert resp.status_code == 404

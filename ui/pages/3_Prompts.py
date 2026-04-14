@@ -29,16 +29,50 @@ _TEMPLATE_LABELS = {
 
 @st.cache_data(ttl=10, show_spinner=False)
 def _fetch_active(api_url: str):
+    """Retrieve currently active prompt templates.
+    
+    Uses Streamlit's @st.cache_data with a 10s TTL to prevent spamming
+    the backend when switching tabs or rerendering components.
+    
+    Args:
+        api_url (str): The base URL of the backend API.
+        
+    Returns:
+        dict: The active prompt variants containing 'system', 'qa', 'condense' and 'no_context' templates.
+    """
     return requests.get(f"{api_url}/prompts/active", timeout=5).json()
 
 
 @st.cache_data(ttl=10, show_spinner=False)
 def _fetch_variants(api_url: str):
+    """Retrieve metadata for all stored prompt template variants.
+    
+    Cached for 10s to minimize backend load. The cache can be cleared manually
+    via _fetch_variants.clear() after mutations (save/delete/activate).
+    
+    Args:
+        api_url (str): The base URL of the backend API.
+        
+    Returns:
+        list[dict]: List of metadata dictionaries for each variant.
+    """
     return requests.get(f"{api_url}/prompts/variants", timeout=5).json()
 
 
 @st.cache_data(ttl=10, show_spinner=False)
 def _fetch_variant(api_url: str, name: str):
+    """Retrieve the full text for a specific stored prompt template variant.
+    
+    Cached per variant name for 10s. Used when expanding a variant's edit panel
+    or loading variants for side-by-side comparison.
+    
+    Args:
+        api_url (str): The base URL of the backend API.
+        name (str): The unique name of the variant to load.
+        
+    Returns:
+        dict: The full variant data including the actual template strings.
+    """
     return requests.get(f"{api_url}/prompts/variants/{name}", timeout=5).json()
 
 

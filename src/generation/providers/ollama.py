@@ -6,7 +6,7 @@ from collections.abc import AsyncGenerator
 from openai import AsyncOpenAI
 
 from src.config.manager import OllamaConfig
-from .base import BaseLLMProvider, LLMResponse
+from .base import BaseLLMProvider, LLMResponse, StreamResult
 
 logger = logging.getLogger(__name__)
 
@@ -21,28 +21,19 @@ def _strip_thinking(text: str) -> str:
 class OllamaProvider(BaseLLMProvider):
     provider = "ollama"
 
-    def __init__(self, config: OllamaConfig | None = None, base_url: str | None = None, model: str | None = None):
-        if config:
-            self.base_url = base_url or config.base_url
-            self.model = model or config.model
-            self.temperature = config.temperature
-            self.top_p = config.top_p
-            self.max_tokens = config.max_tokens
-            self.timeout = config.timeout
-        else:
-            self.base_url = base_url or "http://localhost:11434"
-            self.model = model or "qwen3:8b"
-            self.temperature = 0.3
-            self.top_p = 0.9
-            self.max_tokens = 1024
-            self.timeout = 120
+    def __init__(self, config: OllamaConfig):
+        self.base_url = config.base_url
+        self.model = config.model
+        self.temperature = config.temperature
+        self.top_p = config.top_p
+        self.max_tokens = config.max_tokens
+        self.timeout = config.timeout
 
         self._client = AsyncOpenAI(
             base_url=f"{self.base_url}/v1",
             api_key="ollama",
             timeout=300,  # Generous timeout for slow local models
         )
-        self._last_stream_usage: dict = {}
 
     def _is_qwen3(self) -> bool:
         return "qwen3" in self.model.lower()
@@ -83,14 +74,19 @@ class OllamaProvider(BaseLLMProvider):
             raw_response=response.model_dump() if hasattr(response, "model_dump") else {},
         )
 
-    async def generate_stream(self, prompt: str, system_prompt: str = "", **kwargs) -> AsyncGenerator[str, None]:
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: str = "",
+        stream_result: StreamResult | None = None,
+        **kwargs,
+    ) -> AsyncGenerator[str, None]:
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         user_content = prompt + " /no_think" if self._is_qwen3() else prompt
         messages.append({"role": "user", "content": user_content})
 
-        self._last_stream_usage = {}
         stream = await self._client.chat.completions.create(
             model=self.model,
             messages=messages,
@@ -101,28 +97,55 @@ class OllamaProvider(BaseLLMProvider):
             stream_options={"include_usage": True},
         )
 
-        in_think_block = False
+        # Buffer-based <think>…</think> filter: robust against tags split
+        # across tokens ("<thi" + "nk>") and against real content appearing
+        # before/after the tag in the same token.
+        buffer = ""
+        in_think = False
+        TAG_OPEN = "<think>"
+        TAG_CLOSE = "</think>"
+        MAX_PARTIAL = max(len(TAG_OPEN), len(TAG_CLOSE)) - 1
+
         async for chunk in stream:
-            if getattr(chunk, "usage", None):
-                self._last_stream_usage = {
+            if getattr(chunk, "usage", None) and stream_result is not None:
+                stream_result.usage = {
                     "tokens_in": chunk.usage.prompt_tokens or 0,
                     "tokens_out": chunk.usage.completion_tokens or 0,
                     "tokens_thinking": 0,
                 }
-            if chunk.choices and chunk.choices[0].delta.content:
-                token = chunk.choices[0].delta.content
+            if not (chunk.choices and chunk.choices[0].delta.content):
+                continue
 
-                # Filter out <think>...</think> blocks from stream
-                if "<think>" in token:
-                    in_think_block = True
-                    continue
-                if "</think>" in token:
-                    in_think_block = False
-                    continue
-                if in_think_block:
-                    continue
+            buffer += chunk.choices[0].delta.content
+            out = ""
 
-                yield token
+            while buffer:
+                if in_think:
+                    idx = buffer.find(TAG_CLOSE)
+                    if idx == -1:
+                        # keep only trailing bytes that could start the close tag
+                        buffer = buffer[-MAX_PARTIAL:] if len(buffer) > MAX_PARTIAL else buffer
+                        break
+                    buffer = buffer[idx + len(TAG_CLOSE):]
+                    in_think = False
+                else:
+                    idx = buffer.find(TAG_OPEN)
+                    if idx == -1:
+                        # Flush everything except a possible partial tag at the tail
+                        if len(buffer) > MAX_PARTIAL:
+                            out += buffer[:-MAX_PARTIAL]
+                            buffer = buffer[-MAX_PARTIAL:]
+                        break
+                    out += buffer[:idx]
+                    buffer = buffer[idx + len(TAG_OPEN):]
+                    in_think = True
+
+            if out:
+                yield out
+
+        # Flush any tail bytes that survived (no tag match possible now)
+        if buffer and not in_think:
+            yield buffer
 
     async def health_check(self) -> bool:
         try:

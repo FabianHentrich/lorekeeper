@@ -6,6 +6,11 @@ from src.ingestion.parsers.base import ParsedDocument
 
 @dataclass
 class Chunk:
+    """Represents a discrete sequence of text ready for embedding and insertion into the vector store.
+
+    Contains the extracted raw text along with inherited metadata (like file source and heading hierarchy)
+    that allows the LLM and the UI to trace the information back to its origin.
+    """
     content: str
     source_file: str
     source_path: str
@@ -17,6 +22,10 @@ class Chunk:
 
 
 def chunk_documents(documents: list[ParsedDocument], config: ChunkingConfig) -> list[Chunk]:
+    """Route a list of parsed documents through the configured chunking strategy.
+
+    Available strategies: 'heading_aware', 'recursive', or 'fixed_size'.
+    """
     strategy = config.strategy
     if strategy == "heading_aware":
         return _heading_aware_chunking(documents, config)
@@ -30,7 +39,11 @@ def chunk_documents(documents: list[ParsedDocument], config: ChunkingConfig) -> 
 
 def _heading_aware_chunking(documents: list[ParsedDocument], config: ChunkingConfig) -> list[Chunk]:
     """Each ParsedDocument section becomes a chunk; tables are kept atomic,
-    oversized prose sections get split recursively."""
+    oversized prose sections get split recursively.
+
+    This is the preferred strategy because it naturally bounds context to structural sections
+    defined by the author (like Markdown headings).
+    """
     chunks = []
     for doc in documents:
         text = doc.content.strip()
@@ -58,6 +71,9 @@ def _heading_aware_chunking(documents: list[ParsedDocument], config: ChunkingCon
 
 
 def _recursive_chunking(documents: list[ParsedDocument], config: ChunkingConfig) -> list[Chunk]:
+    """Split documents using a sequence of separators (e.g. paragraphs, then sentences, then words),
+    attempting to keep chunks under the maximum size limit with overlap.
+    """
     chunks = []
     for doc in documents:
         text = doc.content.strip()
@@ -73,6 +89,7 @@ def _recursive_chunking(documents: list[ParsedDocument], config: ChunkingConfig)
 
 
 def _fixed_size_chunking(documents: list[ParsedDocument], config: ChunkingConfig) -> list[Chunk]:
+    """A naive fallback strategy that splits text strictly by a fixed word count and overlaps."""
     chunks = []
     for doc in documents:
         text = doc.content.strip()
@@ -215,9 +232,13 @@ def _estimate_tokens(text: str) -> int:
 
 
 def _doc_to_chunk(doc: ParsedDocument, content: str) -> Chunk:
+    """Convert a ParsedDocument slice into a Chunk object, injecting heading paths.
+
+    Prepend heading path so document title/section is part of the embedded text.
+    Without this, a chunk from 'Arkenfeld.md > Steckbrief' contains no mention
+    of 'Arkenfeld' and an embedding search for 'was ist Arkenfeld?' finds nothing.
+    """
     # Prepend heading path so document title/section is part of the embedded text.
-    # Without this, a chunk from "Arkenfeld.md > Steckbrief" contains no mention
-    # of "Arkenfeld" and embedding search for "was ist Arkenfeld?" finds nothing.
     if doc.heading_hierarchy:
         heading_prefix = " > ".join(doc.heading_hierarchy)
         content = f"{heading_prefix}\n\n{content}"
@@ -234,11 +255,13 @@ def _doc_to_chunk(doc: ParsedDocument, content: str) -> Chunk:
 
 def _merge_small_chunks(chunks: list[Chunk], min_size: int) -> list[Chunk]:
     """Merge tiny chunks into the previous one — but only within the same
-    heading boundary. Merging across headings would make the chunk's
-    heading_hierarchy lie about half its content (e.g. a tiny "Bruchgraben"
-    table absorbing the next section "Verborgenes Erbe" and still being
-    labelled "Bruchgraben"), which corrupts both retrieval display and the
-    per-source diversity logic in the reranker."""
+    heading boundary.
+
+    Merging across headings would make the chunk's heading_hierarchy lie about half
+    its content (e.g. a tiny "Bruchgraben" table absorbing the next section "Verborgenes Erbe"
+    and still being labelled "Bruchgraben"), which corrupts both retrieval display and the
+    per-source diversity logic in the reranker.
+    """
     if not chunks:
         return chunks
 
@@ -258,6 +281,7 @@ def _merge_small_chunks(chunks: list[Chunk], min_size: int) -> list[Chunk]:
 
 
 def _set_indices(chunks: list[Chunk]):
+    """Assign sequential indices and total counts to chunks grouped by their source file."""
     groups: dict[str, list[Chunk]] = {}
     for chunk in chunks:
         groups.setdefault(chunk.source_file, []).append(chunk)

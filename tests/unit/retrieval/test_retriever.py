@@ -8,11 +8,13 @@ from src.retrieval.retriever import Retriever, RetrievedChunk
 
 @pytest.fixture
 def config():
+    """Provides a baseline RetrievalConfig matching Chroma parameters with reranking mocked out."""
     return RetrievalConfig(top_k=5, score_threshold=0.5, reranking=RerankingConfig(enabled=False))
 
 
 @pytest.fixture
 def embed_service():
+    """Provides a sterile mock of the embedding service returning arbitrary constants."""
     svc = AsyncMock()
     svc.embed_text.return_value = [0.1, 0.2, 0.3]
     return svc
@@ -20,6 +22,7 @@ def embed_service():
 
 @pytest.fixture
 def vectorstore():
+    """Provides a Mock vectorstore configured to return synthetic result sets representing typical Chroma hits."""
     vs = MagicMock()
     vs.query.return_value = [
         {
@@ -40,24 +43,30 @@ def vectorstore():
 
 @pytest.fixture
 def retriever(config, embed_service, vectorstore):
+    """Provides a completely integrated test Retriever combining all mocked subsystems."""
     return Retriever(config=config, embedding_service=embed_service, vectorstore=vectorstore)
 
 
 class TestRetrieve:
+    """Test suite targeting simple retrieval evaluations absent complex reranking loops."""
+
     @pytest.mark.asyncio
     async def test_returns_chunks_above_threshold(self, retriever):
+        """Verify queries successfully return mapped dictionaries filtered against the threshold."""
         results = await retriever.retrieve("where is arkenfeld")
         assert len(results) == 1
         assert results[0].content == "Arkenfeld is a city."
 
     @pytest.mark.asyncio
     async def test_filters_out_low_scores(self, retriever):
+        """Verify vectorstore hits dipping beneath `score_threshold` are stripped proactively."""
         results = await retriever.retrieve("something")
         scores = [r.score for r in results]
         assert all(s >= 0.5 for s in scores)
 
     @pytest.mark.asyncio
     async def test_chunk_fields_populated(self, retriever):
+        """Verify schema projection extracts fundamental metadata cleanly from the unrolled DB representation."""
         results = await retriever.retrieve("query")
         chunk = results[0]
         assert chunk.source_file == "Orte/Arkenfeld.md"
@@ -67,6 +76,7 @@ class TestRetrieve:
 
     @pytest.mark.asyncio
     async def test_image_type_excluded_via_filter(self, retriever, vectorstore):
+        """Verify standard query constraints forcefully eject inline image references from standard text search."""
         await retriever.retrieve("query")
         kwargs = vectorstore.query.call_args[1]
         where = kwargs["where"]
@@ -76,6 +86,7 @@ class TestRetrieve:
 
     @pytest.mark.asyncio
     async def test_metadata_filters_combined(self, retriever, vectorstore):
+        """Verify extra constraints stack gracefully via the `$and` implicit merger."""
         vectorstore.query.return_value = []
         await retriever.retrieve("query", metadata_filters={"category": "npc"})
         kwargs = vectorstore.query.call_args[1]
@@ -84,6 +95,7 @@ class TestRetrieve:
 
     @pytest.mark.asyncio
     async def test_custom_top_k(self, retriever, vectorstore):
+        """Verify specific overrides map cleanly bypassing config default constraints."""
         vectorstore.query.return_value = []
         await retriever.retrieve("query", top_k=10)
         kwargs = vectorstore.query.call_args[1]
@@ -91,14 +103,18 @@ class TestRetrieve:
 
     @pytest.mark.asyncio
     async def test_empty_vectorstore_returns_empty(self, retriever, vectorstore):
+        """Verify missing results yield clean empty lists devoid of parsing crashes."""
         vectorstore.query.return_value = []
         results = await retriever.retrieve("nothing here")
         assert results == []
 
 
 class TestRerank:
+    """Test suite validating cross-encoder interactions enforcing relevance scoring over dense space assumptions."""
+
     @pytest.mark.asyncio
     async def test_reranking_reorders_chunks(self, config, embed_service, vectorstore):
+        """Verify the cross-encoder correctly manipulates list indexing according to deep contextual evaluations."""
         config.reranking = RerankingConfig(enabled=True, top_k_rerank=2)
         vectorstore.query.return_value = [
             {"id": "1", "content": "chunk A", "metadata": {"source_file": "a.md", "document_type": "markdown", "heading_hierarchy": ""}, "score": 0.8},
@@ -119,6 +135,7 @@ class TestRerank:
 
     @pytest.mark.asyncio
     async def test_max_per_source_backfills_when_pool_thin(self, config, embed_service, vectorstore):
+        """Verify reranking caps gracefully relax mapping remaining items when alternative file pools run dry."""
         # Pool: 5 chunks from a.md, 1 from b.md. top_k_rerank=5, cap=2.
         # Pass 1: 2× a.md + 1× b.md = 3 selected, 3 a.md chunks parked.
         # Pass 2: backfill from overflow → 5 total. The cap must NOT reduce
@@ -153,6 +170,7 @@ class TestRerank:
     async def test_max_per_source_caps_single_file_when_diversity_available(
         self, config, embed_service, vectorstore,
     ):
+        """Verify distinct file enforcement rigidly rejects clustered hits provided diversity offsets exist in the pool."""
         # Pool: 3× a.md, 2× b.md, 1× c.md. top_k=5, cap=2.
         # With enough diversity, the cap stays binding (no backfill needed).
         config.reranking = RerankingConfig(

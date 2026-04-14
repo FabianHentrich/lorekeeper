@@ -157,6 +157,16 @@ class UIConfig(BaseModel):
 
 
 class Settings(BaseSettings):
+    """Central configuration schema powered by Pydantic settings.
+
+    Reads and merges configuration from multiple layers:
+    1. Environment variables (highest priority, strictly mapped via double-underscore e.g. LLM__PROVIDER)
+    2. .env file
+    3. Base YAML file
+    4. Code defaults (lowest priority)
+
+    This acts as the unified, strictly-typed configuration object for the entire application.
+    """
     model_config = SettingsConfigDict(
         env_nested_delimiter="__",
         env_file=".env",
@@ -187,6 +197,12 @@ class Settings(BaseSettings):
 
 
 class ConfigManager:
+    """Manages the loading, merging, and saving of application configurations.
+
+    It orchestrates the initialization of the Pydantic Settings layer with the
+    base `settings.yaml`, handles legacy migrations for the ingestion sources via a
+    sidecar `sources.yaml` file, and provides IO methods for updating prompts and sources dynamically.
+    """
     def __init__(
         self,
         settings_path: Path = Path("config/settings.yaml"),
@@ -275,4 +291,25 @@ class ConfigManager:
         return self._prompts_raw
 
 
-config_manager = ConfigManager()
+_default: ConfigManager | None = None
+
+
+def get_default_config() -> ConfigManager:
+    """Lazily construct the default ConfigManager.
+
+    Unlike a module-level instance, this avoids reading YAML from disk at import time,
+    preventing circular import explosions and unwanted IO during test initializations.
+    """
+    global _default
+    if _default is None:
+        _default = ConfigManager()
+    return _default
+
+
+def __getattr__(name: str):
+    # Backwards-compat shim: `from src.config.manager import config_manager`
+    # continues to work, but the ConfigManager is only constructed on first
+    # access (not on module import).
+    if name == "config_manager":
+        return get_default_config()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

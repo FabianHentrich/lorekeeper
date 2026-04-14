@@ -47,11 +47,20 @@ def _resolve_category(file_path: Path, source: SourceConfig) -> tuple[str, str]:
 
 
 def _compute_content_hash(file_path: Path) -> str:
+    """Read the file content and compute a SHA-256 hash to detect changes
+    across ingestion runs, avoiding re-embedding unmodified files.
+    """
     content = file_path.read_bytes()
     return f"sha256:{hashlib.sha256(content).hexdigest()}"
 
 
 def _is_excluded(file_path: Path, base_path: Path, exclude_patterns: list[str]) -> bool:
+    """Check if a file matches any of the configured exclude patterns.
+
+    The patterns are evaluated against both the file's exact name
+    and its relative path from the base directory, supporting glob
+    syntax like '*.md' or 'folder/*'.
+    """
     try:
         relative = str(file_path.relative_to(base_path))
     except ValueError:
@@ -70,6 +79,9 @@ def _is_excluded(file_path: Path, base_path: Path, exclude_patterns: list[str]) 
 
 
 class IngestionResult:
+    """Tracks the progress and statistics of an ongoing or completed
+    ingestion job, including document and chunk counts and timing.
+    """
     def __init__(self):
         self.documents_processed: int = 0
         self.documents_total: int = 0
@@ -88,6 +100,10 @@ class IngestionResult:
 
 
 class IngestionOrchestrator:
+    """Coordinates the entire ingestion pipeline: discovering files,
+    parsing formats, chunking text, computing metadata/hashes, and
+    syncing the results (upserts and deletes) with the vector store.
+    """
     def __init__(self, config: ConfigManager | None = None):
         self.config = config or config_manager
         self.parsers: list[BaseParser] = [
@@ -145,6 +161,13 @@ class IngestionOrchestrator:
 
     def run(self, vectorstore=None, only_source_id: str | None = None,
             progress_callback=None) -> IngestionResult:
+        """Execute the ingestion pipeline.
+
+        This method discovers relevant files, parses them into chunks, assigns metadata
+        (e.g. content hashes and categories), and synchronizes them with the vector store.
+        It correctly handles insertions of new chunks, updates of modified documents,
+        and deletions of files that no longer exist on disk (orphans).
+        """
         result = IngestionResult()
         settings = self.config.settings
 

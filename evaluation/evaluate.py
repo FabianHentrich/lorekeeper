@@ -19,11 +19,18 @@ import yaml
 
 
 def load_qa_pairs(path: str) -> list[dict]:
+    """Load the evaluation questions and expected answers from a YAML file."""
     data = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
     return data.get("pairs", [])
 
 
 def evaluate(api_url: str, qa_pairs: list[dict]) -> dict:
+    """Run an end-to-end evaluation against a live API endpoint.
+
+    Sends each question as a POST request to `/query`, measuring latency and
+    testing if the retrieved sources and generated answer match the expected
+    values defined in the evaluation dataset.
+    """
     results = []
     hits = 0
     answer_matches = 0
@@ -88,6 +95,7 @@ def evaluate(api_url: str, qa_pairs: list[dict]) -> dict:
 
 
 def main():
+    """CLI entry point for running the end-to-end evaluation standalone."""
     parser = argparse.ArgumentParser(description="LoreKeeper Evaluation")
     parser.add_argument("--qa-pairs", default="evaluation/qa_pairs.yaml")
     parser.add_argument("--api-url", default="http://localhost:8000")

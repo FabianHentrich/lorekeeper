@@ -24,16 +24,18 @@ from src.api.routes import router
 from src.retrieval.retriever import RetrievedChunk
 
 
-# ─── Fakes ─────────────────────────────────────────────────────────────────
+# ─── Fakes ──────────────────────────────────────────────────────────────────────
 
 @dataclass
 class FakeMessage:
+    """Mock stub for memory-based message history elements."""
     role: str
     content: str
 
 
 @dataclass
 class FakeSession:
+    """Mock stub indicating a single chat session scope."""
     session_id: str
     messages: list[FakeMessage] = field(default_factory=list)
     usage_totals: dict = field(default_factory=lambda: {
@@ -49,6 +51,7 @@ class FakeSession:
 
 
 class FakeConversationManager:
+    """Mock implementation of session history persistence."""
     def __init__(self) -> None:
         self._sessions: dict[str, FakeSession] = {}
         self.config = SimpleNamespace(condense_question=False)
@@ -76,11 +79,12 @@ class FakeLLMResponse:
 
 
 class FakeGenerator:
+    """Mock stub that circumvents real calls to language model providers."""
     async def generate(self, system_prompt: str, qa_prompt: str) -> FakeLLMResponse:
         return FakeLLMResponse(content="Das ist eine Testantwort.")
 
     async def generate_stream(
-        self, system_prompt: str, qa_prompt: str
+        self, system_prompt: str, qa_prompt: str, stream_result=None
     ) -> AsyncGenerator[str, None]:
         for token in ["Das ", "ist ", "ein ", "Token-Stream."]:
             yield token
@@ -90,6 +94,7 @@ class FakeGenerator:
 
 
 class FakePromptManager:
+    """Mock stub bypassing template loading."""
     def get_system_prompt(self) -> str:
         return "Du bist ein hilfreicher Assistent."
 
@@ -104,6 +109,7 @@ class FakePromptManager:
 
 
 class FakeRetriever:
+    """Mock stub returning hardcoded relevance context."""
     def __init__(self, chunks: list[RetrievedChunk] | None = None) -> None:
         self._chunks = chunks or [
             RetrievedChunk(
@@ -117,17 +123,20 @@ class FakeRetriever:
         ]
         self.last_call: dict = {}
 
-    async def retrieve(self, query: str, top_k=None, metadata_filters=None, top_k_rerank=None, max_per_source=None):
+    async def retrieve(self, query: str, top_k=None, metadata_filters=None, top_k_rerank=None, max_per_source=None, hybrid=None):
         self.last_call = {
             "query": query,
             "top_k": top_k,
             "metadata_filters": metadata_filters,
             "top_k_rerank": top_k_rerank,
+            "max_per_source": max_per_source,
+            "hybrid": hybrid,
         }
         return self._chunks
 
 
 class FakeVectorStore:
+    """Mock stub bypassing ChromaDB."""
     def __init__(self, healthy: bool = True, chunk_count: int = 42) -> None:
         self._healthy = healthy
         self._count = chunk_count
@@ -149,7 +158,7 @@ class FakeProvider:
         return self._healthy
 
 
-# ─── Fixtures ──────────────────────────────────────────────────────────────
+# ─── Fixtures ───────────────────────────────────────────────────────────────────
 
 @pytest.fixture
 def fake_services():
@@ -212,9 +221,10 @@ def client(fake_services):
     return TestClient(app)
 
 
-# ─── /query ────────────────────────────────────────────────────────────────
+# ─── /query ────────────────────────────────────────────────────────────────────
 
 def test_query_returns_answer_and_sources(client, fake_services):
+    """Ensure standard query returns 200 OK and expected API payload schema."""
     response = client.post("/query", json={"question": "Wer ist Arkenfeld?"})
     assert response.status_code == 200
     body = response.json()
@@ -229,6 +239,7 @@ def test_query_returns_answer_and_sources(client, fake_services):
 
 
 def test_query_passes_metadata_filters_to_retriever(client, fake_services):
+    """Ensure requested query constraints are passed unadulterated into the retrieval engine."""
     filters = {"content_category": {"$in": ["rules", "tool"]}}
     response = client.post(
         "/query",
@@ -239,6 +250,7 @@ def test_query_passes_metadata_filters_to_retriever(client, fake_services):
 
 
 def test_query_without_chunks_returns_no_context_message(client, fake_services):
+    """Ensure the app falls back strictly to the 'no_context' prompt if semantic search finds nothing."""
     fake_services.retriever._chunks = []
     response = client.post("/query", json={"question": "Unbekanntes Thema?"})
     assert response.status_code == 200
@@ -249,6 +261,7 @@ def test_query_without_chunks_returns_no_context_message(client, fake_services):
 
 
 def test_query_llm_failure_returns_503(client, fake_services):
+    """Ensure that backend LLM crashes bubble up as 503 instead of silent failures."""
     async def _boom(*args, **kwargs):
         raise RuntimeError("Ollama down")
 
@@ -259,6 +272,7 @@ def test_query_llm_failure_returns_503(client, fake_services):
 
 
 def test_query_persists_messages_across_calls(client, fake_services):
+    """Ensure the user's session identifier correctly retrieves the linked history payload."""
     r1 = client.post("/query", json={"question": "Erste Frage"})
     sid = r1.json()["session_id"]
     r2 = client.post("/query", json={"question": "Zweite Frage", "session_id": sid})
@@ -271,9 +285,10 @@ def test_query_persists_messages_across_calls(client, fake_services):
     assert session.messages[2].content == "Zweite Frage"
 
 
-# ─── /query/stream ─────────────────────────────────────────────────────────
+# ─── /query/stream ─────────────────────────────────────────────────────────────
 
 def _parse_sse(raw: str) -> list[dict]:
+    """Helper to convert raw Server-Sent Event text into dict objects."""
     events = []
     for line in raw.splitlines():
         if line.startswith("data: "):
@@ -282,6 +297,7 @@ def _parse_sse(raw: str) -> list[dict]:
 
 
 def test_query_stream_yields_tokens_and_done_event(client, fake_services):
+    """Ensure generating streams provide granular JSON events ending with a structured summary."""
     with client.stream("POST", "/query/stream", json={"question": "Hi"}) as resp:
         assert resp.status_code == 200
         assert resp.headers["content-type"].startswith("text/event-stream")
@@ -303,6 +319,7 @@ def test_query_stream_yields_tokens_and_done_event(client, fake_services):
 
 
 def test_query_stream_no_chunks_emits_fallback_token(client, fake_services):
+    """Ensure missing context immediately yields the configured fallback response via stream."""
     fake_services.retriever._chunks = []
     with client.stream("POST", "/query/stream", json={"question": "???"}) as resp:
         body = resp.read().decode("utf-8")
@@ -315,9 +332,10 @@ def test_query_stream_no_chunks_emits_fallback_token(client, fake_services):
     assert any(e["type"] == "done" for e in events)
 
 
-# ─── /health ───────────────────────────────────────────────────────────────
+# ─── /health ───────────────────────────────────────────────────────────────────
 
 def test_health_healthy(client, fake_services):
+    """Ensure the health endpoint maps dependency statuses appropriately."""
     response = client.get("/health")
     assert response.status_code == 200
     body = response.json()
@@ -331,14 +349,16 @@ def test_health_degraded_when_llm_down(client, fake_services):
     assert response.json() == {"status": "degraded", "chromadb": True, "llm": False, "sources_configured": True}
 
 
-# ─── /sessions ─────────────────────────────────────────────────────────────
+# ─── /sessions ─────────────────────────────────────────────────────────────────
 
 def test_get_session_not_found(client, fake_services):
+    """Ensure invalid session lookups return a distinct 404."""
     response = client.get("/sessions/does-not-exist")
     assert response.status_code == 404
 
 
 def test_delete_session_roundtrip(client, fake_services):
+    """Verify standard CRUD session lifecycle interactions."""
     r1 = client.post("/query", json={"question": "Hallo"})
     sid = r1.json()["session_id"]
 
@@ -355,15 +375,17 @@ def test_delete_session_roundtrip(client, fake_services):
     assert r4.status_code == 404
 
 
-# ─── /stats & /provider ────────────────────────────────────────────────────
+# ─── /stats & /provider ────────────────────────────────────────────────────────
 
 def test_stats(client, fake_services):
+    """Ensure database counts are cleanly parsed and bubbled to the endpoint."""
     response = client.get("/stats")
     assert response.status_code == 200
     assert response.json() == {"chunk_count": 42}
 
 
 def test_get_provider(client, fake_services):
+    """Verify endpoint provides the active identity of the system's LLM engine."""
     response = client.get("/provider")
     assert response.status_code == 200
     body = response.json()
@@ -372,13 +394,15 @@ def test_get_provider(client, fake_services):
 
 
 def test_switch_provider_unknown_returns_400(client, fake_services):
+    """Ensure trying to switch to an unimplemented provider model returns a 400 Bad Request."""
     response = client.post("/provider", json={"provider": "openai"})
     assert response.status_code == 400
     assert "Unbekannter Provider" in response.json()["detail"]
 
 
-# ─── /ingest ───────────────────────────────────────────────────────────────
+# ─── /ingest ───────────────────────────────────────────────────────────────────
 
 def test_ingest_status_unknown_job_returns_404(client, fake_services):
+    """Validate ingestion status endpoints reject unfamiliar background jobs."""
     response = client.get("/ingest/status/nonexistent-job-id")
     assert response.status_code == 404

@@ -16,7 +16,7 @@ _IMAGE_REF = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
 
 
 def _normalize_pdf_headings(md_text: str) -> str:
-    """Promote numbered section headings (e.g. '## **5.4.5 Mönch**') to H1.
+    """Promote numbered section headings (e.g. '## **5.4.5 Mnch**') to H1.
 
     pymupdf4llm renders all headings at the same ## level, so numbered section
     titles and their subsections become siblings. Promoting numbered headings
@@ -61,7 +61,11 @@ def _apply_toc_headings(md_text: str, toc_items: list[list]) -> str:
 def _extract_image_docs(md_text: str, image_dir: Path, source_file: str,
                         source_path: str) -> tuple[str, list[ParsedDocument]]:
     """Find image references in markdown, create ParsedDocuments for existing
-    image files, and replace references with descriptive placeholder text."""
+    image files, and replace references with descriptive placeholder text.
+
+    Returns the cleaned markdown text and a list of image stubs representing
+    the extracted visuals.
+    """
     image_docs: list[ParsedDocument] = []
 
     def _replace_image(m: re.Match) -> str:
@@ -94,14 +98,27 @@ def _extract_image_docs(md_text: str, image_dir: Path, source_file: str,
 
 
 class PDFParser(BaseParser):
+    """Parser that converts PDF documents into structured text blocks.
+
+    Uses pymupdf4llm to extract text and structure (TOCs, tables) into a raw
+    Markdown format. It attempts OCR on embedded images if configured, and
+    reconstructs broken heading hierarchies before delegating the final slicing
+    to the MarkdownParser logic.
+    """
     def __init__(self, pdf_config: PdfConfig | None = None):
         self._md_parser = MarkdownParser()
         self._config = pdf_config or PdfConfig()
 
     def can_parse(self, file_path: Path) -> bool:
+        """Check if the provided file is a PDF."""
         return file_path.suffix.lower() == ".pdf"
 
     def parse(self, file_path: Path, base_path: Path | None = None) -> list[ParsedDocument]:
+        """Extract text from the PDF, normalize headings, and return structural blocks.
+
+        Creates a temporary directory for intermediary image extraction if enabled.
+        Catches OCR failures and automatically retries with pure text extraction fallback.
+        """
         source_file = file_path.name
         source_path = str(file_path.resolve())
         cfg = self._config

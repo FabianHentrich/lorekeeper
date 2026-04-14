@@ -18,7 +18,13 @@ def _rrf_merge(
     bm25_weight: float,
     k: int = 60,
 ) -> list[dict[str, Any]]:
-    """Reciprocal Rank Fusion. Higher bm25_weight → more keyword influence."""
+    """Combine results from vector search and keyword search using Reciprocal Rank Fusion (RRF).
+
+    RRF assigns a score to each document based on its rank in both the vector and BM25 result lists.
+    The `bm25_weight` parameter controls the balance between the two methods; a higher value
+    gives keyword matches more influence over the final ranking. The constant `k` mitigates the
+    impact of extreme outliers by softening the rank decay curve.
+    """
     vector_weight = 1.0 - bm25_weight
 
     scores: dict[str, float] = {}
@@ -55,6 +61,13 @@ class RetrievedChunk:
 
 
 class Retriever:
+    """Orchestrates the semantic retrieval process by combining dense vector
+    search with optional BM25 keyword matching and cross-encoder reranking.
+
+    This class is responsible for filtering out unsupported document types (like images), applying
+    metadata constraints, executing hybrid search (if enabled), applying configured score
+    thresholds, and finally re-ordering the context chunks to maximize relevance and diversity.
+    """
     def __init__(
         self,
         config: RetrievalConfig,
@@ -68,7 +81,8 @@ class Retriever:
         self.bm25_index = bm25_index or BM25Index()
         self._reranker = None
 
-    def _get_reranker(self):
+    def get_reranker(self):
+        """Lazy-load and cache the cross-encoder reranking model."""
         if self._reranker is None:
             from sentence_transformers import CrossEncoder
             logger.info(f"Loading reranker model: {self.config.reranking.model}")
@@ -85,6 +99,12 @@ class Retriever:
         max_per_source: int | None = None,
         hybrid: bool | None = None,
     ) -> list[RetrievedChunk]:
+        """Search the vector store for chunks most relevant to the given query.
+
+        If hybrid search is enabled (either globally or via the request flag), it combines dense embeddings
+        with BM25 keyword matching via Reciprocal Rank Fusion. It then drops any chunk falling below the
+        configured score threshold, and optionally reranks the surviving candidates via a cross-encoder model.
+        """
         top_k = top_k or self.config.top_k
         query_embedding = await self.embedding_service.embed_text(query)
 
@@ -180,7 +200,16 @@ class Retriever:
         top_k_rerank: int | None = None,
         max_per_source: int | None = None,
     ) -> list[RetrievedChunk]:
-        reranker = self._get_reranker()
+        """Apply a cross-encoder model to re-score and re-order the retrieved chunks.
+
+        Unlike the bi-encoder used for initial retrieval, a cross-encoder evaluates the query and chunk text
+        simultaneously, yielding a highly accurate relevance score at the cost of higher latency.
+
+        The method also applies a diversity-aware selection strategy: it prefers to select chunks from different
+        source files up to a `max_per_source` limit. If the pool of candidates above the initial score threshold
+        is small, it will optionally backfill from cap-overflow candidates rather than return fewer chunks than requested.
+        """
+        reranker = self.get_reranker()
         pairs = [[query, c.content] for c in chunks]
 
         scores = await run_in_threadpool(reranker.predict, pairs)

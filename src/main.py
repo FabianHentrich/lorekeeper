@@ -85,6 +85,7 @@ async def _ensure_ollama(base_url: str, timeout: float = 30.0) -> subprocess.Pop
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Manage the lifecycle of the FastAPI application, initializing shared resources and background tasks."""
     global config, conversation_manager, prompt_manager
     global embedding_service, vectorstore, bm25_index, retriever
     global provider, condense_provider, generator
@@ -122,7 +123,7 @@ async def lifespan(app: FastAPI):
     bm25_index = BM25Index()
     retriever = Retriever(settings.retrieval, embedding_service, vectorstore, bm25_index)
     if settings.retrieval.reranking.enabled:
-        retriever._get_reranker()  # pre-load reranker model at startup
+        retriever.get_reranker()  # pre-load reranker model at startup
 
     # LLM
     provider = ProviderFactory.create(settings.llm)
@@ -167,12 +168,17 @@ app = FastAPI(
 )
 
 
+_QUIET_PATHS = {"/health", "/sidebar-state"}
+
+
 @app.middleware("http")
 async def request_logging(request, call_next):
-    import time as _time
-    start = _time.time()
+    """Log incoming HTTP requests and their processing times, ignoring specific paths."""
+    start = time.time()
     response = await call_next(request)
-    duration_ms = (_time.time() - start) * 1000
+    if request.url.path in _QUIET_PATHS:
+        return response
+    duration_ms = (time.time() - start) * 1000
     logger.info(
         f"{request.method} {request.url.path} → {response.status_code} ({duration_ms:.0f}ms)"
     )

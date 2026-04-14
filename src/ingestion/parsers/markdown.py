@@ -15,10 +15,23 @@ HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
 
 
 class MarkdownParser(BaseParser):
+    """Parser that converts Markdown documents into semantic ParsedDocument blocks.
+
+    Includes specific logic to handle and strip Obsidian-specific syntax like
+    Wikilinks (e.g. [[Link|Alias]]), Image embeds (![[image.png]]), and Callouts
+    (> [!info]), ensuring that only clean text goes into the embedding vector store.
+    It builds a structural hierarchy by tracking Markdown heading levels (H1-H6).
+    """
     def can_parse(self, file_path: Path) -> bool:
         return file_path.suffix.lower() == ".md"
 
     def parse(self, file_path: Path, base_path: Path | None = None) -> list[ParsedDocument]:
+        """Read the markdown file and slice it into blocks based on headings.
+
+        Extracts YAML frontmatter (like 'aliases') and inline tags into metadata objects
+        which are then assigned to every extracted slice. The text content is cleaned
+        of Obsidian-specific markdown artifacts before being split.
+        """
         text = file_path.read_text(encoding="utf-8")
         post = frontmatter.loads(text)
 
@@ -72,9 +85,11 @@ class MarkdownParser(BaseParser):
         return documents
 
     def _extract_tags(self, text: str) -> list[str]:
+        """Find inline #tags matching Obsidian tag specifications."""
         return list(set(TAG_PATTERN.findall(text)))
 
     def _extract_wikilinks(self, text: str) -> list[str]:
+        """Extract explicit outbound [[wikilinks]] from the raw text for metadata storage."""
         links = []
         for match in WIKILINK_PATTERN.finditer(text):
             if not IMAGE_EMBED_PATTERN.match(match.group(0)):
@@ -82,6 +97,10 @@ class MarkdownParser(BaseParser):
         return list(set(links))
 
     def _clean_obsidian_syntax(self, text: str) -> str:
+        """Strip or convert Obsidian-specific UI formatting into readable plain text.
+
+        This prevents things like `> [!abstract]` from appearing verbatim within context window text.
+        """
         # Remove image embeds
         text = IMAGE_EMBED_PATTERN.sub("", text)
 
@@ -113,6 +132,11 @@ class MarkdownParser(BaseParser):
         return text.strip()
 
     def _split_by_headings(self, text: str) -> list[tuple[list[str], str]]:
+        """Slice the cleaned text into hierarchical blocks based on header levels.
+
+        As it iterates through lines, it tracks the current H1 -> H2 -> H3 depth.
+        When a new heading is encountered, it flushes the previous block and updates the path.
+        """
         sections = []
         current_hierarchy = []
         current_content_lines = []

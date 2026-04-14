@@ -45,6 +45,12 @@ def _match_source(meta: dict, sources: list[SourceConfig]) -> SourceConfig | Non
 
 
 def recategorize(config: ConfigManager | None = None, vectorstore: VectorStoreService | None = None) -> dict:
+    """Execute a metadata-only update across the entire vector store to apply new source configurations.
+
+    This function reads all currently stored chunks, recalculates their matching category and group
+    based on the current rules in sources.yaml, and pushes the updated metadata back to the vector store.
+    This avoids the high cost of re-embedding the text content.
+    """
     config = config or config_manager
     if vectorstore is None:
         from src.retrieval.embeddings import EmbeddingService
@@ -75,6 +81,7 @@ def recategorize(config: ConfigManager | None = None, vectorstore: VectorStoreSe
             file_path = base
         new_category, new_group = _resolve_category(file_path, source)
 
+        # Check if the metadata actually changed. If identical, skip the update to save database ops.
         if (meta.get("content_category") == new_category
                 and meta.get("group") == new_group
                 and meta.get("source_id") == source.id):

@@ -7,7 +7,15 @@ from src.config.manager import ConfigManager, Settings
 
 
 class TestConfigManager:
+    """Test suite for the ConfigManager class, verifying configuration loading and saving."""
+
     def test_loads_yaml(self, tmp_path):
+        """
+        Verify that ConfigManager correctly loads values from YAML settings and prompts files.
+
+        Args:
+            tmp_path (Path): Pytest fixture providing a temporary directory.
+        """
         settings = tmp_path / "settings.yaml"
         settings.write_text("llm:\n  provider: gemini\n", encoding="utf-8")
         prompts = tmp_path / "prompts.yaml"
@@ -18,6 +26,12 @@ class TestConfigManager:
         assert cm.prompts["system"] == "Test prompt"
 
     def test_defaults_without_yaml(self, tmp_path):
+        """
+        Verify that ConfigManager falls back to default values when YAML files are missing.
+
+        Args:
+            tmp_path (Path): Pytest fixture providing a temporary directory.
+        """
         cm = ConfigManager(
             settings_path=tmp_path / "nonexistent.yaml",
             prompts_path=tmp_path / "nonexistent.yaml",
@@ -26,6 +40,12 @@ class TestConfigManager:
         assert cm.prompts == {}
 
     def test_nested_config(self, tmp_path):
+        """
+        Verify that nested configuration values are correctly parsed and defaults are preserved.
+
+        Args:
+            tmp_path (Path): Pytest fixture providing a temporary directory.
+        """
         settings = tmp_path / "settings.yaml"
         settings.write_text(
             "chunking:\n  strategy: recursive\n  max_chunk_size: 256\n",
@@ -38,8 +58,13 @@ class TestConfigManager:
         # Defaults still work
         assert cm.settings.chunking.chunk_overlap == 30
 
-
     def test_save_prompts(self, tmp_path):
+        """
+        Verify that saving prompts updates the manager's state and writes to the prompts file.
+
+        Args:
+            tmp_path (Path): Pytest fixture providing a temporary directory.
+        """
         settings = tmp_path / "settings.yaml"
         settings.write_text("", encoding="utf-8")
         prompts = tmp_path / "prompts.yaml"
@@ -57,6 +82,12 @@ class TestConfigManager:
         assert reloaded["system"] == "Updated"
 
     def test_save_prompts_strips_meta(self, tmp_path):
+        """
+        Verify that saving prompts removes the '_meta' key before writing to the file.
+
+        Args:
+            tmp_path (Path): Pytest fixture providing a temporary directory.
+        """
         settings = tmp_path / "settings.yaml"
         settings.write_text("", encoding="utf-8")
         prompts = tmp_path / "prompts.yaml"
@@ -71,18 +102,33 @@ class TestConfigManager:
 
 
 class TestSettings:
+    """Test suite for the Settings Pydantic model overrides and defaults."""
+
     def test_default_values(self):
+        """Verify that Settings initializes with the correct default values."""
         s = Settings()
         assert s.llm.provider == "ollama"
         assert s.vectorstore.mode == "embedded"
         assert s.retrieval.top_k == 15
 
     def test_env_override(self, monkeypatch):
+        """
+        Verify that environment variables correctly override default Settings values.
+
+        Args:
+            monkeypatch (pytest.MonkeyPatch): Pytest fixture to mock environment variables.
+        """
         monkeypatch.setenv("LLM__PROVIDER", "gemini")
         s = Settings()
         assert s.llm.provider == "gemini"
 
     def test_chroma_mode_override(self, monkeypatch):
+        """
+        Verify that the Chroma mode can be overridden via environment variable.
+
+        Args:
+            monkeypatch (pytest.MonkeyPatch): Pytest fixture to mock environment variables.
+        """
         monkeypatch.setenv("VECTORSTORE__MODE", "client")
         s = Settings()
         assert s.vectorstore.mode == "client"

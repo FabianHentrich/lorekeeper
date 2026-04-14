@@ -12,6 +12,12 @@ logger = logging.getLogger(__name__)
 
 
 class VectorStoreService:
+    """Manages the connection and interactions with the ChromaDB vector store.
+
+    Handles both embedded (local SQLite) and client (HTTP container) modes, mapping
+    concept chunks (from ingestion) to embedded vectors, performing similarity searches,
+    and managing the chunk lifecycle (upserts, metadata updates, wipes, and orphaned file deletions).
+    """
     def __init__(self, config: VectorStoreConfig, embedding_service: EmbeddingService):
         self.config = config
         self.embedding_service = embedding_service
@@ -19,6 +25,8 @@ class VectorStoreService:
         self._collection = None
 
     def _get_client(self) -> chromadb.ClientAPI:
+        """Lazily initialize and return the correct ChromaDB client based on configuration.
+        Switches between HttpClient and PersistentClient depending on `mode`."""
         if self._client is None:
             if self.config.mode == "client":
                 self._client = chromadb.HttpClient(
@@ -33,6 +41,8 @@ class VectorStoreService:
         return self._client
 
     def _get_collection(self):
+        """Get or create the target collection within ChromaDB context, setting up
+        the necessary distance metric (e.g. cosine similarity)."""
         if self._collection is None:
             client = self._get_client()
             metadata = {}
@@ -45,6 +55,8 @@ class VectorStoreService:
         return self._collection
 
     def _chunk_id(self, chunk: Chunk) -> str:
+        """Deterministically compute a unique chunk ID derived from the source
+        file path and the chunk's sequential slice index."""
         raw = f"{chunk.source_file}::{chunk.chunk_index}"
         return hashlib.md5(raw.encode()).hexdigest()
 
@@ -87,6 +99,12 @@ class VectorStoreService:
         return "\n\n".join(parts)
 
     def upsert_chunks(self, chunks: list[Chunk]):
+        """Embed and insert/update a batch of processed document chunks into the database.
+
+        The text passed to the embedding model is enriched with file names and aliases
+        (_build_embed_text), while the actual raw 'content' is saved for context window delivery.
+        It flattens metadata dictionaries since ChromaDB only accepts flat primitives.
+        """
         if not chunks:
             return
 
@@ -143,6 +161,12 @@ class VectorStoreService:
         top_k: int = 5,
         where: dict | None = None,
     ) -> list[dict[str, Any]]:
+        """Perform a semantic similarity search using the embedded query.
+
+        Converts the returned distances into standard similarity scores
+        (assuming cosine config: similarity = 1 - distance).
+        Matches can be filtered pre-search using Chroma metadata tags via `where`.
+        """
         collection = self._get_collection()
 
         query_params = {
@@ -172,7 +196,11 @@ class VectorStoreService:
         return items
 
     def get_content_hashes_for_source(self, source_id: str) -> dict[str, str]:
-        """Returns {source_file: content_hash} scoped to a single source_id."""
+        """Returns {source_file: content_hash} scoped to a single source_id.
+
+        Used heavily during ingestion to identify if a file has changed. By scoping to source_id,
+        it prevents collisions if the user maps multiple sources to visually identical structural folders.
+        """
         collection = self._get_collection()
         try:
             data = collection.get(where={"source_id": source_id}, include=["metadatas"])
@@ -188,42 +216,33 @@ class VectorStoreService:
                     hashes[src] = h
         return hashes
 
-    def delete_by_source_file(self, source_id: str, source_file: str):
-        """Delete chunks scoped to (source_id, source_file). Avoids cross-source collisions."""
+    def delete_by_source_file(self, source_id: str, source_file: str) -> None:
+        """Delete chunks scoped to (source_id, source_file). Avoids cross-source collisions.
+        Raises on DB failure so callers can abort instead of reporting false success."""
         collection = self._get_collection()
-        try:
-            collection.delete(where={"$and": [
-                {"source_id": source_id},
-                {"source_file": source_file},
-            ]})
-            logger.info(f"Deleted chunks: source_id={source_id} file={source_file}")
-        except Exception as e:
-            logger.error(f"Error deleting chunks for {source_id}/{source_file}: {e}")
+        collection.delete(where={"$and": [
+            {"source_id": source_id},
+            {"source_file": source_file},
+        ]})
+        logger.info(f"Deleted chunks: source_id={source_id} file={source_file}")
 
     def delete_by_source_id(self, source_id: str) -> int:
-        """Delete every chunk that belongs to a source. Returns count before deletion."""
+        """Delete every chunk that belongs to a source. Returns count before deletion.
+        Raises on DB failure."""
         collection = self._get_collection()
-        try:
-            existing = collection.get(where={"source_id": source_id}, include=[])
-            count = len(existing["ids"]) if existing and existing.get("ids") else 0
-            if count:
-                collection.delete(where={"source_id": source_id})
-            logger.info(f"Deleted {count} chunks for source_id={source_id}")
-            return count
-        except Exception as e:
-            logger.error(f"Error deleting source_id={source_id}: {e}")
-            return 0
-
-    def get_chunks_by_source_id(self, source_id: str) -> dict:
-        """Return raw chroma .get() result scoped to a source_id."""
-        collection = self._get_collection()
-        try:
-            return collection.get(where={"source_id": source_id}, include=["metadatas"])
-        except Exception:
-            return {"ids": [], "metadatas": []}
+        existing = collection.get(where={"source_id": source_id}, include=[])
+        count = len(existing["ids"]) if existing and existing.get("ids") else 0
+        if count:
+            collection.delete(where={"source_id": source_id})
+        logger.info(f"Deleted {count} chunks for source_id={source_id}")
+        return count
 
     def update_metadata_batch(self, ids: list[str], metadatas: list[dict]) -> None:
-        """Update metadata for existing chunks without re-embedding."""
+        """Update metadata for existing chunks without re-embedding.
+
+        This is a lightweight operation (used for things like mass tag/category updates)
+        that modifies database objects without wasting CPU on embedding calls.
+        """
         if not ids:
             return
         collection = self._get_collection()
@@ -233,7 +252,8 @@ class VectorStoreService:
         logger.info(f"Updated metadata for {len(ids)} chunks")
 
     def wipe_collection(self) -> None:
-        """Drop and recreate the collection. Works in both embedded and client mode."""
+        """Drop and recreate the collection. Works in both embedded and client mode.
+        This wipes the entire database context for the active collection."""
         client = self._get_client()
         try:
             client.delete_collection(name=self.config.collection_name)
@@ -243,10 +263,12 @@ class VectorStoreService:
         logger.warning(f"Wiped collection: {self.config.collection_name}")
 
     def count(self) -> int:
+        """Return the total number of chunks currently stored in the active collection."""
         collection = self._get_collection()
         return collection.count()
 
     def health_check(self) -> bool:
+        """Ping the ChromaDB instance to verify connectivity and readiness."""
         try:
             self._get_client().heartbeat()
             return True

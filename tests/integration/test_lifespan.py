@@ -25,7 +25,7 @@ def patched_lifespan():
     fake_vs.health_check = MagicMock(return_value=True)
 
     fake_retriever = MagicMock()
-    fake_retriever._get_reranker = MagicMock()
+    fake_retriever.get_reranker = MagicMock()
 
     fake_provider = MagicMock()
     fake_provider.model = "fake-model"
@@ -80,11 +80,13 @@ def test_lifespan_startup_and_shutdown(patched_lifespan):
 
 
 def test_lifespan_preloads_reranker_when_enabled(patched_lifespan):
+    """Ensure reranker preloading hook triggers when appropriate."""
     with TestClient(main_module.app):
-        patched_lifespan.retriever._get_reranker.assert_called_once()
+        patched_lifespan.retriever.get_reranker.assert_called_once()
 
 
 def test_lifespan_creates_provider_via_factory(patched_lifespan):
+    """Ensure LLM factory is instructed to spin up context, condense, and fallback LLMs."""
     with TestClient(main_module.app):
         patched_lifespan.factory.create.assert_called_once()
         patched_lifespan.factory.create_condense_provider.assert_called_once()

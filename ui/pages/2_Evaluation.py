@@ -41,7 +41,11 @@ def _render_tuning_sliders(prefix: str) -> tuple[int, int, int]:
 
 
 def _poll_eval_job(job_id: str, label: str = "Evaluation"):
-    """Poll an eval job until done/error."""
+    """
+    Poll an active background evaluation job.
+    Monitors progress percentage out of the total question pool and blocks
+    the UI until the final results artifact is ready.
+    """
     with st.status(f"{label} läuft...", expanded=True) as status:
         progress_line = st.empty()
         while True:
@@ -74,7 +78,10 @@ def _poll_eval_job(job_id: str, label: str = "Evaluation"):
 
 
 def _render_retrieval_result(result: dict):
-    """Render a retrieval eval result: metrics, breakdown, details."""
+    """
+    Render a retrieval eval result containing metrics, taxonomic breakdowns,
+    and per-question hit/miss deep dives.
+    """
     details = result.get("details", [])
     misses = result.get("misses", [])
     errors = result.get("errors", [])
@@ -139,11 +146,13 @@ tab_gs, tab_test, tab_ret, tab_e2e, tab_results = st.tabs([
 
 @st.cache_data(ttl=10, show_spinner=False)
 def _fetch_qa_pairs(api_url: str):
+    """Fetch the active pool of Golden Set test questions targeting expected metadata."""
     return requests.get(f"{api_url}/eval/qa-pairs", timeout=5).json()
 
 
 @st.cache_data(ttl=15, show_spinner=False)
 def _fetch_eval_results(api_url: str):
+    """Fetch history references for saved evaluation runs."""
     return requests.get(f"{api_url}/eval/results", timeout=5).json()
 
 

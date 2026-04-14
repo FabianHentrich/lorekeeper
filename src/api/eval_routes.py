@@ -35,6 +35,7 @@ _MAX_RESULTS = 3
 
 
 def _get_retriever():
+    """Retrieve the global retriever instance."""
     from src.main import retriever
     return retriever
 
@@ -43,6 +44,7 @@ def _get_retriever():
 
 @eval_router.get("/qa-pairs", response_model=QAPairList)
 async def get_qa_pairs():
+    """Load the current list of QA pairs from the golden set file."""
     if not _QA_PATH.exists():
         return QAPairList(pairs=[])
     data = yaml.safe_load(_QA_PATH.read_text(encoding="utf-8")) or {}
@@ -53,6 +55,7 @@ async def get_qa_pairs():
 
 @eval_router.put("/qa-pairs", response_model=QAPairList)
 async def put_qa_pairs(body: QAPairList):
+    """Overwrite the QA pairs golden set file with a new list."""
     _QA_PATH.parent.mkdir(parents=True, exist_ok=True)
     data = {"pairs": [p.model_dump() for p in body.pairs]}
     _QA_PATH.write_text(
@@ -67,6 +70,7 @@ async def put_qa_pairs(body: QAPairList):
 
 @eval_router.post("/preview", response_model=RetrievalPreviewResponse)
 async def retrieval_preview(req: RetrievalPreviewRequest):
+    """Run a single question against the retriever and return the raw top chunks without LLM generation."""
     retriever = _get_retriever()
     start = time.time()
     chunks = await retriever.retrieve(
@@ -97,6 +101,7 @@ async def retrieval_preview(req: RetrievalPreviewRequest):
 # ─── Eval job (retrieval + e2e) ──────────────────────────────────────
 
 def _has_running_job() -> bool:
+    """Check if any evaluation job is currently queued or running."""
     return any(j.status in ("queued", "running") for j in _eval_jobs.values())
 
 
@@ -111,6 +116,7 @@ def _cleanup_results(eval_type: str):
 
 @eval_router.post("/run", response_model=EvalJobResponse)
 async def start_eval(req: EvalJobRequest):
+    """Start an asynchronous evaluation job processing the entire golden set."""
     if _has_running_job():
         raise HTTPException(status_code=409, detail="An evaluation is already running")
 
@@ -142,6 +148,7 @@ async def start_eval(req: EvalJobRequest):
 
 
 async def _run_retrieval_eval(job: EvalJobStatus, qa_pairs: list[dict], req: EvalJobRequest):
+    """Execute a retrieval-only evaluation and save the report."""
     from evaluation.evaluate_retrieval import run_evaluation_with_retriever
 
     job.status = "running"
@@ -178,6 +185,7 @@ async def _run_retrieval_eval(job: EvalJobStatus, qa_pairs: list[dict], req: Eva
 
 
 async def _run_e2e_eval(job: EvalJobStatus, qa_pairs: list[dict]):
+    """Execute an end-to-end evaluation including the LLM answer generation."""
     from evaluation.evaluate import evaluate
 
     job.status = "running"
@@ -207,6 +215,7 @@ async def _run_e2e_eval(job: EvalJobStatus, qa_pairs: list[dict]):
 
 @eval_router.get("/status/{job_id}", response_model=EvalJobStatus)
 async def eval_status(job_id: str):
+    """Get the current state and progress of an active evaluation job."""
     if job_id not in _eval_jobs:
         raise HTTPException(status_code=404, detail="Job not found")
     return _eval_jobs[job_id]
@@ -216,6 +225,7 @@ async def eval_status(job_id: str):
 
 @eval_router.get("/results", response_model=list[EvalResultSummary])
 async def list_results():
+    """List all available stored evaluation reports."""
     if not _RESULTS_DIR.exists():
         return []
 
@@ -240,6 +250,7 @@ async def list_results():
 
 @eval_router.get("/results/{filename}")
 async def get_result(filename: str):
+    """Download the full JSON report for a specific evaluation run."""
     path = _RESULTS_DIR / filename
     if not path.exists() or not path.is_file():
         raise HTTPException(status_code=404, detail="Result not found")
@@ -248,6 +259,7 @@ async def get_result(filename: str):
 
 @eval_router.delete("/results/{filename}")
 async def delete_result(filename: str):
+    """Delete a specific evaluation report file."""
     path = _RESULTS_DIR / filename
     if not path.exists():
         raise HTTPException(status_code=404, detail="Result not found")

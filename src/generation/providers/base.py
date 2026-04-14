@@ -12,12 +12,26 @@ class LLMResponse:
     raw_response: dict = field(default_factory=dict)
 
 
+@dataclass
+class StreamResult:
+    """Per-call context for generate_stream. Populated by the provider while
+    the stream runs so concurrent streams do not share state."""
+    usage: dict = field(default_factory=dict)
+
+
 class BaseLLMProvider(ABC):
+    provider: str = "unknown"
+
     @abstractmethod
     async def generate(self, prompt: str, **kwargs) -> LLMResponse: ...
 
     @abstractmethod
-    async def generate_stream(self, prompt: str, **kwargs) -> AsyncGenerator[str, None]: ...
+    async def generate_stream(
+        self,
+        prompt: str,
+        stream_result: StreamResult | None = None,
+        **kwargs,
+    ) -> AsyncGenerator[str, None]: ...
 
     @abstractmethod
     async def health_check(self) -> bool: ...

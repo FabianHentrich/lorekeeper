@@ -7,7 +7,11 @@ import streamlit as st
 
 
 def _render_sources(sources: list[dict]):
-    """Render sources grouped by file: one entry per document, chunks listed below."""
+    """
+    Render retrieved source documents inline within the chat interface.
+    Groups identical file origins and displays respective semantic chunk extracts
+    beneath their document headers alongside confidence scores.
+    """
     # Render images individually first
     images = [s for s in sources if s.get("document_type") == "image"]
     docs = [s for s in sources if s.get("document_type") != "image"]
@@ -47,6 +51,10 @@ def _render_sources(sources: list[dict]):
                 st.caption(preview)
 
 def _fmt_usage(u: dict) -> str:
+    """
+    Format token usage statistics into a terse inline string representation
+    for displaying alongside assistant messages.
+    """
     if not u:
         return ""
     tin = u.get("tokens_in", 0) or 0
@@ -78,11 +86,19 @@ with _usage_col:
 # ─── Sidebar (fragment: only re-renders itself, not the chat area) ────
 @st.cache_data(ttl=30, show_spinner=False)
 def _fetch_sidebar_state(api_url: str):
+    """
+    Poll the backend health and current configuration states periodically.
+    Cached briefly to prevent flickering during rapid page redraws.
+    """
     return requests.get(f"{api_url}/sidebar-state", timeout=5).json()
 
 
 @st.fragment
 def _render_sidebar():
+    """
+    Render the isolated sidebar configuration panel. Includes provider switching,
+    API key overrides, source filter checkboxes, and server status readouts.
+    """
     st.header("Einstellungen")
 
     API_URL = st.text_input("API URL", value="http://localhost:8000")
