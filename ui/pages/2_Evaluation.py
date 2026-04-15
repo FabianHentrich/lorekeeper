@@ -136,7 +136,7 @@ def _render_retrieval_result(result: dict):
             {"Type": st_name, "Hit Rate": f"{v['hit_rate']:.1%}", "Hits": v["hits"], "Total": v["total"]}
             for st_name, v in breakdown.items()
         ]
-        st.dataframe(pd.DataFrame(bd_rows), hide_index=True, use_container_width=True)
+        st.dataframe(pd.DataFrame(bd_rows), hide_index=True, width="stretch")
 
     # Details table
     if details:
@@ -236,7 +236,7 @@ with tab_gs:
                 "notes": st.column_config.TextColumn("Notizen"),
             },
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
             key="gs_editor",
         )
 
@@ -314,7 +314,7 @@ with tab_test:
                         "Heading": c.get("heading") or "",
                         "Preview": c["content_preview"][:100],
                     })
-                st.dataframe(pd.DataFrame(chunk_rows), hide_index=True, use_container_width=True)
+                st.dataframe(pd.DataFrame(chunk_rows), hide_index=True, width="stretch")
 
                 # Convenience: add to Golden Set
                 st.divider()
@@ -474,7 +474,7 @@ with tab_ret:
                         f"**{len(flipped)} Fragen geändert** — "
                         f"Hybrid gewinnt: **{wins}**, verliert: **{losses}**"
                     )
-                    st.dataframe(pd.DataFrame(flipped), hide_index=True, use_container_width=True)
+                    st.dataframe(pd.DataFrame(flipped), hide_index=True, width="stretch")
                 else:
                     st.info("Keine Unterschiede bei Hit/Miss zwischen Vektor und Hybrid.")
 
@@ -635,7 +635,7 @@ with tab_results:
                         if flipped:
                             st.markdown(f"**{len(flipped)} Fragen mit geändertem Ergebnis:**")
                             st.dataframe(pd.DataFrame(flipped), hide_index=True,
-                                         use_container_width=True)
+                                         width="stretch")
                         else:
                             st.success("Keine Unterschiede bei Hit/Miss.")
 

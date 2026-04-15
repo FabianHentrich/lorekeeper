@@ -11,7 +11,8 @@ Das Benutzerinterface von LoreKeeper ist vollständig in Streamlit geschrieben. 
 6. [Performance Characteristics](#performance-characteristics)
 7. [Prompts Page (3_Prompts.py)](#prompts-page-uipages3_promptspy)
 8. [Evaluation Page (2_Evaluation.py)](#evaluation-page-uipages2_evaluationpy)
-9. [Session State Overview](#session-state-overview)
+9. [Settings Page (4_Settings.py)](#settings-page-uipages4_settingspy)
+10. [Session State Overview](#session-state-overview)
 
 ---
 
@@ -24,9 +25,9 @@ flowchart LR
         S1["🔌 API URL<br/><i>http://localhost:8000</i>"]
         S2["🔀 LLM Provider<br/>Ollama ↔ Gemini · live switch<br/><i>Active: qwen3:8b</i>"]
         S3["💚 Status<br/>🟢 healthy · ChromaDB ✅ · LLM ✅<br/><i>cached 30s</i>"]
-        S4["⚙️ Erweitert: Retrieval-Tuning<br/><i>Kandidaten 15 · Final 8 · Cap 3</i>"]
-        S5["🎯 Quellen-Filter<br/>☑ 🗺️ Lore<br/>☑ 📖 Abenteuer<br/>☑ 📋 Regelwerk"]
-        S6["→ ⚙ Sources<br/><i>Quellen verwalten, Chunks, Reindex</i>"]
+        S4["🎯 Quellen-Filter<br/>☑ 🗺️ Lore<br/>☑ 📖 Abenteuer<br/>☑ 📋 Regelwerk"]
+        S5["🔍 Hybrid Search<br/><i>BM25 + Vektor · Per-Session-Override</i>"]
+        S6["→ 🛠 Settings<br/><i>Retrieval · LLM · Conv · Chunking</i>"]
         S7["🗑️ Neue Session"]
         S1 --- S2 --- S3 --- S4 --- S5 --- S6 --- S7
     end
@@ -89,24 +90,21 @@ Result of the `/health` endpoint, **cached for 30 seconds** (no poll on every re
 - 🟡 degraded: One component unreachable
 - 🔴 API unreachable: Backend down
 
-### Retrieval-Tuning (Advanced Expander)
-Three sliders inside `st.expander("⚙️ Erweitert: Retrieval-Tuning")`, hidden by
-default to keep the sidebar uncluttered for non-tuning users:
+### Hybrid Search Toggle
 
-| Slider | Range | Default | Sent as | Meaning |
-|---|---|---|---|---|
-| **Kandidaten (Top-K)** | 1 – 50 | 15 | `top_k` | How many chunks the bi-encoder retrieves from ChromaDB (recall pool) |
-| **Finale Chunks (nach Reranking)** | 1 – `top_k` | min(8, top_k) | `top_k_rerank` | How many chunks the cross-encoder selects for the LLM prompt |
-| **Max. Chunks pro Quelle (Soft-Cap)** | 0 – `top_k_rerank` | min(3, top_k_rerank) | `max_per_source` | Per-file diversity cap. `0` disables the cap (pure reranker order). Soft: backfilled if otherwise fewer than `top_k_rerank` chunks would be returned |
+A single `st.checkbox("🔍 Hybrid Search (BM25 + Vektor)")` under the **Suche**
+subheader. Sets the `hybrid_search` field on the next `QueryRequest` and
+overrides `retrieval.hybrid.enabled` **for this session only**. Useful when the
+chat uses the Settings-configured default most of the time but a given question
+benefits from keyword matching (exact names, rule IDs).
 
-Defaults match `config/settings.yaml` (`retrieval.top_k: 15`,
-`retrieval.reranking.top_k_rerank: 8`, `retrieval.reranking.max_per_source: 3`),
-so untouched sliders mean "as configured". The second slider's `max_value`
-is bound to the first, the third's to the second, which prevents the
-nonsensical cases `top_k_rerank > top_k` and `max_per_source > top_k_rerank`.
+Retrieval tuning sliders (top_k, top_k_rerank, max_per_source) used to live
+here but moved to two dedicated places:
+- **Defaults** for all queries → [Settings Page](#settings-page-uipages4_settingspy).
+- **Per-run overrides** for A/B testing against the Golden Set → Evaluation Page.
 
-The values override the server defaults per request only — they do **not**
-mutate `settings.yaml`.
+The sidebar intentionally stays minimal — provider, source filter, hybrid
+toggle, session reset. Everything else is one click away on the Settings page.
 
 ### Source Filter (Lore / Adventure / Rules)
 Three checkboxes that restrict the vector search by the `group` metadata field
@@ -150,6 +148,11 @@ A caption pointing the user to the **⚙ Sources** page for chunk statistics,
 re-indexing (global and per-source), and source management. The chunk count
 metric and the re-index button have been moved from the sidebar to the Sources
 page to keep the sidebar focused on query-time settings.
+
+### Settings Link
+A caption pointing to the **🛠 Settings** page, where all runtime-tunable
+parameters (retrieval, LLM, conversation, chunking) are editable in one place.
+See [Settings Page](#settings-page-uipages4_settingspy) below.
 
 ### New Session
 Clears `st.session_state.messages` and `session_id` — the next question starts
@@ -479,6 +482,92 @@ Eval tabs. The sliders are bound: `top_k_rerank ≤ top_k` and
 
 **`_poll_eval_job(job_id)`**: Polls `GET /eval/status/{job_id}` every 1s
 inside a `st.status` widget until done or error.
+
+---
+
+## Settings Page (`ui/pages/4_Settings.py`)
+
+Central place for editing the runtime-tunable parameters of LoreKeeper.
+Reads the current state via `GET /config` and sends diff-only updates via
+`PUT /config`. Every save is persisted to `config/settings.yaml` **and**
+applied in place to the running services — no restart, next query uses the new
+values.
+
+### Layout
+
+Four `st.tabs`, plus a read-only expander for infrastructure knobs:
+
+| Tab | Backend section | Live effect |
+|---|---|---|
+| 🔎 **Retrieval** | `retrieval.*` | Immediate on next query |
+| 🧠 **LLM** | `llm.ollama.*`, `llm.gemini.*`, `llm.fallback_enabled` | Immediate on next query |
+| 💬 **Conversation** | `conversation.*` | Immediate on next query (GC interval picks up on next wake) |
+| 📥 **Ingestion** | `chunking.*` | Persists, but takes effect on the **next reindex** (explicit warning banner) |
+| Read-only expander | `embeddings.*`, `vectorstore.*` | View only — change via `.env` / `settings.yaml` + restart |
+
+### Retrieval tab
+
+| Control | Maps to | Notes |
+|---|---|---|
+| Slider **Kandidaten (Top-K)** | `retrieval.top_k` | 1–50, how many chunks the vectorstore returns (bi-encoder recall pool). |
+| Slider **Score-Threshold (Cosine)** | `retrieval.score_threshold` | 0.0–0.9 · Under 0.3 floods the context with noise. |
+| Checkbox **Reranking aktiv** | `retrieval.reranking.enabled` | Disabling skips cross-encoder reranking. |
+| Slider **Finale Chunks** | `retrieval.reranking.top_k_rerank` | `max_value` bound to top_k. Disabled when reranking is off. |
+| Slider **Max. Chunks pro Quelle** | `retrieval.reranking.max_per_source` | Soft-Cap. `0` = unlimited. Disabled when reranking is off. |
+| Checkbox **Hybrid-Default aktiv** | `retrieval.hybrid.enabled` | Sets the server default. Sidebar checkbox still overrides per session. |
+| Slider **BM25-Anteil (RRF)** | `retrieval.hybrid.bm25_weight` | 0.0–1.0, only enabled when hybrid is on. |
+| Slider **BM25-Kandidaten** | `retrieval.hybrid.bm25_top_k` | Only enabled when hybrid is on. |
+
+### LLM tab
+
+Two sub-sections side-by-side, one per provider (Ollama / Gemini). For each:
+temperature, top-p, max tokens, timeout. A single global checkbox toggles
+`llm.fallback_enabled`. The active model name is displayed read-only — model
+selection stays in `settings.yaml` (swapping models has non-trivial startup
+costs and isn't worth a UI toggle).
+
+### Conversation tab
+
+Three controls: `conversation.window_size` (sliding-window size for condense
+history), `conversation.condense_question` (toggle condense step entirely),
+`conversation.session_timeout_minutes` (idle-session GC deadline). All three
+take effect on the next query; the GC interval refresh kicks in on the next
+GC wake-up.
+
+### Ingestion tab
+
+Chunking-only. A **warning banner** at the top makes clear that changes do
+**not** rewrite existing chunks — after saving, trigger **Alle Dokumente neu
+indizieren** on the Sources page. Controls: `chunking.strategy` (heading_aware
+/ recursive / fixed_size), `chunking.max_chunk_size`, `chunking.chunk_overlap`,
+`chunking.min_chunk_size`.
+
+### Allow-list and persistence
+
+Not every field from `settings.yaml` is editable here. The backend keeps a
+hard-coded allow-list in `src/config/manager.py:_EDITABLE_KEYS`; unknown or
+disallowed keys are silently dropped by `ConfigManager.save_settings()` before
+writing. Secrets (Gemini API key), infrastructure (`vectorstore.mode`,
+`embeddings.model`, `api.*`, `logging.*`), and already-elsewhere-editable
+fields (`llm.provider`, sources, prompts) never reach the Settings page.
+
+The editable snapshot returned by `GET /config` always mirrors what the
+`PUT /config` endpoint accepts plus the two read-only infrastructure blocks
+the UI displays for context.
+
+Internally, updates mutate the existing nested Pydantic model instances in
+place — services holding references (Retriever, Reranker, ConversationManager,
+LLM providers) keep working with the same objects and pick up new values on
+their next call. That's why a running query doesn't blow up mid-stream when
+you save a tuning change.
+
+### Diff-only saves
+
+Each tab's save button computes a dict diff between the loaded snapshot and
+the current widget state, then `PUT /config`s only the changed keys. If
+nothing changed, the button shows **Keine Änderungen** and makes no request.
+Cache invalidation clears the page's `@st.cache_data(ttl=5)` so the
+post-save view reflects disk state.
 
 ---
 

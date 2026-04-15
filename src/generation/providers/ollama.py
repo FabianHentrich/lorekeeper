@@ -25,13 +25,17 @@ class OllamaProvider(BaseLLMProvider):
     provider = "ollama"
 
     def __init__(self, config: OllamaConfig):
-        """Store generation params and build the AsyncOpenAI client pointed at Ollama."""
+        """Store the config reference and build the AsyncOpenAI client pointed at Ollama.
+
+        Generation parameters (temperature/top_p/max_tokens/timeout) are read
+        from ``self.config`` on each call, so runtime mutation of the shared
+        OllamaConfig instance propagates without rebuilding the provider.
+        base_url and model are captured at init — they require a provider
+        rebuild to change.
+        """
+        self.config = config
         self.base_url = config.base_url
         self.model = config.model
-        self.temperature = config.temperature
-        self.top_p = config.top_p
-        self.max_tokens = config.max_tokens
-        self.timeout = config.timeout
 
         self._client = AsyncOpenAI(
             base_url=f"{self.base_url}/v1",
@@ -56,9 +60,9 @@ class OllamaProvider(BaseLLMProvider):
         response = await self._client.chat.completions.create(
             model=self.model,
             messages=messages,
-            temperature=kwargs.get("temperature", self.temperature),
-            top_p=kwargs.get("top_p", self.top_p),
-            max_tokens=kwargs.get("max_tokens", self.max_tokens),
+            temperature=kwargs.get("temperature", self.config.temperature),
+            top_p=kwargs.get("top_p", self.config.top_p),
+            max_tokens=kwargs.get("max_tokens", self.config.max_tokens),
             stream=False,
         )
         latency_ms = (time.time() - start) * 1000
@@ -102,9 +106,9 @@ class OllamaProvider(BaseLLMProvider):
         stream = await self._client.chat.completions.create(
             model=self.model,
             messages=messages,
-            temperature=kwargs.get("temperature", self.temperature),
-            top_p=kwargs.get("top_p", self.top_p),
-            max_tokens=kwargs.get("max_tokens", self.max_tokens),
+            temperature=kwargs.get("temperature", self.config.temperature),
+            top_p=kwargs.get("top_p", self.config.top_p),
+            max_tokens=kwargs.get("max_tokens", self.config.max_tokens),
             stream=True,
             stream_options={"include_usage": True},
         )

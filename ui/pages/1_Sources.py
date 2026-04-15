@@ -118,6 +118,10 @@ with col_reindex:
             _poll_ingest_job(API_URL, resp["job_id"], label="Vollständige Indizierung")
         except Exception as e:
             st.error(f"Fehler: {e}")
+    st.caption(
+        "⏱ Dauer hängt stark von Anzahl und Größe der Dokumente ab "
+        "(Richtwert: ~220 Markdown-Dateien ≈ 5 Minuten; PDFs mit OCR deutlich länger)."
+    )
 
 st.divider()
 

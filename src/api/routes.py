@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from src.api.schemas import (
+    ConfigUpdateRequest,
     GeminiKeyStatus,
     HealthResponse,
     IngestJobResponse,
@@ -525,6 +526,40 @@ async def set_gemini_key(payload: dict):
             raise HTTPException(status_code=400, detail=f"Key rejected by provider: {e}")
 
     return {"status": "ok", "rebuilt_active_provider": rebuilt}
+
+
+@router.get("/config")
+async def get_config():
+    """Return the current UI-editable settings plus a handful of read-only
+    fields (embeddings model, vectorstore mode) the Settings page displays.
+    Secrets and infrastructure knobs are never included."""
+    import src.main as main_module
+    return main_module.config.editable_snapshot()
+
+
+@router.put("/config")
+async def update_config(request: ConfigUpdateRequest):
+    """Apply a partial settings update, persist to settings.yaml, and mutate
+    the live config in place so running services pick up the new values on
+    the next call.
+
+    Unknown keys are silently dropped. Invalid values raise a Pydantic
+    ValidationError, which FastAPI surfaces as HTTP 422.
+    """
+    import src.main as main_module
+    from pydantic import ValidationError
+
+    updates = request.model_dump(exclude_none=True)
+    try:
+        snapshot = main_module.config.save_settings(updates)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=e.errors())
+    except Exception as e:
+        logger.error(f"save_settings failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+    logger.info(f"Settings updated: {list(updates.keys())}")
+    return snapshot
 
 
 @router.post("/admin/wipe")

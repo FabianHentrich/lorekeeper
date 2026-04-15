@@ -28,6 +28,29 @@ override YAML values (double underscore for nesting: `LLM__OLLAMA__MODEL`).
 Env variables  >  .env file  >  config/settings.yaml  >  Pydantic defaults
 ```
 
+### Editing via the UI
+
+A subset of these settings is editable live via the 🛠 **Settings** page
+(`ui/pages/4_Settings.py`) and the `GET /config` / `PUT /config` endpoints.
+Writes go to `config/settings.yaml` **and** mutate the running services in
+place — no restart required.
+
+| Section | Editable via UI | Live effect |
+|---|---|---|
+| `retrieval.*` (incl. `hybrid.*`, `reranking.*`) | ✅ all fields | next query |
+| `llm.ollama.{temperature,top_p,max_tokens,timeout}` | ✅ | next query |
+| `llm.gemini.{temperature,top_p,max_tokens,timeout}` | ✅ | next query |
+| `llm.fallback_enabled` | ✅ | next query |
+| `conversation.{window_size,condense_question,session_timeout_minutes}` | ✅ | next query / next GC wake |
+| `chunking.*` | ✅ | **next reindex only** (UI shows warning) |
+| `llm.provider` | via sidebar provider switch | hot-swap |
+| `ingestion.sources` | via Sources page | requires reindex |
+| prompts | via Prompts page | hot-reload |
+| `embeddings.*`, `vectorstore.*`, `api.*`, `logging.*`, secrets | ❌ read-only or `.env` only | restart |
+
+The allow-list lives in `src/config/manager.py:_EDITABLE_KEYS`. Keys outside
+it are silently dropped by `ConfigManager.save_settings()`.
+
 ---
 
 ## `ingestion`

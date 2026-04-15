@@ -12,6 +12,53 @@ _log = logging.getLogger(__name__)
 SourceGroup = Literal["lore", "adventure", "rules"]
 
 
+# Allow-list of keys that the Settings UI is permitted to edit via
+# ConfigManager.save_settings. Unknown keys are silently dropped — this keeps
+# secrets, infra-level knobs, and ingest-time schema off the UI surface.
+_EDITABLE_KEYS: dict = {
+    "retrieval": {
+        "top_k": None,
+        "score_threshold": None,
+        "reranking": {
+            "enabled": None,
+            "top_k_rerank": None,
+            "max_per_source": None,
+        },
+        "hybrid": {
+            "enabled": None,
+            "bm25_weight": None,
+            "bm25_top_k": None,
+        },
+    },
+    "llm": {
+        "fallback_enabled": None,
+        "ollama": {
+            "temperature": None,
+            "top_p": None,
+            "max_tokens": None,
+            "timeout": None,
+        },
+        "gemini": {
+            "temperature": None,
+            "top_p": None,
+            "max_tokens": None,
+            "timeout": None,
+        },
+    },
+    "conversation": {
+        "window_size": None,
+        "condense_question": None,
+        "session_timeout_minutes": None,
+    },
+    "chunking": {
+        "strategy": None,
+        "max_chunk_size": None,
+        "chunk_overlap": None,
+        "min_chunk_size": None,
+    },
+}
+
+
 class SourceConfig(BaseModel):
     """A single ingestion source. Either a folder or a single file."""
     id: str                                     # Stable user-supplied identifier
@@ -278,6 +325,106 @@ class ConfigManager:
             encoding="utf-8",
         )
 
+    def editable_snapshot(self) -> dict:
+        """Return the current values of all UI-editable settings plus a few
+        read-only fields the UI wants to display (embeddings model, vectorstore
+        mode). Secrets and infra knobs are never included."""
+        s = self.settings
+        return {
+            "retrieval": {
+                "top_k": s.retrieval.top_k,
+                "score_threshold": s.retrieval.score_threshold,
+                "reranking": {
+                    "enabled": s.retrieval.reranking.enabled,
+                    "top_k_rerank": s.retrieval.reranking.top_k_rerank,
+                    "max_per_source": s.retrieval.reranking.max_per_source,
+                },
+                "hybrid": {
+                    "enabled": s.retrieval.hybrid.enabled,
+                    "bm25_weight": s.retrieval.hybrid.bm25_weight,
+                    "bm25_top_k": s.retrieval.hybrid.bm25_top_k,
+                },
+            },
+            "llm": {
+                "provider": s.llm.provider,
+                "fallback_enabled": s.llm.fallback_enabled,
+                "ollama": {
+                    "model": s.llm.ollama.model,
+                    "temperature": s.llm.ollama.temperature,
+                    "top_p": s.llm.ollama.top_p,
+                    "max_tokens": s.llm.ollama.max_tokens,
+                    "timeout": s.llm.ollama.timeout,
+                },
+                "gemini": {
+                    "model": s.llm.gemini.model,
+                    "temperature": s.llm.gemini.temperature,
+                    "top_p": s.llm.gemini.top_p,
+                    "max_tokens": s.llm.gemini.max_tokens,
+                    "timeout": s.llm.gemini.timeout,
+                },
+            },
+            "conversation": {
+                "window_size": s.conversation.window_size,
+                "condense_question": s.conversation.condense_question,
+                "session_timeout_minutes": s.conversation.session_timeout_minutes,
+            },
+            "chunking": {
+                "strategy": s.chunking.strategy,
+                "max_chunk_size": s.chunking.max_chunk_size,
+                "chunk_overlap": s.chunking.chunk_overlap,
+                "min_chunk_size": s.chunking.min_chunk_size,
+            },
+            "embeddings": {
+                "model": s.embeddings.model,
+                "device": s.embeddings.device,
+            },
+            "vectorstore": {
+                "mode": s.vectorstore.mode,
+                "collection_name": s.vectorstore.collection_name,
+            },
+        }
+
+    def save_settings(self, updates: dict) -> dict:
+        """Merge ``updates`` into the live Settings and persist to settings.yaml.
+
+        Only keys listed in ``_EDITABLE_KEYS`` are accepted; unknown keys are
+        dropped silently. The merged result is re-validated through Pydantic —
+        type errors raise ``pydantic.ValidationError``. On success the running
+        Settings instance is mutated in place so services holding references to
+        the nested config objects (Retriever, ConversationManager, Providers)
+        immediately see the new values.
+
+        Ingest-time settings (``chunking.*``) are persisted but have no live
+        effect until the next reindex.
+
+        Returns the post-save editable snapshot.
+        """
+        filtered = _filter_allowed(updates, _EDITABLE_KEYS)
+        if not filtered:
+            return self.editable_snapshot()
+
+        current_yaml = {}
+        if self._settings_path.exists():
+            current_yaml = yaml.safe_load(self._settings_path.read_text(encoding="utf-8")) or {}
+
+        merged = _deep_merge(current_yaml, filtered)
+
+        # Validation: construct a fresh Settings from the merged dict so
+        # Pydantic rejects bad values before we touch the live instance or
+        # write to disk.
+        Settings(**merged)
+
+        # Apply in place so existing service references stay valid.
+        _apply_updates(self.settings, filtered)
+
+        self._settings_path.parent.mkdir(parents=True, exist_ok=True)
+        self._settings_path.write_text(
+            yaml.safe_dump(merged, sort_keys=False, allow_unicode=True, default_flow_style=False),
+            encoding="utf-8",
+        )
+
+        return self.editable_snapshot()
+
     def save_prompts(self, prompts_dict: dict) -> None:
         """Persist prompts to config/prompts.yaml."""
         self._prompts_path.parent.mkdir(parents=True, exist_ok=True)
@@ -292,6 +439,50 @@ class ConfigManager:
     def prompts(self):
         """Raw prompts dict as loaded from config/prompts.yaml."""
         return self._prompts_raw
+
+
+def _filter_allowed(updates: dict, allowed: dict) -> dict:
+    """Return a copy of ``updates`` containing only keys that appear in the
+    ``allowed`` tree. Nested dicts are recursed into; scalar leaves pass
+    through when the corresponding allow-list entry is present (value None)."""
+    if not isinstance(updates, dict):
+        return {}
+    result: dict = {}
+    for key, value in updates.items():
+        if key not in allowed:
+            continue
+        sub = allowed[key]
+        if sub is None:
+            result[key] = value
+        elif isinstance(sub, dict) and isinstance(value, dict):
+            nested = _filter_allowed(value, sub)
+            if nested:
+                result[key] = nested
+    return result
+
+
+def _deep_merge(base: dict, overlay: dict) -> dict:
+    """Recursively merge ``overlay`` into a copy of ``base``. Dict values are
+    merged key-wise; all other values are replaced wholesale."""
+    out = dict(base)
+    for key, value in overlay.items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = _deep_merge(out[key], value)
+        else:
+            out[key] = value
+    return out
+
+
+def _apply_updates(target, updates: dict) -> None:
+    """Mutate ``target`` (a Pydantic model) in place with values from ``updates``.
+    Nested dicts recurse into nested model instances so object identity of
+    sub-models is preserved — services holding references keep working."""
+    for key, value in updates.items():
+        current = getattr(target, key, None)
+        if isinstance(value, dict) and isinstance(current, BaseModel):
+            _apply_updates(current, value)
+        else:
+            setattr(target, key, value)
 
 
 _default: ConfigManager | None = None

@@ -406,3 +406,92 @@ def test_ingest_status_unknown_job_returns_404(client, fake_services):
     """Validate ingestion status endpoints reject unfamiliar background jobs."""
     response = client.get("/ingest/status/nonexistent-job-id")
     assert response.status_code == 404
+
+
+# ─── /config ───────────────────────────────────────────────────────────────────
+
+@pytest.fixture
+def config_client(tmp_path):
+    """TestClient wired to a real ConfigManager backed by a tmp settings.yaml.
+
+    We need the real ConfigManager here (not a SimpleNamespace fake) so the
+    /config routes can exercise the editable_snapshot/save_settings code paths.
+    """
+    from src.config.manager import ConfigManager
+
+    settings_path = tmp_path / "settings.yaml"
+    settings_path.write_text("", encoding="utf-8")
+
+    original_config = main_module.config
+    main_module.config = ConfigManager(
+        settings_path=settings_path,
+        prompts_path=tmp_path / "p.yaml",
+        sources_path=tmp_path / "s.yaml",
+    )
+
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+
+    yield client, settings_path, main_module.config
+
+    main_module.config = original_config
+
+
+def test_get_config_returns_editable_snapshot(config_client):
+    """GET /config must return the expected top-level sections without secrets."""
+    client, _, _ = config_client
+    response = client.get("/config")
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body.keys()) >= {"retrieval", "llm", "conversation", "chunking", "embeddings", "vectorstore"}
+    assert "api_key_env" not in body["llm"]["gemini"]
+
+
+def test_put_config_persists_and_mutates(config_client):
+    """PUT /config must update live settings and write to settings.yaml."""
+    import yaml as _yaml
+    client, settings_path, cm = config_client
+
+    response = client.put("/config", json={"retrieval": {"top_k": 27}})
+    assert response.status_code == 200
+    assert response.json()["retrieval"]["top_k"] == 27
+
+    assert cm.settings.retrieval.top_k == 27
+    reloaded = _yaml.safe_load(settings_path.read_text(encoding="utf-8"))
+    assert reloaded["retrieval"]["top_k"] == 27
+
+
+def test_put_config_rejects_invalid_type(config_client):
+    """Invalid types must yield a 422 and leave live settings untouched."""
+    client, _, cm = config_client
+    before = cm.settings.retrieval.top_k
+
+    response = client.put("/config", json={"retrieval": {"top_k": "banana"}})
+    assert response.status_code == 422
+    assert cm.settings.retrieval.top_k == before
+
+
+def test_put_config_drops_disallowed_keys(config_client):
+    """Unknown keys must be ignored silently without 4xx."""
+    client, _, cm = config_client
+    original_embed_model = cm.settings.embeddings.model
+
+    response = client.put("/config", json={"embeddings": {"model": "evil/model"}})
+    assert response.status_code == 200
+    assert cm.settings.embeddings.model == original_embed_model
+
+
+def test_put_config_filters_disallowed_inner_keys(config_client):
+    """Unknown keys nested inside an allowed section must be stripped by the allow-list."""
+    import yaml as _yaml
+    client, settings_path, cm = config_client
+
+    response = client.put("/config", json={
+        "retrieval": {"top_k": 11, "some_secret": "x"},
+    })
+    assert response.status_code == 200
+    assert cm.settings.retrieval.top_k == 11
+
+    reloaded = _yaml.safe_load(settings_path.read_text(encoding="utf-8"))
+    assert "some_secret" not in reloaded.get("retrieval", {})

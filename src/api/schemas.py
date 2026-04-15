@@ -88,3 +88,12 @@ class SidebarState(BaseModel):
 class SwitchProviderRequest(BaseModel):
     """Payload for changing the active LLM provider at runtime."""
     provider: str  # "ollama" | "gemini"
+
+
+class ConfigUpdateRequest(BaseModel):
+    """Partial settings update from the Settings UI. Unknown keys are dropped
+    server-side by the ConfigManager allow-list."""
+    retrieval: dict | None = None
+    llm: dict | None = None
+    conversation: dict | None = None
+    chunking: dict | None = None

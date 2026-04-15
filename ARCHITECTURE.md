@@ -199,7 +199,7 @@ lorekeeper/
 │   │
 │   └── api/
 │       ├── __init__.py
-│       ├── routes.py               # Endpoints: /query, /query/stream, /ingest, /ingest/status, /health, /sessions
+│       ├── routes.py               # Endpoints: /query, /query/stream, /ingest, /ingest/status, /health, /sessions, /config
 │       ├── schemas.py              # Pydantic Request/Response Models
 │       ├── prompt_routes.py        # Endpoints: /prompts/* (active, variants, preview)
 │       ├── prompt_schemas.py       # Pydantic Models für Prompt-Endpoints
@@ -840,6 +840,8 @@ in Env-Variablen übersetzt. Pydantic-Settings liest diese automatisch:
 | GET    | `/sessions/{id}`          | Session-History abrufen                             |
 | DELETE | `/sessions/{id}`          | Session löschen                                     |
 | GET    | `/stats`                  | Index-Statistiken (Chunk-Count etc.)                |
+| GET    | `/config`                 | UI-editierbare Settings + Read-only-Infrastruktur (Embeddings/Vectorstore) |
+| PUT    | `/config`                 | Partial Update (Allow-List-gefiltert) → persistiert nach `settings.yaml` + Live-Mutation |
 | GET    | `/prompts/active`         | Aktive Prompts lesen                                |
 | PUT    | `/prompts/active`         | Aktive Prompts speichern + Hot-Reload               |
 | GET    | `/prompts/variants`       | Gespeicherte Varianten auflisten                    |
@@ -924,10 +926,15 @@ class IngestStatusResponse(BaseModel):
   - Bild-Quellen werden via `st.image()` gerendert (dank `document_type` in `SourceReference`)
 - Session-Management (neue Session starten, bestehende fortsetzen)
 - Provider-Status-Anzeige (welches Modell aktiv, Health-Status)
-- Einfacher Settings-Bereich in der Sidebar:
-  - Provider umschalten (Ollama / Gemini)
-  - Top-K Retrieval anpassen
-  - Metadaten-Filter setzen (z.B. nur Charaktere, nur Regionen)
+- Sidebar hält sich schlank:
+  - Provider umschalten (Ollama / Gemini) + Gemini-Key-Override
+  - Quellen-Filter (Lore / Adventure / Rules)
+  - Hybrid-Search-Toggle (Per-Session-Override über Settings-Default)
+- **🛠 Settings** Seite (`ui/pages/4_Settings.py`):
+  - Zentrale Stelle für Retrieval-, LLM-, Conversation- und Chunking-Defaults
+  - `GET /config` lädt die Allow-List-gefilterte Snapshot, `PUT /config` persistiert Diff nach `settings.yaml` und mutiert die laufenden Services in place
+  - Chunking-Tab persistiert sofort, wirkt aber erst nach Reindex (Warning-Banner)
+  - Read-only-Expander für Embeddings- und Vectorstore-Infos (änderbar nur via `.env` + Restart)
 - **✏ Prompts** Seite (`ui/pages/3_Prompts.py`):
   - Aktive Prompts inline bearbeiten mit Jinja2-Preview
   - Varianten speichern, laden, editieren, aktivieren, löschen

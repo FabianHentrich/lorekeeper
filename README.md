@@ -5,7 +5,7 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi)
 ![ChromaDB](https://img.shields.io/badge/ChromaDB-embedded%20%7C%20client-blueviolet)
 ![LLM](https://img.shields.io/badge/LLM-Ollama%20%7C%20Gemini-412991)
-![Tests](https://img.shields.io/badge/tests-147-brightgreen)
+![Tests](https://img.shields.io/badge/tests-220-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 **A production-grade RAG system for Obsidian-based tabletop-RPG worlds.**
@@ -97,8 +97,9 @@ multilingual E5 model and prompts for any other language.
 | 🔁 **Incremental indexing** | SHA-256 content hashing — only changed files re-embed |
 | 🐳 **Docker-ready** | API + ChromaDB + Ollama (GPU) + UI via `docker compose` |
 | ✏ **Prompt management** | Edit active prompts, save/load/compare variants, Jinja2 preview — all from the UI with instant hot-reload |
+| 🛠 **Live settings** | Retrieval, LLM, conversation and chunking defaults editable via a 🛠 Settings page — persisted to `settings.yaml` and applied in place, no restart |
 | ⚙ **Self-service setup** | Sources (folder OR single file), provider switch, and Gemini API-key entry — all from the UI, no YAML required |
-| ✅ **147 tests** | Unit + integration coverage including the full HTTP layer |
+| ✅ **220 tests** | Unit + integration coverage including the full HTTP layer |
 
 ---
 
@@ -212,12 +213,12 @@ For a complete walkthrough of the chat interface, token accounting, evaluation t
 | Document | Contents |
 |----------|----------|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Entry point for system design, components, RAG setup |
-| [docs/ui-ux.md](docs/ui-ux.md) | **UI deep dive**: Sidebar, chat, ⚙ Sources page, ✏ Prompts page, Evaluation tab, usage metrics |
+| [docs/ui-ux.md](docs/ui-ux.md) | **UI deep dive**: Sidebar, chat, ⚙ Sources page, ✏ Prompts page, 🛠 Settings page, Evaluation tab, usage metrics |
 | [docs/parsing.md](docs/parsing.md) | Markdown (Obsidian syntax), PDF (OCR, TOC headings, images), Image parsers |
 | [docs/data-flow.md](docs/data-flow.md) | Ingestion and query pipelines (Mermaid) |
 | [docs/embedding-strategy.md](docs/embedding-strategy.md) | E5 asymmetry, identity layer, reranking — and **why** |
 | [docs/provider-strategy.md](docs/provider-strategy.md) | Ollama vs. Gemini, runtime switching, fallback configuration |
-| [docs/configuration.md](docs/configuration.md) | Full `settings.yaml` reference, `sources.yaml` schema, env variables, runtime API key |
+| [docs/configuration.md](docs/configuration.md) | Full `settings.yaml` reference, `sources.yaml` schema, env variables, runtime API key, UI allow-list |
 | [docs/prompts.md](docs/prompts.md) | Jinja2 templates, variables, UI editing, variant management |
 | [docs/operations.md](docs/operations.md) | Ingest flows, Docker workflows, re-indexing, troubleshooting |
 | [docs/evaluation.md](docs/evaluation.md) | Golden Set, retrieval/end-to-end eval scripts, metrics, workflow |

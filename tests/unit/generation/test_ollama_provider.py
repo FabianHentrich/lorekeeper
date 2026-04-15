@@ -30,7 +30,7 @@ class TestOllamaProvider:
         provider = OllamaProvider(config=config)
         assert provider.model == "custom-model"
         assert provider.base_url == "http://custom:1234"
-        assert provider.temperature == 0.7
+        assert provider.config.temperature == 0.7
 
     @pytest.mark.asyncio
     async def test_generate(self):
