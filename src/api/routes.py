@@ -159,19 +159,24 @@ async def query_stream(request: QueryRequest):
         full_answer = ""
         stream_ctx = StreamResult()
 
-        if qa_prompt is not None:
-            async for token in gen.generate_stream(
-                system_prompt=system_prompt,
-                qa_prompt=qa_prompt,
-                stream_result=stream_ctx,
-            ):
-                full_answer += token
-                event = json.dumps({"type": "token", "content": token})
+        try:
+            if qa_prompt is not None:
+                async for token in gen.generate_stream(
+                    system_prompt=system_prompt,
+                    qa_prompt=qa_prompt,
+                    stream_result=stream_ctx,
+                ):
+                    full_answer += token
+                    event = json.dumps({"type": "token", "content": token})
+                    yield f"data: {event}\n\n"
+            else:
+                full_answer = pm.render_no_context(question=request.question)
+                event = json.dumps({"type": "token", "content": full_answer})
                 yield f"data: {event}\n\n"
-        else:
-            full_answer = pm.render_no_context(question=request.question)
-            event = json.dumps({"type": "token", "content": full_answer})
-            yield f"data: {event}\n\n"
+        except Exception as e:
+            logger.error(f"Streaming generation failed: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+            return
 
         session.add_message("user", request.question)
         session.add_message("assistant", full_answer)

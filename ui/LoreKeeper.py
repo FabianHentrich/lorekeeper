@@ -365,6 +365,10 @@ if prompt := st.chat_input("Stelle eine Frage über deine Welt..."):
                     full_response += data["content"]
                     placeholder.markdown(full_response + "▌")
 
+                elif data["type"] == "error":
+                    placeholder.error(f"Fehler: {data.get('content', 'Unbekannter Fehler')}")
+                    break
+
                 elif data["type"] == "done":
                     st.session_state.session_id = data.get("session_id")
                     sources = data.get("sources", [])
