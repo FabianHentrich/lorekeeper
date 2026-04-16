@@ -353,6 +353,7 @@ if prompt := st.chat_input("Stelle eine Frage über deine Welt..."):
             full_response = ""
             sources = []
             usage = {}
+            error_message = None
             placeholder = st.empty()
 
             for line in response.iter_lines(decode_unicode=True):
@@ -366,7 +367,7 @@ if prompt := st.chat_input("Stelle eine Frage über deine Welt..."):
                     placeholder.markdown(full_response + "▌")
 
                 elif data["type"] == "error":
-                    placeholder.error(f"Fehler: {data.get('content', 'Unbekannter Fehler')}")
+                    error_message = data.get("content", "Unbekannter Fehler")
                     break
 
                 elif data["type"] == "done":
@@ -377,21 +378,30 @@ if prompt := st.chat_input("Stelle eine Frage über deine Welt..."):
                     if sess_usage:
                         st.session_state.session_usage = sess_usage
 
-            placeholder.markdown(full_response)
+            if error_message:
+                placeholder.error(f"Fehler vom LLM-Provider: {error_message}")
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": f"⚠️ Fehler vom LLM-Provider: {error_message}",
+                    "sources": [],
+                    "usage": {},
+                })
+            else:
+                placeholder.markdown(full_response)
 
-            if usage:
-                st.caption(_fmt_usage(usage))
+                if usage:
+                    st.caption(_fmt_usage(usage))
 
-            if sources:
-                with st.expander("📎 Quellen"):
-                    _render_sources(sources)
+                if sources:
+                    with st.expander("📎 Quellen"):
+                        _render_sources(sources)
 
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": full_response,
-                "sources": sources,
-                "usage": usage,
-            })
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": full_response,
+                    "sources": sources,
+                    "usage": usage,
+                })
 
         except requests.exceptions.ConnectionError:
             st.error("Verbindung zum Backend fehlgeschlagen. Läuft der Server?")

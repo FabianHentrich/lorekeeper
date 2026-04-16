@@ -70,7 +70,7 @@ llm:
     api_key_env: GEMINI_API_KEY
     temperature: 0.3
     top_p: 0.9
-    max_tokens: 1024
+    max_tokens: 8192
     timeout: 30
 
 # Conversation
