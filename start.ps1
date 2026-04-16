@@ -41,7 +41,7 @@ if (Test-PortInUse $UI_PORT) {
 if (-not $skipBackend) {
     Write-Host "Starting backend..." -ForegroundColor Cyan
     Start-Process -FilePath $PYTHON `
-        -ArgumentList "-m", "uvicorn", "src.main:app", "--reload", "--port", "$BACKEND_PORT" `
+        -ArgumentList "-m", "uvicorn", "src.main:app", "--reload", "--reload-dir", "src", "--port", "$BACKEND_PORT" `
         -WorkingDirectory $ROOT `
         -WindowStyle Normal
 

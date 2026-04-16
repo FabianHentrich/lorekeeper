@@ -179,7 +179,13 @@ For the exact data flow of queries and ingestion, see [`docs/data-flow.md`](docs
    ```
    *Note:* Set up your sources in the UI, or create a `config/sources.yaml` pointing at your vault(s). For full details on configuration, the `settings.yaml`, and managing multiple sources, see [docs/configuration.md](docs/configuration.md).
 
-4. **Start backend + UI**
+4. **Pre-download embedding models** *(recommended — avoids a slow download on first start)*
+   ```powershell
+   python -c "from sentence_transformers import SentenceTransformer, CrossEncoder; SentenceTransformer('intfloat/multilingual-e5-base'); CrossEncoder('cross-encoder/mmarco-mMiniLMv2-L12-H384-v1'); print('Done.')"
+   ```
+   Models are cached in `~/.cache/huggingface/hub/` and reused on every subsequent start.
+
+5. **Start backend + UI**
    ```powershell
    .\start.ps1
    ```

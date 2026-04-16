@@ -45,7 +45,7 @@ class EmbeddingService:
 
     async def embed_text(self, text: str) -> list[float]:
         """Embed a single query string, offloading the blocking encode() to a thread."""
-        model = self._get_model()
+        model = await run_in_threadpool(self._get_model)
         embedding = await run_in_threadpool(
             model.encode,
             self._with_query_prefix(text),
