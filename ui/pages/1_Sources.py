@@ -111,15 +111,22 @@ with col_stat:
     except Exception:
         st.metric("Indizierte Chunks (gesamt)", "?")
 with col_reindex:
-    st.caption("Alle Sources komplett neu einlesen:")
-    if st.button("🔄 Alle Dokumente neu indizieren"):
+    st.caption("Nur geänderte/neue Dateien einlesen, oder alle Sources komplett neu:")
+    col_incr, col_full = st.columns(2)
+    ingest_mode = None
+    if col_incr.button("⚡ Nur Änderungen indizieren"):
+        ingest_mode = ({}, "Inkrementelle Indizierung")
+    if col_full.button("🔄 Alle Dokumente neu indizieren"):
+        ingest_mode = ({"full": "true"}, "Vollständige Indizierung")
+    if ingest_mode:
+        params, label = ingest_mode
         try:
-            r = requests.post(f"{API_URL}/ingest", params={"full": "true"}, timeout=10)
+            r = requests.post(f"{API_URL}/ingest", params=params, timeout=10)
             if r.status_code == 409:
                 st.warning(r.json()["detail"])
             else:
                 r.raise_for_status()
-                _poll_ingest_job(API_URL, r.json()["job_id"], label="Vollständige Indizierung")
+                _poll_ingest_job(API_URL, r.json()["job_id"], label=label)
         except Exception as e:
             st.error(f"Fehler: {e}")
     st.caption(
