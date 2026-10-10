@@ -213,6 +213,18 @@ class VectorStoreService:
                     hashes[src] = h
         return hashes
 
+    def get_chunks_for_file(self, source_id: str, source_file: str) -> list[dict[str, Any]]:
+        """Return every chunk of one file as ``{id, content, metadata}`` (used for section expansion)."""
+        collection = self._get_collection()
+        data = collection.get(
+            where={"$and": [{"source_id": source_id}, {"source_file": source_file}]},
+            include=["documents", "metadatas"],
+        )
+        return [
+            {"id": doc_id, "content": data["documents"][i], "metadata": data["metadatas"][i]}
+            for i, doc_id in enumerate(data.get("ids") or [])
+        ]
+
     def delete_by_source_file(self, source_id: str, source_file: str) -> None:
         """Delete chunks scoped to (source_id, source_file). Avoids cross-source collisions.
         Raises on DB failure so callers can abort instead of reporting false success."""

@@ -398,3 +398,77 @@ class TestHybridRetrieve:
         assert "vector hit" in contents
         assert "BM25-only exact keyword" in contents
         assert len(results) == 2
+
+
+def _hit(heading, idx, score=0.9, source_file="regelbuch.pdf"):
+    """Vectorstore-style hit for section expansion tests."""
+    return {"id": f"{source_file}-{idx}", "content": f"text {idx}", "score": score,
+            "metadata": {"source_file": source_file, "source_id": "rules", "document_type": "pdf",
+                         "heading_hierarchy": heading, "chunk_index": idx}}
+
+
+class TestSectionExpansion:
+    """Test suite for replacing sibling fragments with their complete parent section."""
+
+    _SECTION = [
+        _hit("Waldläufer", 10), _hit("Waldläufer > Kurzprofil", 11), _hit("Waldläufer > Fesselschuss", 12),
+        _hit("Waldläufer > Tiergefährten > Schwarzbär", 13), _hit("Waldläufer > Mehrfachschuss", 14),
+        _hit("Krieger > Kurzprofil", 20),
+    ]
+
+    def _retriever(self, embed_service, hits, max_chunks=25):
+        config = RetrievalConfig(top_k=10, score_threshold=0.5, reranking=RerankingConfig(enabled=False))
+        config.section_expansion.max_chunks = max_chunks
+        vs = MagicMock()
+        vs.query.return_value = hits
+        vs.get_chunks_for_file.return_value = list(reversed(self._SECTION))  # store order is arbitrary
+        return Retriever(config=config, embedding_service=embed_service, vectorstore=vs), vs
+
+    @pytest.mark.asyncio
+    async def test_sibling_hits_expand_to_whole_section_in_document_order(self, embed_service):
+        """Verify two sibling hits pull in every chunk under their parent, in chunk_index order, once."""
+        hits = [_hit("Waldläufer > Mehrfachschuss", 14, 0.9), _hit("Waldläufer > Kurzprofil", 11, 0.8),
+                _hit("Arkenfeld", 0, 0.7, source_file="Arkenfeld.md")]
+        retriever, vs = self._retriever(embed_service, hits)
+
+        results = await retriever.retrieve("fähigkeiten waldläufer")
+
+        assert [r.metadata["chunk_index"] for r in results[:5]] == [10, 11, 12, 13, 14]
+        assert results[5].source_file == "Arkenfeld.md"           # unrelated hit keeps its place after
+        assert len(results) == 6                                  # no duplicates of the original hits
+        assert all(r.score == 0.9 for r in results[:5])           # section inherits its best hit score
+        vs.get_chunks_for_file.assert_called_once_with("rules", "regelbuch.pdf")
+
+    @pytest.mark.asyncio
+    async def test_repeated_same_heading_does_not_expand(self, embed_service):
+        """Verify several parts of one heading (no distinct siblings) don't trigger expansion."""
+        hits = [_hit("NPC > Rolle > Waldläufer (Kern)", 1, source_file="npc.md"),
+                _hit("NPC > Rolle > Waldläufer (Kern)", 2, source_file="npc.md")]
+        retriever, vs = self._retriever(embed_service, hits)
+
+        results = await retriever.retrieve("waldläufer")
+
+        assert len(results) == 2
+        vs.get_chunks_for_file.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_oversized_section_is_not_expanded(self, embed_service):
+        """Verify a section above max_chunks is left as the original hits."""
+        hits = [_hit("Waldläufer > Mehrfachschuss", 14), _hit("Waldläufer > Kurzprofil", 11)]
+        retriever, _ = self._retriever(embed_service, hits, max_chunks=3)
+
+        results = await retriever.retrieve("waldläufer")
+
+        assert [r.metadata["chunk_index"] for r in results] == [14, 11]
+
+    @pytest.mark.asyncio
+    async def test_disabled_expansion_keeps_hits(self, embed_service):
+        """Verify section_expansion.enabled=False leaves retrieval untouched."""
+        hits = [_hit("Waldläufer > Mehrfachschuss", 14), _hit("Waldläufer > Kurzprofil", 11)]
+        retriever, vs = self._retriever(embed_service, hits)
+        retriever.config.section_expansion.enabled = False
+
+        results = await retriever.retrieve("waldläufer")
+
+        assert len(results) == 2
+        vs.get_chunks_for_file.assert_not_called()

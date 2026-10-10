@@ -50,6 +50,14 @@ def _rrf_merge(
     ]
 
 
+def _section_key(chunk) -> tuple[str, str, str] | None:
+    """(source_id, source_file, parent heading) — None for chunks without a parent heading."""
+    parts = chunk.heading.split(" > ") if chunk.heading else []
+    if len(parts) < 2:
+        return None
+    return (chunk.metadata.get("source_id", ""), chunk.source_file, " > ".join(parts[:-1]))
+
+
 @dataclass
 class RetrievedChunk:
     content: str
@@ -191,8 +199,69 @@ class Retriever:
         if self.config.reranking.enabled and chunks:
             chunks = await self._rerank(query, chunks, top_k_rerank=top_k_rerank, max_per_source=max_per_source)
 
+        if self.config.section_expansion.enabled and chunks:
+            chunks = await self._expand_sections(chunks)
+
         logger.info(f"Retrieved {len(chunks)} chunks (query: {query[:60]}...)")
         return chunks
+
+    async def _expand_sections(self, chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+        """Replace sibling fragments with their complete parent section.
+
+        Questions like "which abilities does the ranger have?" match a few of the
+        ~20 sub-heading chunks of one section; the LLM then answers from fragments.
+        When >= 2 hits of one file share a parent heading with *different* child
+        headings, every chunk under that parent is loaded and inserted in document
+        order at the position of the best hit. Sections above ``max_chunks`` stay as is.
+        """
+        siblings: dict[tuple[str, str, str], set[str]] = {}
+        for c in chunks:
+            key = _section_key(c)
+            if key is not None:
+                siblings.setdefault(key, set()).add(c.heading)
+
+        expanded: dict[tuple[str, str, str], list[RetrievedChunk]] = {}
+        for (source_id, source_file, parent), headings in siblings.items():
+            if len(headings) < 2:
+                continue
+            items = await run_in_threadpool(self.vectorstore.get_chunks_for_file, source_id, source_file)
+            section = [
+                it for it in items
+                if (h := it["metadata"].get("heading_hierarchy", "")) == parent or h.startswith(parent + " > ")
+            ]
+            if len(section) > self.config.section_expansion.max_chunks:
+                logger.info(f"Section '{parent}' ({source_file}) has {len(section)} chunks — not expanded")
+                continue
+            section.sort(key=lambda it: it["metadata"].get("chunk_index", 0))
+            score = max(c.score for c in chunks if c.source_file == source_file and c.heading in headings)
+            expanded[(source_id, source_file, parent)] = [
+                RetrievedChunk(
+                    content=it["content"],
+                    source_file=source_file,
+                    document_type=it["metadata"].get("document_type", ""),
+                    heading=it["metadata"].get("heading_hierarchy", ""),
+                    score=score,
+                    metadata=it["metadata"],
+                )
+                for it in section
+            ]
+            logger.info(f"Expanded section '{parent}' ({source_file}): {len(headings)} hits → {len(section)} chunks")
+
+        if not expanded:
+            return chunks
+
+        # The first (best-ranked) hit of a section inserts the whole section; dedupe by
+        # chunk identity so siblings and deeper hits already inside it aren't repeated.
+        result: list[RetrievedChunk] = []
+        seen: set = set()
+        for c in chunks:
+            for item in expanded.get(_section_key(c), [c]):
+                idx = item.metadata.get("chunk_index")
+                ident = (item.source_file, idx) if idx is not None else id(item)
+                if ident not in seen:
+                    seen.add(ident)
+                    result.append(item)
+        return result
 
     async def _rerank(
         self,

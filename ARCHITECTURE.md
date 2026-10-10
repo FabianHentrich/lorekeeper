@@ -526,7 +526,12 @@ komplett für diesen Request).
      in Score-Reihenfolge nachziehen
    - Final-Re-Sort nach Reranker-Score, damit der LLM die relevantesten
      Chunks zuerst sieht
-7. Rückgabe: Chunks + Metadaten + Scores
+7. **Section Expansion** (`section_expansion`): Teilen sich ≥ 2 Treffer einer Datei eine
+   Eltern-Überschrift mit *verschiedenen* Unter-Überschriften (z.B. `5.4.3 Waldläufer > Kampfstil`
+   und `> Fesselschuss`), wird die komplette Eltern-Sektion geladen (`get_chunks_for_file`) und in
+   Dokument-Reihenfolge an der Position des besten Treffers eingesetzt. Sektionen über `max_chunks`
+   bleiben unverändert. Behebt fragmentarische Antworten auf Aufzählungs-Fragen.
+8. Rückgabe: Chunks + Metadaten + Scores
 
 ---
 

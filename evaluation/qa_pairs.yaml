@@ -408,6 +408,14 @@ pairs:
     expected_answer_contains: ["Flüche"]
     notes: "Kapitel 6.4"
 
+  - id: p041
+    question: "Welche Fähigkeiten hat der Waldläufer und wie funktionieren sie?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Fesselschuss", "Gezielter Schuss", "Mehrfachschuss", "Waldkundiger Blick", "Natürlicher Schutz", "Tiergefährte"]
+    notes: "Kapitel 5.4.3 — Vollständigkeits-Check für Section Expansion (vorher erreichten nur 5 von 24 Abschnitten das LLM)"
+
   # ─────────────────────────────────────────
   # IMAGE (10 Fragen)
   # ─────────────────────────────────────────

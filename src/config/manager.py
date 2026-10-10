@@ -141,11 +141,17 @@ class HybridSearchConfig(BaseModel):
     bm25_top_k: int = 15             # how many BM25 candidates to fetch
 
 
+class SectionExpansionConfig(BaseModel):
+    enabled: bool = True
+    max_chunks: int = 25             # sections larger than this are not expanded (protects the LLM context)
+
+
 class RetrievalConfig(BaseModel):
     top_k: int = 15
     score_threshold: float = 0.5
     reranking: RerankingConfig = RerankingConfig()
     hybrid: HybridSearchConfig = HybridSearchConfig()
+    section_expansion: SectionExpansionConfig = SectionExpansionConfig()
 
 
 class OllamaConfig(BaseModel):

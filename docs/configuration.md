@@ -39,7 +39,7 @@ reset to `settings.yaml`.
 
 | Section | Editable via UI | Live effect |
 |---|---|---|
-| `retrieval.*` (incl. `hybrid.*`, `reranking.*`) | ✅ all fields | next query |
+| `retrieval.*` (incl. `hybrid.*`, `reranking.*`) | ✅ all fields except `section_expansion.*` (YAML only) | next query |
 | `llm.ollama.{temperature,top_p,max_tokens,timeout}` | ✅ | next query |
 | `llm.gemini.{temperature,top_p,max_tokens,timeout}` | ✅ | next query |
 | `llm.fallback_enabled` | ✅ | next query |
@@ -228,6 +228,8 @@ The model is preloaded at server start (`warmup` in `lifespan`), not on the firs
 | `hybrid.enabled` | `bool` | `false` | Enable hybrid retrieval: vector + BM25 run in parallel, results fused via Reciprocal Rank Fusion before reranking. Per-request override via the `hybrid_search` field on `QueryRequest` |
 | `hybrid.bm25_weight` | `float` | `0.3` | BM25 share in RRF (0.0 = pure vector, 1.0 = pure BM25) |
 | `hybrid.bm25_top_k` | `int` | `15` | How many BM25 candidates to fetch before fusion |
+| `section_expansion.enabled` | `bool` | `true` | After reranking: if ≥ 2 hits of one file share a parent heading with *different* sub-headings, the whole parent section is loaded and passed to the LLM in document order (fixes fragmentary answers to "which abilities / what does X contain" questions). Not editable via the UI |
+| `section_expansion.max_chunks` | `int` | `25` | Sections with more chunks are not expanded — protects the LLM context from whole chapters |
 
 **Rules of thumb:**
 - `top_k` should be at least twice `top_k_rerank`

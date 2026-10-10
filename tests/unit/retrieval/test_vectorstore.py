@@ -168,6 +168,26 @@ class TestGetCollection:
         assert "uses distance" not in caplog.text
 
 
+class TestGetChunksForFile:
+    """Test suite for loading all chunks of one file (section expansion)."""
+
+    def test_scoped_to_source_and_file(self, service, mock_collection):
+        """Verify the query is scoped to (source_id, source_file) and returns id/content/metadata dicts."""
+        mock_collection.get.return_value = {
+            "ids": ["a", "b"],
+            "documents": ["text a", "text b"],
+            "metadatas": [{"chunk_index": 0}, {"chunk_index": 1}],
+        }
+        items = service.get_chunks_for_file("rules", "regelbuch.pdf")
+
+        where = mock_collection.get.call_args[1]["where"]
+        assert where == {"$and": [{"source_id": "rules"}, {"source_file": "regelbuch.pdf"}]}
+        assert items == [
+            {"id": "a", "content": "text a", "metadata": {"chunk_index": 0}},
+            {"id": "b", "content": "text b", "metadata": {"chunk_index": 1}},
+        ]
+
+
 class TestUpsertChunks:
     """Test suite validating ingestion chunk transposition mapping directly towards Chroma representations."""
 

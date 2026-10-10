@@ -52,6 +52,9 @@ retrieval:
     model: "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"  # multilingual
     top_k_rerank: 8
     max_per_source: 3         # cap chunks per single file (0 = unlimited) — prevents one dense doc from crowding others
+  section_expansion:
+    enabled: true             # ≥2 hits under one parent heading → hand the LLM the whole section
+    max_chunks: 25            # larger sections are not expanded (protects the LLM context)
 
 # LLM
 llm:
