@@ -57,6 +57,29 @@ class TestOllamaProvider:
         assert result.provider == "ollama"
 
     @pytest.mark.asyncio
+    async def test_generate_uses_live_config_timeout(self):
+        """
+        Verify the request timeout comes from the config on each call, so Settings-page
+        changes apply without rebuilding the provider.
+        """
+        config = OllamaConfig(timeout=42)
+        provider = OllamaProvider(config=config)
+
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "ok"
+        mock_response.usage = None
+        provider._client = AsyncMock()
+        provider._client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        await provider.generate("p")
+        config.timeout = 99
+        await provider.generate("p")
+
+        timeouts = [c.kwargs["timeout"] for c in provider._client.chat.completions.create.call_args_list]
+        assert timeouts == [42, 99]
+
+    @pytest.mark.asyncio
     async def test_health_check_success(self):
         """
         Verify that receiving a successful 200 HTTP response mapped onto httpx

@@ -59,6 +59,20 @@ class TestConversationManager:
         assert len(history) == 6  # 3 pairs
         assert history[0].content == "Frage 2"
 
+    def test_history_respects_max_context_tokens(self):
+        """
+        Verify oldest pairs are dropped when the window still exceeds max_context_tokens.
+        """
+        cm = ConversationManager(ConversationConfig(window_size=8, max_context_tokens=100))
+        session = cm.get_or_create_session()
+        # Each pair ≈ 2 * 140 chars / 3.5 = 80 tokens → only the newest pair fits into 100
+        for i in range(3):
+            session.add_message("user", f"F{i}".ljust(140, "x"))
+            session.add_message("assistant", f"A{i}".ljust(140, "x"))
+
+        history = cm.get_history(session.session_id)
+        assert [m.content[:2] for m in history] == ["F2", "A2"]
+
     def test_get_history_for_condense(self, cm):
         """
         Verify that the history formatted for condensation represents messages as dictionaries.

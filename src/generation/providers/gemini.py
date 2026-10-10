@@ -94,6 +94,7 @@ class GeminiProvider(BaseLLMProvider):
             top_p=kwargs.get("top_p", self.config.top_p),
             max_output_tokens=kwargs.get("max_tokens", self.config.max_tokens),
             system_instruction=kwargs.get("system_prompt", None),
+            http_options=types.HttpOptions(timeout=self.config.timeout * 1000),
         )
 
     async def generate(self, prompt: str, system_prompt: str = "", **kwargs) -> LLMResponse:

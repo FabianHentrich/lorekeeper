@@ -40,7 +40,6 @@ class OllamaProvider(BaseLLMProvider):
         self._client = AsyncOpenAI(
             base_url=f"{self.base_url}/v1",
             api_key="ollama",
-            timeout=300,  # Generous timeout for slow local models
         )
 
     def _is_qwen3(self) -> bool:
@@ -63,6 +62,7 @@ class OllamaProvider(BaseLLMProvider):
             temperature=kwargs.get("temperature", self.config.temperature),
             top_p=kwargs.get("top_p", self.config.top_p),
             max_tokens=kwargs.get("max_tokens", self.config.max_tokens),
+            timeout=self.config.timeout,
             stream=False,
         )
         latency_ms = (time.time() - start) * 1000
@@ -109,6 +109,7 @@ class OllamaProvider(BaseLLMProvider):
             temperature=kwargs.get("temperature", self.config.temperature),
             top_p=kwargs.get("top_p", self.config.top_p),
             max_tokens=kwargs.get("max_tokens", self.config.max_tokens),
+            timeout=self.config.timeout,
             stream=True,
             stream_options={"include_usage": True},
         )

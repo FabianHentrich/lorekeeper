@@ -33,3 +33,14 @@ class TestGeminiProvider:
         from src.generation.providers.gemini import GeminiProvider
         provider = GeminiProvider(config=config)
         assert provider.model == "gemini-2.5-flash"
+
+    def test_build_config_timeout_in_milliseconds(self, monkeypatch):
+        """
+        Verify the configured timeout (seconds) reaches the request as HttpOptions milliseconds.
+        """
+        monkeypatch.setenv("GEMINI_API_KEY", "test-key-123")
+        config = GeminiConfig(api_key_env="GEMINI_API_KEY", timeout=30)
+
+        from src.generation.providers.gemini import GeminiProvider
+        provider = GeminiProvider(config=config)
+        assert provider._build_config().http_options.timeout == 30_000

@@ -72,7 +72,7 @@ class ConversationManager:
         return False
 
     def get_history(self, session_id: str) -> list[Message]:
-        """Return the last ``window_size`` QA pairs from the session, or [] if unknown."""
+        """Return the last ``window_size`` QA pairs within ``max_context_tokens``, or [] if unknown."""
         session = self._sessions.get(session_id)
         if not session:
             return []
@@ -82,6 +82,10 @@ class ConversationManager:
 
         if len(messages) > window:
             messages = messages[-window:]
+
+        # Hard token limit: drop oldest pairs until the history fits (~3.5 chars/token for German)
+        while messages and sum(len(m.content) for m in messages) / 3.5 > self.config.max_context_tokens:
+            messages = messages[2:]
 
         return messages
 
