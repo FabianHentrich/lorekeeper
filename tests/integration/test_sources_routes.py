@@ -1,0 +1,348 @@
+"""Integration tests for the /sources/*, /ingest job lifecycle and /admin routes.
+
+Like test_api_routes.py, these build a bare FastAPI app (no lifespan) and inject
+fakes into ``src.main``. Config is a real ConfigManager on tmp files so that
+PUT/DELETE /sources exercise the actual sources.yaml persistence.
+"""
+from __future__ import annotations
+
+import time
+from types import SimpleNamespace
+from urllib.parse import quote
+
+import pytest
+import yaml
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+import src.main as main_module
+from src.api import routes as routes_module
+from src.api.routes import router
+from src.config.manager import ConfigManager, SourceConfig
+from src.ingestion.orchestrator import IngestionOrchestrator, IngestionResult
+
+
+class FakeVectorStore:
+    """Records destructive calls instead of touching ChromaDB."""
+
+    def __init__(self) -> None:
+        self.deleted_sources: list[str] = []
+        self.wiped = False
+
+    def delete_by_source_id(self, source_id: str) -> int:
+        self.deleted_sources.append(source_id)
+        return 7
+
+    def wipe_collection(self) -> None:
+        self.wiped = True
+
+
+class FakeBM25:
+    def __init__(self) -> None:
+        self.invalidated = 0
+
+    def invalidate(self) -> None:
+        self.invalidated += 1
+
+
+@pytest.fixture
+def env(tmp_path):
+    """Real ConfigManager on tmp files + fake vectorstore/BM25, with a vault folder source."""
+    vault = tmp_path / "vault"
+    (vault / "NPCs").mkdir(parents=True)
+    (vault / ".obsidian").mkdir()
+    (vault / "Arkenfeld.md").write_text("# Arkenfeld", encoding="utf-8")
+    (vault / "notes.xyz").write_text("unsupported", encoding="utf-8")
+    single = tmp_path / "Regelbuch.md"
+    single.write_text("# Regeln", encoding="utf-8")
+
+    settings_path = tmp_path / "settings.yaml"
+    settings_path.write_text("", encoding="utf-8")
+    sources_path = tmp_path / "sources.yaml"
+    config = ConfigManager(
+        settings_path=settings_path,
+        prompts_path=tmp_path / "p.yaml",
+        sources_path=sources_path,
+    )
+    config.settings.ingestion.sources = [
+        SourceConfig(id="vault", path=str(vault), group="lore"),
+        SourceConfig(id="Pen & Paper", path=str(single), group="rules"),
+    ]
+
+    names = ("config", "vectorstore", "bm25_index")
+    originals = {n: getattr(main_module, n) for n in names}
+    fakes = SimpleNamespace(
+        config=config, vectorstore=FakeVectorStore(), bm25_index=FakeBM25(),
+        vault=vault, single=single, sources_path=sources_path,
+    )
+    for n in names:
+        setattr(main_module, n, getattr(fakes, n))
+    routes_module._ingest_jobs.clear()
+
+    yield fakes
+
+    for n, v in originals.items():
+        setattr(main_module, n, v)
+    routes_module._ingest_jobs.clear()
+
+
+@pytest.fixture
+def client(env):
+    """TestClient used as context manager so background ingest tasks keep their event loop."""
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as c:
+        yield c
+
+
+def _wait_for_job(client, job_id: str, timeout: float = 10.0) -> dict:
+    """Poll /ingest/status until the job leaves queued/running."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        info = client.get(f"/ingest/status/{job_id}").json()
+        if info["status"] not in ("queued", "running"):
+            return info
+        time.sleep(0.05)
+    pytest.fail(f"Job {job_id} did not finish within {timeout}s")
+
+
+def _fake_result(**fields) -> IngestionResult:
+    result = IngestionResult()
+    for k, v in fields.items():
+        setattr(result, k, v)
+    return result
+
+
+# ─── GET /sources, /sources/{id}/folders ──────────────────────────────────────
+
+def test_list_sources(client, env):
+    """Verify all configured sources are returned."""
+    ids = [s["id"] for s in client.get("/sources").json()["sources"]]
+    assert ids == ["vault", "Pen & Paper"]
+
+
+def test_folders_lists_dirs_and_supported_files_only(client, env):
+    """Verify hidden entries and unsupported formats are skipped."""
+    body = client.get("/sources/vault/folders").json()
+    assert body["folders"] == [
+        {"name": "Arkenfeld.md", "type": "file"},
+        {"name": "NPCs", "type": "folder"},
+    ]
+
+
+def test_folders_for_file_source(client, env):
+    """Verify a single-file source reports no subfolders; URL-encoded ids are routed."""
+    body = client.get(f"/sources/{quote('Pen & Paper', safe='')}/folders").json()
+    assert body["folders"] == []
+    assert "note" in body
+
+
+def test_folders_missing_path(client, env):
+    """Verify a source whose path vanished returns an error field, not a 500."""
+    env.config.settings.ingestion.sources[0].path = str(env.vault / "gone")
+    body = client.get("/sources/vault/folders").json()
+    assert body["folders"] == [] and "error" in body
+
+
+def test_folders_unknown_source_404(client, env):
+    assert client.get("/sources/nope/folders").status_code == 404
+
+
+# ─── POST /sources/scan ───────────────────────────────────────────────────────
+
+def test_scan_missing_path_400(client, env):
+    assert client.post("/sources/scan", json={}).status_code == 400
+
+
+def test_scan_folder(client, env):
+    body = client.post("/sources/scan", json={"path": str(env.vault)}).json()
+    assert body["is_file"] is False
+    assert {"name": "NPCs", "type": "folder"} in body["folders"]
+
+
+def test_scan_file(client, env):
+    body = client.post("/sources/scan", json={"path": str(env.single)}).json()
+    assert body == {"folders": [], "is_file": True}
+
+
+def test_scan_nonexistent(client, env):
+    body = client.post("/sources/scan", json={"path": str(env.vault / "gone")}).json()
+    assert "error" in body
+
+
+# ─── PUT /sources ─────────────────────────────────────────────────────────────
+
+def _src(id_: str, env) -> dict:
+    return {"id": id_, "path": str(env.vault), "group": "lore"}
+
+
+def test_put_sources_persists_to_sidecar(client, env):
+    """Verify the new list replaces the in-memory config and is written to sources.yaml."""
+    r = client.put("/sources", json={"sources": [_src("neu", env)]})
+    assert r.status_code == 200
+    assert [s.id for s in env.config.settings.ingestion.sources] == ["neu"]
+    saved = yaml.safe_load(env.sources_path.read_text(encoding="utf-8"))
+    assert [s["id"] for s in saved["sources"]] == ["neu"]
+
+
+def test_put_sources_missing_field_400(client, env):
+    assert client.put("/sources", json={}).status_code == 400
+
+
+def test_put_sources_invalid_group_400(client, env):
+    bad = {"id": "x", "path": "p", "group": "nope"}
+    assert client.put("/sources", json={"sources": [bad]}).status_code == 400
+
+
+def test_put_sources_duplicate_ids_400(client, env):
+    r = client.put("/sources", json={"sources": [_src("a", env), _src("a", env)]})
+    assert r.status_code == 400
+    assert "Duplicate" in r.json()["detail"]
+
+
+@pytest.mark.parametrize("bad_id", ["", "  ", "a/b", ".", ".."])
+def test_put_sources_rejects_unroutable_ids(client, env, bad_id):
+    """Verify ids the /sources/{id}/... routes can't serve are rejected, config untouched."""
+    r = client.put("/sources", json={"sources": [_src(bad_id, env)]})
+    assert r.status_code == 400
+    assert "Invalid source id" in r.json()["detail"]
+    assert [s.id for s in env.config.settings.ingestion.sources] == ["vault", "Pen & Paper"]
+
+
+@pytest.mark.parametrize("ok_id", ["Pen & Paper", "foo#1", "a.b", "märchen"])
+def test_put_sources_accepts_free_text_ids(client, env, ok_id):
+    assert client.put("/sources", json={"sources": [_src(ok_id, env)]}).status_code == 200
+
+
+# ─── DELETE /sources/{id} ─────────────────────────────────────────────────────
+
+def test_delete_source_removes_chunks_and_config(client, env):
+    """Verify delete drops chunks, removes the source and persists the sidecar."""
+    r = client.delete(f"/sources/{quote('Pen & Paper', safe='')}")
+    assert r.status_code == 200
+    assert r.json() == {"deleted_chunks": 7}
+    assert env.vectorstore.deleted_sources == ["Pen & Paper"]
+    assert [s.id for s in env.config.settings.ingestion.sources] == ["vault"]
+    saved = yaml.safe_load(env.sources_path.read_text(encoding="utf-8"))
+    assert [s["id"] for s in saved["sources"]] == ["vault"]
+
+
+def test_delete_unknown_source_404(client, env):
+    assert client.delete("/sources/nope").status_code == 404
+    assert env.vectorstore.deleted_sources == []
+
+
+# ─── POST /sources/recategorize ───────────────────────────────────────────────
+
+def test_recategorize_returns_summary(client, env, monkeypatch):
+    import src.ingestion.recategorize as recat_module
+    monkeypatch.setattr(recat_module, "recategorize", lambda vectorstore: {"updated": 3})
+    assert client.post("/sources/recategorize").json() == {"updated": 3}
+
+
+# ─── Ingest job lifecycle ─────────────────────────────────────────────────────
+
+def test_ingest_job_runs_to_done(client, env, monkeypatch):
+    """Verify a job goes queued → done, copies result counters, and invalidates BM25."""
+    calls = {}
+
+    def fake_run(self, vectorstore=None, only_source_id=None, progress_callback=None, full=False):
+        calls.update(full=full, only=only_source_id)
+        return _fake_result(documents_processed=5, documents_total=5, documents_skipped=3,
+                            chunks_created=4, chunks_deleted=2, errors=["warn"])
+
+    monkeypatch.setattr(IngestionOrchestrator, "run", fake_run)
+    job_id = client.post("/ingest").json()["job_id"]
+    info = _wait_for_job(client, job_id)
+
+    assert info["status"] == "done"
+    assert (info["documents_processed"], info["documents_skipped"]) == (5, 3)
+    assert (info["chunks_created"], info["chunks_deleted"]) == (4, 2)
+    assert info["errors"] == ["warn"]
+    assert calls == {"full": False, "only": None}
+    assert env.bm25_index.invalidated == 1
+
+
+def test_ingest_full_flag_passed_through(client, env, monkeypatch):
+    seen = {}
+
+    def fake_run(self, vectorstore=None, only_source_id=None, progress_callback=None, full=False):
+        seen["full"] = full
+        return _fake_result()
+
+    monkeypatch.setattr(IngestionOrchestrator, "run", fake_run)
+    job_id = client.post("/ingest", params={"full": "true"}).json()["job_id"]
+    _wait_for_job(client, job_id)
+    assert seen["full"] is True
+
+
+def test_ingest_job_error_status(client, env, monkeypatch):
+    """Verify an orchestrator exception marks the job as error and frees the slot."""
+    def boom(self, **kwargs):
+        raise RuntimeError("chroma locked")
+
+    monkeypatch.setattr(IngestionOrchestrator, "run", boom)
+    job_id = client.post("/ingest").json()["job_id"]
+    info = _wait_for_job(client, job_id)
+    assert info["status"] == "error"
+    assert info["errors"] == ["chroma locked"]
+    assert env.bm25_index.invalidated == 0
+    # A failed job must not block the next one with 409
+    monkeypatch.setattr(IngestionOrchestrator, "run", lambda self, **kw: _fake_result())
+    assert client.post("/ingest").status_code == 200
+
+
+def test_ingest_progress_visible_while_running(client, env, monkeypatch):
+    """Verify progress callback updates are visible via /ingest/status mid-run."""
+    import threading
+    release = threading.Event()
+
+    def slow_run(self, vectorstore=None, only_source_id=None, progress_callback=None, full=False):
+        r = _fake_result(documents_total=10, documents_processed=4, phase="parsing")
+        progress_callback(r)
+        release.wait(5)
+        return r
+
+    monkeypatch.setattr(IngestionOrchestrator, "run", slow_run)
+    job_id = client.post("/ingest").json()["job_id"]
+    deadline = time.monotonic() + 5
+    info = {}
+    while time.monotonic() < deadline:
+        info = client.get(f"/ingest/status/{job_id}").json()
+        if info["documents_processed"] == 4:
+            break
+        time.sleep(0.05)
+    assert info["status"] == "running"
+    assert (info["documents_processed"], info["documents_total"], info["phase"]) == (4, 10, "parsing")
+    release.set()
+    assert _wait_for_job(client, job_id)["status"] == "done"
+
+
+def test_reindex_source_deletes_then_ingests_only_that_source(client, env, monkeypatch):
+    seen = {}
+
+    def fake_run(self, vectorstore=None, only_source_id=None, progress_callback=None, full=False):
+        seen["only"] = only_source_id
+        seen["deleted_before"] = list(env.vectorstore.deleted_sources)
+        return _fake_result()
+
+    monkeypatch.setattr(IngestionOrchestrator, "run", fake_run)
+    job_id = client.post(f"/sources/{quote('Pen & Paper', safe='')}/reindex").json()["job_id"]
+    assert _wait_for_job(client, job_id)["status"] == "done"
+    assert seen == {"only": "Pen & Paper", "deleted_before": ["Pen & Paper"]}
+
+
+def test_reindex_unknown_source_404(client, env):
+    assert client.post("/sources/nope/reindex").status_code == 404
+
+
+# ─── /admin/wipe ──────────────────────────────────────────────────────────────
+
+def test_wipe_requires_confirmation(client, env):
+    assert client.post("/admin/wipe", json={"confirm": "yes"}).status_code == 400
+    assert env.vectorstore.wiped is False
+
+
+def test_wipe_with_confirmation(client, env):
+    assert client.post("/admin/wipe", json={"confirm": "DELETE"}).json() == {"status": "wiped"}
+    assert env.vectorstore.wiped is True

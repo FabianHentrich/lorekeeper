@@ -453,6 +453,12 @@ async def update_sources(payload: dict):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid source config: {e}")
     ids = [s.id for s in new_sources]
+    # Checked here, not in SourceConfig, so an existing sources.yaml never breaks startup.
+    # '/' can't be routed (%2F is decoded before matching), '.'/'..' get normalized away.
+    bad = [i for i in ids if not i.strip() or "/" in i or i in (".", "..")]
+    if bad:
+        raise HTTPException(status_code=400, detail=f"Invalid source id(s): {bad} — "
+                            "must not be empty, '.', '..' or contain '/'")
     if len(ids) != len(set(ids)):
         raise HTTPException(status_code=400, detail="Duplicate source ids")
     main_module.config.settings.ingestion.sources = new_sources

@@ -109,3 +109,66 @@ class TestGenerator:
         result = await gen.condense_question("prompt", condense_provider=condense)
         assert result == "Condensed"
         mock_provider.generate.assert_not_called()
+
+
+def _stream_provider(tokens: list[str], fail_after: int | None = None):
+    """Provider whose generate_stream yields `tokens`, raising after `fail_after` of them."""
+    provider = MagicMock()
+
+    async def _gen(*args, **kwargs):
+        for i, tok in enumerate(tokens):
+            if fail_after is not None and i == fail_after:
+                raise RuntimeError("stream broke")
+            yield tok
+        if fail_after is not None and fail_after >= len(tokens):
+            raise RuntimeError("stream broke")
+
+    provider.generate_stream = MagicMock(side_effect=_gen)
+    return provider
+
+
+async def _collect(agen) -> list[str]:
+    return [tok async for tok in agen]
+
+
+class TestGenerateStream:
+    """Test suite for streaming generation and its fallback rules."""
+
+    async def test_streams_primary_tokens(self):
+        """Verify tokens of the primary provider are passed through unchanged."""
+        gen = Generator(provider=_stream_provider(["a", "b"]))
+        assert await _collect(gen.generate_stream("sys", "q")) == ["a", "b"]
+
+    async def test_falls_back_when_primary_fails_before_first_token(self):
+        """Verify the fallback takes over if nothing has been emitted yet."""
+        fallback = _stream_provider(["x", "y"])
+        gen = Generator(provider=_stream_provider(["a"], fail_after=0), fallback_provider=fallback)
+        assert await _collect(gen.generate_stream("sys", "q")) == ["x", "y"]
+        fallback.generate_stream.assert_called_once()
+
+    async def test_no_fallback_after_tokens_were_emitted(self):
+        """Verify a mid-stream failure re-raises instead of duplicating output via the fallback."""
+        fallback = _stream_provider(["x"])
+        gen = Generator(provider=_stream_provider(["a", "b"], fail_after=1), fallback_provider=fallback)
+        received = []
+        with pytest.raises(RuntimeError, match="stream broke"):
+            async for tok in gen.generate_stream("sys", "q"):
+                received.append(tok)
+        assert received == ["a"]
+        fallback.generate_stream.assert_not_called()
+
+    async def test_raises_without_fallback(self):
+        """Verify a failure before the first token propagates when no fallback is configured."""
+        gen = Generator(provider=_stream_provider(["a"], fail_after=0))
+        with pytest.raises(RuntimeError):
+            await _collect(gen.generate_stream("sys", "q"))
+
+    async def test_passes_prompts_and_stream_result(self):
+        """Verify system prompt and stream_result reach the provider."""
+        primary = _stream_provider(["a"])
+        sentinel = object()
+        gen = Generator(provider=primary)
+        await _collect(gen.generate_stream("sys", "q", stream_result=sentinel))
+        args, kwargs = primary.generate_stream.call_args
+        assert args == ("q",)
+        assert kwargs == {"system_prompt": "sys", "stream_result": sentinel}

@@ -118,7 +118,8 @@ def _raise_for_status(resp: requests.Response):
     if resp.ok:
         return
     try:
-        detail = resp.json().get("detail", resp.text)
+        body = resp.json()
+        detail = body.get("detail", resp.text) if isinstance(body, dict) else resp.text
     except ValueError:
         detail = resp.text
     raise RuntimeError(f"{resp.status_code}: {detail}")
@@ -291,7 +292,7 @@ for s in sources:
                               "auf die aktuelle category_map / group. Wirkt auf alle Sources."):
                 try:
                     r = requests.post(f"{API_URL}/sources/recategorize", timeout=60)
-                    r.raise_for_status()
+                    _raise_for_status(r)
                     st.success(f"Recategorize: {r.json()}")
                 except Exception as e:
                     st.error(f"Fehler: {e}")
@@ -302,7 +303,7 @@ for s in sources:
                               "zugehörigen Chunks aus der Datenbank."):
                 try:
                     r = requests.delete(f"{API_URL}/sources/{sid_url}", timeout=10)
-                    r.raise_for_status()
+                    _raise_for_status(r)
                     st.success(f"Entfernt. Gelöschte Chunks: {r.json()['deleted_chunks']}")
                     _refresh()
                 except Exception as e:
@@ -311,9 +312,11 @@ for s in sources:
         # ── Folder mapping ──
         st.markdown("**Ordner-Zuordnung**")
         try:
-            tree = requests.get(f"{API_URL}/sources/{sid_url}/folders", timeout=5).json()
-            folders = tree.get("folders", [])
-        except Exception:
+            r = requests.get(f"{API_URL}/sources/{sid_url}/folders", timeout=5)
+            _raise_for_status(r)
+            folders = r.json().get("folders", [])
+        except Exception as e:
+            st.error(f"Ordner konnten nicht geladen werden: {e}")
             folders = []
 
         if not folders:
@@ -486,16 +489,15 @@ if scan_result is not None and scan_source_path:
 
         # Step 4: Save
         if st.button("➕ Source hinzufügen", type="primary", key="_add_source_final"):
-            if not new_id or not new_id.strip():
+            new_id = (new_id or "").strip()
+            if not new_id:
                 st.error("ID ist ein Pflichtfeld.")
-            elif "/" in new_id:
-                # FastAPI decodes %2F before routing → /sources/{id}/... would 404
-                st.error("ID darf kein '/' enthalten.")
-            elif any(s["id"] == new_id.strip() for s in sources):
+            elif any(s["id"] == new_id for s in sources):
                 st.error(f"ID '{new_id}' existiert bereits.")
             else:
+                # Invalid ids ('/', '.', '..') are rejected by PUT /sources with a detail message
                 updated = sources + [{
-                    "id": new_id.strip(),
+                    "id": new_id,
                     "path": scan_source_path,
                     "group": new_group,
                     "default_category": new_default or None,
