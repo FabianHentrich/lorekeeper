@@ -489,7 +489,7 @@ inside a `st.status` widget until done or error.
 
 Central place for editing the runtime-tunable parameters of LoreKeeper.
 Reads the current state via `GET /config` and sends diff-only updates via
-`PUT /config`. Every save is persisted to `config/settings.yaml` **and**
+`PUT /config`. Every save is persisted to `config/settings.local.yaml` **and**
 applied in place to the running services — no restart, next query uses the new
 values.
 

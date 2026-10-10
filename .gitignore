@@ -20,4 +20,5 @@ logs/
 CLAUDE.md
 /.claude/
 config/sources.yaml
+config/settings.local.yaml
 /config/prompts/

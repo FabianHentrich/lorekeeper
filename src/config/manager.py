@@ -257,17 +257,15 @@ class ConfigManager:
         prompts_path: Path = Path("config/prompts.yaml"),
         sources_path: Path = Path("config/sources.yaml"),
     ):
-        """Load settings, sources sidecar, and prompts from the given paths."""
+        """Load settings (+ UI overrides sidecar), sources sidecar, and prompts from the given paths."""
         self._settings_path = settings_path
+        # UI edits land here so the hand-written, commented settings.yaml is never rewritten
+        self._local_settings_path = settings_path.with_name("settings.local.yaml")
         self._sources_path = sources_path
         self._prompts_path = prompts_path
 
-        yaml_data = {}
-        if settings_path.exists():
-            yaml_data = yaml.safe_load(settings_path.read_text(encoding="utf-8")) or {}
-
         # YAML data is passed as init_settings (lowest priority after defaults)
-        self.settings = Settings(**yaml_data)
+        self.settings = Settings(**_deep_merge(_read_yaml(settings_path), _read_yaml(self._local_settings_path)))
 
         # Load sources sidecar (if present), then apply migration shim if needed
         self._load_sources_sidecar()
@@ -385,7 +383,7 @@ class ConfigManager:
         }
 
     def save_settings(self, updates: dict) -> dict:
-        """Merge ``updates`` into the live Settings and persist to settings.yaml.
+        """Merge ``updates`` into the live Settings and persist to the settings.local.yaml sidecar.
 
         Only keys listed in ``_EDITABLE_KEYS`` are accepted; unknown keys are
         dropped silently. The merged result is re-validated through Pydantic —
@@ -403,23 +401,20 @@ class ConfigManager:
         if not filtered:
             return self.editable_snapshot()
 
-        current_yaml = {}
-        if self._settings_path.exists():
-            current_yaml = yaml.safe_load(self._settings_path.read_text(encoding="utf-8")) or {}
+        local = _deep_merge(_read_yaml(self._local_settings_path), filtered)
 
-        merged = _deep_merge(current_yaml, filtered)
-
-        # Validation: construct a fresh Settings from the merged dict so
+        # Validation: construct a fresh Settings from base + overrides so
         # Pydantic rejects bad values before we touch the live instance or
         # write to disk.
-        Settings(**merged)
+        Settings(**_deep_merge(_read_yaml(self._settings_path), local))
 
         # Apply in place so existing service references stay valid.
         _apply_updates(self.settings, filtered)
 
-        self._settings_path.parent.mkdir(parents=True, exist_ok=True)
-        self._settings_path.write_text(
-            yaml.safe_dump(merged, sort_keys=False, allow_unicode=True, default_flow_style=False),
+        self._local_settings_path.parent.mkdir(parents=True, exist_ok=True)
+        self._local_settings_path.write_text(
+            "# Written by the Settings page — overrides config/settings.yaml. Delete to reset.\n"
+            + yaml.safe_dump(local, sort_keys=False, allow_unicode=True, default_flow_style=False),
             encoding="utf-8",
         )
 
@@ -439,6 +434,13 @@ class ConfigManager:
     def prompts(self):
         """Raw prompts dict as loaded from config/prompts.yaml."""
         return self._prompts_raw
+
+
+def _read_yaml(path: Path) -> dict:
+    """Load a YAML mapping, or {} if the file is missing or empty."""
+    if not path.exists():
+        return {}
+    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
 def _filter_allowed(updates: dict, allowed: dict) -> dict:

@@ -339,6 +339,14 @@ if prompt := st.chat_input("Stelle eine Frage über deine Welt..."):
     if st.session_state.get("_hybrid_search"):
         request_body["hybrid_search"] = True
 
+    # Read timeout follows the configured LLM timeout: condense + answer can each
+    # take up to that long before the first token arrives.
+    try:
+        _llm = requests.get(f"{API_URL}/config", timeout=5).json()["llm"]
+        _llm_timeout = _llm[_llm["provider"]]["timeout"]
+    except Exception:
+        _llm_timeout = 300
+
     # Stream response
     with st.chat_message("assistant"):
         try:
@@ -346,7 +354,7 @@ if prompt := st.chat_input("Stelle eine Frage über deine Welt..."):
                 f"{API_URL}/query/stream",
                 json=request_body,
                 stream=True,
-                timeout=180,
+                timeout=(10, 2 * _llm_timeout + 60),
             )
             response.raise_for_status()
 

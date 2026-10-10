@@ -36,6 +36,13 @@ def _variants_dir() -> Path:
 _jinja_env = Environment()
 
 
+def _variant_path(name: str) -> Path:
+    """Resolve a variant file, rejecting names that would escape the variants dir (e.g. '..' + backslash on Windows)."""
+    if not name or name in (".", "..") or Path(name).name != name:
+        raise HTTPException(status_code=400, detail=f"Ungültiger Variantenname: {name!r}")
+    return _variants_dir() / f"{name}.yaml"
+
+
 def _file_hash(path: Path) -> str:
     """Compute the MD5 hash of a file for cheap 'is_active' equality checks."""
     return hashlib.md5(path.read_bytes()).hexdigest()
@@ -128,7 +135,7 @@ async def list_variants():
 @prompt_router.get("/variants/{name}", response_model=PromptVariant)
 async def get_variant(name: str):
     """Load a specific prompt variant by its filename/name."""
-    path = _variants_dir() / f"{name}.yaml"
+    path = _variant_path(name)
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Variante '{name}' nicht gefunden")
     raw = _read_variant_file(path)
@@ -153,7 +160,7 @@ async def save_variant(name: str, variant: PromptVariant):
     for k in _TEMPLATE_KEYS:
         data[k] = getattr(variant.prompts, k)
 
-    path = _variants_dir() / f"{name}.yaml"
+    path = _variant_path(name)
     path.write_text(
         yaml.safe_dump(data, sort_keys=False, allow_unicode=True, default_flow_style=False),
         encoding="utf-8",
@@ -165,7 +172,7 @@ async def save_variant(name: str, variant: PromptVariant):
 @prompt_router.delete("/variants/{name}")
 async def delete_variant(name: str):
     """Delete a specific prompt variant file from the disk."""
-    path = _variants_dir() / f"{name}.yaml"
+    path = _variant_path(name)
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Variante '{name}' nicht gefunden")
     path.unlink()
@@ -180,7 +187,7 @@ async def activate_variant(name: str):
     This copies the variant's content to the active prompts.yaml file and triggers
     a hot-reload of the PromptManager within the FastAPI app.
     """
-    path = _variants_dir() / f"{name}.yaml"
+    path = _variant_path(name)
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Variante '{name}' nicht gefunden")
 

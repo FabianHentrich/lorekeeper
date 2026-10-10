@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 import yaml
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from src.api.eval_schemas import (
     EvalJobRequest,
@@ -131,7 +131,7 @@ def _cleanup_results(eval_type: str):
 
 
 @eval_router.post("/run", response_model=EvalJobResponse)
-async def start_eval(req: EvalJobRequest):
+async def start_eval(req: EvalJobRequest, request: Request):
     """Start an asynchronous evaluation job processing the entire golden set."""
     if not _QA_PATH.exists():
         raise HTTPException(status_code=404, detail="No qa_pairs.yaml found")
@@ -160,7 +160,8 @@ async def start_eval(req: EvalJobRequest):
         if req.eval_type == "retrieval":
             _spawn_eval_task(_run_retrieval_eval(job, qa_pairs, req))
         else:
-            _spawn_eval_task(_run_e2e_eval(job, qa_pairs))
+            # Same server that received this request — no hardcoded host/port
+            _spawn_eval_task(_run_e2e_eval(job, qa_pairs, str(request.base_url).rstrip("/")))
 
     return EvalJobResponse(job_id=job_id, status="queued")
 
@@ -204,7 +205,7 @@ async def _run_retrieval_eval(job: EvalJobStatus, qa_pairs: list[dict], req: Eva
         logger.error(f"Retrieval eval failed: {e}")
 
 
-async def _run_e2e_eval(job: EvalJobStatus, qa_pairs: list[dict]):
+async def _run_e2e_eval(job: EvalJobStatus, qa_pairs: list[dict], api_url: str):
     """Execute an end-to-end evaluation including the LLM answer generation."""
     from evaluation.evaluate import evaluate
 
@@ -212,7 +213,7 @@ async def _run_e2e_eval(job: EvalJobStatus, qa_pairs: list[dict]):
 
     def _run_sync():
         """Blocking evaluator invocation, offloaded to a worker thread."""
-        return evaluate("http://localhost:8000", qa_pairs)
+        return evaluate(api_url, qa_pairs)
 
     try:
         report = await asyncio.get_event_loop().run_in_executor(None, _run_sync)
@@ -269,10 +270,17 @@ async def list_results():
     return summaries
 
 
+def _result_path(filename: str) -> Path:
+    """Resolve a result file, rejecting names that would escape the results dir (e.g. '..' + backslash on Windows)."""
+    if not filename or filename in (".", "..") or Path(filename).name != filename:
+        raise HTTPException(status_code=400, detail=f"Invalid result filename: {filename!r}")
+    return _RESULTS_DIR / filename
+
+
 @eval_router.get("/results/{filename}")
 async def get_result(filename: str):
     """Download the full JSON report for a specific evaluation run."""
-    path = _RESULTS_DIR / filename
+    path = _result_path(filename)
     if not path.exists() or not path.is_file():
         raise HTTPException(status_code=404, detail="Result not found")
     return json.loads(path.read_text(encoding="utf-8"))
@@ -281,7 +289,7 @@ async def get_result(filename: str):
 @eval_router.delete("/results/{filename}")
 async def delete_result(filename: str):
     """Delete a specific evaluation report file."""
-    path = _RESULTS_DIR / filename
+    path = _result_path(filename)
     if not path.exists():
         raise HTTPException(status_code=404, detail="Result not found")
     path.unlink()

@@ -246,16 +246,20 @@ def _start_ingest_job(run_sync) -> str:
 
 
 @router.post("/ingest", response_model=IngestJobResponse)
-async def ingest():
-    """Start an asynchronous ingestion job to process and embed all configured sources."""
+async def ingest(full: bool = False):
+    """Start an asynchronous ingestion job to process and embed all configured sources.
+
+    Incremental by default (unchanged files are skipped); ``?full=true`` re-chunks and
+    re-embeds every file, e.g. after chunking settings changed.
+    """
     from src.ingestion.orchestrator import IngestionOrchestrator
     import src.main as main_module
     _, _, _, _, _, vs, _ = _get_services()
 
     def _run(progress_cb):
-        """Run full ingestion across all configured sources."""
+        """Run ingestion across all configured sources."""
         return IngestionOrchestrator(config=main_module.config).run(
-            vectorstore=vs, progress_callback=progress_cb,
+            vectorstore=vs, progress_callback=progress_cb, full=full,
         )
 
     return IngestJobResponse(job_id=_start_ingest_job(_run), status="queued")

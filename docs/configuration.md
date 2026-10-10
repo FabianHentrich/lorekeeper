@@ -25,15 +25,17 @@ override YAML values (double underscore for nesting: `LLM__OLLAMA__MODEL`).
 
 **Override order** (highest priority first):
 ```
-Env variables  >  .env file  >  config/settings.yaml  >  Pydantic defaults
+Env variables  >  .env file  >  config/settings.local.yaml  >  config/settings.yaml  >  Pydantic defaults
 ```
 
 ### Editing via the UI
 
 A subset of these settings is editable live via the 🛠 **Settings** page
 (`ui/pages/4_Settings.py`) and the `GET /config` / `PUT /config` endpoints.
-Writes go to `config/settings.yaml` **and** mutate the running services in
-place — no restart required.
+Writes go to the gitignored sidecar `config/settings.local.yaml` (overrides
+`settings.yaml`, which is never rewritten and keeps its comments) **and** mutate
+the running services in place — no restart required. Delete the sidecar to
+reset to `settings.yaml`.
 
 | Section | Editable via UI | Live effect |
 |---|---|---|

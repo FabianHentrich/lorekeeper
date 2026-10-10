@@ -228,3 +228,14 @@ def test_delete_nonexistent_result(client):
     """Ensure non-existent files trigger logical HTTP 404s."""
     resp = client.delete("/eval/results/nope.json")
     assert resp.status_code == 404
+
+
+@pytest.mark.parametrize("name", ["..%5Csecret.json", "sub%5Csecret.json"])
+def test_result_paths_cannot_escape_results_dir(client, tmp_eval_dir, name):
+    """Ensure encoded backslashes can't read or delete files outside the results dir."""
+    outside = tmp_eval_dir.results_dir.parent / "secret.json"
+    outside.write_text(json.dumps({"hit_rate": 1.0}))
+
+    assert client.get(f"/eval/results/{name}").status_code == 400
+    assert client.delete(f"/eval/results/{name}").status_code == 400
+    assert outside.exists()

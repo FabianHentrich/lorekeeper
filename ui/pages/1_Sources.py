@@ -114,7 +114,7 @@ with col_reindex:
     st.caption("Alle Sources komplett neu einlesen:")
     if st.button("🔄 Alle Dokumente neu indizieren"):
         try:
-            r = requests.post(f"{API_URL}/ingest", timeout=10)
+            r = requests.post(f"{API_URL}/ingest", params={"full": "true"}, timeout=10)
             if r.status_code == 409:
                 st.warning(r.json()["detail"])
             else:

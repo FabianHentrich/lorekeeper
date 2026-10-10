@@ -167,13 +167,16 @@ class IngestionOrchestrator:
         return p.parent if p.is_file() else p
 
     def run(self, vectorstore=None, only_source_id: str | None = None,
-            progress_callback=None) -> IngestionResult:
+            progress_callback=None, full: bool = False) -> IngestionResult:
         """Execute the ingestion pipeline.
 
         This method discovers relevant files, parses them into chunks, assigns metadata
         (e.g. content hashes and categories), and synchronizes them with the vector store.
         It correctly handles insertions of new chunks, updates of modified documents,
         and deletions of files that no longer exist on disk (orphans).
+
+        ``full=True`` re-processes files whose content hash is unchanged — needed after
+        chunking settings or parser logic changed.
         """
         result = IngestionResult()
         settings = self.config.settings
@@ -234,7 +237,7 @@ class IngestionOrchestrator:
 
             try:
                 content_hash = _compute_content_hash(file_path)
-                if existing.get(key) == content_hash:
+                if not full and existing.get(key) == content_hash:
                     processed.add(key)
                     result.documents_processed += 1
                     _report()

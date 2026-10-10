@@ -112,11 +112,11 @@ class TestSaveSettings:
             settings_path=settings,
             prompts_path=tmp_path / "p.yaml",
             sources_path=tmp_path / "s.yaml",
-        ), settings
+        ), tmp_path / "settings.local.yaml"
 
     def test_happy_path_writes_yaml_and_mutates_live(self, tmp_path):
-        """A valid update should be persisted and visible on the running settings object."""
-        cm, settings_path = self._make_cm(tmp_path)
+        """A valid update should be persisted to the sidecar and visible on the running settings object."""
+        cm, local_path = self._make_cm(tmp_path)
         retrieval_ref = cm.settings.retrieval  # hold a reference to verify in-place mutation
 
         cm.save_settings({"retrieval": {"top_k": 22, "score_threshold": 0.66}})
@@ -126,7 +126,7 @@ class TestSaveSettings:
         # Same object — services holding references stay consistent
         assert cm.settings.retrieval is retrieval_ref
 
-        reloaded = yaml.safe_load(settings_path.read_text(encoding="utf-8"))
+        reloaded = yaml.safe_load(local_path.read_text(encoding="utf-8"))
         assert reloaded["retrieval"]["top_k"] == 22
         assert reloaded["retrieval"]["score_threshold"] == 0.66
 
@@ -143,7 +143,7 @@ class TestSaveSettings:
 
     def test_disallowed_keys_are_dropped(self, tmp_path):
         """Keys outside the allow-list must not reach the live settings or disk."""
-        cm, settings_path = self._make_cm(tmp_path)
+        cm, local_path = self._make_cm(tmp_path)
         original_model = cm.settings.embeddings.model
 
         cm.save_settings({
@@ -153,7 +153,7 @@ class TestSaveSettings:
 
         assert cm.settings.embeddings.model == original_model
         assert cm.settings.retrieval.top_k == 7
-        reloaded = yaml.safe_load(settings_path.read_text(encoding="utf-8"))
+        reloaded = yaml.safe_load(local_path.read_text(encoding="utf-8"))
         assert "embeddings" not in reloaded
         assert "secret_key" not in reloaded["retrieval"]
 
@@ -161,27 +161,26 @@ class TestSaveSettings:
         """Pydantic validation errors must bubble up and leave state untouched."""
         from pydantic import ValidationError
 
-        cm, settings_path = self._make_cm(tmp_path)
+        cm, local_path = self._make_cm(tmp_path)
         original_top_k = cm.settings.retrieval.top_k
 
         with pytest.raises(ValidationError):
             cm.save_settings({"retrieval": {"top_k": "not-an-int"}})
 
         assert cm.settings.retrieval.top_k == original_top_k
-        # File should remain empty since validation failed before write
-        assert settings_path.read_text(encoding="utf-8").strip() == ""
+        # Nothing written since validation failed before write
+        assert not local_path.exists()
 
     def test_empty_update_is_noop(self, tmp_path):
         """Empty or fully-disallowed updates should not touch disk."""
-        cm, settings_path = self._make_cm(tmp_path)
-        mtime_before = settings_path.stat().st_mtime_ns
+        cm, local_path = self._make_cm(tmp_path)
 
         snapshot = cm.save_settings({})
         snapshot2 = cm.save_settings({"api": {"port": 9999}})  # disallowed section
 
         assert snapshot["retrieval"]["top_k"] == cm.settings.retrieval.top_k
         assert snapshot == snapshot2
-        assert settings_path.stat().st_mtime_ns == mtime_before
+        assert not local_path.exists()
 
     def test_snapshot_excludes_secrets(self, tmp_path):
         """The editable snapshot must not contain API keys, file paths, or logging."""
@@ -192,24 +191,23 @@ class TestSaveSettings:
         assert "logging" not in snap
         assert "persist_directory" not in snap["vectorstore"]
 
-    def test_preserves_unrelated_yaml_sections(self, tmp_path):
-        """Existing YAML keys outside the update must survive the round-trip."""
+    def test_base_settings_file_is_never_rewritten(self, tmp_path):
+        """settings.yaml (with its comments) stays untouched; overrides survive a restart via the sidecar."""
         settings_path = tmp_path / "settings.yaml"
-        settings_path.write_text(
-            "logging:\n  level: DEBUG\nretrieval:\n  top_k: 10\n",
-            encoding="utf-8",
-        )
-        cm = ConfigManager(
-            settings_path=settings_path,
-            prompts_path=tmp_path / "p.yaml",
-            sources_path=tmp_path / "s.yaml",
-        )
+        original = "# Kommentar bleibt\nlogging:\n  level: DEBUG\nretrieval:\n  top_k: 10\n  score_threshold: 0.5\n"
+        settings_path.write_text(original, encoding="utf-8")
+        paths = dict(settings_path=settings_path, prompts_path=tmp_path / "p.yaml", sources_path=tmp_path / "s.yaml")
+        cm = ConfigManager(**paths)
 
         cm.save_settings({"retrieval": {"top_k": 42}})
+        cm.save_settings({"conversation": {"window_size": 4}})
 
-        reloaded = yaml.safe_load(settings_path.read_text(encoding="utf-8"))
-        assert reloaded["logging"]["level"] == "DEBUG"
-        assert reloaded["retrieval"]["top_k"] == 42
+        assert settings_path.read_text(encoding="utf-8") == original
+        restarted = ConfigManager(**paths)
+        assert restarted.settings.retrieval.top_k == 42
+        assert restarted.settings.retrieval.score_threshold == 0.5
+        assert restarted.settings.conversation.window_size == 4
+        assert restarted.settings.logging.level == "DEBUG"
 
 
 class TestSettings:

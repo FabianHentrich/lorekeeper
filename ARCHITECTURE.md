@@ -841,7 +841,7 @@ in Env-Variablen übersetzt. Pydantic-Settings liest diese automatisch:
 | DELETE | `/sessions/{id}`          | Session löschen                                     |
 | GET    | `/stats`                  | Index-Statistiken (Chunk-Count etc.)                |
 | GET    | `/config`                 | UI-editierbare Settings + Read-only-Infrastruktur (Embeddings/Vectorstore) |
-| PUT    | `/config`                 | Partial Update (Allow-List-gefiltert) → persistiert nach `settings.yaml` + Live-Mutation |
+| PUT    | `/config`                 | Partial Update (Allow-List-gefiltert) → persistiert nach `settings.local.yaml` (Sidecar) + Live-Mutation |
 | GET    | `/prompts/active`         | Aktive Prompts lesen                                |
 | PUT    | `/prompts/active`         | Aktive Prompts speichern + Hot-Reload               |
 | GET    | `/prompts/variants`       | Gespeicherte Varianten auflisten                    |
@@ -932,7 +932,7 @@ class IngestStatusResponse(BaseModel):
   - Hybrid-Search-Toggle (Per-Session-Override über Settings-Default)
 - **🛠 Settings** Seite (`ui/pages/4_Settings.py`):
   - Zentrale Stelle für Retrieval-, LLM-, Conversation- und Chunking-Defaults
-  - `GET /config` lädt die Allow-List-gefilterte Snapshot, `PUT /config` persistiert Diff nach `settings.yaml` und mutiert die laufenden Services in place
+  - `GET /config` lädt die Allow-List-gefilterte Snapshot, `PUT /config` persistiert Diff nach `settings.local.yaml` (Sidecar, überschreibt `settings.yaml`) und mutiert die laufenden Services in place
   - Chunking-Tab persistiert sofort, wirkt aber erst nach Reindex (Warning-Banner)
   - Read-only-Expander für Embeddings- und Vectorstore-Infos (änderbar nur via `.env` + Restart)
 - **✏ Prompts** Seite (`ui/pages/3_Prompts.py`):

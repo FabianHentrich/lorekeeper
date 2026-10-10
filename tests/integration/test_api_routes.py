@@ -505,7 +505,8 @@ def config_client(tmp_path):
     app.include_router(router)
     client = TestClient(app)
 
-    yield client, settings_path, main_module.config
+    # UI writes go to the settings.local.yaml sidecar, not settings.yaml
+    yield client, tmp_path / "settings.local.yaml", main_module.config
 
     main_module.config = original_config
 
@@ -521,7 +522,7 @@ def test_get_config_returns_editable_snapshot(config_client):
 
 
 def test_put_config_persists_and_mutates(config_client):
-    """PUT /config must update live settings and write to settings.yaml."""
+    """PUT /config must update live settings and write to the settings.local.yaml sidecar."""
     import yaml as _yaml
     client, settings_path, cm = config_client
 

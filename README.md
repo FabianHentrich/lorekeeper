@@ -97,7 +97,7 @@ multilingual E5 model and prompts for any other language.
 | 🔁 **Incremental indexing** | SHA-256 content hashing — only changed files re-embed |
 | 🐳 **Docker-ready** | API + ChromaDB + Ollama (GPU) + UI via `docker compose` |
 | ✏ **Prompt management** | Edit active prompts, save/load/compare variants, Jinja2 preview — all from the UI with instant hot-reload |
-| 🛠 **Live settings** | Retrieval, LLM, conversation and chunking defaults editable via a 🛠 Settings page — persisted to `settings.yaml` and applied in place, no restart |
+| 🛠 **Live settings** | Retrieval, LLM, conversation and chunking defaults editable via a 🛠 Settings page — persisted to `settings.local.yaml` and applied in place, no restart |
 | ⚙ **Self-service setup** | Sources (folder OR single file), provider switch, and Gemini API-key entry — all from the UI, no YAML required |
 | ✅ **220 tests** | Unit + integration coverage including the full HTTP layer |
 

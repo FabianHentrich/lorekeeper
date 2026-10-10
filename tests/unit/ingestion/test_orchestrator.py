@@ -272,6 +272,15 @@ class TestRunIncremental:
         assert result.documents_processed == 1
         assert result.chunks_created == result.chunks_updated == result.chunks_deleted == 0
 
+    def test_full_run_reprocesses_unchanged_file(self, tmp_path, monkeypatch):
+        """Verify full=True re-chunks an unchanged file (e.g. after chunking settings changed)."""
+        orch, f = self._setup(tmp_path, monkeypatch)
+        vs = FakeVectorStore({"vault": {"Arkenfeld.md": _compute_content_hash(f)}})
+        result = orch.run(vectorstore=vs, full=True)
+        assert vs.calls[0] == ("delete", "vault", "Arkenfeld.md")
+        assert vs.upserted
+        assert result.chunks_updated == len(vs.upserted)
+
     def test_changed_file_old_chunks_deleted_before_upsert(self, tmp_path, monkeypatch):
         """Verify a changed file drops its old chunks first so a shrunken file leaves no stale tail."""
         orch, _ = self._setup(tmp_path, monkeypatch)
