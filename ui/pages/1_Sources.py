@@ -8,6 +8,7 @@ without touching config/sources.yaml manually. Also exposes the danger-zone
 import re
 import time
 from pathlib import Path
+from urllib.parse import quote
 
 import pandas as pd
 import requests
@@ -110,6 +111,17 @@ def _refresh():
 def _fetch_stats(api_url: str):
     """Retrieve aggregate VectorStore telemetry (e.g. total indexed chunks)."""
     return requests.get(f"{api_url}/stats", timeout=5).json()
+
+
+def _raise_for_status(resp: requests.Response):
+    """Like resp.raise_for_status(), but surfaces the backend's `detail` message."""
+    if resp.ok:
+        return
+    try:
+        detail = resp.json().get("detail", resp.text)
+    except ValueError:
+        detail = resp.text
+    raise RuntimeError(f"{resp.status_code}: {detail}")
 
 
 try:
@@ -243,7 +255,7 @@ if sources:
 
             try:
                 resp = requests.put(f"{API_URL}/sources", json={"sources": new_sources}, timeout=10)
-                resp.raise_for_status()
+                _raise_for_status(resp)
                 st.success("Gespeichert. Du musst u.U. Recategorize oder Reindex anwerfen, "
                            "damit bestehende Chunks die neuen Werte übernehmen.")
                 _refresh()
@@ -264,6 +276,7 @@ st.subheader("Aktionen pro Quelle")
 _GROUPS = ["lore", "adventure", "rules"]
 
 for s in sources:
+    sid_url = quote(s["id"], safe="")  # ids are free text — encode for URL paths
     with st.expander(f"📁 {s['id']} — {s['path']}"):
         # ── Action buttons ──
         col_a, col_b, col_c = st.columns(3)
@@ -271,7 +284,7 @@ for s in sources:
             if st.button("🔄 Reindex", key=f"reindex_{s['id']}",
                          help="Löscht alle Chunks dieser Source und liest sie neu ein. "
                               "Pflicht, wenn sich Inhalte oder der Pfad geändert haben."):
-                _start_ingest(f"/sources/{s['id']}/reindex", f"Reindex '{s['id']}'")
+                _start_ingest(f"/sources/{sid_url}/reindex", f"Reindex '{s['id']}'")
         with col_b:
             if st.button("🏷 Recategorize (alle)", key=f"recat_{s['id']}",
                          help="Schnell, kein Re-Embedding. Bringt bestehende Chunks "
@@ -288,7 +301,7 @@ for s in sources:
                          help="Entfernt die Source aus der Config UND löscht alle "
                               "zugehörigen Chunks aus der Datenbank."):
                 try:
-                    r = requests.delete(f"{API_URL}/sources/{s['id']}", timeout=10)
+                    r = requests.delete(f"{API_URL}/sources/{sid_url}", timeout=10)
                     r.raise_for_status()
                     st.success(f"Entfernt. Gelöschte Chunks: {r.json()['deleted_chunks']}")
                     _refresh()
@@ -298,7 +311,7 @@ for s in sources:
         # ── Folder mapping ──
         st.markdown("**Ordner-Zuordnung**")
         try:
-            tree = requests.get(f"{API_URL}/sources/{s['id']}/folders", timeout=5).json()
+            tree = requests.get(f"{API_URL}/sources/{sid_url}/folders", timeout=5).json()
             folders = tree.get("folders", [])
         except Exception:
             folders = []
@@ -369,7 +382,7 @@ for s in sources:
                     resp = requests.put(
                         f"{API_URL}/sources", json={"sources": updated_sources}, timeout=10,
                     )
-                    resp.raise_for_status()
+                    _raise_for_status(resp)
                     st.success("Zuordnung gespeichert. Recategorize starten, "
                                "damit bestehende Chunks aktualisiert werden.")
                     _refresh()
@@ -419,10 +432,9 @@ if scan_result is not None and scan_source_path:
         c1, c2, c3 = st.columns(3)
         with c1:
             # Auto-suggest ID from folder/file name
-            suggested_id = re.sub(r"[^\w-]+", "-", Path(scan_source_path).stem.lower()).strip("-")
+            suggested_id = re.sub(r"[^\w-]+", "-", Path(scan_source_path).stem.lower()).strip("-") or "source"
             new_id = st.text_input("ID", value=suggested_id, key="_new_source_id",
-                                   help="Stabiler Identifier. Wird zum Filtern und Reindex verwendet. "
-                                        "Erlaubt: Buchstaben, Ziffern, '_' und '-'.")
+                                   help="Stabiler Identifier. Wird zum Filtern und Reindex verwendet.")
         with c2:
             new_group = st.selectbox("Default-Group", _GROUPS, key="_new_source_group",
                                      help="Fallback-Gruppe für nicht zugeordnete Ordner/Dateien.")
@@ -476,6 +488,9 @@ if scan_result is not None and scan_source_path:
         if st.button("➕ Source hinzufügen", type="primary", key="_add_source_final"):
             if not new_id or not new_id.strip():
                 st.error("ID ist ein Pflichtfeld.")
+            elif "/" in new_id:
+                # FastAPI decodes %2F before routing → /sources/{id}/... would 404
+                st.error("ID darf kein '/' enthalten.")
             elif any(s["id"] == new_id.strip() for s in sources):
                 st.error(f"ID '{new_id}' existiert bereits.")
             else:
@@ -490,7 +505,7 @@ if scan_result is not None and scan_source_path:
                 try:
                     r = requests.put(f"{API_URL}/sources",
                                      json={"sources": updated}, timeout=10)
-                    r.raise_for_status()
+                    _raise_for_status(r)
                     st.success(f"Source '{new_id}' hinzugefügt. Starte jetzt Reindex "
                                "um die Dokumente zu indizieren.")
                     st.session_state.pop("_scan_result", None)

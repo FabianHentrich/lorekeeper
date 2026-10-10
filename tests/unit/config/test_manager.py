@@ -2,9 +2,8 @@ from pathlib import Path
 
 import pytest
 import yaml
-from pydantic import ValidationError
 
-from src.config.manager import ConfigManager, Settings, SourceConfig
+from src.config.manager import ConfigManager, Settings
 
 
 class TestConfigManager:
@@ -242,18 +241,3 @@ class TestSettings:
         monkeypatch.setenv("VECTORSTORE__MODE", "client")
         s = Settings()
         assert s.vectorstore.mode == "client"
-
-
-class TestSourceConfigId:
-    """Test suite for source id validation — ids are used in URL paths."""
-
-    @pytest.mark.parametrize("sid", ["pnp-welt", "pnp_regelbuch", "Akademie2", "märchen"])
-    def test_accepts_word_chars_and_dash(self, sid):
-        """Verify letters (incl. umlauts), digits, '_' and '-' are accepted."""
-        assert SourceConfig(id=sid, path="x", group="lore").id == sid
-
-    @pytest.mark.parametrize("sid", ["", "a/b", "foo#1", "a b", "x?y", "a.b"])
-    def test_rejects_url_unsafe_chars(self, sid):
-        """Verify ids that would break or redirect /sources/{id}/... routes are rejected."""
-        with pytest.raises(ValidationError):
-            SourceConfig(id=sid, path="x", group="lore")

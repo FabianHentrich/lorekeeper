@@ -1,5 +1,4 @@
 import logging
-import re
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -68,14 +67,6 @@ class SourceConfig(BaseModel):
     default_category: str | None = None         # Used for files & flat sources
     category_map: dict[str, str | dict[str, str]] = {}  # Top-folder -> category or {category, group}
     exclude_patterns: list[str] = []            # Additive to global excludes
-
-    @field_validator("id")
-    @classmethod
-    def _validate_id(cls, v: str) -> str:
-        """Restrict ids to word chars and '-' — they end up in URL paths (/sources/{id}/...)."""
-        if not re.fullmatch(r"[\w-]+", v):
-            raise ValueError(f"source id {v!r}: only letters, digits, '_' and '-' allowed")
-        return v
 
     @field_validator("category_map")
     @classmethod
