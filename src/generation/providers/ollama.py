@@ -165,11 +165,21 @@ class OllamaProvider(BaseLLMProvider):
             yield buffer
 
     async def health_check(self) -> bool:
-        """Return True if the Ollama daemon responds to /api/tags within the timeout."""
+        """Return True if the Ollama daemon responds and the configured model is pulled.
+
+        A running daemon without the model would report healthy while every query fails.
+        """
         try:
             import httpx
             async with httpx.AsyncClient(timeout=3.0) as client:
                 resp = await client.get(f"{self.base_url}/api/tags")
-                return resp.status_code == 200
+                if resp.status_code != 200:
+                    return False
+                names = {m.get("name", "") for m in resp.json().get("models", [])}
         except Exception:
             return False
+        # Ollama stores an untagged name ("qwen3") as "qwen3:latest"
+        available = self.model in names or f"{self.model}:latest" in names
+        if not available:
+            logger.warning(f"Ollama model '{self.model}' is not pulled — run: ollama pull {self.model}")
+        return available

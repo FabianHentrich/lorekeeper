@@ -80,19 +80,26 @@ class TestOllamaProvider:
         assert timeouts == [42, 99]
 
     @pytest.mark.asyncio
-    async def test_health_check_success(self):
+    @pytest.mark.parametrize("model, pulled, expected", [
+        ("qwen3:8b", ["qwen3:8b", "llama3:latest"], True),
+        ("qwen3", ["qwen3:latest"], True),           # untagged name resolves to :latest
+        ("qwen3:8b", [], False),                     # daemon up, model not pulled
+        ("qwen3:8b", ["qwen3:14b"], False),
+    ])
+    async def test_health_check_requires_pulled_model(self, model, pulled, expected):
         """
-        Verify that receiving a successful 200 HTTP response mapped onto httpx
-        correctly represents the healthcheck as truthy.
+        Verify the healthcheck is only truthy when the daemon responds AND the configured
+        model is pulled — a running daemon without the model would fail every query.
         """
-        provider = OllamaProvider(config=OllamaConfig())
+        provider = OllamaProvider(config=OllamaConfig(model=model))
         with patch("httpx.AsyncClient") as mock_client_cls:
             mock_resp = MagicMock(status_code=200)
+            mock_resp.json.return_value = {"models": [{"name": n} for n in pulled]}
             mock_client = AsyncMock()
             mock_client.get = AsyncMock(return_value=mock_resp)
             mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
-            assert await provider.health_check() is True
+            assert await provider.health_check() is expected
 
     @pytest.mark.asyncio
     async def test_health_check_failure(self):

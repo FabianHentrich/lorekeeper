@@ -38,7 +38,8 @@ def patched_lifespan():
          patch("src.main.Retriever", return_value=fake_retriever), \
          patch("src.main.ProviderFactory") as fake_factory, \
          patch("src.main.Generator", return_value=fake_generator), \
-         patch("src.main._ensure_ollama", new=AsyncMock(return_value=None)):
+         patch("src.main._ensure_ollama", new=AsyncMock(return_value=None)), \
+         patch("src.logging_setup.setup_logging"):  # else the root logger writes all later test logs to logs/lorekeeper.log
 
         fake_factory.create.return_value = fake_provider
         fake_factory.create_condense_provider.return_value = None

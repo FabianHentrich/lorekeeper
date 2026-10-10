@@ -60,7 +60,7 @@ llm:
   fallback_enabled: false
   ollama:
     base_url: "http://localhost:11434"
-    model: "qwen3:8b"
+    model: "qwen3:14b"
     temperature: 0.3
     top_p: 0.9
     max_tokens: 2048
