@@ -17,6 +17,7 @@ class StreamResult:
     """Per-call context for generate_stream. Populated by the provider while
     the stream runs so concurrent streams do not share state."""
     usage: dict = field(default_factory=dict)
+    model: str | None = None  # model that actually produced the stream (set by Generator, fallback-aware)
 
 
 class BaseLLMProvider(ABC):

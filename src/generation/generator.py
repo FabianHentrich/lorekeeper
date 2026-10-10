@@ -53,6 +53,8 @@ class Generator:
         once tokens are already on the wire, re-running from scratch would duplicate output.
         """
         emitted = False
+        if stream_result is not None:
+            stream_result.model = self.provider.model
         try:
             async for token in self.provider.generate_stream(
                 qa_prompt,
@@ -67,6 +69,8 @@ class Generator:
                     logger.error(f"Primary provider failed mid-stream ({e}); cannot fall back safely")
                 raise
             logger.warning(f"Primary provider failed before emitting tokens ({e}), trying fallback")
+            if stream_result is not None:
+                stream_result.model = self.fallback_provider.model
             async for token in self.fallback_provider.generate_stream(
                 qa_prompt,
                 system_prompt=system_prompt,

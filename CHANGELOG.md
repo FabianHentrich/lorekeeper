@@ -43,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Sources page: chunk total stayed stale after an ingest; status polling looped forever when the backend was unreachable
 - Source ids with `#`, `&`, `?` or spaces broke reindex, delete and folder lookup
 - Failed scans and missing source paths were shown as "no subfolders"
+- `/query/stream` reported the primary provider's model in `model_used` even when the fallback provider answered
 
 ### Removed
 - Docker setup (`Dockerfile`, `Dockerfile.ui`, `docker-compose.yaml`, `.dockerignore`, `requirements-ui.txt`) — LoreKeeper runs Windows-only with embedded ChromaDB

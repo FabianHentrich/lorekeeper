@@ -193,7 +193,7 @@ async def query_stream(request: QueryRequest):
             "type": "done",
             "session_id": session.session_id,
             "sources": sources,
-            "model_used": getattr(prov, "model", "unknown"),
+            "model_used": stream_ctx.model or prov.model,
             "usage": usage,
             "session_usage": session.usage_totals,
         })

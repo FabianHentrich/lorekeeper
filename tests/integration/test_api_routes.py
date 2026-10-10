@@ -352,6 +352,18 @@ def test_query_stream_yields_tokens_and_done_event(client, fake_services):
     assert done["sources"][0]["file"] == "Arkenfeld.md"
 
 
+def test_query_stream_reports_model_that_answered(client, fake_services):
+    """Ensure model_used comes from the stream result (e.g. the fallback), not the primary provider."""
+    class FallbackGenerator(FakeGenerator):
+        async def generate_stream(self, system_prompt, qa_prompt, stream_result=None):
+            stream_result.model = "gemini-2.5-flash"
+            yield "Antwort"
+
+    main_module.generator = FallbackGenerator()
+    done = _parse_sse(client.post("/query/stream", json={"question": "Hi"}).text)[-1]
+    assert done["model_used"] == "gemini-2.5-flash"
+
+
 def test_query_stream_no_chunks_emits_fallback_token(client, fake_services):
     """Ensure missing context immediately yields the configured fallback response via stream."""
     fake_services.retriever._chunks = []

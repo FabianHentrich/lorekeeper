@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from src.generation.generator import Generator
-from src.generation.providers.base import LLMResponse
+from src.generation.providers.base import LLMResponse, StreamResult
 
 
 @pytest.fixture
@@ -111,9 +111,10 @@ class TestGenerator:
         mock_provider.generate.assert_not_called()
 
 
-def _stream_provider(tokens: list[str], fail_after: int | None = None):
+def _stream_provider(tokens: list[str], fail_after: int | None = None, model: str = "primary-model"):
     """Provider whose generate_stream yields `tokens`, raising after `fail_after` of them."""
     provider = MagicMock()
+    provider.model = model
 
     async def _gen(*args, **kwargs):
         for i, tok in enumerate(tokens):
@@ -137,14 +138,19 @@ class TestGenerateStream:
     async def test_streams_primary_tokens(self):
         """Verify tokens of the primary provider are passed through unchanged."""
         gen = Generator(provider=_stream_provider(["a", "b"]))
-        assert await _collect(gen.generate_stream("sys", "q")) == ["a", "b"]
+        result = StreamResult()
+        assert await _collect(gen.generate_stream("sys", "q", stream_result=result)) == ["a", "b"]
+        assert result.model == "primary-model"
 
     async def test_falls_back_when_primary_fails_before_first_token(self):
         """Verify the fallback takes over if nothing has been emitted yet."""
-        fallback = _stream_provider(["x", "y"])
+        fallback = _stream_provider(["x", "y"], model="fallback-model")
         gen = Generator(provider=_stream_provider(["a"], fail_after=0), fallback_provider=fallback)
-        assert await _collect(gen.generate_stream("sys", "q")) == ["x", "y"]
+        result = StreamResult()
+        assert await _collect(gen.generate_stream("sys", "q", stream_result=result)) == ["x", "y"]
         fallback.generate_stream.assert_called_once()
+        # The model that actually answered is reported, not the failed primary
+        assert result.model == "fallback-model"
 
     async def test_no_fallback_after_tokens_were_emitted(self):
         """Verify a mid-stream failure re-raises instead of duplicating output via the fallback."""
@@ -166,7 +172,7 @@ class TestGenerateStream:
     async def test_passes_prompts_and_stream_result(self):
         """Verify system prompt and stream_result reach the provider."""
         primary = _stream_provider(["a"])
-        sentinel = object()
+        sentinel = StreamResult()
         gen = Generator(provider=primary)
         await _collect(gen.generate_stream("sys", "q", stream_result=sentinel))
         args, kwargs = primary.generate_stream.call_args
