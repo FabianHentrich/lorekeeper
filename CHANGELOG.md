@@ -35,6 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `PUT /sources` rejects new ids that are empty, `.`, `..` or have surrounding whitespace (already configured ids are never rejected)
 - Sources page shows the backend's error detail instead of a generic HTTP status
 - `BaseLLMProvider.generate_stream` is declared as a plain `def` returning an `AsyncGenerator`, with `system_prompt` matching the Ollama/Gemini signatures
+- `BaseLLMProvider.model` no longer defaults to `"unknown"` — provider implementations must set `self.model` in `__init__`
 
 ### Fixed
 - Documentation: corrected stale values and inconsistencies across docs
