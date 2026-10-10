@@ -88,6 +88,7 @@ class IngestionResult:
         """Start an empty result bag with the current UTC start timestamp."""
         self.documents_processed: int = 0
         self.documents_total: int = 0
+        self.documents_skipped: int = 0
         self.chunks_created: int = 0
         self.chunks_updated: int = 0
         self.chunks_deleted: int = 0
@@ -240,6 +241,7 @@ class IngestionOrchestrator:
                 if not full and existing.get(key) == content_hash:
                     processed.add(key)
                     result.documents_processed += 1
+                    result.documents_skipped += 1
                     _report()
                     continue
 
@@ -289,8 +291,7 @@ class IngestionOrchestrator:
         if vectorstore is not None:
             # Orphans: anything in existing that wasn't processed this run
             for (sid, src_file) in set(existing.keys()) - processed:
-                vectorstore.delete_by_source_file(sid, src_file)
-                result.chunks_deleted += 1
+                result.chunks_deleted += vectorstore.delete_by_source_file(sid, src_file)
 
         result.end_time = datetime.now(timezone.utc)
         logger.info(

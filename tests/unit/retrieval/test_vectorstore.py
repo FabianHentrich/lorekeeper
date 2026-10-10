@@ -279,6 +279,23 @@ class TestGetContentHashesForSource:
         assert result == {}
 
 
+class TestDeleteBySourceFile:
+    """Test suite for file-scoped chunk deletion."""
+
+    def test_returns_deleted_chunk_count(self, service, mock_collection):
+        """Verify the method deletes scoped by source_id + source_file and reports the chunk count."""
+        mock_collection.get.return_value = {"ids": ["a", "b", "c"]}
+        assert service.delete_by_source_file("src1", "a.md") == 3
+        where = {"$and": [{"source_id": "src1"}, {"source_file": "a.md"}]}
+        mock_collection.delete.assert_called_once_with(where=where)
+
+    def test_skips_delete_when_nothing_stored(self, service, mock_collection):
+        """Verify no delete call is issued for a file without chunks."""
+        mock_collection.get.return_value = {"ids": []}
+        assert service.delete_by_source_file("src1", "a.md") == 0
+        mock_collection.delete.assert_not_called()
+
+
 class TestHealthCheck:
     """Test suite targeting system telemetry polling capabilities."""
 

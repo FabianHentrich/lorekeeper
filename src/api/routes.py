@@ -221,6 +221,7 @@ def _start_ingest_job(run_sync) -> str:
         job.phase = result.phase
         job.documents_processed = result.documents_processed
         job.documents_total = result.documents_total
+        job.documents_skipped = result.documents_skipped
         job.chunks_created = result.chunks_created
         job.chunks_updated = result.chunks_updated
         job.chunks_deleted = result.chunks_deleted

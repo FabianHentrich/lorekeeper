@@ -236,6 +236,7 @@ class FakeVectorStore:
 
     def delete_by_source_file(self, source_id, source_file):
         self.calls.append(("delete", source_id, source_file))
+        return 3
 
     def upsert_chunks(self, chunks):
         self.calls.append(("upsert", len(chunks)))
@@ -260,6 +261,7 @@ class TestRunIncremental:
         result = orch.run(vectorstore=vs)
         assert vs.upserted
         assert result.chunks_created == len(vs.upserted)
+        assert result.documents_skipped == 0
         assert not [c for c in vs.calls if c[0] == "delete"]
 
     def test_unchanged_file_is_skipped(self, tmp_path, monkeypatch):
@@ -270,6 +272,7 @@ class TestRunIncremental:
         result = orch.run(vectorstore=vs)
         assert vs.upserted == []
         assert result.documents_processed == 1
+        assert result.documents_skipped == 1
         assert result.chunks_created == result.chunks_updated == result.chunks_deleted == 0
 
     def test_full_run_reprocesses_unchanged_file(self, tmp_path, monkeypatch):
@@ -301,7 +304,8 @@ class TestRunIncremental:
         result = orch.run(vectorstore=vs)
         assert ("delete", "vault", "Gelöscht.md") in vs.calls
         assert ("delete", "vault", "Arkenfeld.md") not in vs.calls
-        assert result.chunks_deleted == 1
+        # Counts deleted chunks as reported by the store, not orphaned files
+        assert result.chunks_deleted == 3
 
     def test_parse_error_keeps_previous_version(self, tmp_path, monkeypatch):
         """Verify a changed file that fails to parse keeps its old chunks instead of being deleted."""

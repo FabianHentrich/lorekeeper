@@ -225,15 +225,21 @@ class VectorStoreService:
             for i, doc_id in enumerate(data.get("ids") or [])
         ]
 
-    def delete_by_source_file(self, source_id: str, source_file: str) -> None:
+    def delete_by_source_file(self, source_id: str, source_file: str) -> int:
         """Delete chunks scoped to (source_id, source_file). Avoids cross-source collisions.
-        Raises on DB failure so callers can abort instead of reporting false success."""
+        Returns count before deletion. Raises on DB failure so callers can abort instead
+        of reporting false success."""
         collection = self._get_collection()
-        collection.delete(where={"$and": [
+        where = {"$and": [
             {"source_id": source_id},
             {"source_file": source_file},
-        ]})
-        logger.info(f"Deleted chunks: source_id={source_id} file={source_file}")
+        ]}
+        existing = collection.get(where=where, include=[])
+        count = len(existing["ids"]) if existing and existing.get("ids") else 0
+        if count:
+            collection.delete(where=where)
+        logger.info(f"Deleted {count} chunks: source_id={source_id} file={source_file}")
+        return count
 
     def delete_by_source_id(self, source_id: str) -> int:
         """Delete every chunk that belongs to a source. Returns count before deletion.

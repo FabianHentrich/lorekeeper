@@ -20,10 +20,18 @@ def _poll_ingest_job(api_url: str, job_id: str, label: str = "Indizierung"):
     """
     with st.status(f"{label} läuft...", expanded=True) as status:
         progress_line = st.empty()
+        failures = 0
         while True:
             try:
                 info = requests.get(f"{api_url}/ingest/status/{job_id}", timeout=5).json()
-            except Exception:
+                failures = 0
+            except Exception as e:
+                failures += 1
+                if failures >= _POLL_MAX_FAILURES:
+                    progress_line.empty()
+                    status.update(label=f"{label}: Backend nicht erreichbar", state="error", expanded=True)
+                    st.write(f"Status konnte nicht abgefragt werden: {e}")
+                    break
                 time.sleep(1)
                 continue
 
@@ -31,6 +39,7 @@ def _poll_ingest_job(api_url: str, job_id: str, label: str = "Indizierung"):
             phase = info.get("phase", "starting")
             docs = info.get("documents_processed", 0)
             total = info.get("documents_total", 0)
+            skipped = info.get("documents_skipped", 0)
             created = info.get("chunks_created", 0)
             updated = info.get("chunks_updated", 0)
             deleted = info.get("chunks_deleted", 0)
@@ -52,7 +61,8 @@ def _poll_ingest_job(api_url: str, job_id: str, label: str = "Indizierung"):
             if state == "done":
                 status.update(label=f"{label} abgeschlossen", state="complete", expanded=True)
                 st.write(
-                    f"**{docs}** Dokumente in **{duration:.1f}s**  \n"
+                    f"**{docs - skipped}** Dokumente indiziert · **{skipped}** unverändert "
+                    f"übersprungen · **{duration:.1f}s**  \n"
                     f"Chunks: **{created}** neu · **{updated}** aktualisiert · **{deleted}** gelöscht"
                 )
             else:
@@ -63,6 +73,12 @@ def _poll_ingest_job(api_url: str, job_id: str, label: str = "Indizierung"):
                 for err in errors:
                     st.warning(err)
             break
+
+    _fetch_stats.clear()
+    _render_chunk_metric()
+
+
+_POLL_MAX_FAILURES = 30  # ~30 s of unreachable backend before giving up
 
 st.set_page_config(page_title="Sources — LoreKeeper", page_icon="⚙", layout="wide")
 
@@ -102,19 +118,28 @@ except Exception as e:
     st.stop()
 
 
-# ─── Global stats + full reindex ─────────────────────────────────────
+def _render_chunk_metric():
+    """(Re-)draw the total chunk count into its placeholder."""
+    try:
+        value = _fetch_stats(API_URL)["chunk_count"]
+    except Exception:
+        value = "?"
+    stat_slot.metric("Indizierte Chunks (gesamt)", value)
+
+
+# ─── Global stats + incremental / full reindex ───────────────────────
 col_stat, col_reindex = st.columns([2, 3])
 with col_stat:
-    try:
-        stats = _fetch_stats(API_URL)
-        st.metric("Indizierte Chunks (gesamt)", stats["chunk_count"])
-    except Exception:
-        st.metric("Indizierte Chunks (gesamt)", "?")
+    stat_slot = st.empty()
+    _render_chunk_metric()
 with col_reindex:
     st.caption("Nur geänderte/neue Dateien einlesen, oder alle Sources komplett neu:")
     col_incr, col_full = st.columns(2)
     ingest_mode = None
-    if col_incr.button("⚡ Nur Änderungen indizieren"):
+    if col_incr.button("⚡ Nur Änderungen indizieren",
+                       help="Überspringt Dateien mit unverändertem Inhalt (Content-Hash). "
+                            "Nach geänderten Chunking-Einstellungen → 'Alle Dokumente neu "
+                            "indizieren'; nach geänderter category_map/group → 'Recategorize'."):
         ingest_mode = ({}, "Inkrementelle Indizierung")
     if col_full.button("🔄 Alle Dokumente neu indizieren"):
         ingest_mode = ({"full": "true"}, "Vollständige Indizierung")

@@ -45,6 +45,7 @@ class IngestStatusResponse(BaseModel):
     phase: str = "starting"
     documents_processed: int = 0
     documents_total: int = 0
+    documents_skipped: int = 0
     chunks_created: int = 0
     chunks_updated: int = 0
     chunks_deleted: int = 0
