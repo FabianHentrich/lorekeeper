@@ -255,7 +255,8 @@ class Retriever:
         result: list[RetrievedChunk] = []
         seen: set = set()
         for c in chunks:
-            for item in expanded.get(_section_key(c), [c]):
+            key = _section_key(c)
+            for item in (expanded.get(key, [c]) if key else [c]):
                 idx = item.metadata.get("chunk_index")
                 ident = (item.source_file, idx) if idx is not None else id(item)
                 if ident not in seen:
@@ -277,14 +278,15 @@ class Retriever:
 
         The method also applies a diversity-aware selection strategy: it prefers to select chunks from different
         source files up to a `max_per_source` limit. If the pool of candidates above the initial score threshold
-        is small, it will optionally backfill from cap-overflow candidates rather than return fewer chunks than requested.
+        is small, it will optionally backfill from cap-overflow candidates rather than return fewer chunks than
+        requested.
         """
         reranker = self.get_reranker()
         pairs = [[query, c.content] for c in chunks]
 
         scores = await run_in_threadpool(reranker.predict, pairs)
 
-        ranked = sorted(zip(scores, chunks), key=lambda x: x[0], reverse=True)
+        ranked = sorted(zip(scores, chunks, strict=True), key=lambda x: x[0], reverse=True)
         top_k = top_k_rerank or self.config.reranking.top_k_rerank
 
         # Diversity-aware selection in two passes:

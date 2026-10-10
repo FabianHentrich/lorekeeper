@@ -1,14 +1,13 @@
 import pytest
 import yaml
-
-from src.api.prompt_schemas import PromptSet
-from src.api.prompt_routes import (
-    _validate_templates,
-    _prompts_dict_from_set,
-    _read_variant_file,
-)
 from fastapi import HTTPException
 
+from src.api.prompt_routes import (
+    _prompts_dict_from_set,
+    _read_variant_file,
+    _validate_templates,
+)
+from src.api.prompt_schemas import PromptSet
 
 _SAMPLE = PromptSet(
     system="System prompt",

@@ -11,7 +11,7 @@ Usage:
 import argparse
 import json
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import requests
@@ -34,7 +34,7 @@ def evaluate(api_url: str, qa_pairs: list[dict]) -> dict:
     results = []
     hits = 0
     answer_matches = 0
-    total_latency = 0
+    total_latency = 0.0
 
     for pair in qa_pairs:
         question = pair["question"]
@@ -85,7 +85,7 @@ def evaluate(api_url: str, qa_pairs: list[dict]) -> dict:
 
     total = len(qa_pairs)
     return {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "total_questions": total,
         "hit_rate": hits / total if total else 0,
         "answer_contains_rate": answer_matches / total if total else 0,

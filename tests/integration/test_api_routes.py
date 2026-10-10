@@ -11,9 +11,9 @@ structure, session_id propagation, error codes, and provider switching.
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from types import SimpleNamespace
-from typing import AsyncGenerator
 
 import pytest
 from fastapi import FastAPI
@@ -22,7 +22,6 @@ from fastapi.testclient import TestClient
 import src.main as main_module
 from src.api.routes import router
 from src.retrieval.retriever import RetrievedChunk
-
 
 # ─── Fakes ──────────────────────────────────────────────────────────────────────
 
@@ -204,6 +203,7 @@ def fake_services():
 
     # Seed health cache (background loop doesn't run in tests)
     import time as _time
+
     from src.api import routes as routes_module
     routes_module._health_cache.update({"ts": _time.monotonic(), "chroma": True, "llm": True})
     routes_module._ingest_jobs.clear()

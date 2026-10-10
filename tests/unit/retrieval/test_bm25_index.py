@@ -1,4 +1,3 @@
-import pytest
 
 from src.retrieval.bm25_index import BM25Index, _matches_filter, _tokenize
 

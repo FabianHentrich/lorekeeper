@@ -1,7 +1,7 @@
 import pytest
 
 from src.config.manager import ChunkingConfig
-from src.ingestion.chunking import chunk_documents, _estimate_tokens
+from src.ingestion.chunking import _estimate_tokens, chunk_documents
 from src.ingestion.parsers.base import ParsedDocument
 
 

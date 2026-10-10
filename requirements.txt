@@ -31,3 +31,7 @@ pytest>=8.3.0
 pytest-asyncio>=0.25.0
 pytest-cov>=6.0.0
 httpx>=0.28.0
+
+# Code quality (run via tests/test_code_quality.py)
+ruff>=0.17.0
+mypy>=2.4.0

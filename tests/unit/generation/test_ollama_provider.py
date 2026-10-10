@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -140,7 +140,7 @@ class TestOllamaProvider:
                 try:
                     return next(self._iter)
                 except StopIteration:
-                    raise StopAsyncIteration
+                    raise StopAsyncIteration from None
 
         fake_stream = FakeStream([make_chunk(p) for p in pieces])
         provider._client = AsyncMock()
@@ -182,7 +182,7 @@ class TestOllamaProvider:
                 try:
                     return next(self._iter)
                 except StopIteration:
-                    raise StopAsyncIteration
+                    raise StopAsyncIteration from None
 
         provider._client = AsyncMock()
         provider._client.chat.completions.create = AsyncMock(return_value=FakeStream(pieces))

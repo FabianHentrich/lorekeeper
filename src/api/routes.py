@@ -23,7 +23,6 @@ from src.api.schemas import (
     StatsResponse,
     SwitchProviderRequest,
 )
-
 from src.generation.generator import Generator
 from src.generation.providers.base import StreamResult
 
@@ -52,13 +51,13 @@ _health_cache: dict = {"ts": 0.0, "chroma": False, "llm": False}
 def _get_services():
     """Lazy import to avoid circular imports at module level."""
     from src.main import (
+        condense_provider,
         conversation_manager,
         generator,
-        condense_provider,
         prompt_manager,
+        provider,
         retriever,
         vectorstore,
-        provider,
     )
     return conversation_manager, generator, condense_provider, prompt_manager, retriever, vectorstore, provider
 
@@ -131,7 +130,7 @@ async def query(request: QueryRequest):
             model_used = response.model
         except Exception as e:
             logger.error(f"LLM generation failed: {e}")
-            raise HTTPException(status_code=503, detail=f"LLM nicht erreichbar: {e}")
+            raise HTTPException(status_code=503, detail=f"LLM nicht erreichbar: {e}") from e
     else:
         answer = pm.render_no_context(question=request.question)
         model_used = "none"
@@ -253,8 +252,8 @@ async def ingest(full: bool = False):
     Incremental by default (unchanged files are skipped); ``?full=true`` re-chunks and
     re-embeds every file, e.g. after chunking settings changed.
     """
-    from src.ingestion.orchestrator import IngestionOrchestrator
     import src.main as main_module
+    from src.ingestion.orchestrator import IngestionOrchestrator
     _, _, _, _, _, vs, _ = _get_services()
 
     def _run(progress_cb):
@@ -451,7 +450,7 @@ async def update_sources(payload: dict):
     try:
         new_sources = [SourceConfig(**s) for s in raw_sources]
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid source config: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid source config: {e}") from e
     ids = [s.id for s in new_sources]
     # Only new ids are checked — an existing (legacy) id must never block saving the list.
     # '.'/'..' get normalized away by HTTP clients, so /sources/{id}/... could not reach them.
@@ -471,8 +470,8 @@ async def update_sources(payload: dict):
 @router.post("/sources/{source_id:path}/reindex", response_model=IngestJobResponse)
 async def reindex_source(source_id: str):
     """Delete + re-ingest a single source."""
-    from src.ingestion.orchestrator import IngestionOrchestrator
     import src.main as main_module
+    from src.ingestion.orchestrator import IngestionOrchestrator
     _, _, _, _, _, vs, _ = _get_services()
 
     if not any(s.id == source_id for s in main_module.config.settings.ingestion.sources):
@@ -550,7 +549,7 @@ async def set_gemini_key(payload: dict):
             )
             rebuilt = True
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Key rejected by provider: {e}")
+            raise HTTPException(status_code=400, detail=f"Key rejected by provider: {e}") from e
 
     return {"status": "ok", "rebuilt_active_provider": rebuilt}
 
@@ -573,17 +572,18 @@ async def update_config(request: ConfigUpdateRequest):
     Unknown keys are silently dropped. Invalid values raise a Pydantic
     ValidationError, which FastAPI surfaces as HTTP 422.
     """
-    import src.main as main_module
     from pydantic import ValidationError
+
+    import src.main as main_module
 
     updates = request.model_dump(exclude_none=True)
     try:
         snapshot = main_module.config.save_settings(updates)
     except ValidationError as e:
-        raise HTTPException(status_code=422, detail=e.errors())
+        raise HTTPException(status_code=422, detail=e.errors()) from e
     except Exception as e:
         logger.error(f"save_settings failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
     logger.info(f"Settings updated: {list(updates.keys())}")
     return snapshot
@@ -629,7 +629,7 @@ async def switch_provider(request: SwitchProviderRequest):
     except Exception as e:
         settings.llm.provider = previous_provider
         logger.error(f"Provider switch to {request.provider} failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Provider-Wechsel fehlgeschlagen: {e}")
+        raise HTTPException(status_code=500, detail=f"Provider-Wechsel fehlgeschlagen: {e}") from e
 
     return ProviderInfo(
         provider=main_module.provider.provider,

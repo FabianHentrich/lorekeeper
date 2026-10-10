@@ -23,15 +23,19 @@ class BaseLLMProvider(ABC):
     """Abstract interface every LLM backend (Ollama, Gemini, ...) must implement."""
 
     provider: str = "unknown"
+    model: str = "unknown"
 
     @abstractmethod
     async def generate(self, prompt: str, **kwargs) -> LLMResponse:
         """Return a full, non-streamed completion for ``prompt``."""
 
+    # Plain `def`: implementations are async generators, so calling one returns the
+    # AsyncGenerator directly (an `async def` without yield would type it as a coroutine).
     @abstractmethod
-    async def generate_stream(
+    def generate_stream(
         self,
         prompt: str,
+        system_prompt: str = "",
         stream_result: StreamResult | None = None,
         **kwargs,
     ) -> AsyncGenerator[str, None]:

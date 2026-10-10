@@ -30,13 +30,13 @@ _TEMPLATE_LABELS = {
 @st.cache_data(ttl=10, show_spinner=False)
 def _fetch_active(api_url: str):
     """Retrieve currently active prompt templates.
-    
+
     Uses Streamlit's @st.cache_data with a 10s TTL to prevent spamming
     the backend when switching tabs or rerendering components.
-    
+
     Args:
         api_url (str): The base URL of the backend API.
-        
+
     Returns:
         dict: The active prompt variants containing 'system', 'qa', 'condense' and 'no_context' templates.
     """
@@ -46,13 +46,13 @@ def _fetch_active(api_url: str):
 @st.cache_data(ttl=10, show_spinner=False)
 def _fetch_variants(api_url: str):
     """Retrieve metadata for all stored prompt template variants.
-    
+
     Cached for 10s to minimize backend load. The cache can be cleared manually
     via _fetch_variants.clear() after mutations (save/delete/activate).
-    
+
     Args:
         api_url (str): The base URL of the backend API.
-        
+
     Returns:
         list[dict]: List of metadata dictionaries for each variant.
     """
@@ -62,14 +62,14 @@ def _fetch_variants(api_url: str):
 @st.cache_data(ttl=10, show_spinner=False)
 def _fetch_variant(api_url: str, name: str):
     """Retrieve the full text for a specific stored prompt template variant.
-    
+
     Cached per variant name for 10s. Used when expanding a variant's edit panel
     or loading variants for side-by-side comparison.
-    
+
     Args:
         api_url (str): The base URL of the backend API.
         name (str): The unique name of the variant to load.
-        
+
     Returns:
         dict: The full variant data including the actual template strings.
     """
@@ -114,8 +114,10 @@ with tab_active:
                 if key == "qa":
                     sample = {
                         "chunks": [
-                            {"source_file": "Orte/Arkenfeld.md", "heading": "Lage", "content": "Arkenfeld liegt im Norden..."},
-                            {"source_file": "NPCs/Malek.md", "heading": "Hintergrund", "content": "Malek ist ein Händler..."},
+                            {"source_file": "Orte/Arkenfeld.md", "heading": "Lage",
+                             "content": "Arkenfeld liegt im Norden..."},
+                            {"source_file": "NPCs/Malek.md", "heading": "Hintergrund",
+                             "content": "Malek ist ein Händler..."},
                         ],
                         "question": "Was ist Arkenfeld?",
                     }

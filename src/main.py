@@ -144,7 +144,7 @@ async def lifespan(app: FastAPI):
     gc_task = asyncio.create_task(conversation_manager.start_gc())
 
     # Start background health checker
-    from src.api.routes import _health_loop, _health_cache
+    from src.api.routes import _health_cache, _health_loop
     # Seed cache with initial state (vectorstore + provider already initialized)
     try:
         chroma_ok = vectorstore.health_check()

@@ -4,7 +4,7 @@ Integration test for the RAG pipeline.
 Uses real ChromaDB (in-memory via EphemeralClient) and real sentence-transformer
 embeddings, but mocks the LLM call. No Ollama or Gemini required.
 """
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import chromadb
 import pytest
@@ -21,7 +21,6 @@ from src.ingestion.chunking import Chunk
 from src.retrieval.embeddings import EmbeddingService
 from src.retrieval.retriever import Retriever
 from src.retrieval.vectorstore import VectorStoreService
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -6,10 +6,9 @@ without paying for a full re-embed. This rewrites only metadata.
 """
 
 import logging
-from pathlib import Path
 
 from src.config.manager import ConfigManager, SourceConfig, config_manager
-from src.ingestion.orchestrator import _resolve_category, IngestionOrchestrator
+from src.ingestion.orchestrator import IngestionOrchestrator, _resolve_category
 from src.retrieval.vectorstore import VectorStoreService
 
 logger = logging.getLogger(__name__)
@@ -68,7 +67,7 @@ def recategorize(config: ConfigManager | None = None, vectorstore: VectorStoreSe
     new_ids: list[str] = []
     new_metas: list[dict] = []
 
-    for cid, meta in zip(ids, metas):
+    for cid, meta in zip(ids, metas, strict=True):
         source = _match_source(meta, sources)
         if source is None:
             stats["chunks_unmatched"] += 1

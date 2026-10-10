@@ -4,8 +4,10 @@ import time
 from collections.abc import AsyncGenerator
 
 from openai import AsyncOpenAI
+from openai.types.chat import ChatCompletionMessageParam
 
 from src.config.manager import OllamaConfig
+
 from .base import BaseLLMProvider, LLMResponse, StreamResult
 
 logger = logging.getLogger(__name__)
@@ -48,7 +50,7 @@ class OllamaProvider(BaseLLMProvider):
 
     async def generate(self, prompt: str, system_prompt: str = "", **kwargs) -> LLMResponse:
         """Produce a complete, non-streamed response and return it wrapped in an LLMResponse."""
-        messages = []
+        messages: list[ChatCompletionMessageParam] = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         # Disable Qwen3 thinking mode for faster responses
@@ -97,7 +99,7 @@ class OllamaProvider(BaseLLMProvider):
         (e.g. "<th" + "ink>") are still detected. Token-usage data from the final
         chunk is written back into ``stream_result`` when provided.
         """
-        messages = []
+        messages: list[ChatCompletionMessageParam] = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         user_content = prompt + " /no_think" if self._is_qwen3() else prompt
@@ -124,10 +126,11 @@ class OllamaProvider(BaseLLMProvider):
         MAX_PARTIAL = max(len(TAG_OPEN), len(TAG_CLOSE)) - 1
 
         async for chunk in stream:
-            if getattr(chunk, "usage", None) and stream_result is not None:
+            usage = getattr(chunk, "usage", None)
+            if usage and stream_result is not None:
                 stream_result.usage = {
-                    "tokens_in": chunk.usage.prompt_tokens or 0,
-                    "tokens_out": chunk.usage.completion_tokens or 0,
+                    "tokens_in": usage.prompt_tokens or 0,
+                    "tokens_out": usage.completion_tokens or 0,
                     "tokens_thinking": 0,
                 }
             if not (chunk.choices and chunk.choices[0].delta.content):

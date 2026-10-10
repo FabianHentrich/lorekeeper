@@ -24,7 +24,9 @@ class VectorStoreService:
         self._collection = None
 
     def _get_client(self) -> chromadb.ClientAPI:
-        """Return the ChromaDB client, connecting on first call (HttpClient in client mode, otherwise PersistentClient)."""
+        """Return the ChromaDB client, connecting on first call.
+
+        HttpClient in client mode, otherwise PersistentClient."""
         if self._client is None:
             if self.config.mode == "client":
                 self._client = chromadb.HttpClient(
@@ -125,7 +127,7 @@ class VectorStoreService:
         metadatas = []
         embedding_list = []
 
-        for chunk, embedding in zip(chunks, embeddings):
+        for chunk, embedding in zip(chunks, embeddings, strict=True):
             chunk_id = self._chunk_id(chunk)
             ids.append(chunk_id)
             documents.append(chunk.content)

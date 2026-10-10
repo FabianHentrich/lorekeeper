@@ -1,7 +1,4 @@
-from pathlib import Path
 from unittest.mock import MagicMock
-
-import pytest
 
 from src.config.manager import SourceConfig
 from src.ingestion.recategorize import _match_source, recategorize
@@ -77,7 +74,7 @@ class TestRecategorize:
 
     def test_updates_changed_metadata(self, tmp_path):
         """
-        Verify that if current chunk metadata diverges from the active yaml configuration, 
+        Verify that if current chunk metadata diverges from the active yaml configuration,
         an update batch is securely triggered altering the vectorstore contents.
         """
         folder = tmp_path / "vault"
@@ -163,7 +160,7 @@ class TestRecategorize:
 
     def test_dict_category_map_overrides_group(self, tmp_path):
         """
-        Verify complex mapping structures assigning nested `group` keys accurately 
+        Verify complex mapping structures assigning nested `group` keys accurately
         translate these overwrites into the final vectorstore metadata.
         """
         folder = tmp_path / "vault"

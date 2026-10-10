@@ -1,7 +1,7 @@
 import fnmatch
 import hashlib
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from src.config.manager import ConfigManager, SourceConfig, config_manager
@@ -94,13 +94,13 @@ class IngestionResult:
         self.chunks_deleted: int = 0
         self.phase: str = "starting"
         self.errors: list[str] = []
-        self.start_time: datetime = datetime.now(timezone.utc)
+        self.start_time: datetime = datetime.now(UTC)
         self.end_time: datetime | None = None
 
     @property
     def duration_seconds(self) -> float:
         """Elapsed seconds since start; live until end_time is set."""
-        end = self.end_time or datetime.now(timezone.utc)
+        end = self.end_time or datetime.now(UTC)
         return (end - self.start_time).total_seconds()
 
 
@@ -252,7 +252,7 @@ class IngestionOrchestrator:
 
                 content_category, group = _resolve_category(file_path, source)
                 last_modified = datetime.fromtimestamp(
-                    file_path.stat().st_mtime, tz=timezone.utc
+                    file_path.stat().st_mtime, tz=UTC
                 ).isoformat()
 
                 for chunk in chunks:
@@ -293,7 +293,7 @@ class IngestionOrchestrator:
             for (sid, src_file) in set(existing.keys()) - processed:
                 result.chunks_deleted += vectorstore.delete_by_source_file(sid, src_file)
 
-        result.end_time = datetime.now(timezone.utc)
+        result.end_time = datetime.now(UTC)
         logger.info(
             f"Ingestion complete: {result.documents_processed} docs, "
             f"{result.chunks_created} created, {result.chunks_updated} updated, "

@@ -14,7 +14,7 @@ import argparse
 import json
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
@@ -135,7 +135,7 @@ async def run_evaluation_with_retriever(
     }
 
     return {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "config": {
             "top_k": top_k,
             "top_k_rerank": top_k_rerank,
@@ -158,11 +158,12 @@ def run_evaluation(qa_pairs: list[dict], top_k: int, top_k_rerank: int,
     Loads configuration settings, creates the necessary Embedding and VectorStore dependencies,
     and runs the asynchronous evaluation process blocking the thread until completion.
     """
+    import asyncio
+
     from src.config.manager import config_manager
     from src.retrieval.embeddings import EmbeddingService
-    from src.retrieval.vectorstore import VectorStoreService
     from src.retrieval.retriever import Retriever
-    import asyncio
+    from src.retrieval.vectorstore import VectorStoreService
 
     settings = config_manager.settings
     cfg = settings.retrieval
@@ -211,7 +212,8 @@ def main():
     report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
 
     print(f"\n{'='*45}")
-    print(f"Hit Rate (gesamt):  {report['hit_rate']:.1%}  ({sum(r['hit'] for r in report['details'])}/{report['total_questions']})")
+    hits = sum(r['hit'] for r in report['details'])
+    print(f"Hit Rate (gesamt):  {report['hit_rate']:.1%}  ({hits}/{report['total_questions']})")
     print()
     for st, stats in report["breakdown_by_source_type"].items():
         print(f"  {st:<12} {stats['hit_rate']:.1%}  ({stats['hits']}/{stats['total']})")

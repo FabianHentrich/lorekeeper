@@ -1,9 +1,9 @@
 import logging
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _log = logging.getLogger(__name__)
@@ -174,7 +174,7 @@ class GeminiConfig(BaseModel):
 
 class LLMConfig(BaseModel):
     provider: str = "ollama"
-    fallback_provider: Optional[str] = "gemini"
+    fallback_provider: str | None = "gemini"
     fallback_enabled: bool = False
     ollama: OllamaConfig = OllamaConfig()
     gemini: GeminiConfig = GeminiConfig()
@@ -184,7 +184,7 @@ class ConversationConfig(BaseModel):
     window_size: int = 8
     max_context_tokens: int = 4096
     condense_question: bool = True
-    condense_model: Optional[str] = None
+    condense_model: str | None = None
     session_timeout_minutes: int = 60
     session_gc_interval_seconds: int = 300
 
@@ -197,11 +197,13 @@ class APIConfig(BaseModel):
 
 class LoggingConfig(BaseModel):
     level: str = "INFO"
-    file: Optional[str] = "logs/lorekeeper.log"
+    file: str | None = "logs/lorekeeper.log"
     max_bytes: int = 10_485_760  # 10 MB
     backup_count: int = 5
     format: str = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-    suppress: list[str] = ["httpx", "httpcore", "chromadb", "huggingface_hub", "sentence_transformers", "safetensors", "model_utils"]
+    suppress: list[str] = [
+        "httpx", "httpcore", "chromadb", "huggingface_hub", "sentence_transformers", "safetensors", "model_utils",
+    ]
 
 
 class UIConfig(BaseModel):
@@ -276,7 +278,7 @@ class ConfigManager:
         # Load sources sidecar (if present), then apply migration shim if needed
         self._load_sources_sidecar()
 
-        self._prompts_raw = {}
+        self._prompts_raw: dict = {}
         if prompts_path.exists():
             self._prompts_raw = yaml.safe_load(prompts_path.read_text(encoding="utf-8")) or {}
 

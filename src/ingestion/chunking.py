@@ -135,7 +135,7 @@ def _split_into_blocks(text: str) -> list[tuple[str, bool]]:
 
 def _split_table_by_rows(text: str, max_size: int) -> list[str]:
     """Split a very large table at row boundaries, repeating the header in each part."""
-    lines = [l for l in text.split("\n") if l.strip()]
+    lines = [ln for ln in text.split("\n") if ln.strip()]
 
     # Identify header: first line + optional separator line (contains ---)
     header_lines: list[str] = []
@@ -146,7 +146,6 @@ def _split_table_by_rows(text: str, max_size: int) -> list[str]:
         else:
             data_lines.append(line)
 
-    header = "\n".join(header_lines)
     parts: list[str] = []
     current_rows = list(header_lines)
 

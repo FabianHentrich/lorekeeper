@@ -1,8 +1,8 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from src.config.manager import EmbeddingsConfig, VectorStoreConfig
+from src.config.manager import VectorStoreConfig
 from src.ingestion.chunking import Chunk
 from src.retrieval.embeddings import EmbeddingService
 from src.retrieval.vectorstore import VectorStoreService

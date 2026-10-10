@@ -58,7 +58,7 @@ def _validate_templates(prompts: PromptSet):
             raise HTTPException(
                 status_code=422,
                 detail=f"Jinja2-Syntaxfehler in '{key}': {e}",
-            )
+            ) from e
 
 
 def _reload_prompt_manager(prompts_dict: dict):
@@ -112,7 +112,7 @@ async def update_active(variant: PromptVariant):
 @prompt_router.get("/variants", response_model=list[PromptVariantSummary])
 async def list_variants():
     """List all available prompt variants discovered in the variants directory.
-    
+
     Dynamically checks which variant is currently active by comparing file hashes.
     """
     if not _variants_dir().exists():
@@ -183,7 +183,7 @@ async def delete_variant(name: str):
 @prompt_router.post("/activate/{name}", response_model=PromptVariant)
 async def activate_variant(name: str):
     """Promote a specific variant to be the currently active prompt configuration.
-    
+
     This copies the variant's content to the active prompts.yaml file and triggers
     a hot-reload of the PromptManager within the FastAPI app.
     """
@@ -215,14 +215,14 @@ async def activate_variant(name: str):
 @prompt_router.post("/preview", response_model=RenderPreviewResponse)
 async def preview_template(req: RenderPreviewRequest):
     """Render a raw Jinja2 template string against provided dummy payload data.
-    
+
     Used by the UI to show live previews without needing to overwrite active systems.
     """
     try:
         template = _jinja_env.from_string(req.template_text)
         rendered = template.render(**req.sample_data)
     except TemplateSyntaxError as e:
-        raise HTTPException(status_code=422, detail=f"Jinja2-Syntaxfehler: {e}")
+        raise HTTPException(status_code=422, detail=f"Jinja2-Syntaxfehler: {e}") from e
     except Exception as e:
-        raise HTTPException(status_code=422, detail=f"Render-Fehler: {e}")
+        raise HTTPException(status_code=422, detail=f"Render-Fehler: {e}") from e
     return RenderPreviewResponse(rendered=rendered)

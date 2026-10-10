@@ -140,9 +140,9 @@ class MarkdownParser(BaseParser):
         When a new heading is encountered, it flushes the previous block and updates the path.
         """
         sections = []
-        current_hierarchy = []
-        current_content_lines = []
-        current_levels = []
+        current_hierarchy: list[str] = []
+        current_content_lines: list[str] = []
+        current_levels: list[int] = []
         in_code = False
 
         for line in text.split("\n"):

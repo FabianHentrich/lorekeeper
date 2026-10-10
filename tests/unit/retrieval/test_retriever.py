@@ -4,7 +4,7 @@ import pytest
 
 from src.config.manager import HybridSearchConfig, RerankingConfig, RetrievalConfig
 from src.retrieval.bm25_index import BM25Index
-from src.retrieval.retriever import Retriever, RetrievedChunk, _rrf_merge
+from src.retrieval.retriever import Retriever, _rrf_merge
 
 
 @pytest.fixture
@@ -258,6 +258,7 @@ class TestHybridRetrieve:
     def _make_bm25(self, docs):
         """Build an in-memory BM25 index from inline dicts, skipping the vectorstore."""
         from rank_bm25 import BM25Okapi
+
         from src.retrieval.bm25_index import _tokenize
         idx = BM25Index()
         idx._documents = docs

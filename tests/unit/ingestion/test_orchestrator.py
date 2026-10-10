@@ -4,10 +4,10 @@ import pytest
 
 from src.config.manager import SourceConfig
 from src.ingestion.orchestrator import (
-    _resolve_category,
+    IngestionOrchestrator,
     _compute_content_hash,
     _is_excluded,
-    IngestionOrchestrator,
+    _resolve_category,
 )
 
 
@@ -206,7 +206,8 @@ class TestDiscoverFiles:
         """
         f1 = tmp_path / "a.pdf"
         f2 = tmp_path / "b.pdf"
-        f1.write_text("x"); f2.write_text("x")
+        f1.write_text("x")
+        f2.write_text("x")
         src1 = SourceConfig(id="s1", path=str(f1), group="rules", default_category="rules")
         src2 = SourceConfig(id="s2", path=str(f2), group="rules", default_category="rules")
         orch = self._make_orchestrator(monkeypatch, [src1, src2])

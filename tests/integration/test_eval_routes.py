@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -16,8 +15,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import src.main as main_module
-from src.api.eval_routes import eval_router, _eval_jobs, _QA_PATH, _RESULTS_DIR
-
+from src.api.eval_routes import _eval_jobs, eval_router
 
 # ─── Fakes ──────────────────────────────────────────────────────────────────────
 
@@ -197,7 +195,6 @@ def test_list_results_empty(client):
 def test_results_cap_at_3(tmp_eval_dir):
     """Cleanup should keep only the last 3 result files per type."""
     from src.api.eval_routes import _cleanup_results
-    import src.api.eval_routes as mod
 
     for i in range(5):
         f = tmp_eval_dir.results_dir / f"retrieval_20260410_00000{i}.json"

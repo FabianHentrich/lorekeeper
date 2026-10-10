@@ -112,7 +112,6 @@ def _render_retrieval_result(result: dict):
     and per-question hit/miss deep dives.
     """
     details = result.get("details", [])
-    misses = result.get("misses", [])
     errors = result.get("errors", [])
     breakdown = result.get("breakdown_by_source_type", {})
     config = result.get("config", {})
@@ -404,7 +403,8 @@ with tab_ret:
         run_ab = st.button(
             "⚖ A/B starten (Vektor vs. Hybrid)",
             key="ret_ab",
-            help="Führt die Evaluation zweimal aus — einmal ohne, einmal mit Hybrid — und zeigt den Vergleich direkt an.",
+            help="Führt die Evaluation zweimal aus — einmal ohne, einmal mit Hybrid — "
+                 "und zeigt den Vergleich direkt an.",
         )
 
     if run_single:

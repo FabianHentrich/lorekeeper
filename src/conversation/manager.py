@@ -2,7 +2,7 @@ import asyncio
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from src.config.manager import ConversationConfig
 
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class Message:
     role: str  # "user" or "assistant"
     content: str
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
@@ -21,7 +21,7 @@ class Session:
     """Represents an active or cached chat session with history and token usage tracking."""
     session_id: str
     messages: list[Message] = field(default_factory=list)
-    last_active: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    last_active: datetime = field(default_factory=lambda: datetime.now(UTC))
     usage_totals: dict = field(default_factory=lambda: {
         "tokens_in": 0, "tokens_out": 0, "tokens_thinking": 0,
     })
@@ -29,7 +29,7 @@ class Session:
     def add_message(self, role: str, content: str):
         """Append a message and bump ``last_active``."""
         self.messages.append(Message(role=role, content=content))
-        self.last_active = datetime.now(timezone.utc)
+        self.last_active = datetime.now(UTC)
 
     def add_usage(self, usage: dict):
         """Increment the session-wide token usage counters by the values provided."""
@@ -52,7 +52,7 @@ class ConversationManager:
         """
         if session_id and session_id in self._sessions:
             session = self._sessions[session_id]
-            session.last_active = datetime.now(timezone.utc)
+            session.last_active = datetime.now(UTC)
             return session
 
         new_id = session_id or str(uuid.uuid4())
@@ -107,7 +107,7 @@ class ConversationManager:
 
     def _cleanup_expired(self):
         """Drop sessions whose ``last_active`` exceeds ``session_timeout_minutes``."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         timeout = self.config.session_timeout_minutes * 60
 
         expired = [

@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from src.ingestion.parsers.markdown import MarkdownParser
 from src.ingestion.parsers.image import ImageMetaParser
+from src.ingestion.parsers.markdown import MarkdownParser
 
 
 @pytest.fixture

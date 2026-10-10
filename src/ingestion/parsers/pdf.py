@@ -6,6 +6,7 @@ from pathlib import Path
 import pymupdf4llm
 
 from src.config.manager import PdfConfig
+
 from .base import BaseParser, ParsedDocument
 from .markdown import MarkdownParser
 
@@ -48,7 +49,7 @@ def _apply_toc_headings(md_text: str, toc_items: list[list]) -> str:
 
     def _fix_heading(m: re.Match) -> str:
         """Rewrite this heading's level to match the TOC, or leave it as-is when no match."""
-        hashes, rest = m.group(1), m.group(2)
+        rest = m.group(2)
         # Strip bold markers for lookup
         clean = re.sub(r'\*{1,2}', '', rest).strip()
         normalised = re.sub(r'\s+', ' ', clean.lower())
