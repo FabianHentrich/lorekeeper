@@ -171,6 +171,23 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 **Lösung**: Einfacher API-Key aus `.env` (`LOREKEEPER_API_KEY`), geprüft per FastAPI-Dependency auf allen schreibenden/Admin-Routen; die Streamlit-UI schickt ihn als Header mit. Ohne gesetzten Key bleibt das Verhalten wie bisher (lokaler Betrieb). Zusätzlich `/sources/scan` auf erlaubte Basisverzeichnisse beschränken.
 
 **Aufwand**: Gering-Mittel.
+
+### 3.8 Laufenden Ingest-Job wieder aufnehmen
+
+**Problem**: Startet man eine Indizierung, während schon eine läuft, antwortet das Backend mit 409 („Eine Indexierung läuft bereits") — die UI zeigt nur diese Warnung. Den Fortschritt des laufenden Jobs sieht man nicht mehr, z.B. nachdem ein Widget-Klick den Poll-Loop abgebrochen hat.
+
+**Lösung**: `_start_ingest_job` gibt im 409-Body die `job_id` des laufenden Jobs mit; `_start_ingest` in `ui/pages/1_Sources.py` pollt dann diesen Job statt nur zu warnen. Alternativ `GET /ingest/active`.
+
+**Aufwand**: Gering.
+
+### 3.9 Nicht-blockierender Ingest-Fortschritt in der UI
+
+**Problem**: `_poll_ingest_job` pollt synchron in einer `while`-Schleife. Solange ein Job läuft (Minuten), rendert der Rest der Sources-Seite nicht (bei Reindex pro Source fehlen alle Elemente unterhalb des Expanders), und jede Interaktion bricht die Fortschrittsanzeige ab — der Job läuft im Backend weiter.
+
+**Lösung**: `job_id` in `st.session_state` halten und den Fortschritt in einem `st.fragment(run_every=...)` aktualisieren. Kombiniert mit 3.8 überlebt die Anzeige auch Seitenwechsel.
+
+**Aufwand**: Gering-Mittel.
+
 ---
 
 ## Priorisierungsvorschlag
@@ -187,3 +204,5 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 | 8 | Wikilink-Expansion | Mittel | Mittel | Experimentell |
 | 9 | Chat-Verlauf im Antwort-Prompt | Mittel — bessere Folgefragen | Gering-Mittel | Nach Bugfix-Phase |
 | 10 | API-Authentifizierung | Mittel — nur relevant bei Netzwerk-/Docker-Betrieb | Gering-Mittel | Vor Remote-Deployment |
+| 11 | Laufenden Ingest-Job wieder aufnehmen | Gering-Mittel | Gering | Nach Bugfix-Phase |
+| 12 | Nicht-blockierender Ingest-Fortschritt | Mittel — Sources-Seite bleibt bedienbar | Gering-Mittel | Nach Bugfix-Phase, zusammen mit 11 |

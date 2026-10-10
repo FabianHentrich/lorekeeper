@@ -5,6 +5,7 @@ without touching config/sources.yaml manually. Also exposes the danger-zone
 'wipe collection' button.
 """
 
+import re
 import time
 from pathlib import Path
 
@@ -133,11 +134,13 @@ def _start_ingest(endpoint: str, label: str, params: dict | None = None):
         r = requests.post(f"{API_URL}{endpoint}", params=params, timeout=10)
         if r.status_code == 409:
             st.warning(r.json()["detail"])
-        else:
-            r.raise_for_status()
-            _poll_ingest_job(API_URL, r.json()["job_id"], label=label)
+            return
+        r.raise_for_status()
+        job_id = r.json()["job_id"]
     except Exception as e:
-        st.error(f"Fehler: {e}")
+        st.error(f"Start fehlgeschlagen: {e}")
+        return
+    _poll_ingest_job(API_URL, job_id, label=label)
 
 
 # ─── Global stats + incremental / full reindex ───────────────────────
@@ -416,9 +419,10 @@ if scan_result is not None and scan_source_path:
         c1, c2, c3 = st.columns(3)
         with c1:
             # Auto-suggest ID from folder/file name
-            suggested_id = Path(scan_source_path).stem.lower().replace(" ", "-")
+            suggested_id = re.sub(r"[^\w-]+", "-", Path(scan_source_path).stem.lower()).strip("-")
             new_id = st.text_input("ID", value=suggested_id, key="_new_source_id",
-                                   help="Stabiler Identifier. Wird zum Filtern und Reindex verwendet.")
+                                   help="Stabiler Identifier. Wird zum Filtern und Reindex verwendet. "
+                                        "Erlaubt: Buchstaben, Ziffern, '_' und '-'.")
         with c2:
             new_group = st.selectbox("Default-Group", _GROUPS, key="_new_source_group",
                                      help="Fallback-Gruppe für nicht zugeordnete Ordner/Dateien.")
