@@ -573,7 +573,7 @@ llm:
   provider: ollama                       # ollama | gemini
   ollama:
     base_url: "http://localhost:11434"
-    model: "qwen3:8b"
+    model: "qwen3:14b"
     temperature: 0.3
     top_p: 0.9
     max_tokens: 1024
@@ -1012,7 +1012,7 @@ llm:
   fallback_enabled: false
   ollama:
     base_url: "http://localhost:11434"
-    model: "qwen3:8b"
+    model: "qwen3:14b"
     temperature: 0.3
     top_p: 0.9
     max_tokens: 1024
@@ -1228,7 +1228,7 @@ python -m venv .venv
 pip install -r requirements.txt
 
 # 4. Ollama-Modell herunterladen (Ollama muss laufen)
-ollama pull qwen3:8b
+ollama pull qwen3:14b
 
 # 5. Config anpassen
 copy .env.example .env

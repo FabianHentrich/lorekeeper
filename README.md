@@ -169,7 +169,7 @@ For the exact data flow of queries and ingestion, see [`docs/data-flow.md`](docs
 
 2. **Pull the LLM model**
    ```powershell
-   ollama pull qwen3:8b
+   ollama pull qwen3:14b
    ```
 
 3. **Configure**
@@ -240,7 +240,7 @@ For a complete walkthrough of the chat interface, token accounting, evaluation t
 | Embeddings | sentence-transformers (`intfloat/multilingual-e5-base`, 768-dim, asymmetric) |
 | Reranker | sentence-transformers CrossEncoder (`cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`) |
 | Vector store | ChromaDB (embedded / HTTP client) |
-| LLM | Ollama (`qwen3:8b`) or Google Gemini (`gemini-2.5-flash`) |
+| LLM | Ollama (`qwen3:14b`) or Google Gemini (`gemini-2.5-flash`) |
 | Prompts | Jinja2 + YAML |
 | OCR | RapidOCR (via `rapidocr_onnxruntime`, pure Python) |
 | Tests | pytest + pytest-asyncio + httpx |

@@ -32,7 +32,7 @@ copy .env.example .env
 # config/sources.yaml — see docs/configuration.md "Sources sidecar"
 
 # 3. Pull Ollama model
-ollama pull qwen3:8b
+ollama pull qwen3:14b
 
 # 4. Start backend (loads embedding model + ChromaDB on first start)
 uvicorn src.main:app --reload --port 8000
@@ -107,7 +107,7 @@ Env variables  >  .env file  >  config/settings.yaml  >  Pydantic defaults
 ```powershell
 ollama serve          # start Ollama manually
 ollama list           # check available models
-ollama pull qwen3:8b  # pull model if missing
+ollama pull qwen3:14b  # pull model if missing
 ```
 
 ### ChromaDB file lock

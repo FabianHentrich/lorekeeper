@@ -23,7 +23,7 @@ flowchart LR
     subgraph SIDEBAR["📋 Sidebar"]
         direction TB
         S1["🔌 API URL<br/><i>http://localhost:8000</i>"]
-        S2["🔀 LLM Provider<br/>Ollama ↔ Gemini · live switch<br/><i>Active: qwen3:8b</i>"]
+        S2["🔀 LLM Provider<br/>Ollama ↔ Gemini · live switch<br/><i>Active: qwen3:14b</i>"]
         S3["💚 Status<br/>🟢 healthy · ChromaDB ✅ · LLM ✅<br/><i>cached 30s</i>"]
         S4["🎯 Quellen-Filter<br/>☑ 🗺️ Lore<br/>☑ 📖 Abenteuer<br/>☑ 📋 Regelwerk"]
         S5["🔍 Hybrid Search<br/><i>BM25 + Vektor · Per-Session-Override</i>"]

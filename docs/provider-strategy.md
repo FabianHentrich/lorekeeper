@@ -53,7 +53,7 @@ llm:
   provider: ollama
   ollama:
     base_url: "http://localhost:11434"
-    model: "qwen3:8b"          # currently recommended
+    model: "qwen3:14b"         # currently recommended (16 GB VRAM)
     temperature: 0.3
     top_p: 0.9
     max_tokens: 2048
@@ -66,7 +66,7 @@ llm:
 |------|---------------|---------|
 | < 8 GB | `qwen3:4b` | Good |
 | 8–12 GB | `qwen3:8b` | Very good |
-| > 16 GB | `qwen3:14b` | Excellent |
+| ≥ 16 GB | `qwen3:14b` | Excellent |
 
 **Qwen3-specific:** LoreKeeper automatically filters `<think>...</think>` blocks out of the
 stream. Reasoning behavior is disabled via `/no_think` (faster responses).

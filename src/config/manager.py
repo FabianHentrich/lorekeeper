@@ -150,7 +150,7 @@ class RetrievalConfig(BaseModel):
 
 class OllamaConfig(BaseModel):
     base_url: str = "http://localhost:11434"
-    model: str = "qwen3:8b"
+    model: str = "qwen3:14b"
     temperature: float = 0.3
     top_p: float = 0.9
     max_tokens: int = 1024
