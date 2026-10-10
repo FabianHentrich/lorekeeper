@@ -396,7 +396,7 @@ def _scan_path(path: Path, supported_formats: set[str]) -> list[dict]:
     return entries
 
 
-@router.get("/sources/{source_id}/folders")
+@router.get("/sources/{source_id:path}/folders")
 async def list_source_folders(source_id: str):
     """List top-level entries (folders and files) under a source's path."""
     import src.main as main_module
@@ -453,12 +453,14 @@ async def update_sources(payload: dict):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid source config: {e}")
     ids = [s.id for s in new_sources]
-    # Checked here, not in SourceConfig, so an existing sources.yaml never breaks startup.
-    # '/' can't be routed (%2F is decoded before matching), '.'/'..' get normalized away.
-    bad = [i for i in ids if not i.strip() or "/" in i or i in (".", "..")]
+    # Only new ids are checked — an existing (legacy) id must never block saving the list.
+    # '.'/'..' get normalized away by HTTP clients, so /sources/{id}/... could not reach them.
+    existing = {s.id for s in main_module.config.settings.ingestion.sources}
+    bad = [i for i in ids if i not in existing
+           and (not i.strip() or i != i.strip() or i in (".", ".."))]
     if bad:
-        raise HTTPException(status_code=400, detail=f"Invalid source id(s): {bad} — "
-                            "must not be empty, '.', '..' or contain '/'")
+        raise HTTPException(status_code=400, detail=f"Invalid source id(s): {bad} — must not be "
+                            "empty, '.', '..' or have leading/trailing whitespace")
     if len(ids) != len(set(ids)):
         raise HTTPException(status_code=400, detail="Duplicate source ids")
     main_module.config.settings.ingestion.sources = new_sources
@@ -466,7 +468,7 @@ async def update_sources(payload: dict):
     return {"sources": [s.model_dump() for s in new_sources]}
 
 
-@router.post("/sources/{source_id}/reindex", response_model=IngestJobResponse)
+@router.post("/sources/{source_id:path}/reindex", response_model=IngestJobResponse)
 async def reindex_source(source_id: str):
     """Delete + re-ingest a single source."""
     from src.ingestion.orchestrator import IngestionOrchestrator
@@ -486,7 +488,7 @@ async def reindex_source(source_id: str):
     return IngestJobResponse(job_id=_start_ingest_job(_run), status="queued")
 
 
-@router.delete("/sources/{source_id}")
+@router.delete("/sources/{source_id:path}")
 async def delete_source(source_id: str):
     """Remove a source from config and delete all its chunks."""
     import src.main as main_module

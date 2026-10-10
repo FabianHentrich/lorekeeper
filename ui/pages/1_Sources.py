@@ -148,7 +148,7 @@ def _start_ingest(endpoint: str, label: str, params: dict | None = None):
         if r.status_code == 409:
             st.warning(r.json()["detail"])
             return
-        r.raise_for_status()
+        _raise_for_status(r)
         job_id = r.json()["job_id"]
     except Exception as e:
         st.error(f"Start fehlgeschlagen: {e}")
@@ -314,7 +314,10 @@ for s in sources:
         try:
             r = requests.get(f"{API_URL}/sources/{sid_url}/folders", timeout=5)
             _raise_for_status(r)
-            folders = r.json().get("folders", [])
+            tree = r.json()
+            folders = tree.get("folders", [])
+            if tree.get("error"):
+                st.warning(tree["error"])
         except Exception as e:
             st.error(f"Ordner konnten nicht geladen werden: {e}")
             folders = []
@@ -411,10 +414,11 @@ with col_scan:
 # Persist scan results in session state
 if scan_clicked and new_path.strip():
     try:
-        scan_resp = requests.post(
+        r = requests.post(
             f"{API_URL}/sources/scan", json={"path": new_path.strip()}, timeout=10,
-        ).json()
-        st.session_state["_scan_result"] = scan_resp
+        )
+        _raise_for_status(r)
+        st.session_state["_scan_result"] = r.json()
         st.session_state["_scanned_path"] = new_path.strip()
     except Exception as e:
         st.error(f"Scan fehlgeschlagen: {e}")
@@ -529,7 +533,7 @@ if st.button("🔥 Collection komplett leeren", type="secondary"):
     else:
         try:
             r = requests.post(f"{API_URL}/admin/wipe", json={"confirm": "DELETE"}, timeout=10)
-            r.raise_for_status()
+            _raise_for_status(r)
             st.success("Collection geleert.")
         except Exception as e:
             st.error(f"Fehler: {e}")

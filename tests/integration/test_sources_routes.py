@@ -200,18 +200,60 @@ def test_put_sources_duplicate_ids_400(client, env):
     assert "Duplicate" in r.json()["detail"]
 
 
-@pytest.mark.parametrize("bad_id", ["", "  ", "a/b", ".", ".."])
+@pytest.mark.parametrize("bad_id", ["", "  ", ".", "..", " vault", "vault "])
 def test_put_sources_rejects_unroutable_ids(client, env, bad_id):
-    """Verify ids the /sources/{id}/... routes can't serve are rejected, config untouched."""
+    """Verify new ids the /sources/{id}/... routes can't serve are rejected, config untouched."""
     r = client.put("/sources", json={"sources": [_src(bad_id, env)]})
     assert r.status_code == 400
     assert "Invalid source id" in r.json()["detail"]
     assert [s.id for s in env.config.settings.ingestion.sources] == ["vault", "Pen & Paper"]
 
 
-@pytest.mark.parametrize("ok_id", ["Pen & Paper", "foo#1", "a.b", "märchen"])
+@pytest.mark.parametrize("ok_id", ["Pen & Paper", "foo#1", "a.b", "märchen", "Lore/NPCs"])
 def test_put_sources_accepts_free_text_ids(client, env, ok_id):
     assert client.put("/sources", json={"sources": [_src(ok_id, env)]}).status_code == 200
+
+
+def test_put_sources_legacy_id_does_not_block_saving(client, env):
+    """Verify an already configured id that would be rejected as new can still be saved."""
+    env.config.settings.ingestion.sources.append(
+        SourceConfig(id=" legacy", path=str(env.single), group="rules"))
+    payload = [s.model_dump() for s in env.config.settings.ingestion.sources] + [_src("neu", env)]
+    assert client.put("/sources", json={"sources": payload}).status_code == 200
+    assert [s.id for s in env.config.settings.ingestion.sources][-2:] == [" legacy", "neu"]
+
+
+# ─── ids containing '/' (routes use the :path converter) ──────────────────────
+
+@pytest.fixture
+def slash_source(env):
+    env.config.settings.ingestion.sources.append(
+        SourceConfig(id="Lore/NPCs", path=str(env.vault), group="lore"))
+    return quote("Lore/NPCs", safe="")
+
+
+def test_folders_with_slash_id(client, env, slash_source):
+    assert client.get(f"/sources/{slash_source}/folders").json()["folders"]
+
+
+def test_reindex_with_slash_id(client, env, slash_source, monkeypatch):
+    monkeypatch.setattr(IngestionOrchestrator, "run", lambda self, **kw: _fake_result())
+    job_id = client.post(f"/sources/{slash_source}/reindex").json()["job_id"]
+    assert _wait_for_job(client, job_id)["status"] == "done"
+    assert env.vectorstore.deleted_sources == ["Lore/NPCs"]
+
+
+def test_delete_with_slash_id(client, env, slash_source):
+    assert client.delete(f"/sources/{slash_source}").status_code == 200
+    assert "Lore/NPCs" not in [s.id for s in env.config.settings.ingestion.sources]
+
+
+def test_static_source_routes_not_shadowed(client, env, monkeypatch):
+    """Verify /sources/scan and /sources/recategorize still win over the :path routes."""
+    import src.ingestion.recategorize as recat_module
+    monkeypatch.setattr(recat_module, "recategorize", lambda vectorstore: {"ok": True})
+    assert client.post("/sources/recategorize").json() == {"ok": True}
+    assert client.post("/sources/scan", json={"path": str(env.single)}).json()["is_file"] is True
 
 
 # ─── DELETE /sources/{id} ─────────────────────────────────────────────────────
