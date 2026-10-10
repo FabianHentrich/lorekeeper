@@ -41,7 +41,7 @@ def _poll_ingest_job(api_url: str, job_id: str, label: str = "Indizierung"):
                 phase_labels = {
                     "starting": "Vorbereitung …",
                     "parsing": f"Parsing & Chunking: **{docs}** / {total} Dokumente",
-                    "embedding": "Embedding & Speichern …",
+                    "embedding": f"Embedding & Speichern … (**{docs}** / {total} Dokumente)",
                 }
                 progress_line.markdown(phase_labels.get(phase, phase))
                 time.sleep(1.5)

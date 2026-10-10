@@ -307,6 +307,50 @@ class TestRunIncremental:
         assert not [c for c in vs.calls if c[0] == "delete"]
         assert len(result.errors) == 1
 
+    def test_upserts_in_batches_without_splitting_files(self, tmp_path, monkeypatch):
+        """Verify chunks are flushed once the batch size is reached, each file's chunks in one batch."""
+        import src.ingestion.orchestrator as orch_module
+        orch, _ = self._setup(tmp_path, monkeypatch)
+        (tmp_path / "Malek.md").write_text(_NOTE.replace("Arkenfeld", "Malek"), encoding="utf-8")
+        (tmp_path / "Venthir.md").write_text(_NOTE.replace("Arkenfeld", "Venthir"), encoding="utf-8")
+        monkeypatch.setattr(orch_module, "UPSERT_BATCH_CHUNKS", 1)
+        vs = FakeVectorStore()
+        batches: list[set[str]] = []
+        original_upsert = vs.upsert_chunks
+
+        def _record(chunks):
+            batches.append({c.source_file for c in chunks})
+            original_upsert(chunks)
+
+        vs.upsert_chunks = _record
+
+        result = orch.run(vectorstore=vs)
+
+        assert len(batches) == 3
+        assert all(len(files) == 1 for files in batches)
+        assert set().union(*batches) == {"Arkenfeld.md", "Malek.md", "Venthir.md"}
+        assert result.chunks_created == len(vs.upserted)
+
+    def test_crash_keeps_already_flushed_batches(self, tmp_path, monkeypatch):
+        """Verify batches flushed before a failing upsert stay stored instead of being lost with the run."""
+        import src.ingestion.orchestrator as orch_module
+        orch, _ = self._setup(tmp_path, monkeypatch)
+        (tmp_path / "Malek.md").write_text(_NOTE.replace("Arkenfeld", "Malek"), encoding="utf-8")
+        monkeypatch.setattr(orch_module, "UPSERT_BATCH_CHUNKS", 1)
+        vs = FakeVectorStore()
+        original_upsert = vs.upsert_chunks
+
+        def _upsert_then_fail(chunks):
+            if vs.upserted:
+                raise RuntimeError("ChromaDB gone")
+            original_upsert(chunks)
+
+        vs.upsert_chunks = _upsert_then_fail
+
+        with pytest.raises(RuntimeError):
+            orch.run(vectorstore=vs)
+        assert len({c.source_file for c in vs.upserted}) == 1
+
 
 class TestSourceBase:
     """Test suite verifying base path resolution for determining file relativity."""

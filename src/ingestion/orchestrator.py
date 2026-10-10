@@ -13,6 +13,10 @@ from src.ingestion.parsers.pdf import PDFParser
 
 logger = logging.getLogger(__name__)
 
+# Pending chunks are embedded + upserted once this many have accumulated — gives
+# progress during embedding and keeps finished work if a later file crashes the run.
+UPSERT_BATCH_CHUNKS = 500
+
 
 def _resolve_category(file_path: Path, source: SourceConfig) -> tuple[str, str]:
     """Resolve (content_category, group) for a file based on its source config.
@@ -197,9 +201,26 @@ class IngestionOrchestrator:
 
         # Track which (source_id, source_file) pairs we process (orphan detection)
         processed: set[tuple[str, str]] = set()
-        # Files already in the store whose content changed — old chunks are dropped before upsert
+        # Files of the pending batch already in the store — old chunks are dropped before upsert
         changed: set[tuple[str, str]] = set()
-        all_chunks: list[Chunk] = []
+        pending: list[Chunk] = []
+
+        def _flush():
+            """Embed + upsert the pending batch. A file's chunks are always in one batch."""
+            if vectorstore is None or not pending:
+                return
+            result.phase = "embedding"
+            _report()
+            # Drop old chunks of changed files first — otherwise a file that shrinks
+            # keeps its trailing chunks from the previous version.
+            for (sid, src_file) in changed:
+                vectorstore.delete_by_source_file(sid, src_file)
+            logger.info(f"Upserting batch of {len(pending)} chunks...")
+            vectorstore.upsert_chunks(pending)
+            pending.clear()
+            changed.clear()
+            result.phase = "parsing"
+            _report()
 
         total_files = len(files)
         for idx, (file_path, source) in enumerate(files, 1):
@@ -240,7 +261,7 @@ class IngestionOrchestrator:
                         "last_modified": last_modified,
                     })
 
-                all_chunks.extend(chunks)
+                pending.extend(chunks)
                 processed.add(key)
                 if key in existing:
                     changed.add(key)
@@ -250,6 +271,9 @@ class IngestionOrchestrator:
                 result.documents_processed += 1
                 _report()
 
+                if len(pending) >= UPSERT_BATCH_CHUNKS:
+                    _flush()
+
             except Exception as e:
                 error_msg = f"Error processing {file_path}: {e}"
                 logger.error(error_msg)
@@ -257,25 +281,13 @@ class IngestionOrchestrator:
                 # Keep the previously indexed version instead of treating the file as deleted
                 processed.add(key)
 
-        logger.info(f"Parsing complete: {result.documents_processed} docs, {len(all_chunks)} new/changed chunks. Starting vectorstore sync...")
+        _flush()
 
         if vectorstore is not None:
-            result.phase = "embedding"
-            _report()
-
-            # Drop old chunks of changed files first — otherwise a file that shrinks
-            # keeps its trailing chunks from the previous version.
-            for (sid, src_file) in changed:
-                vectorstore.delete_by_source_file(sid, src_file)
-
             # Orphans: anything in existing that wasn't processed this run
             for (sid, src_file) in set(existing.keys()) - processed:
                 vectorstore.delete_by_source_file(sid, src_file)
                 result.chunks_deleted += 1
-
-            logger.info(f"Upserting {len(all_chunks)} chunks (new={result.chunks_created}, updated={result.chunks_updated}, deleted={result.chunks_deleted})...")
-            vectorstore.upsert_chunks(all_chunks)
-            logger.info("Upsert complete")
 
         result.end_time = datetime.now(timezone.utc)
         logger.info(
