@@ -1,0 +1,34 @@
+sources:
+- id: pnp-welt
+  path: C:\Pfad\zu\Obsidian-Vault
+  group: lore
+  default_category: misc
+  category_map:
+    Gegenstände:
+      category: misc
+      group: rules
+    Geschichte - Akademie:
+      category: misc
+      group: adventure
+    Geschichte - Söldner:
+      category: misc
+      group: adventure
+    Geschichte - Weihnachts-One-Shot:
+      category: misc
+      group: adventure
+    Spielleiter-Tools:
+      category: misc
+      group: rules
+  exclude_patterns: []
+- id: pnp_regelbuch
+  path: C:\Pfad\zu\Regelwerk\regelbuch.pdf
+  group: rules
+  default_category: misc
+  category_map: {}
+  exclude_patterns: []
+- id: charakterbogen
+  path: C:\Pfad\zu\Charakterbogen.pdf
+  group: rules
+  default_category: misc
+  category_map: {}
+  exclude_patterns: []
