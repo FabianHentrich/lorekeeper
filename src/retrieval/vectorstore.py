@@ -42,18 +42,28 @@ class VectorStoreService:
         """Return (or create on first call) the configured collection with the right distance metric."""
         if self._collection is None:
             client = self._get_client()
-            metadata = {}
-            if self.config.distance_metric != "cosine":
-                metadata["hnsw:space"] = self.config.distance_metric
+            # Always set the space explicitly — Chroma defaults to l2, which turns
+            # ``1 - distance`` into ``2*cos - 1`` and silently tightens score_threshold.
             self._collection = client.get_or_create_collection(
                 name=self.config.collection_name,
-                metadata=metadata or None,
+                metadata={"hnsw:space": self.config.distance_metric},
             )
+            # The space is fixed at creation; an existing collection keeps its old one.
+            space = (self._collection.metadata or {}).get("hnsw:space", "l2")
+            if space != self.config.distance_metric:
+                logger.warning(
+                    f"Collection '{self.config.collection_name}' uses distance '{space}' but config "
+                    f"expects '{self.config.distance_metric}' — scores are wrong until the collection "
+                    "is wiped (POST /admin/wipe) and re-ingested."
+                )
         return self._collection
 
     def _chunk_id(self, chunk: Chunk) -> str:
-        """Stable MD5 ID from ``source_file::chunk_index`` so re-ingestion overwrites instead of duplicating."""
-        raw = f"{chunk.source_file}::{chunk.chunk_index}"
+        """Stable MD5 ID from ``source_id::source_file::chunk_index``.
+
+        ``source_id`` keeps two sources with the same relative path (e.g. ``Index.md``) from overwriting each other.
+        """
+        raw = f"{chunk.metadata.get('source_id', '')}::{chunk.source_file}::{chunk.chunk_index}"
         return hashlib.md5(raw.encode()).hexdigest()
 
     @staticmethod

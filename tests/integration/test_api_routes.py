@@ -99,6 +99,7 @@ class FakePromptManager:
         return "Du bist ein hilfreicher Assistent."
 
     def render_qa(self, chunks, question: str) -> str:
+        self.last_qa_question = question
         return f"Frage: {question}"
 
     def render_condense(self, history, question: str) -> str:
@@ -247,6 +248,23 @@ def test_query_passes_metadata_filters_to_retriever(client, fake_services):
     )
     assert response.status_code == 200
     assert fake_services.retriever.last_call["metadata_filters"] == filters
+
+
+def test_query_uses_condensed_question_in_qa_prompt(client, fake_services):
+    """Ensure follow-ups reach the QA prompt in condensed form — it carries no chat history."""
+    cm = fake_services.conversation_manager
+    cm.config.condense_question = True
+    cm.get_history_for_condense = lambda sid: [{"role": "user", "content": "Wer ist Arkenfeld?"}]
+
+    async def _condense(prompt, provider):
+        return "Wer ist der Vater von Arkenfeld?"
+
+    fake_services.generator.condense_question = _condense
+
+    response = client.post("/query", json={"question": "Wer ist sein Vater?"})
+    assert response.status_code == 200
+    assert fake_services.retriever.last_call["query"] == "Wer ist der Vater von Arkenfeld?"
+    assert fake_services.prompt_manager.last_qa_question == "Wer ist der Vater von Arkenfeld?"
 
 
 def test_query_without_chunks_returns_no_context_message(client, fake_services):

@@ -91,7 +91,8 @@ async def _prepare_query(request: QueryRequest):
             for c in chunks
         ]
         system_prompt = pm.get_system_prompt()
-        qa_prompt = pm.render_qa(chunks=chunk_dicts, question=request.question)
+        # Condensed question: resolves follow-up references ("sein Vater") — the QA prompt has no chat history
+        qa_prompt = pm.render_qa(chunks=chunk_dicts, question=question)
     else:
         chunk_dicts = []
         system_prompt = ""

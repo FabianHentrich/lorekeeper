@@ -127,6 +127,46 @@ class TestChunkId:
         )
         assert service._chunk_id(sample_chunk) != service._chunk_id(other)
 
+    def test_different_for_same_path_in_different_sources(self, service):
+        """Verify two sources sharing a relative path (e.g. Index.md) get distinct ids."""
+        a = Chunk(content="a", source_file="Index.md", source_path="/a/Index.md",
+                  document_type="markdown", metadata={"source_id": "vault"})
+        b = Chunk(content="b", source_file="Index.md", source_path="/b/Index.md",
+                  document_type="markdown", metadata={"source_id": "rules"})
+        assert service._chunk_id(a) != service._chunk_id(b)
+
+
+class TestGetCollection:
+    """Test suite for collection creation and distance-metric handling."""
+
+    def _fresh(self, vs_config, embed_service, collection_metadata):
+        svc = VectorStoreService(vs_config, embed_service)
+        client = MagicMock()
+        client.get_or_create_collection.return_value.metadata = collection_metadata
+        svc._client = client
+        return svc, client
+
+    def test_cosine_space_passed_explicitly(self, vs_config, embed_service):
+        """Verify cosine is requested explicitly instead of relying on Chroma's l2 default."""
+        svc, client = self._fresh(vs_config, embed_service, {"hnsw:space": "cosine"})
+        svc._get_collection()
+        kwargs = client.get_or_create_collection.call_args[1]
+        assert kwargs["metadata"] == {"hnsw:space": "cosine"}
+
+    def test_warns_on_legacy_l2_collection(self, vs_config, embed_service, caplog):
+        """Verify a collection created without hnsw:space (l2 default) triggers a wipe hint."""
+        svc, _ = self._fresh(vs_config, embed_service, None)
+        with caplog.at_level("WARNING"):
+            svc._get_collection()
+        assert "uses distance 'l2'" in caplog.text
+
+    def test_no_warning_when_space_matches(self, vs_config, embed_service, caplog):
+        """Verify no warning for a collection already using the configured metric."""
+        svc, _ = self._fresh(vs_config, embed_service, {"hnsw:space": "cosine"})
+        with caplog.at_level("WARNING"):
+            svc._get_collection()
+        assert "uses distance" not in caplog.text
+
 
 class TestUpsertChunks:
     """Test suite validating ingestion chunk transposition mapping directly towards Chroma representations."""

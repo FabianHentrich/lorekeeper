@@ -204,6 +204,99 @@ class TestDiscoverFiles:
         assert files[0][1].id == "s2"
 
 
+_NOTE = (
+    "# Arkenfeld\n\n"
+    "Arkenfeld ist eine Stadt am Rand der Akademie. Sie wird von einem Rat aus "
+    "sieben Magiern regiert, die sich jeden Neumond im alten Turm versammeln, um "
+    "über Handel, Verteidigung und die Pflege der Bibliothek zu beraten.\n"
+)
+
+
+class FakeVectorStore:
+    """Records sync calls; serves pre-seeded {source_id: {source_file: hash}}."""
+
+    def __init__(self, hashes: dict | None = None):
+        self.hashes = hashes or {}
+        self.calls: list[tuple] = []
+        self.upserted: list = []
+
+    def get_content_hashes_for_source(self, source_id):
+        return dict(self.hashes.get(source_id, {}))
+
+    def delete_by_source_file(self, source_id, source_file):
+        self.calls.append(("delete", source_id, source_file))
+
+    def upsert_chunks(self, chunks):
+        self.calls.append(("upsert", len(chunks)))
+        self.upserted.extend(chunks)
+
+
+class TestRunIncremental:
+    """Test suite for hash-based incremental sync in IngestionOrchestrator.run()."""
+
+    def _setup(self, tmp_path, monkeypatch):
+        from src.config.manager import config_manager
+        src = _folder_source(tmp_path, id="vault")
+        monkeypatch.setattr(config_manager.settings.ingestion, "sources", [src])
+        f = tmp_path / "Arkenfeld.md"
+        f.write_text(_NOTE, encoding="utf-8")
+        return IngestionOrchestrator(), f
+
+    def test_new_file_is_upserted(self, tmp_path, monkeypatch):
+        """Verify a file unknown to the store is parsed, counted as created and upserted."""
+        orch, _ = self._setup(tmp_path, monkeypatch)
+        vs = FakeVectorStore()
+        result = orch.run(vectorstore=vs)
+        assert vs.upserted
+        assert result.chunks_created == len(vs.upserted)
+        assert not [c for c in vs.calls if c[0] == "delete"]
+
+    def test_unchanged_file_is_skipped(self, tmp_path, monkeypatch):
+        """Verify a file whose hash matches the store is neither parsed nor re-embedded."""
+        orch, f = self._setup(tmp_path, monkeypatch)
+        vs = FakeVectorStore({"vault": {"Arkenfeld.md": _compute_content_hash(f)}})
+        monkeypatch.setattr(orch.parsers[0], "parse", lambda *a: pytest.fail("parsed unchanged file"))
+        result = orch.run(vectorstore=vs)
+        assert vs.upserted == []
+        assert result.documents_processed == 1
+        assert result.chunks_created == result.chunks_updated == result.chunks_deleted == 0
+
+    def test_changed_file_old_chunks_deleted_before_upsert(self, tmp_path, monkeypatch):
+        """Verify a changed file drops its old chunks first so a shrunken file leaves no stale tail."""
+        orch, _ = self._setup(tmp_path, monkeypatch)
+        vs = FakeVectorStore({"vault": {"Arkenfeld.md": "sha256:old"}})
+        result = orch.run(vectorstore=vs)
+        assert vs.calls[0] == ("delete", "vault", "Arkenfeld.md")
+        assert vs.calls[-1][0] == "upsert"
+        assert result.chunks_updated == len(vs.upserted) > 0
+        assert result.chunks_created == 0
+
+    def test_orphan_file_is_deleted(self, tmp_path, monkeypatch):
+        """Verify a file present in the store but gone from disk is removed."""
+        orch, f = self._setup(tmp_path, monkeypatch)
+        vs = FakeVectorStore({"vault": {
+            "Arkenfeld.md": _compute_content_hash(f),
+            "Gelöscht.md": "sha256:x",
+        }})
+        result = orch.run(vectorstore=vs)
+        assert ("delete", "vault", "Gelöscht.md") in vs.calls
+        assert ("delete", "vault", "Arkenfeld.md") not in vs.calls
+        assert result.chunks_deleted == 1
+
+    def test_parse_error_keeps_previous_version(self, tmp_path, monkeypatch):
+        """Verify a changed file that fails to parse keeps its old chunks instead of being deleted."""
+        orch, _ = self._setup(tmp_path, monkeypatch)
+        vs = FakeVectorStore({"vault": {"Arkenfeld.md": "sha256:old"}})
+
+        def _boom(*a):
+            raise RuntimeError("broken file")
+
+        monkeypatch.setattr(orch.parsers[0], "parse", _boom)
+        result = orch.run(vectorstore=vs)
+        assert not [c for c in vs.calls if c[0] == "delete"]
+        assert len(result.errors) == 1
+
+
 class TestSourceBase:
     """Test suite verifying base path resolution for determining file relativity."""
 

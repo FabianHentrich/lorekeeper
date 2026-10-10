@@ -185,8 +185,19 @@ class IngestionOrchestrator:
         result.phase = "parsing"
         _report()
 
+        # Source-scoped existing-hash lookup — unchanged files are skipped before parsing
+        existing: dict[tuple[str, str], str] = {}
+        if vectorstore is not None:
+            scope_ids = [only_source_id] if only_source_id else [s.id for s in settings.ingestion.sources]
+            for sid in scope_ids:
+                for src_file, h in vectorstore.get_content_hashes_for_source(sid).items():
+                    existing[(sid, src_file)] = h
+            logger.info(f"Existing files in scope: {len(existing)}")
+
         # Track which (source_id, source_file) pairs we process (orphan detection)
         processed: set[tuple[str, str]] = set()
+        # Files already in the store whose content changed — old chunks are dropped before upsert
+        changed: set[tuple[str, str]] = set()
         all_chunks: list[Chunk] = []
 
         total_files = len(files)
@@ -195,20 +206,27 @@ class IngestionOrchestrator:
             if parser is None:
                 continue
 
+            base = self._source_base(source)
+            relative_path = str(file_path.relative_to(base))
+            key = (source.id, relative_path)
+
             try:
-                base = self._source_base(source)
+                content_hash = _compute_content_hash(file_path)
+                if existing.get(key) == content_hash:
+                    processed.add(key)
+                    result.documents_processed += 1
+                    _report()
+                    continue
+
                 if idx % 10 == 1 or idx == total_files:
                     logger.info(f"Parsing [{idx}/{total_files}]: {file_path.name}")
                 documents = parser.parse(file_path, base)
                 chunks = chunk_documents(documents, settings.chunking)
 
-                content_hash = _compute_content_hash(file_path)
                 content_category, group = _resolve_category(file_path, source)
                 last_modified = datetime.fromtimestamp(
                     file_path.stat().st_mtime, tz=timezone.utc
                 ).isoformat()
-
-                relative_path = str(file_path.relative_to(base))
 
                 for chunk in chunks:
                     chunk.source_file = relative_path
@@ -222,7 +240,12 @@ class IngestionOrchestrator:
                     })
 
                 all_chunks.extend(chunks)
-                processed.add((source.id, relative_path))
+                processed.add(key)
+                if key in existing:
+                    changed.add(key)
+                    result.chunks_updated += len(chunks)
+                else:
+                    result.chunks_created += len(chunks)
                 result.documents_processed += 1
                 _report()
 
@@ -230,30 +253,19 @@ class IngestionOrchestrator:
                 error_msg = f"Error processing {file_path}: {e}"
                 logger.error(error_msg)
                 result.errors.append(error_msg)
+                # Keep the previously indexed version instead of treating the file as deleted
+                processed.add(key)
 
-        logger.info(f"Parsing complete: {result.documents_processed} docs, {len(all_chunks)} chunks. Starting vectorstore sync...")
+        logger.info(f"Parsing complete: {result.documents_processed} docs, {len(all_chunks)} new/changed chunks. Starting vectorstore sync...")
 
         if vectorstore is not None:
             result.phase = "embedding"
             _report()
 
-            # Source-scoped existing-hash lookup
-            scope_ids = [only_source_id] if only_source_id else [s.id for s in settings.ingestion.sources]
-            existing: dict[tuple[str, str], str] = {}
-            for sid in scope_ids:
-                for src_file, h in vectorstore.get_content_hashes_for_source(sid).items():
-                    existing[(sid, src_file)] = h
-            logger.info(f"Existing chunks in scope: {len(existing)}")
-
-            for chunk in all_chunks:
-                key = (chunk.metadata.get("source_id", ""), chunk.source_file)
-                chunk_hash = chunk.metadata.get("content_hash", "")
-                if existing.get(key) == chunk_hash:
-                    continue
-                elif key in existing:
-                    result.chunks_updated += 1
-                else:
-                    result.chunks_created += 1
+            # Drop old chunks of changed files first — otherwise a file that shrinks
+            # keeps its trailing chunks from the previous version.
+            for (sid, src_file) in changed:
+                vectorstore.delete_by_source_file(sid, src_file)
 
             # Orphans: anything in existing that wasn't processed this run
             for (sid, src_file) in set(existing.keys()) - processed:
@@ -263,8 +275,6 @@ class IngestionOrchestrator:
             logger.info(f"Upserting {len(all_chunks)} chunks (new={result.chunks_created}, updated={result.chunks_updated}, deleted={result.chunks_deleted})...")
             vectorstore.upsert_chunks(all_chunks)
             logger.info("Upsert complete")
-        else:
-            result.chunks_created = len(all_chunks)
 
         result.end_time = datetime.now(timezone.utc)
         logger.info(
