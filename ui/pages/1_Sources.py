@@ -127,6 +127,19 @@ def _render_chunk_metric():
     stat_slot.metric("Indizierte Chunks (gesamt)", value)
 
 
+def _start_ingest(endpoint: str, label: str, params: dict | None = None):
+    """Start an ingest job at `endpoint` and poll it; 409 = another job is running."""
+    try:
+        r = requests.post(f"{API_URL}{endpoint}", params=params, timeout=10)
+        if r.status_code == 409:
+            st.warning(r.json()["detail"])
+        else:
+            r.raise_for_status()
+            _poll_ingest_job(API_URL, r.json()["job_id"], label=label)
+    except Exception as e:
+        st.error(f"Fehler: {e}")
+
+
 # ─── Global stats + incremental / full reindex ───────────────────────
 col_stat, col_reindex = st.columns([2, 3])
 with col_stat:
@@ -135,25 +148,17 @@ with col_stat:
 with col_reindex:
     st.caption("Nur geänderte/neue Dateien einlesen, oder alle Sources komplett neu:")
     col_incr, col_full = st.columns(2)
-    ingest_mode = None
-    if col_incr.button("⚡ Nur Änderungen indizieren",
-                       help="Überspringt Dateien mit unverändertem Inhalt (Content-Hash). "
-                            "Nach geänderten Chunking-Einstellungen → 'Alle Dokumente neu "
-                            "indizieren'; nach geänderter category_map/group → 'Recategorize'."):
-        ingest_mode = ({}, "Inkrementelle Indizierung")
-    if col_full.button("🔄 Alle Dokumente neu indizieren"):
-        ingest_mode = ({"full": "true"}, "Vollständige Indizierung")
-    if ingest_mode:
-        params, label = ingest_mode
-        try:
-            r = requests.post(f"{API_URL}/ingest", params=params, timeout=10)
-            if r.status_code == 409:
-                st.warning(r.json()["detail"])
-            else:
-                r.raise_for_status()
-                _poll_ingest_job(API_URL, r.json()["job_id"], label=label)
-        except Exception as e:
-            st.error(f"Fehler: {e}")
+    incr_clicked = col_incr.button(
+        "⚡ Nur Änderungen indizieren",
+        help="Überspringt Dateien mit unverändertem Inhalt (Content-Hash). "
+             "Nach geänderten Chunking-Einstellungen → 'Alle Dokumente neu "
+             "indizieren'; nach geänderter category_map/group → 'Recategorize'.",
+    )
+    full_clicked = col_full.button("🔄 Alle Dokumente neu indizieren")
+    if incr_clicked:
+        _start_ingest("/ingest", "Inkrementelle Indizierung")
+    elif full_clicked:
+        _start_ingest("/ingest", "Vollständige Indizierung", params={"full": "true"})
     st.caption(
         "⏱ Dauer hängt stark von Anzahl und Größe der Dokumente ab "
         "(Richtwert: ~220 Markdown-Dateien ≈ 5 Minuten; PDFs mit OCR deutlich länger)."
@@ -263,15 +268,7 @@ for s in sources:
             if st.button("🔄 Reindex", key=f"reindex_{s['id']}",
                          help="Löscht alle Chunks dieser Source und liest sie neu ein. "
                               "Pflicht, wenn sich Inhalte oder der Pfad geändert haben."):
-                try:
-                    r = requests.post(f"{API_URL}/sources/{s['id']}/reindex", timeout=10)
-                    if r.status_code == 409:
-                        st.warning(r.json()["detail"])
-                    else:
-                        r.raise_for_status()
-                        _poll_ingest_job(API_URL, r.json()["job_id"], label=f"Reindex '{s['id']}'")
-                except Exception as e:
-                    st.error(f"Fehler: {e}")
+                _start_ingest(f"/sources/{s['id']}/reindex", f"Reindex '{s['id']}'")
         with col_b:
             if st.button("🏷 Recategorize (alle)", key=f"recat_{s['id']}",
                          help="Schnell, kein Re-Embedding. Bringt bestehende Chunks "
