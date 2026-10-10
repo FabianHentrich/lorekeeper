@@ -267,6 +267,22 @@ def test_query_uses_condensed_question_in_qa_prompt(client, fake_services):
     assert fake_services.prompt_manager.last_qa_question == "Wer ist der Vater von Arkenfeld?"
 
 
+def test_query_falls_back_to_original_question_when_condense_fails(client, fake_services):
+    """Ensure a failing condense LLM call degrades to the raw question instead of a 500."""
+    cm = fake_services.conversation_manager
+    cm.config.condense_question = True
+    cm.get_history_for_condense = lambda sid: [{"role": "user", "content": "Wer ist Arkenfeld?"}]
+
+    async def _condense(prompt, provider):
+        raise ConnectionError("Ollama down")
+
+    fake_services.generator.condense_question = _condense
+
+    response = client.post("/query", json={"question": "Wer ist sein Vater?"})
+    assert response.status_code == 200
+    assert fake_services.retriever.last_call["query"] == "Wer ist sein Vater?"
+
+
 def test_query_without_chunks_returns_no_context_message(client, fake_services):
     """Ensure the app falls back strictly to the 'no_context' prompt if semantic search finds nothing."""
     fake_services.retriever._chunks = []
@@ -350,6 +366,25 @@ def test_query_stream_no_chunks_emits_fallback_token(client, fake_services):
     assert any(e["type"] == "done" for e in events)
 
 
+
+def test_query_stream_falls_back_to_original_question_when_condense_fails(client, fake_services):
+    """Ensure a failing condense call still opens the SSE stream instead of erroring before it."""
+    cm = fake_services.conversation_manager
+    cm.config.condense_question = True
+    cm.get_history_for_condense = lambda sid: [{"role": "user", "content": "Wer ist Arkenfeld?"}]
+
+    async def _condense(prompt, provider):
+        raise ConnectionError("Ollama down")
+
+    fake_services.generator.condense_question = _condense
+
+    with client.stream("POST", "/query/stream", json={"question": "Wer ist sein Vater?"}) as resp:
+        assert resp.status_code == 200
+        events = _parse_sse(resp.read().decode("utf-8"))
+
+    assert fake_services.retriever.last_call["query"] == "Wer ist sein Vater?"
+    assert any(e["type"] == "done" for e in events)
+
 # ─── /health ───────────────────────────────────────────────────────────────────
 
 def test_health_healthy(client, fake_services):
@@ -424,6 +459,25 @@ def test_ingest_status_unknown_job_returns_404(client, fake_services):
     """Validate ingestion status endpoints reject unfamiliar background jobs."""
     response = client.get("/ingest/status/nonexistent-job-id")
     assert response.status_code == 404
+
+
+def test_ingest_rejected_while_job_running(client, fake_services):
+    """Validate a second ingest is refused with 409 while one is still running."""
+    from src.api import routes as routes_module
+    from src.api.schemas import IngestStatusResponse
+    routes_module._ingest_jobs["busy"] = IngestStatusResponse(job_id="busy", status="running")
+
+    assert client.post("/ingest").status_code == 409
+
+
+def test_reindex_rejected_while_job_running(client, fake_services):
+    """Validate a per-source reindex is refused with 409 while another job is running."""
+    from src.api import routes as routes_module
+    from src.api.schemas import IngestStatusResponse
+    main_module.config.settings.ingestion.sources = [SimpleNamespace(id="vault")]
+    routes_module._ingest_jobs["busy"] = IngestStatusResponse(job_id="busy", status="queued")
+
+    assert client.post("/sources/vault/reindex").status_code == 409
 
 
 # ─── /config ───────────────────────────────────────────────────────────────────

@@ -14,6 +14,11 @@ class TestTokenize:
         """Verify empty strings map safely to void arrays."""
         assert _tokenize("") == []
 
+    def test_strips_punctuation(self):
+        """Verify punctuation is dropped so query 'Arkenfeld?' matches document 'Arkenfeld.'."""
+        assert _tokenize("Wer ist Arkenfeld?") == ["wer", "ist", "arkenfeld"]
+        assert _tokenize("(Arkenfeld), Größe: 3.") == ["arkenfeld", "größe", "3"]
+
 
 class TestMatchesFilter:
     """Test suite validating subset ChromaDB pseudo-query filtering implementations."""

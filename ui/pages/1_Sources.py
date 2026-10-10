@@ -114,8 +114,12 @@ with col_reindex:
     st.caption("Alle Sources komplett neu einlesen:")
     if st.button("🔄 Alle Dokumente neu indizieren"):
         try:
-            resp = requests.post(f"{API_URL}/ingest", timeout=10).json()
-            _poll_ingest_job(API_URL, resp["job_id"], label="Vollständige Indizierung")
+            r = requests.post(f"{API_URL}/ingest", timeout=10)
+            if r.status_code == 409:
+                st.warning(r.json()["detail"])
+            else:
+                r.raise_for_status()
+                _poll_ingest_job(API_URL, r.json()["job_id"], label="Vollständige Indizierung")
         except Exception as e:
             st.error(f"Fehler: {e}")
     st.caption(
@@ -229,8 +233,11 @@ for s in sources:
                               "Pflicht, wenn sich Inhalte oder der Pfad geändert haben."):
                 try:
                     r = requests.post(f"{API_URL}/sources/{s['id']}/reindex", timeout=10)
-                    r.raise_for_status()
-                    _poll_ingest_job(API_URL, r.json()["job_id"], label=f"Reindex '{s['id']}'")
+                    if r.status_code == 409:
+                        st.warning(r.json()["detail"])
+                    else:
+                        r.raise_for_status()
+                        _poll_ingest_job(API_URL, r.json()["job_id"], label=f"Reindex '{s['id']}'")
                 except Exception as e:
                     st.error(f"Fehler: {e}")
         with col_b:

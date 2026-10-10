@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 
 from src.api.schemas import (
@@ -74,7 +75,10 @@ async def _prepare_query(request: QueryRequest):
     history = cm.get_history_for_condense(session.session_id)
     if history and cm.config.condense_question:
         condense_prompt = pm.render_condense(history=history, question=question)
-        question = await gen.condense_question(condense_prompt, condense_prov)
+        try:
+            question = await gen.condense_question(condense_prompt, condense_prov)
+        except Exception as e:
+            logger.warning(f"Condense failed ({e}); retrieving with the original question")
 
     chunks = await ret.retrieve(
         query=question,
@@ -204,6 +208,10 @@ def _start_ingest_job(run_sync) -> str:
     the job_id. `run_sync` is a zero-arg callable returning an IngestionResult."""
     import src.main as main_module
 
+    # Parallel runs race on delete/upsert of the same chunks
+    if any(j.status in ("queued", "running") for j in _ingest_jobs.values()):
+        raise HTTPException(status_code=409, detail="Eine Indexierung läuft bereits")
+
     job_id = str(uuid.uuid4())
     _ingest_jobs[job_id] = IngestStatusResponse(job_id=job_id, status="queued")
 
@@ -266,7 +274,7 @@ async def _health_loop(interval: float = 60.0):
     while True:
         try:
             _, _, _, _, _, vs, prov = _get_services()
-            chroma_ok = vs.health_check()
+            chroma_ok = await run_in_threadpool(vs.health_check)
             llm_ok = await prov.health_check()
             _health_cache.update({"ts": time.monotonic(), "chroma": chroma_ok, "llm": llm_ok})
         except Exception as e:
@@ -488,7 +496,7 @@ async def recategorize_endpoint():
     """Trigger a recategorization task to update metadata for existing configurations."""
     from src.ingestion.recategorize import recategorize
     _, _, _, _, _, vs, _ = _get_services()
-    return recategorize(vectorstore=vs)
+    return await run_in_threadpool(recategorize, vectorstore=vs)
 
 
 @router.get("/provider/gemini/status")

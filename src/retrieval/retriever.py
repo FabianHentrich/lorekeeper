@@ -122,7 +122,8 @@ class Retriever:
         )
 
         # 1. Vector search (always)
-        vector_results = self.vectorstore.query(
+        vector_results = await run_in_threadpool(
+            self.vectorstore.query,
             query_embedding=query_embedding,
             top_k=top_k,
             where=where,
@@ -155,7 +156,8 @@ class Retriever:
                     self.bm25_index.build_from_vectorstore, self.vectorstore
                 )
 
-            bm25_results = self.bm25_index.query(
+            bm25_results = await run_in_threadpool(
+                self.bm25_index.query,
                 query_text=query,
                 top_k=self.config.hybrid.bm25_top_k,
                 where=where,

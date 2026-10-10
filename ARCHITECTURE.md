@@ -522,7 +522,7 @@ komplett für diesen Request).
 **Ablauf (Hybrid Search):**
 
 1. **Vektor-Suche** (immer): Query wird embedded (gleiches Modell wie Dokumente). ChromaDB Similarity Search → Top-K Chunks. Score-Threshold Filterung **auf die Cosine-Scores, bevor die Fusion passiert** — RRF-Scores liegen auf anderer Skala und wären durch den Threshold sonst komplett weggefiltert.
-2. **Lexikalische Suche (BM25)** (nur wenn Hybrid aktiv): Query wird tokenisiert (Whitespace + Lowercase). In-Memory-Index von `rank_bm25`, lazy aus der ChromaDB-Collection gebaut, nach Ingestion invalidiert. Post-hoc Metadaten-Filter (ChromaDB-kompatible `$eq`/`$ne`/`$in`/`$and`-Operatoren).
+2. **Lexikalische Suche (BM25)** (nur wenn Hybrid aktiv): Query wird tokenisiert (Lowercase, `\w+`-Wörter — Satzzeichen fallen weg). In-Memory-Index von `rank_bm25`, lazy aus der ChromaDB-Collection gebaut, nach Ingestion invalidiert. Post-hoc Metadaten-Filter (ChromaDB-kompatible `$eq`/`$ne`/`$in`/`$and`-Operatoren).
 3. **Score-Fusion**: Ergebnisse beider Suchen werden über Reciprocal Rank Fusion (RRF) kombiniert (`hybrid.bm25_weight` regelt den Einfluss). BM25-only-Kandidaten werden mit aufgenommen.
 4. Optional: Metadaten-Filter (nur bestimmte Kategorien/Quellen) — wird sowohl an Vektor-Query als auch an BM25 durchgereicht.
 5. Reranking via Cross-Encoder (Score-sortierte Liste).

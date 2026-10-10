@@ -1,18 +1,21 @@
 import logging
+import re
 from typing import Any
 
 from rank_bm25 import BM25Okapi
 
 logger = logging.getLogger(__name__)
 
+_WORD_PATTERN = re.compile(r"\w+")
+
 
 def _tokenize(text: str) -> list[str]:
-    """Simple whitespace tokenizer with lowercasing.
+    """Lowercased word tokenizer; punctuation is dropped so "Arkenfeld?" matches "Arkenfeld.".
 
     Sufficient for German TTRPG content at this scale. No stemmer needed —
     the cross-encoder reranker compensates for morphological variation.
     """
-    return text.lower().split()
+    return _WORD_PATTERN.findall(text.lower())
 
 
 def _matches_filter(metadata: dict, where: dict | None) -> bool:
