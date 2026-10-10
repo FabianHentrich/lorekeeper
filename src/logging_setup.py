@@ -1,3 +1,4 @@
+import io
 import logging
 import sys
 from logging.handlers import RotatingFileHandler
@@ -16,7 +17,10 @@ def setup_logging(config: LoggingConfig):
 
     formatter = logging.Formatter(config.format)
 
-    # Console handler
+    # Console handler. Redirected stdout on Windows defaults to cp1252, which can't encode
+    # characters like "→" in our log lines — every such line would raise a logging error.
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     console = logging.StreamHandler(sys.stdout)
     console.setFormatter(formatter)
     root.addHandler(console)

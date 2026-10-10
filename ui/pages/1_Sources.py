@@ -101,10 +101,20 @@ def _fetch_sources():
     return requests.get(f"{API_URL}/sources", timeout=5).json()["sources"]
 
 
-def _refresh():
-    """Clear the local component cache and trigger a full UI reload."""
+def _refresh(message: str | None = None):
+    """Clear the local caches and trigger a full UI reload.
+
+    `message` is shown as success banner after the reload — an st.success()
+    rendered right before st.rerun() would be wiped immediately."""
+    if message:
+        st.session_state["_flash"] = message
     _fetch_sources.clear()
+    _fetch_stats.clear()
     st.rerun()
+
+
+if _flash := st.session_state.pop("_flash", None):
+    st.success(_flash)
 
 
 @st.cache_data(ttl=30, show_spinner=False)
@@ -257,9 +267,8 @@ if sources:
             try:
                 resp = requests.put(f"{API_URL}/sources", json={"sources": new_sources}, timeout=10)
                 _raise_for_status(resp)
-                st.success("Gespeichert. Du musst u.U. Recategorize oder Reindex anwerfen, "
-                           "damit bestehende Chunks die neuen Werte übernehmen.")
-                _refresh()
+                _refresh("Gespeichert. Du musst u.U. Recategorize oder Reindex anwerfen, "
+                         "damit bestehende Chunks die neuen Werte übernehmen.")
             except Exception as e:
                 st.error(f"Speichern fehlgeschlagen: {e}")
     with col_reload:
@@ -304,8 +313,7 @@ for s in sources:
                 try:
                     r = requests.delete(f"{API_URL}/sources/{sid_url}", timeout=10)
                     _raise_for_status(r)
-                    st.success(f"Entfernt. Gelöschte Chunks: {r.json()['deleted_chunks']}")
-                    _refresh()
+                    _refresh(f"Source '{s['id']}' entfernt. Gelöschte Chunks: {r.json()['deleted_chunks']}")
                 except Exception as e:
                     st.error(f"Fehler: {e}")
 
@@ -389,9 +397,8 @@ for s in sources:
                         f"{API_URL}/sources", json={"sources": updated_sources}, timeout=10,
                     )
                     _raise_for_status(resp)
-                    st.success("Zuordnung gespeichert. Recategorize starten, "
-                               "damit bestehende Chunks aktualisiert werden.")
-                    _refresh()
+                    _refresh("Zuordnung gespeichert. Recategorize starten, "
+                             "damit bestehende Chunks aktualisiert werden.")
                 except Exception as e:
                     st.error(f"Speichern fehlgeschlagen: {e}")
 
@@ -512,11 +519,10 @@ if scan_result is not None and scan_source_path:
                     r = requests.put(f"{API_URL}/sources",
                                      json={"sources": updated}, timeout=10)
                     _raise_for_status(r)
-                    st.success(f"Source '{new_id}' hinzugefügt. Starte jetzt Reindex "
-                               "um die Dokumente zu indizieren.")
                     st.session_state.pop("_scan_result", None)
                     st.session_state.pop("_scanned_path", None)
-                    _refresh()
+                    _refresh(f"Source '{new_id}' hinzugefügt. Starte jetzt Reindex "
+                             "um die Dokumente zu indizieren.")
                 except Exception as e:
                     st.error(f"Fehler: {e}")
 
@@ -535,5 +541,7 @@ if st.button("🔥 Collection komplett leeren", type="secondary"):
             r = requests.post(f"{API_URL}/admin/wipe", json={"confirm": "DELETE"}, timeout=10)
             _raise_for_status(r)
             st.success("Collection geleert.")
+            _fetch_stats.clear()
+            _render_chunk_metric()
         except Exception as e:
             st.error(f"Fehler: {e}")
