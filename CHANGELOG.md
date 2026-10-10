@@ -19,6 +19,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `config/sources.yaml` sidecar for source configuration (auto-migrated from `settings.yaml` on first startup)
 - Multiple document path support for ingestion with per-source group and category mapping
 - Structured logging for all evaluation endpoints and the retrieval eval core loop
+- **"⚡ Nur Änderungen indizieren"** button on the Sources page: incremental ingest that skips files with an unchanged content hash (next to the full reindex)
+- `documents_skipped` in the ingest job status; the Sources page reports indexed vs. skipped documents
+- Integration tests for all `/sources/*` endpoints and the ingest job lifecycle, plus an end-to-end test (ingest a vault over HTTP → `/query/stream` → incremental re-ingest) with real embeddings and in-memory ChromaDB
+- ruff and mypy configuration in `pyproject.toml`, run as part of `pytest` via `tests/test_code_quality.py`
 
 ### Changed
 - `OllamaProvider` reads `temperature`/`top_p`/`max_tokens` from `self.config` on each call instead of caching them at init, so runtime edits via the Settings page propagate without rebuilding the provider
@@ -27,9 +31,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Sidebar HTTP calls (`/provider`, `/provider/gemini/status`) cached with TTL to eliminate redundant requests on every Streamlit rerun
 - Evaluation page data (`/eval/qa-pairs`, `/eval/results`) cached with TTL and explicit cache invalidation on mutations
 - `evaluate_retrieval.run_evaluation()` refactored: core logic extracted into `run_evaluation_with_retriever()` for reuse by both CLI and API
+- Per-source routes (`/sources/{id}/folders`, `/sources/{id}/reindex`, `DELETE /sources/{id}`) accept ids containing `/`; the UI URL-encodes ids
+- `PUT /sources` rejects new ids that are empty, `.`, `..` or have surrounding whitespace (already configured ids are never rejected)
+- Sources page shows the backend's error detail instead of a generic HTTP status
+- `BaseLLMProvider.generate_stream` is declared as a plain `def` returning an `AsyncGenerator`, with `system_prompt` matching the Ollama/Gemini signatures
 
 ### Fixed
 - Documentation: corrected stale values and inconsistencies across docs
+- Ingest stats: `chunks_deleted` counted orphaned files instead of deleted chunks
+- Sources page: chunk total stayed stale after an ingest; status polling looped forever when the backend was unreachable
+- Source ids with `#`, `&`, `?` or spaces broke reindex, delete and folder lookup
+- Failed scans and missing source paths were shown as "no subfolders"
 
 ### Removed
 - Docker setup (`Dockerfile`, `Dockerfile.ui`, `docker-compose.yaml`, `.dockerignore`, `requirements-ui.txt`) — LoreKeeper runs Windows-only with embedded ChromaDB

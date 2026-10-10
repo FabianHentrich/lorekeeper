@@ -21,5 +21,6 @@ select = ["E", "F", "W", "I", "B", "UP"]
 
 [tool.mypy]
 python_version = "3.11"
-files = ["src"]
+files = ["src", "evaluation"]
+explicit_package_bases = true
 ignore_missing_imports = true

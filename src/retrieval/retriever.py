@@ -256,7 +256,7 @@ class Retriever:
         seen: set = set()
         for c in chunks:
             key = _section_key(c)
-            for item in (expanded.get(key, [c]) if key else [c]):
+            for item in (expanded.get(key, [c]) if key is not None else [c]):
                 idx = item.metadata.get("chunk_index")
                 ident = (item.source_file, idx) if idx is not None else id(item)
                 if ident not in seen:

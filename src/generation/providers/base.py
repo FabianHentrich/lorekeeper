@@ -23,7 +23,7 @@ class BaseLLMProvider(ABC):
     """Abstract interface every LLM backend (Ollama, Gemini, ...) must implement."""
 
     provider: str = "unknown"
-    model: str = "unknown"
+    model: str  # set by each implementation in __init__ — no default, so a missing one fails loudly
 
     @abstractmethod
     async def generate(self, prompt: str, **kwargs) -> LLMResponse:
