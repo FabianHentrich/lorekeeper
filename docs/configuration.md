@@ -59,7 +59,7 @@ Controls which files are read.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `supported_formats` | `list[str]` | `[".md", ".pdf", ".png", ".jpg", ".webp"]` | File extensions to process |
+| `supported_formats` | `list[str]` | `[".md", ".pdf", ".png", ".jpg", ".jpeg", ".webp"]` | File extensions to process |
 | `exclude_patterns` | `list[str]` | see below | Glob patterns for files/folders to exclude |
 | `watch_for_changes` | `bool` | `false` | Not implemented (reserved for auto-reindex) |
 | `document_paths` | `list[str]` | `[]` | **Deprecated.** Replaced by `config/sources.yaml`. If set without a `sources.yaml`, the loader migrates them on the fly to sources with `group=lore` and warns. |

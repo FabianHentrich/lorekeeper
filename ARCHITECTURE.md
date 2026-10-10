@@ -965,7 +965,7 @@ Streamlit (ui/LoreKeeper.py) ──HTTP/SSE──▶ FastAPI (src/main.py) ─�
 # Ingestion — Sources liegen in config/sources.yaml (Sidecar, gitignored)
 # document_paths ist DEPRECATED, nur noch als Migrations-Shim aktiv.
 ingestion:
-  supported_formats: [".md", ".pdf", ".png", ".jpg", ".webp"]
+  supported_formats: [".md", ".pdf", ".png", ".jpg", ".jpeg", ".webp"]
   exclude_patterns:
     - ".obsidian/*"
     - ".trash/*"

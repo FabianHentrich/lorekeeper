@@ -147,11 +147,12 @@ class IngestionOrchestrator:
                     logger.warning(f"Unsupported file extension for source {source.id}: {src_path}")
                 continue
 
-            # Folder source
-            for ext in settings.ingestion.supported_formats:
-                for file_path in src_path.rglob(f"*{ext}"):
-                    if not _is_excluded(file_path, src_path, exclude):
-                        files.append((file_path, source))
+            # Folder source — suffix compared lowercased; rglob(f"*{ext}") is case-sensitive on Linux
+            supported = {ext.lower() for ext in settings.ingestion.supported_formats}
+            for file_path in src_path.rglob("*"):
+                if (file_path.suffix.lower() in supported and file_path.is_file()
+                        and not _is_excluded(file_path, src_path, exclude)):
+                    files.append((file_path, source))
 
         return files
 

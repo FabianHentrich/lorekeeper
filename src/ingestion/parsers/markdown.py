@@ -143,9 +143,13 @@ class MarkdownParser(BaseParser):
         current_hierarchy = []
         current_content_lines = []
         current_levels = []
+        in_code = False
 
         for line in text.split("\n"):
-            heading_match = HEADING_PATTERN.match(line)
+            # "# comment" inside ``` / ~~~ fences is code, not a heading
+            if line.lstrip().startswith(("```", "~~~")):
+                in_code = not in_code
+            heading_match = None if in_code else HEADING_PATTERN.match(line)
             if heading_match:
                 # Save previous section
                 if current_content_lines:

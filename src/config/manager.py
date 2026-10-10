@@ -98,7 +98,7 @@ class IngestionConfig(BaseModel):
     # DEPRECATED — kept only for backwards compatibility. If sources is empty
     # but document_paths is set, the loader migrates them on the fly.
     document_paths: list[str] = []
-    supported_formats: list[str] = [".md", ".pdf", ".png", ".jpg", ".webp"]
+    supported_formats: list[str] = [".md", ".pdf", ".png", ".jpg", ".jpeg", ".webp"]
     exclude_patterns: list[str] = [".obsidian/*", ".trash/*", "*alt.md", "*(1).md", "*.draft.*"]
     watch_for_changes: bool = False
     pdf: PdfConfig = PdfConfig()

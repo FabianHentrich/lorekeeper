@@ -119,6 +119,22 @@ class TestChunking:
         assert chunks[1].chunk_index == 1
         assert chunks[0].total_chunks == 2
 
+    def test_large_table_split_below_model_limit(self):
+        """
+        Verify a table above 1.5x max_chunk_size is split by rows (header repeated) so no part
+        exceeds the 512-token limit of the embedding model.
+        """
+        header = "| Name | Rang | Ort |\n|---|---|---|"
+        rows = "\n".join(f"| Magier Nummer {i} | Erzmagier | Turm von Arkenfeld |" for i in range(40))
+        config = ChunkingConfig(strategy="heading_aware", max_chunk_size=256, chunk_overlap=0, min_chunk_size=0)
+        table = f"{header}\n{rows}"
+        assert 256 * 1.5 < _estimate_tokens(table) <= 256 * 3  # was kept atomic before
+
+        chunks = chunk_documents([_make_doc(table)], config)
+        assert len(chunks) > 1
+        assert all(c.content.startswith("| Name | Rang | Ort |") for c in chunks)
+        assert all(_estimate_tokens(c.content) <= 256 * 1.5 for c in chunks)
+
     def test_empty_documents(self):
         """
         Verify that feeding empty strings yields an empty list rather than errors.

@@ -188,6 +188,17 @@ class TestDiscoverFiles:
         files = orch._discover_files()
         assert len(files) == 2
 
+    def test_folder_source_matches_extensions_case_insensitively(self, tmp_path, monkeypatch):
+        """
+        Verify uppercase extensions (.PNG, .MD) and .jpeg are discovered — rglob is case-sensitive on Linux.
+        """
+        for name in ("Karte.PNG", "Notiz.MD", "Foto.jpeg", "ignore.txt"):
+            (tmp_path / name).write_text("x")
+        src = _folder_source(tmp_path)
+        orch = self._make_orchestrator(monkeypatch, [src])
+        names = sorted(f.name for f, _ in orch._discover_files())
+        assert names == ["Foto.jpeg", "Karte.PNG", "Notiz.MD"]
+
     def test_only_source_id_filter(self, tmp_path, monkeypatch):
         """
         Verify that the Orchestrator can ingest a designated subset of documents filtering

@@ -6,7 +6,7 @@
 # Sources are configured in config/sources.yaml (sidecar, gitignored).
 # document_paths is DEPRECATED — use config/sources.yaml instead.
 ingestion:
-  supported_formats: [".md", ".pdf", ".png", ".jpg", ".webp"]
+  supported_formats: [".md", ".pdf", ".png", ".jpg", ".jpeg", ".webp"]
   exclude_patterns:
     - ".obsidian/*"
     - ".trash/*"

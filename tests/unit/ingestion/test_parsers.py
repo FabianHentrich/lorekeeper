@@ -104,6 +104,19 @@ class TestMarkdownParser:
         assert ["Charakter", "Hintergrund"] in hierarchies
         assert ["Charakter", "Ausrüstung"] in hierarchies
 
+    def test_hash_lines_in_code_block_are_not_headings(self, md_parser, tmp_path):
+        """Verify '# comment' lines inside fenced code blocks don't break the heading path."""
+        f = tmp_path / "test.md"
+        f.write_text(
+            "# Würfel\n## Makros\n```python\n# kein Heading\nroll(2)\n```\nNach dem Code.",
+            encoding="utf-8",
+        )
+
+        docs = md_parser.parse(f)
+        assert [d.heading_hierarchy for d in docs] == [["Würfel", "Makros"]]
+        assert "# kein Heading" in docs[0].content
+        assert "Nach dem Code." in docs[0].content
+
     def test_empty_file(self, md_parser, tmp_path):
         """Verify that absolutely blank files still generate an empty document stub."""
         f = tmp_path / "empty.md"

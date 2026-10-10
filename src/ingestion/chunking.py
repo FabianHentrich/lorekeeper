@@ -43,8 +43,10 @@ def _heading_aware_chunking(documents: list[ParsedDocument], config: ChunkingCon
 
         for block_text, is_table in _split_into_blocks(text):
             if is_table:
-                # Tables are atomic — split only at row boundaries if very large
-                if _estimate_tokens(block_text) <= config.max_chunk_size * 3:
+                # Tables are atomic — split only at row boundaries if very large.
+                # 1.5x keeps table + heading/identity prefix under the 512-token
+                # limit of e5 and the reranker; beyond it the tail is silently truncated.
+                if _estimate_tokens(block_text) <= config.max_chunk_size * 1.5:
                     chunks.append(_doc_to_chunk(doc, block_text))
                 else:
                     for sub in _split_table_by_rows(block_text, config.max_chunk_size):
