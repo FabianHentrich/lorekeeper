@@ -203,17 +203,12 @@ The model is preloaded at server start (`warmup` in `lifespan`), not on the firs
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `mode` | `str` | `embedded` | `embedded` (local) \| `client` (Docker/remote) |
+| `mode` | `str` | `embedded` | `embedded` (local) \| `client` (external ChromaDB server, unused) |
 | `persist_directory` | `str` | `./chroma_data` | Storage location in embedded mode |
 | `chroma_host` | `str` | `chromadb` | Host in client mode |
 | `chroma_port` | `int` | `8000` | Port in client mode |
 | `collection_name` | `str` | `lorekeeper` | ChromaDB collection |
 | `distance_metric` | `str` | `cosine` | `cosine` \| `l2` \| `ip` |
-
-**Env override for Docker:**
-```bash
-CHROMA_MODE=client
-```
 
 > **Warning:** `persist_directory` and `chroma_host/port` are mutually exclusive.
 > Switch exclusively via `CHROMA_MODE`.

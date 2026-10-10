@@ -37,13 +37,6 @@ uvicorn src.main:app --reload --port 8000
 streamlit run ui/LoreKeeper.py
 ```
 
-### Docker
-
-```bash
-docker compose up --build -d
-docker compose exec ollama ollama pull qwen3:8b
-```
-
 ---
 
 ## Project Layout
@@ -76,9 +69,9 @@ Key directories:
 - **Respect async boundaries.** Any CPU-bound call (especially
   `sentence_transformers` `encode()` / `predict()`) **must** be offloaded via
   `fastapi.concurrency.run_in_threadpool`. Blocking the event loop is a bug.
-- **ChromaDB mode.** Local dev uses `embedded` (on-disk), Docker uses
-  `client` (HTTP). Never access `chroma_data/` directly when the client
-  container is running — it causes file locks.
+- **ChromaDB mode.** LoreKeeper runs Windows-only with `embedded` (on-disk)
+  ChromaDB. Don't run the ingestion CLI while the backend holds `chroma_data/`
+  — it causes file locks.
 - **Tests are required.** Any logic added to `src/` (except thin wiring in
   `src/api/routes.py`) needs a unit test. API route behavior should be
   covered in `tests/integration/test_api_routes.py`.
@@ -137,7 +130,7 @@ Open an issue with:
 - What you expected to happen
 - What actually happened (stack trace, log output)
 - Steps to reproduce (ideally a minimal example)
-- Your environment (OS, Python version, provider: Ollama/Gemini, Docker or local)
+- Your environment (OS, Python version, provider: Ollama/Gemini)
 
 Log output lives in `logs/lorekeeper.log` by default.
 

@@ -31,6 +31,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 - Documentation: corrected stale values and inconsistencies across docs
 
+### Removed
+- Docker setup (`Dockerfile`, `Dockerfile.ui`, `docker-compose.yaml`, `.dockerignore`, `requirements-ui.txt`) — LoreKeeper runs Windows-only with embedded ChromaDB
+
 ---
 
 ## [0.2.0] — 2026-04-10

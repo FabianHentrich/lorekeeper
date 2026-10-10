@@ -13,7 +13,7 @@ Version: 0.2.0 — Last Updated: 2026-04-04
 > | Embedding-Aufbau & Reranking | [docs/embedding-strategy.md](docs/embedding-strategy.md) |
 > | Ollama vs. Gemini, Provider-Wechsel | [docs/provider-strategy.md](docs/provider-strategy.md) |
 > | Streamlit UI, Session-State | [docs/ui-ux.md](docs/ui-ux.md) |
-> | Ingest, Troubleshooting, Docker | [docs/operations.md](docs/operations.md) |
+> | Ingest, Troubleshooting | [docs/operations.md](docs/operations.md) |
 
 ---
 
@@ -62,7 +62,7 @@ indiziert und über eine Chat-Oberfläche durchsuchbar und abfragbar macht.
 
 - Multimodale Bildbeschreibung / Vision (Bilder werden als Metadaten indiziert, nicht analysiert)
 - React-Frontend (kommt nach Streamlit als v2)
-- Cloud-Deployment (läuft lokal + Docker)
+- Cloud-Deployment / Docker (läuft ausschließlich lokal unter Windows)
 - Schreibzugriff auf Dokumente (read-only)
 - Fine-Tuning von Modellen
 
@@ -224,9 +224,6 @@ lorekeeper/
 ├── chroma_data/
 │   └── .gitkeep                   # ChromaDB Persistenz (NICHT committed)
 │
-├── docker-compose.yaml            # API + ChromaDB + Ollama
-├── Dockerfile                     # API + Backend
-├── Dockerfile.ui                  # Streamlit UI (separater Container)
 ├── requirements.txt
 ├── pyproject.toml
 ├── .env.example                   # Environment-Variablen Template
@@ -449,18 +446,17 @@ embeddings:
 
 #### ChromaDB — Embedded vs. Client/Server
 
-ChromaDB wird in zwei verschiedenen Modi betrieben, je nach Umgebung:
+ChromaDB unterstützt zwei Modi; LoreKeeper nutzt lokal unter Windows ausschließlich `embedded`:
 
 | Modus        | Wann              | Beschreibung                                              |
 |--------------|-------------------|-----------------------------------------------------------|
 | `embedded`   | Lokal (Windows)   | Chroma läuft als Library direkt im FastAPI-Prozess.       |
 |              |                   | Zugriff auf `./chroma_data` via SQLite. Kein extra Prozess. |
-| `client`     | Docker            | Chroma läuft als eigener Container. FastAPI kommuniziert  |
-|              |                   | über HTTP (`http://chromadb:8000`). Kein `persist_directory`. |
+| `client`     | (ungenutzt)       | Externer ChromaDB-Server. FastAPI kommuniziert über HTTP  |
+|              |                   | (`chroma_host`/`chroma_port`). Kein `persist_directory`.  |
 
 > **Wichtig:** Beide Modi dürfen **nicht** gleichzeitig auf dasselbe `chroma_data`-Verzeichnis
-> zugreifen (File-Lock / SQLite-Korruption). Im Docker-Betrieb greift ausschließlich
-> der chromadb-Container auf das Volume zu; der FastAPI-Container spricht per HTTP.
+> zugreifen (File-Lock / SQLite-Korruption).
 
 ```yaml
 # settings.yaml
@@ -468,17 +464,14 @@ vectorstore:
   provider: chroma
   mode: embedded              # embedded | client  (via Env-Var CHROMA_MODE überschreibbar)
   persist_directory: ./chroma_data   # nur für mode: embedded (lokal)
-  chroma_host: chromadb              # nur für mode: client (Docker)
-  chroma_port: 8000                  # nur für mode: client (Docker)
+  chroma_host: chromadb              # nur für mode: client
+  chroma_port: 8000                  # nur für mode: client
   collection_name: lorekeeper
   distance_metric: cosine            # cosine | l2 | ip
 ```
 
-**Umgebungs-Umschaltung:** Im Docker Compose wird `CHROMA_MODE=client` als
-Environment-Variable gesetzt — kein manuelles Editieren der `settings.yaml` nötig.
-
 **Warum ChromaDB:**
-- Embedded für lokale Entwicklung (kein separater Prozess), Client für Docker-Isolation
+- Embedded: läuft im FastAPI-Prozess, kein separater Server nötig
 - Persistenz auf Disk
 - Metadaten-Filterung (nach `content_category`, `source_collection` etc.)
 - Python-native, minimale Abhängigkeiten
@@ -801,7 +794,7 @@ class ConfigManager:
 **Override-Hierarchie:**
 1. `config/settings.yaml` (Basis)
 2. `.env` Datei (für Secrets wie `GEMINI_API_KEY`)
-3. Environment-Variablen (höchste Priorität, für Docker/CI)
+3. Environment-Variablen (höchste Priorität)
 
 Für `GEMINI_API_KEY` gibt es zusätzlich einen **Runtime-Override** (process-lokal,
 über die UI bzw. `POST /provider/gemini/key` setzbar). Der überschreibt env/.env
@@ -991,9 +984,9 @@ embeddings:
 # Vector Store
 vectorstore:
   provider: chroma
-  mode: embedded              # embedded (lokal) | client (Docker) — via CHROMA_MODE überschreibbar
+  mode: embedded              # embedded (lokal) | client (externer Server) — via CHROMA_MODE überschreibbar
   persist_directory: ./chroma_data   # nur für mode: embedded
-  chroma_host: chromadb              # nur für mode: client (Docker-Servicename)
+  chroma_host: chromadb              # nur für mode: client
   chroma_port: 8000                  # nur für mode: client
   collection_name: lorekeeper
   distance_metric: cosine
@@ -1204,12 +1197,7 @@ Anleitung zum Erweitern des Golden Sets — in **[`docs/evaluation.md`](docs/eva
 
 ## 8. Deployment & Infrastruktur
 
-LoreKeeper unterstützt zwei Betriebsarten, die sich im ChromaDB-Modus unterscheiden:
-
-| Betriebsart        | ChromaDB-Modus | Wer nutzt es?             |
-|--------------------|----------------|---------------------------|
-| Lokal (Windows)    | `embedded`     | Entwicklung, tägliche Nutzung |
-| Docker             | `client`       | Isolierter Betrieb, Deployment |
+LoreKeeper läuft ausschließlich lokal unter Windows mit ChromaDB im `embedded`-Modus.
 
 ---
 
@@ -1274,102 +1262,13 @@ python -m src.ingestion.orchestrator
 
 ---
 
-### Docker — Isolierter Betrieb
-
-**ChromaDB läuft als eigener Container.** FastAPI kommuniziert per HTTP
-(`http://chromadb:8000`). Der API-Container darf das `chroma_data`-Volume
-**nicht** direkt einbinden — nur der chromadb-Container hat darauf Zugriff
-(verhindert File-Lock / SQLite-Korruption).
-
-`CHROMA_MODE=client` überschreibt den `mode: embedded`-Default in `settings.yaml`.
-
-```yaml
-# docker-compose.yaml
-services:
-  api:
-    build: .
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./config:/app/config
-      - ./data:/app/data
-      # KEIN chroma_data-Mount hier! FastAPI nutzt HTTP-Client zum chromadb-Container.
-    environment:
-      - CHROMA_MODE=client              # Embedded → Client umschalten
-      - LLM_PROVIDER=ollama
-      - OLLAMA_BASE_URL=http://ollama:11434
-    depends_on:
-      - chromadb
-      - ollama
-
-  chromadb:
-    image: chromadb/chroma:latest
-    ports:
-      - "8100:8000"                     # Extern: 8100, intern: 8000
-    volumes:
-      - chroma_data:/chroma/chroma      # Ausschließlich dieser Container schreibt hier
-
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: amd               # "amd" für RX 9070 XT (ROCm) | "nvidia" für NVIDIA
-              count: 1
-              capabilities: [gpu]
-
-  ui:
-    build:
-      context: .
-      dockerfile: Dockerfile.ui
-    ports:
-      - "8501:8501"
-    environment:
-      - API_URL=http://api:8000
-    depends_on:
-      - api
-
-volumes:
-  chroma_data:
-  ollama_data:
-```
-
-#### Docker starten
-
-```bash
-# Erststart: Images bauen + Modell laden
-docker compose up --build -d
-docker compose exec ollama ollama pull qwen3:8b
-
-# Normaler Start
-docker compose up -d
-
-# Logs
-docker compose logs -f api
-
-# Stoppen
-docker compose down
-```
-
-> **AMD GPU (RX 9070 XT):** ROCm-Unterstützung in Ollama ist vorhanden, kann aber
-> bei neuen RDNA4-GPUs noch Kinderkrankheiten haben. Falls Probleme: `driver: amd`
-> aus dem deploy-Block entfernen — Ollama fällt auf CPU-Inferenz zurück (langsamer,
-> aber funktionsfähig mit 32 GB RAM).
-
----
-
 ## 9. Erweiterbarkeit & Roadmap
 
 ### v1 (MVP) — aktueller Scope
 
 - [x] Architektur-Design
 - [ ] Document Ingestion (MD, PDF, Image-Metadaten) inkl. Content-Hash-Deduplication
-- [ ] Embedding + ChromaDB (Embedded lokal / Client Docker)
+- [ ] Embedding + ChromaDB (Embedded)
 - [ ] Retrieval Engine
 - [ ] Provider-Abstraction (Ollama + Gemini) inkl. `generate_stream()`
 - [ ] Conversation Manager (Sliding Window + Background-GC für Sessions)
@@ -1377,7 +1276,7 @@ docker compose down
 - [ ] FastAPI Backend inkl. `/query/stream` (SSE) + `/ingest` als Background-Job
 - [ ] Streamlit Chat UI mit Streaming (`st.write_stream`) + Bild-Quellenanzeige
 - [ ] Evaluation Framework
-- [ ] Lokal (Windows) + Docker Compose Setup
+- [ ] Lokales Windows-Setup
 - [ ] README + Dokumentation
 
 ### v2 — geplante Erweiterungen
@@ -1420,7 +1319,6 @@ Neue Komponenten können ohne Änderung bestehenden Codes hinzugefügt werden:
 | **PDF Parsing**     | PyMuPDF (pymupdf4llm)                               |
 | **Templating**      | Jinja2                                              |
 | **Config**          | YAML + Pydantic Validation                          |
-| **Containerisierung**| Docker + Docker Compose                             |
 | **Versionierung**   | Git + GitHub                                        |
 
 ---

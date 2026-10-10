@@ -1,6 +1,6 @@
 # Operations
 
-This document covers operational instructions for LoreKeeper: initial setup workflows, running ingestion manually or via API, troubleshooting common issues, and Docker execution.
+This document covers operational instructions for LoreKeeper: initial setup workflows, running ingestion manually or via API, and troubleshooting common issues.
 
 ## Table of Contents
 1. [Initial Setup](#initial-setup)
@@ -17,8 +17,7 @@ This document covers operational instructions for LoreKeeper: initial setup work
    - [Reranker model not found](#reranker-model-not-found)
    - [PDF OCR not working](#pdf-ocr-not-working)
    - [Retrieval returns wrong document](#retrieval-returns-wrong-document)
-5. [Docker](#docker)
-6. [Logs](#logs)
+5. [Logs](#logs)
 
 ---
 
@@ -98,7 +97,7 @@ Env variables  >  .env file  >  config/settings.yaml  >  Pydantic defaults
 | `GEMINI_API_KEY` | Enable Gemini provider |
 | `LLM__PROVIDER` | Provider at startup (`ollama` or `gemini`) |
 | `LLM__OLLAMA__MODEL` | Override Ollama model |
-| `CHROMA_MODE` | `embedded` (local) or `client` (Docker) |
+| `CHROMA_MODE` | `embedded` (default) or `client` (external ChromaDB server, unused) |
 
 ---
 
@@ -137,34 +136,10 @@ Afterwards it is cached at `~/.cache/huggingface/`.
 
 ---
 
-## Docker
-
-```bash
-# First start
-docker compose up --build -d
-docker compose exec ollama ollama pull qwen3:8b
-
-# Index documents
-docker compose exec api python -m src.ingestion.orchestrator
-
-# Normal start / stop
-docker compose up -d
-docker compose down
-```
-
-In the Docker setup, ChromaDB runs in `client` mode — the API container accesses the
-`chromadb` container via HTTP. `chroma_data` resides only in the `chromadb` container.
-
----
-
 ## Logs
 
 ```powershell
-# Local logs
 Get-Content logs\lorekeeper.log -Tail 50
-
-# Docker logs
-docker compose logs -f api
 ```
 
 Log level in `settings.yaml`:

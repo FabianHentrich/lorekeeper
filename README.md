@@ -95,7 +95,6 @@ multilingual E5 model and prompts for any other language.
 | 💬 **Multi-turn chat** | Sliding-window memory + automatic session GC |
 | 💬 **Telegram-style answers** | Scannable chat-like formatting: short paragraphs, emoji headers, bullets — instead of flat 3-line prose |
 | 🔁 **Incremental indexing** | SHA-256 content hashing — only changed files re-embed |
-| 🐳 **Docker-ready** | API + ChromaDB + Ollama (GPU) + UI via `docker compose` |
 | ✏ **Prompt management** | Edit active prompts, save/load/compare variants, Jinja2 preview — all from the UI with instant hot-reload |
 | 🛠 **Live settings** | Retrieval, LLM, conversation and chunking defaults editable via a 🛠 Settings page — persisted to `settings.local.yaml` and applied in place, no restart |
 | ⚙ **Self-service setup** | Sources (folder OR single file), provider switch, and Gemini API-key entry — all from the UI, no YAML required |
@@ -197,7 +196,7 @@ For the exact data flow of queries and ingestion, see [`docs/data-flow.md`](docs
    ```
    *You can also do this directly from the **⚙ Sources** section in the UI!* 
 
-For instructions on using Google Gemini, running via Docker, or handling advanced operations, see [docs/operations.md](docs/operations.md) and [docs/provider-strategy.md](docs/provider-strategy.md).
+For instructions on using Google Gemini or handling advanced operations, see [docs/operations.md](docs/operations.md) and [docs/provider-strategy.md](docs/provider-strategy.md).
 
 For a complete walkthrough of the chat interface, token accounting, evaluation tabs, and prompt management pages, see the [UI/UX Documentation](docs/ui-ux.md).
 
@@ -226,7 +225,7 @@ For a complete walkthrough of the chat interface, token accounting, evaluation t
 | [docs/provider-strategy.md](docs/provider-strategy.md) | Ollama vs. Gemini, runtime switching, fallback configuration |
 | [docs/configuration.md](docs/configuration.md) | Full `settings.yaml` reference, `sources.yaml` schema, env variables, runtime API key, UI allow-list |
 | [docs/prompts.md](docs/prompts.md) | Jinja2 templates, variables, UI editing, variant management |
-| [docs/operations.md](docs/operations.md) | Ingest flows, Docker workflows, re-indexing, troubleshooting |
+| [docs/operations.md](docs/operations.md) | Ingest flows, re-indexing, troubleshooting |
 | [docs/evaluation.md](docs/evaluation.md) | Golden Set, retrieval/end-to-end eval scripts, metrics, workflow |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Dev setup, coding conventions, PR process |
 
