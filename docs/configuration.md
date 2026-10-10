@@ -74,7 +74,7 @@ filter groups `lore`, `adventure`, `rules`.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `id` | `str` | yes | Stable identifier (used to scope reindex/delete and as `source_id` metadata on every chunk). Renaming = new source. |
+| `id` | `str` | yes | Stable identifier (used to scope reindex/delete and as `source_id` metadata on every chunk). Free text — spaces, `&`, `#`, `/` etc. are fine. New IDs must not be empty, `.`/`..` or have leading/trailing whitespace (checked by `PUT /sources`). Renaming = new source (see below). |
 | `path` | `str` | yes | Absolute or relative path. May point at a folder OR a single file. |
 | `group` | `lore`\|`adventure`\|`rules` | yes | Default filter group for the three sidebar buttons. Can be overridden per folder in `category_map`. |
 | `default_category` | `str` | no (yes for file sources) | Fallback `content_category` when no entry of `category_map` matches. |
@@ -108,7 +108,14 @@ sources:
 
 **Recategorize vs. Reindex:**
 - *Recategorize* — `python -m src.ingestion.recategorize` rewrites only the `group` / `content_category` / `source_id` metadata of existing chunks against the current `sources.yaml`. No re-embedding, runs in seconds.
-- *Reindex* — full delete + parse + chunk + embed for one source. Required when content or `path` changes.
+- *Reindex* — full delete + parse + chunk + embed for one source. Required when `path` changes.
+- *Incremental ingest* (`POST /ingest`, "⚡ Nur Änderungen indizieren") — all sources, only new / changed / deleted files. Enough after editing notes.
+- *Full ingest* (`POST /ingest?full=true`, "🔄 Alle Dokumente neu indizieren") — all sources, every file. Required after chunking or PDF-parsing changes.
+
+**Renaming a source `id`:** ingest only looks at chunks of *configured* IDs, so
+chunks stored under the old ID are never cleaned up automatically. Remove the
+source first (Sources page → "Source entfernen" deletes its chunks), then add it
+again under the new ID — or wipe the collection and re-ingest.
 
 **Default excludes:**
 ```yaml
@@ -154,7 +161,9 @@ ingestion:
 6. If OCR fails (engine not installed, corrupt page), the parser retries without OCR automatically
 
 > **Note:** Changes to `ingestion.pdf` require a re-ingest of affected PDFs.
-> Incremental ingest handles this automatically (content hash changes).
+> The incremental ingest does **not** pick this up — the PDF's content hash is
+> unchanged, so it is skipped. Use a full re-ingest (Sources page → "🔄 Alle
+> Dokumente neu indizieren", or `POST /ingest?full=true`) or reindex the source.
 
 ---
 
@@ -181,8 +190,9 @@ Controls how documents are split into chunks.
 > Markdown tables and treated as atomic units — no split mid-row, no overlap. Very large
 > tables are split at row boundaries with the header repeated in each part.
 
-> **Note:** Changes to `chunking` require a full re-ingest
-> (delete `chroma_data`). See [operations.md](operations.md).
+> **Note:** Changes to `chunking` require a full re-ingest (Sources page →
+> "🔄 Alle Dokumente neu indizieren", or `POST /ingest?full=true`) — the incremental
+> ingest skips files whose content hash is unchanged. See [operations.md](operations.md).
 
 ---
 

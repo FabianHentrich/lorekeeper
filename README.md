@@ -94,7 +94,7 @@ multilingual E5 model and prompts for any other language.
 | 📊 **Token accounting** | Per-message and per-session token usage (in / out / thinking), shown live in the UI |
 | 💬 **Multi-turn chat** | Sliding-window memory + automatic session GC |
 | 💬 **Telegram-style answers** | Scannable chat-like formatting: short paragraphs, emoji headers, bullets — instead of flat 3-line prose |
-| 🔁 **Incremental indexing** | SHA-256 content hashing — only changed files re-embed |
+| 🔁 **Incremental indexing** | SHA-256 content hashing — only changed files re-embed; one click for "only changes" or a full re-index on the Sources page |
 | ✏ **Prompt management** | Edit active prompts, save/load/compare variants, Jinja2 preview — all from the UI with instant hot-reload |
 | 🛠 **Live settings** | Retrieval, LLM, conversation and chunking defaults editable via a 🛠 Settings page — persisted to `settings.local.yaml` and applied in place, no restart |
 | ⚙ **Self-service setup** | Sources (folder OR single file), provider switch, and Gemini API-key entry — all from the UI, no YAML required |
@@ -190,11 +190,17 @@ For the exact data flow of queries and ingestion, see [`docs/data-flow.md`](docs
    ```
    The UI is then available at **http://localhost:8501**.
 
-5. **Index your vault (one-time)**
+6. **Index your vault**
+   In the UI open **⚙ Sources** and click **⚡ Nur Änderungen indizieren** — the
+   first run indexes everything, later runs only re-embed new or changed files.
+   **🔄 Alle Dokumente neu indizieren** re-processes every file (needed after
+   chunking changes).
+
+   The CLI does the same incremental run, but only while the backend is **stopped**
+   (embedded ChromaDB locks `chroma_data/`):
    ```powershell
    python -m src.ingestion.orchestrator
    ```
-   *You can also do this directly from the **⚙ Sources** section in the UI!* 
 
 For instructions on using Google Gemini or handling advanced operations, see [docs/operations.md](docs/operations.md) and [docs/provider-strategy.md](docs/provider-strategy.md).
 
@@ -243,7 +249,8 @@ For a complete walkthrough of the chat interface, token accounting, evaluation t
 | LLM | Ollama (`qwen3:14b`) or Google Gemini (`gemini-2.5-flash`) |
 | Prompts | Jinja2 + YAML |
 | OCR | RapidOCR (via `rapidocr_onnxruntime`, pure Python) |
-| Tests | pytest + pytest-asyncio + httpx |
+| Tests | pytest + pytest-asyncio + httpx; unit, API integration and an end-to-end ingest → query test |
+| Code quality | ruff + mypy, run as part of `pytest` |
 
 ---
 

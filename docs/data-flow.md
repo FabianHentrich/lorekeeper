@@ -17,9 +17,15 @@ This document provides visual representations of LoreKeeper's core pipelines and
 flowchart TD
     FS[("Sources\nconfig/sources.yaml")] --> ORCH[IngestionOrchestrator]
 
-    ORCH -->|".md"| MD[MarkdownParser\nFrontmatter · Headings · Obsidian syntax]
-    ORCH -->|".pdf"| PDF[PDFParser\npymupdf4llm · heading-aware]
-    ORCH -->|".png/.jpg/.webp"| IMG[ImageMetaParser\nFilename + full path hierarchy]
+    ORCH --> HASH{{"content_hash (SHA-256)\nvs. stored hash"}}
+
+    HASH -->|"unchanged\n(incremental run)"| SKIP["skip\ndocuments_skipped += 1"]
+    HASH -->|"new / changed\n(or full=true)"| PARSE
+
+    PARSE{{"parser by extension"}}
+    PARSE -->|".md"| MD[MarkdownParser\nFrontmatter · Headings · Obsidian syntax]
+    PARSE -->|".pdf"| PDF[PDFParser\npymupdf4llm · heading-aware]
+    PARSE -->|".png/.jpg/.webp"| IMG[ImageMetaParser\nFilename + full path hierarchy]
 
     MD --> CHUNK
     PDF --> CHUNK
@@ -27,19 +33,26 @@ flowchart TD
 
     CHUNK["chunk_documents()\nheading_aware: Section → Chunk\nTables atomic (no split, no overlap)\nOversized prose → split recursively\nSmall chunks → merge"]
 
-    CHUNK --> HASH{{"content_hash\ncheck"}}
-
-    HASH -->|"unchanged"| SKIP[skip]
-    HASH -->|"new / changed"| EMBED
+    CHUNK --> BATCH["pending batch\n(a file's chunks never split across batches)"]
+    BATCH --> DEL["changed files:\ndelete old chunks"]
+    DEL --> EMBED
 
     EMBED["_build_embed_text()\n① Stem | Alias1 | Alias2\n② Heading > Sub\n③ Content"]
 
     EMBED --> E5["e5-base\n'passage: '+text\n768-dim vector"]
     E5 --> CHROMA[("ChromaDB\nupsert:\nid · document=content\nembedding · metadata")]
 
+    ORCH -.->|"after all files"| ORPHAN["files gone from disk:\ndelete their chunks\n(chunks_deleted)"]
+    ORPHAN -.-> CHROMA
+
     style SKIP fill:#f5f5f5,stroke:#ccc
     style CHROMA fill:#dbeafe,stroke:#3b82f6
 ```
+
+The hash check happens **before** parsing, so unchanged files cost only a hash.
+`full=true` (Sources page "🔄 Alle Dokumente neu indizieren") bypasses it — needed
+after chunking or parser changes, which don't change a file's hash. A file that
+fails to parse keeps its previously indexed chunks.
 
 **Important:** ChromaDB stores the original `content` (what the LLM sees later),
 not the enriched `embed_text`.

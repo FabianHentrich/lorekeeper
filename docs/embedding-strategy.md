@@ -308,10 +308,17 @@ source reference. The Golden Set reflects this: image questions use `.md` as
 ## Re-ingest After Changes
 
 The `content_hash` is based on the **file content**, not the generated embed text.
-Changes to chunking or embed text construction therefore require a manual re-ingest:
+Changes to chunking or embed text construction therefore require a **full**
+re-ingest — the incremental run would skip every file:
+
+- Sources page → **🔄 Alle Dokumente neu indizieren**, or
+- `POST /ingest?full=true`
+
+A changed **embedding model** (new vector dimension) additionally needs an empty
+collection first: Sources page → Danger Zone (`POST /admin/wipe`), or with the
+backend stopped:
 
 ```powershell
-# Stop backend first, then:
 Remove-Item -Recurse -Force .\chroma_data
 python -m src.ingestion.orchestrator
 ```

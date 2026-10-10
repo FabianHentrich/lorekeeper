@@ -39,7 +39,7 @@ uvicorn src.main:app --reload --port 8000
 
 # 5. Index documents (first time)
 python -m src.ingestion.orchestrator
-# or via the sidebar: "🔄 Re-index Documents"
+# or in the UI: ⚙ Sources page → "⚡ Nur Änderungen indizieren"
 ```
 
 ---
@@ -53,23 +53,43 @@ python -m src.ingestion.orchestrator
 Files with an unchanged `content_hash` (SHA-256 of file content) are skipped.
 New and modified files are re-embedded. Deleted files are removed from ChromaDB.
 
+In the UI: **⚙ Sources → ⚡ Nur Änderungen indizieren**. The result line shows
+how many documents were indexed vs. skipped as unchanged, plus chunks
+created / updated / deleted.
+
 ### Full Re-ingest
-Required after changes to the embedding strategy (chunking, embed-text construction):
+Required after changes to chunking settings or parser / embed-text logic — these
+don't change a file's hash, so the incremental run would skip everything:
+
+- UI: **⚙ Sources → 🔄 Alle Dokumente neu indizieren**
+- API: `POST /ingest?full=true`
+
+After changing the **embedding model** (different vector dimension) the collection
+must be emptied first: **⚙ Sources → Danger Zone** (`POST /admin/wipe`), then a
+normal ingest. Alternatively, with the backend stopped:
 
 ```powershell
-# Stop backend first!
 Remove-Item -Recurse -Force .\chroma_data
 python -m src.ingestion.orchestrator
 ```
 
+Changed `category_map` / `group` only? Use **Recategorize** instead — it rewrites
+the metadata without re-embedding.
+
 ### Ingest via API (asynchronous)
 ```bash
-curl -X POST http://localhost:8000/ingest
+curl -X POST http://localhost:8000/ingest              # incremental
+curl -X POST "http://localhost:8000/ingest?full=true"  # full re-ingest
 # → {"job_id": "abc123", "status": "queued"}
+# → 409 if another ingest/reindex job is still running
 
 curl http://localhost:8000/ingest/status/abc123
-# → {"status": "done", "documents_processed": 42, "chunks_created": 287, ...}
+# → {"status": "done", "documents_processed": 42, "documents_total": 42,
+#    "documents_skipped": 39, "chunks_created": 5, "chunks_updated": 12, "chunks_deleted": 3, ...}
 ```
+
+`documents_processed` includes skipped files (it drives the progress display);
+`chunks_deleted` counts the deleted chunks of files that no longer exist.
 
 ### Exclusion Patterns
 Configured in `settings.yaml` under `ingestion.exclude_patterns`:
@@ -88,7 +108,7 @@ exclude_patterns:
 
 ### Override Order
 ```
-Env variables  >  .env file  >  config/settings.yaml  >  Pydantic defaults
+Env variables  >  .env file  >  config/settings.local.yaml  >  config/settings.yaml  >  Pydantic defaults
 ```
 
 ### Key Env Variables
@@ -129,7 +149,7 @@ Afterwards it is cached at `~/.cache/huggingface/`.
 - OCR is CPU-intensive; large scanned PDFs may take significantly longer than text PDFs
 
 ### Retrieval returns wrong document
-1. Check if re-ingest is needed (delete `chroma_data` + re-ingest)
+1. Check if a full re-ingest is needed (chunking changed → "🔄 Alle Dokumente neu indizieren")
 2. Check `score_threshold` in `settings.yaml` (default: 0.5)
 3. Increase `top_k` (more candidates for the reranker)
 4. Disable the category filter in the sidebar

@@ -264,17 +264,26 @@ sidebar.
 
 ### Sections
 
-#### 1. Indizierte Chunks (gesamt) + Alle Dokumente neu indizieren
+#### 1. Indizierte Chunks (gesamt) + Ingest-Buttons
 
-| Backend call | Notes |
-|---|---|
-| `GET /stats`, `POST /ingest` | Global chunk count and full re-ingest trigger (all sources). Moved here from the chat sidebar so all indexing concerns live on one page. |
+| Button | Backend call | Notes |
+|---|---|---|
+| — (metric) | `GET /stats` | Global chunk count. Refreshed after every ingest, reindex, delete and wipe. |
+| ⚡ **Nur Änderungen indizieren** | `POST /ingest` | Incremental: files with an unchanged content hash are skipped. The default for "I edited some notes". |
+| 🔄 **Alle Dokumente neu indizieren** | `POST /ingest?full=true` | Re-chunks and re-embeds every file. Needed after chunking-setting changes (they don't change the file hash). |
+
+The incremental button's tooltip explains when the full run (chunking changed)
+or Recategorize (`category_map` / group changed) is the right tool instead.
+Both moved here from the chat sidebar so all indexing concerns live on one page.
 
 All ingest operations (global and per-source) use **live progress polling**:
 `_poll_ingest_job()` polls `GET /ingest/status/{job_id}` every 1.5 seconds and
-displays the current state inside a `st.status` widget — documents processed,
-chunks created/updated/deleted, and final duration. Errors from the ingest job
-are shown as `st.warning` items.
+displays the current state inside a `st.status` widget. The final line reads
+"X Dokumente indiziert · Y unverändert übersprungen · Ns" plus chunks
+created / updated / deleted. Errors from the ingest job are shown as
+`st.warning` items. If the backend is unreachable for ~30 s in a row, polling
+stops with "Backend nicht erreichbar" instead of spinning forever (the job keeps
+running in the backend). A `409` (another job running) is shown as a warning.
 
 #### 2. Konfigurierte Quellen
 
@@ -325,9 +334,22 @@ Adding a source is a multi-step process:
 | **4. Source hinzufügen** | ➕ button | `PUT /sources` with the appended entry |
 
 The scan result (folder list, is-file flag) is persisted in `st.session_state`
-so it survives Streamlit reruns between steps. Validation: ID must be non-empty
-and unique across existing sources. On success, the scan state is cleared and
-the page refreshes.
+so it survives Streamlit reruns between steps. A failed scan or a non-existent
+path is shown as an error and the "Source hinzufügen" step is not offered.
+
+The suggested ID is the folder/file name, lower-cased, with everything except
+letters, digits, `_` and `-` replaced by `-` (fallback `source`). Any free-text ID
+is allowed; the UI checks non-empty and unique, the backend (`PUT /sources`)
+rejects new IDs that are `.`, `..` or have leading/trailing whitespace and the
+UI shows its error text. IDs are URL-encoded for the per-source calls, and
+IDs containing `/` work too. On success, the scan state is cleared and the page
+refreshes.
+
+**Messages across reloads:** save, mapping, add and delete reload the page
+(`st.rerun()`) to pick up the new source list. Their success message is stored
+in `st.session_state["_flash"]` and shown once after the reload. An
+`st.success()` rendered right before the rerun would be wiped immediately.
+Backend errors show the response's `detail` text, not just the HTTP status.
 
 File sources skip step 3 (no subfolders to map).
 
@@ -351,8 +373,9 @@ Every chunk carries a `source_id` metadata field equal to the source's
 configured `id`. This is what makes per-source delete / reindex / recategorize
 safe in a multi-source setup — collisions on `source_file` (e.g. two vaults
 both containing `notes.md`) cannot cross-contaminate. Renaming the `id`
-counts as creating a new source; the old chunks become orphans on the next
-ingest.
+counts as creating a new source. The chunks of the old ID are **not** removed
+by later ingests (ingest only looks at configured IDs) — remove the source via
+"Source entfernen" before re-adding it under a new ID, or wipe and re-ingest.
 
 ---
 

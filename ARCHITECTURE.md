@@ -152,7 +152,9 @@ lorekeeper/
 ├── config/
 │   ├── settings.yaml              # Zentrale Konfiguration
 │   ├── prompts.yaml               # Aktive Prompt-Templates
-│   └── prompts/                   # Gespeicherte Prompt-Varianten (*.yaml)
+│   ├── prompts/                   # Gespeicherte Prompt-Varianten (*.yaml)
+│   ├── sources.yaml               # Sources (Sidecar, gitignored — Vorlage: sources_example.yaml)
+│   └── settings.local.yaml        # UI-Overrides der Settings-Seite (Sidecar, gitignored)
 │
 ├── src/
 │   ├── __init__.py
@@ -199,7 +201,8 @@ lorekeeper/
 │   │
 │   └── api/
 │       ├── __init__.py
-│       ├── routes.py               # Endpoints: /query, /query/stream, /ingest, /ingest/status, /health, /sessions, /config
+│       ├── routes.py               # Endpoints: /query, /query/stream, /ingest, /ingest/status, /health, /sessions,
+│       │                           #   /sources/*, /provider/*, /config, /stats, /admin/wipe
 │       ├── schemas.py              # Pydantic Request/Response Models
 │       ├── prompt_routes.py        # Endpoints: /prompts/* (active, variants, preview)
 │       ├── prompt_schemas.py       # Pydantic Models für Prompt-Endpoints
@@ -210,7 +213,13 @@ lorekeeper/
 │   └── pages/
 │       ├── 1_Sources.py            # Source-Verwaltung
 │       ├── 2_Evaluation.py         # Evaluation-Seite
-│       └── 3_Prompts.py            # Prompt-Editor + Varianten
+│       ├── 3_Prompts.py            # Prompt-Editor + Varianten
+│       └── 4_Settings.py           # Settings-Seite (Retrieval/LLM/Conversation/Chunking)
+│
+├── tests/
+│   ├── unit/                      # Pro Modul, externe Abhängigkeiten gemockt
+│   ├── integration/               # FastAPI-Routen (TestClient), RAG-Pipeline, E2E Ingest → Query
+│   └── test_code_quality.py       # ruff check + mypy als Teil von pytest
 │
 ├── evaluation/
 │   ├── qa_pairs.yaml              # Golden Set: 40 Fragen (markdown/pdf/image/adventure)
@@ -276,6 +285,12 @@ einen Migrations-Shim (alle Pfade → `group=lore`) und loggt eine Warnung.
 REST (`GET/PUT /sources`, `POST /sources/{id}/reindex`, `DELETE /sources/{id}`,
 `POST /sources/recategorize`, `POST /admin/wipe`) oder über die Streamlit-Seite
 **⚙ Sources** (siehe `ui/pages/`).
+
+**Source-IDs** sind Freitext (`Pen & Paper #1`, `Lore/NPCs` usw. funktionieren). Die
+UI URL-encodiert sie; die Per-Source-Routen nutzen den `{source_id:path}`-Converter,
+damit auch IDs mit `/` erreichbar sind. `PUT /sources` lehnt **neue** IDs ab, die leer,
+`.`/`..` sind oder führende/abschließende Leerzeichen haben — bereits konfigurierte IDs
+werden nie abgelehnt, damit eine Alt-ID das Speichern der Liste nicht blockiert.
 
 **Recategorize** (`python -m src.ingestion.recategorize` bzw. UI-Button) wendet
 geänderte `category_map` / `group`-Werte auf bestehende Chunks an, ohne neu zu
@@ -391,14 +406,23 @@ Der Wert wird aus dem **obersten** Ordnernamen unterhalb des jeweiligen `documen
 
 #### Inkrementelle Re-Ingestion
 
-Beim erneuten Ausführen werden nur geänderte Dateien neu indiziert:
+Standardmäßig (`POST /ingest`, CLI, UI-Button **⚡ Nur Änderungen indizieren**) werden
+nur geänderte Dateien neu indiziert:
 
-1. **Content-Hash + Timestamp:** Pro Datei wird ein SHA-256-Hash des Inhalts gespeichert.
-   Änderungserkennung prüft primär den Hash (robust gegen Timestamp-Unzuverlässigkeit bei
-   externen Repos / Windows-Mounts), fällt auf `last_modified` zurück wenn Hash fehlt.
-2. Geänderte Dateien: Alte Chunks löschen → neu parsen → neu embedden → speichern
-3. Gelöschte Dateien: Verwaiste Chunks aus ChromaDB entfernen
+1. **Content-Hash:** Pro Datei wird ein SHA-256-Hash des Inhalts in den Chunk-Metadaten
+   gespeichert. Änderungserkennung vergleicht ausschließlich den Hash (robust gegen
+   unzuverlässige Timestamps bei externen Repos / Windows-Mounts); `last_modified` ist nur
+   Information. Unveränderte Dateien werden vor dem Parsen übersprungen (`documents_skipped`).
+2. Geänderte Dateien: neu parsen → alte Chunks löschen → neu embedden → speichern
+   (Löschen + Upsert pro Batch, die Chunks einer Datei landen immer im selben Batch)
+3. Gelöschte Dateien: Verwaiste Chunks aus ChromaDB entfernen (`chunks_deleted` zählt Chunks)
 4. Neue Dateien: Normal verarbeiten
+5. Parse-Fehler: die zuvor indizierte Version bleibt erhalten
+
+**Voll-Reindex** (`POST /ingest?full=true`, UI-Button **🔄 Alle Dokumente neu indizieren**)
+verarbeitet auch unveränderte Dateien — nötig nach Änderungen an Chunking-Settings oder
+Parser-Logik, denn die ändern den Datei-Hash nicht. Für geänderte `category_map`/`group`
+reicht **Recategorize** (kein Re-Embedding).
 
 ```python
 # Chunk-Metadaten ergänzt um:
@@ -541,16 +565,39 @@ komplett für diesen Request).
 
 ```python
 class BaseLLMProvider(ABC):
+    provider: str = "unknown"
+    model: str                       # muss im __init__ gesetzt werden (kein Default)
+
     @abstractmethod
     async def generate(self, prompt: str, **kwargs) -> LLMResponse: ...
 
     @abstractmethod
-    async def generate_stream(self, prompt: str, **kwargs) -> AsyncGenerator[str, None]:
-        """Yields token-by-token für SSE-Streaming."""
+    def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: str = "",
+        stream_result: StreamResult | None = None,
+        **kwargs,
+    ) -> AsyncGenerator[str, None]:
+        """Yields token-by-token für SSE-Streaming; schreibt usage in stream_result."""
         ...
 
     @abstractmethod
     async def health_check(self) -> bool: ...
+```
+
+`generate_stream` ist im Interface ein normales `def` — Implementierungen sind
+`async def` mit `yield` (Async-Generator). Ein `async def` ohne `yield` im Interface
+würde für mypy eine Coroutine statt eines `AsyncGenerator` liefern.
+
+`StreamResult` ist ein Per-Call-Kontext (keine geteilten Zustände bei parallelen Streams):
+
+```python
+@dataclass
+class StreamResult:
+    usage: dict             # vom Provider befüllt (tokens_in, tokens_out, tokens_thinking)
+    model: str | None       # vom Generator gesetzt: Modell, das tatsächlich geantwortet hat
+                            # (nach einem Fallback das Fallback-Modell)
 ```
 
 Rückgabe-Schema:
@@ -832,8 +879,21 @@ in Env-Variablen übersetzt. Pydantic-Settings liest diese automatisch:
 |--------|---------------------------|-----------------------------------------------------|
 | POST   | `/query`                  | Frage stellen, Antwort + Quellen erhalten (synchron)|
 | POST   | `/query/stream`           | Wie `/query`, aber Antwort als SSE-Stream (Token-by-Token) |
-| POST   | `/ingest`                 | Ingestion als Background-Job starten                |
+| POST   | `/ingest`                 | Ingestion als Background-Job starten (inkrementell; `?full=true` = Voll-Reindex). 409, solange ein Job läuft |
 | GET    | `/ingest/status/{job_id}` | Status eines laufenden Ingestion-Jobs abfragen      |
+| GET    | `/sources`                | Konfigurierte Sources                               |
+| PUT    | `/sources`                | Source-Liste ersetzen → `config/sources.yaml`       |
+| POST   | `/sources/scan`           | Beliebigen Pfad scannen (Ordner/Dateien für „Source hinzufügen") |
+| GET    | `/sources/{id}/folders`   | Top-Level-Einträge einer Source                     |
+| POST   | `/sources/{id}/reindex`   | Chunks der Source löschen + neu indizieren (Background-Job) |
+| DELETE | `/sources/{id}`           | Source entfernen + alle ihre Chunks löschen         |
+| POST   | `/sources/recategorize`   | `group`/`category` aller Chunks neu setzen (kein Re-Embedding) |
+| POST   | `/admin/wipe`             | Collection komplett leeren (Body `{"confirm": "DELETE"}`) |
+| GET    | `/provider`               | Aktiver Provider + Modell                           |
+| POST   | `/provider`               | Provider zur Laufzeit wechseln                      |
+| GET    | `/provider/gemini/status` | Ob ein Gemini-Key verfügbar ist (ohne den Key)      |
+| POST   | `/provider/gemini/key`    | Gemini-Key zur Laufzeit setzen (nur im Prozess, nie auf Disk) |
+| GET    | `/sidebar-state`          | Gebündelter Status für die Chat-Sidebar             |
 | GET    | `/health`                 | Health Check (API + ChromaDB + LLM)                 |
 | GET    | `/sessions/{id}`          | Session-History abrufen                             |
 | DELETE | `/sessions/{id}`          | Session löschen                                     |
@@ -887,6 +947,7 @@ class SourceReference(BaseModel):
 #          "session_usage": {"tokens_in": N, "tokens_out": N, "tokens_thinking": N}}\n\n
 # Das "done"-Event enthält:
 #   - session_id   → für Folgefragen
+#   - model_used   → Modell, das tatsächlich geantwortet hat (nach Fallback das Fallback-Modell)
 #   - usage        → Token-Verbrauch dieser einzelnen Anfrage
 #   - session_usage → kumulierte Session-Totals (für die Header-Metric in der UI)
 # usage wird aus dem Stream extrahiert (Ollama: stream_options.include_usage,
@@ -900,11 +961,14 @@ class IngestJobResponse(BaseModel):
 # GET /ingest/status/{job_id}
 class IngestStatusResponse(BaseModel):
     job_id: str
-    status: str
-    documents_processed: int
+    status: str                             # "queued" | "running" | "done" | "error"
+    phase: str                              # "starting" | "parsing" | "embedding"
+    documents_processed: int                # inkl. übersprungener Dateien (für den Fortschritt)
+    documents_total: int
+    documents_skipped: int                  # unverändert (Hash gleich), nicht neu indiziert
     chunks_created: int
     chunks_updated: int
-    chunks_deleted: int
+    chunks_deleted: int                     # gelöschte Chunks verwaister Dateien
     errors: list[str]
     duration_seconds: float
 ```
@@ -928,6 +992,14 @@ class IngestStatusResponse(BaseModel):
   - Provider umschalten (Ollama / Gemini) + Gemini-Key-Override
   - Quellen-Filter (Lore / Adventure / Rules)
   - Hybrid-Search-Toggle (Per-Session-Override über Settings-Default)
+- **⚙ Sources** Seite (`ui/pages/1_Sources.py`):
+  - Chunk-Gesamtzahl + zwei Ingest-Buttons: **⚡ Nur Änderungen indizieren** (inkrementell)
+    und **🔄 Alle Dokumente neu indizieren** (`full=true`); Fortschritt per Polling von
+    `/ingest/status`, Ergebnis „X indiziert · Y unverändert übersprungen"
+  - Sources bearbeiten (Tabelle), hinzufügen (Pfad scannen → ID/Group/Ordner-Mapping),
+    pro Source Reindex / Recategorize / Entfernen, Ordner-Zuordnung, Danger-Zone-Wipe
+  - Fehlertexte des Backends (`detail`) werden angezeigt; nach 30 s ohne Backend bricht
+    das Polling ab
 - **🛠 Settings** Seite (`ui/pages/4_Settings.py`):
   - Zentrale Stelle für Retrieval-, LLM-, Conversation- und Chunking-Defaults
   - `GET /config` lädt die Allow-List-gefilterte Snapshot, `PUT /config` persistiert Diff nach `settings.local.yaml` (Sidecar, überschreibt `settings.yaml`) und mutiert die laufenden Services in place
@@ -1324,6 +1396,8 @@ Neue Komponenten können ohne Änderung bestehenden Codes hinzugefügt werden:
 | **PDF Parsing**     | PyMuPDF (pymupdf4llm)                               |
 | **Templating**      | Jinja2                                              |
 | **Config**          | YAML + Pydantic Validation                          |
+| **Tests**           | pytest + pytest-asyncio + httpx (FastAPI TestClient), ChromaDB `EphemeralClient` |
+| **Code-Qualität**   | ruff (Lint) + mypy (Typen), laufen als Teil von `pytest` |
 | **Versionierung**   | Git + GitHub                                        |
 
 ---

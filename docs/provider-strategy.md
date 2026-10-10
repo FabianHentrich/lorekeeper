@@ -23,10 +23,20 @@ Currently supported providers: **Ollama** (local) and **Gemini** (cloud).
 
 ```python
 class BaseLLMProvider(ABC):
+    provider: str = "unknown"
+    model: str                       # set in __init__ — no default
+
     async def generate(self, prompt: str, **kwargs) -> LLMResponse: ...
-    async def generate_stream(self, prompt: str, **kwargs) -> AsyncGenerator[str, None]: ...
+    def generate_stream(self, prompt: str, system_prompt: str = "",
+                        stream_result: StreamResult | None = None,
+                        **kwargs) -> AsyncGenerator[str, None]: ...
     async def health_check(self) -> bool: ...
 ```
+
+Implementations write `generate_stream` as `async def` with `yield`. `StreamResult`
+is a per-call context: the provider fills `usage`, the `Generator` sets `model` to
+the model that actually answered. A new provider must set `self.model` in
+`__init__` and be registered in `ProviderFactory`.
 
 ---
 
@@ -128,6 +138,11 @@ When `fallback_enabled: true` and the primary provider fails (timeout, Ollama do
 the system automatically switches to the fallback. The fallback uses the same configuration
 of the respective provider (same model settings).
 
+For streaming (`/query/stream`) the fallback only kicks in if the primary fails
+**before the first token** — once tokens are on the wire, a restart would duplicate
+output, so the error is surfaced instead. The `done` event's `model_used` names the
+model that actually answered (the fallback's model after a fallback).
+
 ---
 
 ## Condense Provider
@@ -164,9 +179,9 @@ The OpenAI-compatible streaming API only emits a usage block when
 `stream_options={"include_usage": True}` is passed on the request. Without
 that flag the final stream chunk arrives with empty `usage` and
 LoreKeeper would report zeros. The flag is set in
-`OllamaProvider.generate_stream` and the resulting numbers are stored on
-`self._last_stream_usage`, which the `Generator` reads after the stream
-finishes.
+`OllamaProvider.generate_stream` and the resulting numbers are written to the
+per-call `StreamResult.usage`, which the route reads after the stream
+finishes (no shared provider state, so concurrent streams don't mix).
 
 `tokens_thinking` is intentionally always `0` for Qwen3: LoreKeeper appends
 `/no_think` to user prompts (see `OllamaProvider._is_qwen3`) to skip the
