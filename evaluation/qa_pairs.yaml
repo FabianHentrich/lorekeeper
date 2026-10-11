@@ -16,35 +16,38 @@ pairs:
     source_type: markdown
     category: npc
     expected_sources: ["NPCs/Malek Nocthar.md"]
-    expected_answer_contains: ["Malek Nocthar"]
+    expected_answer_contains: ["Malek", "Monolith"]
+    notes: "Ziel = Schwarzer Monolith / Rhadomir als Kommandant binden."
 
   - id: m003
     question: "Was ist der Schattenorden und welche Ziele verfolgt er?"
     source_type: markdown
     category: lore
     expected_sources: ["Organisationen/Schattenorden/Schattenorden.md"]
-    expected_answer_contains: ["Schattenorden"]
+    expected_answer_contains: ["Schattenorden", "Alaric"]
 
   - id: m004
     question: "Welche Stats hat der Chaoskrieger?"
     source_type: markdown
     category: enemy
-    expected_sources: ["Gegner/Chaoskrieger.md"]
+    expected_sources: ["Gegner/Minibossgegner/Chaoskrieger.md"]
     expected_answer_contains: ["Chaoskrieger"]
 
   - id: m005
     question: "Was ist der Heimkehrpfennig und was bewirkt er?"
-    source_type: markdown
+    source_type: pdf
     category: item
-    expected_sources: ["Gegenstände/Heimkehrpfennig.md"]
-    expected_answer_contains: ["Heimkehrpfennig"]
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Heimkehrpfennig", "verflucht"]
+    expected_section: "7.2.4"
+    notes: "Gegenstände/Heimkehrpfennig.md existiert nicht mehr — steht jetzt in Kapitel 7.2.4 (Artefakttabelle)."
 
   - id: m006
     question: "Wer ist Lyssara Vaydris?"
     source_type: markdown
     category: npc
     expected_sources: ["Organisationen/Schattenorden/Wichtige NPCs/Lyssara Vaydris.md"]
-    expected_answer_contains: ["Lyssara"]
+    expected_answer_contains: ["Lyssara", "Schattenorden"]
     notes: "NPC liegt tief verschachtelt unter Organisation"
 
   - id: m007
@@ -65,8 +68,13 @@ pairs:
     question: "Was sind die Läuterer von Arkenis?"
     source_type: markdown
     category: lore
-    expected_sources: ["Organisationen/Läuterer von Arkenis/Läuterer von Arkenis.md"]
-    expected_answer_contains: ["Läuterer"]
+    expected_sources:
+      - "Organisationen/Läuterer von Arkenis/Buch der Reinigung.md"
+      - "Organisationen/Läuterer von Arkenis/Wichtige NPCs/Inquisitorin Maelia Grauwind, Stimme der Reinheit.md"
+      - "Orte/Arkenfeld.md"
+      - "Geschichte - Söldner/Akt 1 - Erste Fäden/2. Im Namen der Reinheit/Im Namen der Reinheit.md"
+    expected_answer_contains: ["Läuterer", "Magie"]
+    notes: "Die Organisationsdatei 'Läuterer von Arkenis.md' existiert nicht mehr — Info ist über Buch der Reinigung, Maelia Grauwind, Arkenfeld und I-2 verteilt."
 
   - id: m010
     question: "Wer ist Liora Veylan und zu welcher Organisation gehört sie?"
@@ -85,29 +93,36 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Marke"]
+    expected_answer_contains: ["Marke", "10"]
+    expected_section: "2.5"
+    notes: "Kapitel 2.5 — Marken gibt es ab Wurfzahl 10, maximal 2 gleichzeitig."
 
   - id: p002
     question: "Welche Fähigkeiten hat die Klasse Mönch?"
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Mönch"]
+    expected_answer_contains: ["Mönch", "Schlagserie"]
+    expected_section: "5.4.5"
+    notes: "Kapitel 5.4.5"
 
   - id: p003
     question: "Wie funktioniert das Würfelsystem?"
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: []
-    notes: "Allgemeine Mechanik-Frage — answer_contains absichtlich leer"
+    expected_answer_contains: ["Zielwert"]
+    expected_section: "1.1"
+    notes: "Kapitel 1.1/1.2 — Allgemeine Mechanik-Frage; eine korrekte Antwort muss Wurfzahl vs. Zielwert erklären."
 
   - id: p004
     question: "Was sind Fähigkeitspunkte und wie werden sie eingesetzt?"
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Aktionspunkte"]
+    expected_answer_contains: ["Rang"]
+    expected_section: "5.1"
+    notes: "Kapitel 5.1 — Fähigkeitspunkte lernen/steigern Skills und Zauber (1 Punkt pro Rang), sind KEINE Verbrauchsressource. Früher fälschlich 'Aktionspunkte' erwartet."
 
   - id: p005
     question: "Wie funktionieren Aktion und Bonusaktion im Kampf?"
@@ -115,6 +130,8 @@ pairs:
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
     expected_answer_contains: ["Aktion", "Bonusaktion"]
+    expected_section: "4.3"
+    notes: "Kapitel 4.3"
 
   - id: p006
     question: "Was ist der Unterschied zwischen einer Fähigkeit und einem Talent?"
@@ -129,28 +146,34 @@ pairs:
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
     expected_answer_contains: ["Initiative"]
+    expected_section: "4.1"
+    notes: "Kapitel 4.1"
 
   - id: p008
     question: "Welche Klassen gibt es im Regelwerk?"
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: []
-    notes: "Breite Übersichtsfrage — testet ob Klassen-Kapitel gefunden wird"
+    expected_answer_contains: ["Krieger", "Zeitmagie"]
+    notes: "Breite Übersichtsfrage — erste nicht-magische und letzte magische Klasse müssen beide auftauchen (5.4 + 5.5)."
 
   - id: p009
     question: "Was sind Zauberpunkte und wie erhält man sie zurück?"
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Zauberpunkte"]
+    expected_answer_contains: ["Fähigkeitspunkte"]
+    expected_section: "5.1"
+    notes: "Fangfrage, Kapitel 5.1 — Zauberpunkte sind Fähigkeitspunkte für Zauber und werden nicht verbraucht. Die Antwort darf sie nicht mit Manapunkten verwechseln."
 
   - id: p010
     question: "Wie funktioniert das Erlernen neuer Zauber?"
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Zauber"]
+    expected_answer_contains: ["Fähigkeitspunkt"]
+    expected_section: "5.1"
+    notes: "Kapitel 5.1 — neue Fähigkeit mit 1 Punkt auf Rang 1, regulär bis Rang 5."
 
   # — Grundregeln (Kapitel 1) —
 
@@ -160,6 +183,7 @@ pairs:
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
     expected_answer_contains: ["Ass"]
+    expected_section: "1.3"
     notes: "Kapitel 1.3 — distinktes Regelmechanik-Label, gut für BM25."
 
   - id: p012
@@ -167,8 +191,9 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Kombination"]
-    notes: "Kapitel 1.5"
+    expected_answer_contains: ["Kombination", "höchste"]
+    expected_section: "1.5"
+    notes: "Kapitel 1.5 — höchster beteiligter Rang wird gewürfelt, +1 (ab Rang 3) / +2 (ab Rang 5) je weiterem Talent."
 
   - id: p013
     question: "Wann wird nicht gewürfelt?"
@@ -176,6 +201,7 @@ pairs:
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
     expected_answer_contains: []
+    expected_section: "1.7"
     notes: "Kapitel 1.7 — Meta-Regel, answer_contains leer."
 
   # — Charaktergrundlagen (Kapitel 2) —
@@ -185,15 +211,17 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Talentpunkte"]
-    notes: "Kapitel 2.4"
+    expected_answer_contains: ["Talentpunkte", "Elite"]
+    expected_section: "2.4"
+    notes: "Kapitel 2.4 — Benchmark Normal 11 / Beruf 22 / Elite 33 / Max 44."
 
   - id: p015
     question: "Was ist der Legendäre Rang (Rang 6)?"
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Legendär"]
+    expected_answer_contains: ["Legendär", "W20"]
+    expected_section: "2.7"
     notes: "Kapitel 2.7 — distinkter Rang-Name."
 
   - id: p016
@@ -201,8 +229,9 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Ressourcen"]
-    notes: "Kapitel 2.5"
+    expected_answer_contains: ["Lebenspunkte", "Manapunkte"]
+    expected_section: "2.5"
+    notes: "Kapitel 2.5 — LP, AP/MP, RP/SP, Materialien, Marken, Todeszähler."
 
   # — Talente (Kapitel 3) —
 
@@ -212,6 +241,7 @@ pairs:
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
     expected_answer_contains: ["legendär"]
+    expected_section: "3.5"
     notes: "Kapitel 3.5"
 
   - id: p018
@@ -220,6 +250,7 @@ pairs:
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
     expected_answer_contains: ["Talent"]
+    expected_section: "3.3"
     notes: "Kapitel 3.3"
 
   # — Kampfregeln (Kapitel 4) —
@@ -229,31 +260,35 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Rüstung"]
-    notes: "Kapitel 4.7"
+    expected_answer_contains: ["Rüstung", "Schild"]
+    expected_section: "2.5"
+    notes: "Kapitel 2.5 (Ressourcen: RP/SP) + 4.6 (Reihenfolge der Schadensaufnahme)."
 
   - id: p020
     question: "Welche Schadenstypen gibt es?"
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Schaden"]
-    notes: "Kapitel 4.8"
+    expected_answer_contains: ["Durchschlag", "Direktschaden"]
+    expected_section: "4.7"
+    notes: "Kapitel 4.7"
 
   - id: p021
     question: "Welche Statuseffekte gibt es?"
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Status"]
-    notes: "Kapitel 4.9"
+    expected_answer_contains: ["Vergiftung", "Betäubung"]
+    expected_section: "4.8"
+    notes: "Kapitel 4.8 — drei Tabellen (Schaden über Zeit, Kontrolle, Permanent); beide Stichworte stammen aus unterschiedlichen Tabellen."
 
   - id: p022
     question: "Wie funktioniert Bewegung im Kampf?"
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Bewegung"]
+    expected_answer_contains: ["Bewegung", "Gewandtheit"]
+    expected_section: "4.4"
     notes: "Kapitel 4.4"
 
   - id: p023
@@ -261,8 +296,9 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Zeitpunkt"]
-    notes: "Kapitel 4.10 — sub-section recall."
+    expected_answer_contains: ["Beginn"]
+    expected_section: "4.9"
+    notes: "Kapitel 4.9 — Statuseffekt-Schaden tickt zu Rundenbeginn, Angriffsschaden sofort."
 
   # — Klassen nicht-magisch (Kapitel 5.4) —
 
@@ -271,7 +307,8 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Krieger"]
+    expected_answer_contains: ["Krieger", "Wuchtschlag"]
+    expected_section: "5.4.1"
     notes: "Kapitel 5.4.1"
 
   - id: p025
@@ -279,7 +316,8 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Schurke"]
+    expected_answer_contains: ["Schurke", "Hinterhalt"]
+    expected_section: "5.4.2"
     notes: "Kapitel 5.4.2"
 
   - id: p026
@@ -287,7 +325,8 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Waldläufer"]
+    expected_answer_contains: ["Waldläufer", "Gezielter Schuss"]
+    expected_section: "5.4.3"
     notes: "Kapitel 5.4.3"
 
   - id: p027
@@ -295,7 +334,8 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Gladiator"]
+    expected_answer_contains: ["Gladiator", "Triumphstoß"]
+    expected_section: "5.4.4"
     notes: "Kapitel 5.4.4"
 
   - id: p028
@@ -303,7 +343,8 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Alchemist"]
+    expected_answer_contains: ["Alchemist", "Falle"]
+    expected_section: "5.4.6"
     notes: "Kapitel 5.4.6"
 
   # — Magische Klassen (Kapitel 5.5) —
@@ -313,7 +354,8 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Elementar"]
+    expected_answer_contains: ["Elementar", "Froststrahl"]
+    expected_section: "5.5.2"
     notes: "Kapitel 5.5.2"
 
   - id: p030
@@ -321,7 +363,8 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Tiermagie"]
+    expected_answer_contains: ["Tiermagie", "Tierverwandlung"]
+    expected_section: "5.5.3"
     notes: "Kapitel 5.5.3"
 
   - id: p031
@@ -329,7 +372,8 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Zauberschmied"]
+    expected_answer_contains: ["Zauberschmied", "Zauberspeicher"]
+    expected_section: "5.5.4"
     notes: "Kapitel 5.5.4 — distinkter Klassen-Eigenname, BM25-affin."
 
   - id: p032
@@ -337,7 +381,8 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Golem"]
+    expected_answer_contains: ["Golem", "Wachgolem"]
+    expected_section: "5.5.5"
     notes: "Kapitel 5.5.5"
 
   - id: p033
@@ -345,15 +390,17 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Dunkle"]
-    notes: "Kapitel 5.5.6"
+    expected_answer_contains: ["Dunkle", "Nebenwirkung"]
+    expected_section: "5.5.6"
+    notes: "Kapitel 5.5.6 — Kern der Klasse sind Zauber mit Nebenwirkungen."
 
   - id: p034
     question: "Welche Fähigkeiten bietet die Zeitmagie?"
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Zeitmagie"]
+    expected_answer_contains: ["Zeitmagie", "Stasisfeld"]
+    expected_section: "5.5.7"
     notes: "Kapitel 5.5.7"
 
   - id: p035
@@ -361,8 +408,9 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Basisausrüstung"]
-    notes: "Kapitel 5.5.1 — sub-section in 5.5"
+    expected_answer_contains: ["Basisausrüstung", "Kampfmagier"]
+    expected_section: "5.5.1"
+    notes: "Kapitel 5.5.1 — drei Varianten: Gelehrter, Kampfmagier, Unterstützer."
 
   # — Basis-Skills & Zauber —
 
@@ -371,7 +419,8 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Basis-Skills"]
+    expected_answer_contains: ["Erholen", "Verbände"]
+    expected_section: "5.2"
     notes: "Kapitel 5.2"
 
   - id: p037
@@ -379,7 +428,8 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Basis-Zauber"]
+    expected_answer_contains: ["Magischer Schlag", "Wunde schließen"]
+    expected_section: "5.3"
     notes: "Kapitel 5.3"
 
   # — Eigenheiten (Kapitel 6) —
@@ -389,7 +439,8 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Geist"]
+    expected_answer_contains: ["Phobie", "Wahnsinniges Genie"]
+    expected_section: "6.1"
     notes: "Kapitel 6.1"
 
   - id: p039
@@ -397,7 +448,8 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Kampf"]
+    expected_answer_contains: ["Ritterlichkeit", "Trance"]
+    expected_section: "6.3"
     notes: "Kapitel 6.3"
 
   - id: p040
@@ -405,7 +457,8 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Flüche"]
+    expected_answer_contains: ["Preis des Lebens", "Schattenfreund"]
+    expected_section: "6.4"
     notes: "Kapitel 6.4"
 
   - id: p041
@@ -414,7 +467,748 @@ pairs:
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
     expected_answer_contains: ["Fesselschuss", "Gezielter Schuss", "Mehrfachschuss", "Waldkundiger Blick", "Natürlicher Schutz", "Tiergefährte"]
+    expected_section: "5.4.3"
     notes: "Kapitel 5.4.3 — Vollständigkeits-Check für Section Expansion (vorher erreichten nur 5 von 24 Abschnitten das LLM)"
+
+  # ─────────────────────────────────────────
+  # REGELWERK — Kampfunfähigkeit, Tod & Überheilung (p042–p049)
+  # Benachbarte Abschnitte 4.10 / 4.11 mit ähnlichem Vokabular
+  # („Über-“). Der Hit ist dateibasiert und damit für das PDF fast immer
+  # wahr — der eigentliche Prüfstein ist expected_answer_contains im
+  # End-to-End-Lauf (evaluate.py).
+  # ─────────────────────────────────────────
+
+  - id: p042
+    question: "Was ist Überschaden und was passiert dabei?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Todeszähler"]
+    expected_section: "4.10"
+    notes: "Kapitel 4.10 — REGRESSION: Antwort kam nur aus 4.11 (Überheilung). Korrekt: Schaden über die verbleibenden LP hinaus; übersteigt er die max. LP → +1 Todeszähler (laut 'Tod'-Absatz auch Tod + Heroische Runde)."
+
+  - id: p043
+    question: "Was passiert, wenn ein Charakter auf 0 Lebenspunkte fällt?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["kampfunfähig", "Todeszähler"]
+    expected_section: "4.10"
+    notes: "Kapitel 4.10 — Umgangssprachliche Formulierung ohne Fachbegriff 'Kampfunfähigkeit'."
+
+  - id: p044
+    question: "Wie funktioniert die Sterbeprobe?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["10", "Todeszähler"]
+    expected_section: "4.10"
+    notes: "Kapitel 4.10 — 10+ stabilisiert (1 LP), unter 4 → +1 Todeszähler, 4–9 keine Veränderung. Abschnitt liegt über einen Seitenumbruch verteilt."
+
+  - id: p045
+    question: "Was ist die Heroische Runde?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Marke"]
+    expected_section: "4.10"
+    notes: "Kapitel 4.10 — letzte Runde nach dem Tod, Wurfzahl gilt als mind. 10, pro Probe eine Marke an einen Verbündeten."
+
+  - id: p046
+    question: "Wie kann ein kampfunfähiger Charakter wieder auf die Beine kommen?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Heilung", "Marke"]
+    expected_section: "4.10"
+    notes: "Kapitel 4.10 'Hilfe' — Heilung ≥1 LP setzt Todeszähler auf 0, alternativ eigene Marke ausgeben, oder Sterbeprobe 10+."
+
+  - id: p047
+    question: "Welche Nachwirkung hat es, wenn ein Charakter aus der Kampfunfähigkeit zurückkehrt?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Ruhephase"]
+    expected_section: "4.10"
+    notes: "Kapitel 4.10 'Verwundet' — −1 auf alle Proben bis zur nächsten vollständigen Ruhephase, stapelbar."
+
+  - id: p048
+    question: "Was ist Überheilung und wann verfällt sie?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Maximum"]
+    expected_section: "4.11"
+    notes: "Kapitel 4.11 — Gegenstück zu p042: hier ist die Überheilungs-Antwort richtig."
+
+  - id: p049
+    question: "Welche Zauber erlauben Überheilung?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Seelenentzug"]
+    expected_section: "4.11"
+    notes: "Multi-Section: die Regel steht in 4.11, die Zauber in 5.5.6 (Seelenentzug, Verfluchte Klinge legendär). Testet ob der Retriever über die Regeldefinition hinaus findet."
+
+  # ─────────────────────────────────────────
+  # REGELWERK — Angriff, Schaden & Statuseffekte (p050–p066)
+  # ─────────────────────────────────────────
+
+  - id: p050
+    question: "Ab welcher Wurfzahl ist ein Angriff ein kritischer Treffer und was bewirkt er?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["15", "doppelt"]
+    expected_section: "4.6.1"
+    notes: "Kapitel 4.6.1 — 15+ verdoppelt Schaden; wurfzahlabhängiger Schaden wird nicht verdoppelt."
+
+  - id: p051
+    question: "Wie werden mehrere Schadensverdopplungen miteinander verrechnet?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["dreifach"]
+    expected_section: "4.6.1"
+    notes: "Kapitel 4.6.1 'Mehrere Verdopplungen' — addieren statt multiplizieren (2× → dreifach, 3× → vierfach)."
+
+  - id: p052
+    question: "Welche Waffen erzielen schon ab Wurfzahl 10 einen kritischen Treffer?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["leicht"]
+    expected_section: "7.1.1"
+    notes: "Kapitel 7.1.1 (Waffenkategorien) — Distraktor: 4.6.1 nennt 15 als Krit-Schwelle. Kettenbrecher (7.3) krittet sogar ab 8."
+
+  - id: p053
+    question: "In welcher Reihenfolge nehmen Magisches Schild, Rüstung und Lebenspunkte Schaden auf?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Schild", "Rüstung"]
+    expected_section: "4.6"
+    notes: "Kapitel 4.6 — SP → RP → LP."
+
+  - id: p054
+    question: "Wie viel Schaden fängt ein Rüstungspunkt und wie viel ein Schildpunkt ab?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["2 Schaden", "1 Schaden"]
+    expected_section: "2.5"
+    notes: "Kapitel 2.5 — 1 RP = 2 Schadenspunkte, 1 SP = 1 Schadenspunkt; RP nur außerhalb des Kampfes wiederherstellbar."
+
+  - id: p055
+    question: "Was ist der Unterschied zwischen Durchschlagsschaden und Direktschaden?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Rüstung", "Lebenspunkte"]
+    expected_section: "4.7"
+    notes: "Kapitel 4.7 — Durchschlag ignoriert RP (SP wirkt), Direktschaden ignoriert RP und SP."
+
+  - id: p056
+    question: "Wie hoch ist die Chance, dass Feuer-, Gift- oder Verwesungsschaden einen Statuseffekt auslöst?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Rang"]
+    expected_section: "4.7"
+    notes: "Kapitel 4.7 — Chance richtet sich nach dem Rang des Schadens (z. B. Rang 3 = 1W8-Chance)."
+
+  - id: p057
+    question: "Wie lange wirkt ein Statuseffekt, wenn keine Dauer angegeben ist?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["3 Runden"]
+    expected_section: "4.8"
+    notes: "Kapitel 4.8 'Wirkungsdauer' — Standard 3 Runden; Ausnahme Erosion."
+
+  - id: p058
+    question: "Welche Statuseffekte verursachen Schaden über Zeit?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Vergiftung", "Verbrennung", "Blutung"]
+    expected_section: "4.8"
+    notes: "Kapitel 4.8 — Tabellen-Atomicity: alle drei Zeilen müssen im selben Chunk landen."
+
+  - id: p059
+    question: "Was bewirkt Erosion?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["maximal"]
+    expected_section: "4.8"
+    notes: "Kapitel 4.8 'Permanente Effekte' — einmaliger Verlust von Rang × 1W4 maximaler LP."
+
+  - id: p060
+    question: "Was passiert, wenn derselbe Statuseffekt mehrfach angewendet wird?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["stapel"]
+    expected_section: "4.8"
+    notes: "Kapitel 4.8 — jede Anwendung zählt als eigener Effekt."
+
+  - id: p061
+    question: "Was bewirken Betäubung und Unterkühlung?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Bonusaktion"]
+    expected_section: "4.8"
+    notes: "Kapitel 4.8 'Kontroll- und Einschränkungseffekte'."
+
+  - id: p062
+    question: "Wann wird der Schaden von Vergiftung oder Verbrennung abgehandelt?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Beginn"]
+    expected_section: "4.9"
+    notes: "Kapitel 4.9 — tickt zu Rundenbeginn."
+
+  - id: p063
+    question: "Was passiert nach einer erfolgreichen Parade oder einem erfolgreichen Ausweichen?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["halbe"]
+    expected_section: "4.5"
+    notes: "Kapitel 4.5 — Parade: Gegenangriff ohne Probe mit halbem Waffenschaden; Ausweichen: halbe Bewegung."
+
+  - id: p064
+    question: "Welchen Vorteil haben magische Waffen bei der Parade?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["+2"]
+    expected_section: "4.5"
+    notes: "Kapitel 4.5 — +2, hebt sich auf, wenn beide Seiten magische Waffen führen."
+
+  - id: p065
+    question: "Kann man Zauber parieren?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["magisch"]
+    expected_section: "4.5"
+    notes: "Kapitel 4.5 'Zauber parieren' — nur mit magischen Waffen, ohne +2-Bonus."
+
+  - id: p066
+    question: "Wie weit kann sich ein Charakter im Kampf bewegen und wie funktioniert Sprinten?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Gewandtheit", "1,5"]
+    expected_section: "4.4"
+    notes: "Kapitel 4.4 — 4 + Rang Meter; Sprinten als Bonusaktion bis 1,5-fach mit Gewandtheitsprobe."
+
+  - id: p067
+    question: "Wie funktioniert die Gruppeninitiative und was bedeutet Überlegenheit?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["doppelt"]
+    expected_section: "4.1"
+    notes: "Kapitel 4.1 Variante 2 — Überlegenheit bei mindestens doppelter Initiativesumme."
+
+  # ─────────────────────────────────────────
+  # REGELWERK — Ressourcen, Charakter & Progression (p068–p082)
+  # ─────────────────────────────────────────
+
+  - id: p068
+    question: "Wie berechnen sich die Lebenspunkte und wie regenerieren sie?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["20", "Ruhephase"]
+    expected_section: "2.5"
+    notes: "Kapitel 2.5 — LP = 20 + Stärke-Wurfzahl; pro Ruhephase halbe max. LP."
+
+  - id: p069
+    question: "Wie werden Aktionspunkte und Manapunkte aufgeteilt und wieder aufgefüllt?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["50", "Ruhephase"]
+    expected_section: "2.5"
+    notes: "Kapitel 2.5 — 50 Punkte frei aufteilbar auf Level 1; volle Regeneration pro Ruhephase."
+
+  - id: p070
+    question: "Warum ist Heilung als Bonusaktion begrenzt, Heilung als Aktion aber nicht?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Bonusaktion"]
+    expected_section: "2.5"
+    notes: "Kapitel 2.5 'Heilung im Kampf' — Designbegründung, kein Zahlenwert."
+
+  - id: p071
+    question: "Was bekommt ein neuer Charakter bei der Charaktererschaffung?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["15", "Eigenheit"]
+    expected_section: "2.1"
+    notes: "Kapitel 2.1 — 1 Klasse, 15 Talentpunkte, 15 Fähigkeitspunkte, bis zu 2 Eigenheiten."
+
+  - id: p072
+    question: "Wie viele Fähigkeitspunkte und Aktions-/Manapunkte hat ein Charakter auf Level 3?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["35", "70"]
+    expected_section: "2.2"
+    notes: "Kapitel 2.2 Level-Tabelle — Tabellen-Lookup in transponierter Tabelle (PDF-Extraktion zerlegt sie zeilenweise)."
+
+  - id: p073
+    question: "Ab welchem Level kann man eine Nebenklasse wählen?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Level 2"]
+    expected_section: "2.2"
+    notes: "Kapitel 2.2 / 2.3"
+
+  - id: p074
+    question: "Was kostet es, ein Talent zu steigern?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Stärke", "Wissen"]
+    expected_section: "3.4"
+    notes: "Kapitel 3.4 — 2 TP/Rang für Stärke, Gewandtheit, Kampf; 1 TP/Rang für Wahrnehmung, Heimlichkeit, Wissen, Gesellschaft, Wildnisleben."
+
+  - id: p075
+    question: "Kann man Talentpunkte in Lebenspunkte umwandeln?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: []
+    expected_section: "2.4"
+    notes: "Kapitel 2.4 — 1 Talentpunkt = 2 LP, nicht umkehrbar. answer_contains leer, weil die Zahl allein nicht trennscharf prüfbar ist."
+
+  - id: p076
+    question: "Wie steigert man eine Disziplin auf den legendären Rang 6?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Lehrmeister", "Meisterprobe"]
+    expected_section: "2.7"
+    notes: "Kapitel 2.7 — Rang 5, Lehrmeister/Fokusort, 3 Trainingsphasen, Meisterprobe 10+ mit Rang-5-Würfel."
+
+  - id: p077
+    question: "Wie viele legendäre Slots hat ein Charakter?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Basis", "Hauptklasse", "Nebenklasse"]
+    expected_section: "2.7"
+    notes: "Kapitel 2.7 'Legendär-Slots' — 1 Talent + 3 Fähigkeiten (Basis/Haupt/Neben)."
+
+  - id: p078
+    question: "Welche legendären Effekte kann das Talent Gewandtheit freischalten?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Bonusaktion", "Initiative"]
+    expected_section: "3.5"
+    notes: "Kapitel 3.5 Übersichtstabelle — Zeile einer mehrspaltigen Tabelle (Schnelligkeit / Initiativevorteil)."
+
+  - id: p079
+    question: "Wie hängen die Kosten eines Zaubers von der Wurfzahl ab?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["halbe", "keine Kosten"]
+    expected_section: "5.1"
+    notes: "Kapitel 5.1 'Kosten durch Wurfzahl' — 1–3 misslingt (halbe), 4–6 volle, 7–9 halbe, 10+ keine Kosten."
+
+  - id: p080
+    question: "Was ist der Standard-Zielwert einer Probe und wann gelingt sie?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["4", "Zielwert"]
+    expected_section: "1.1"
+    notes: "Kapitel 1.1"
+
+  - id: p081
+    question: "Gibt es kritische Erfolge oder kritische Fehlschläge bei Proben?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["keine"]
+    expected_section: "1.6"
+    notes: "Kapitel 1.6 'Konsequenzen' — keine festen Kategorien; Distraktor: kritischer Treffer im Kampf (4.6.1)."
+
+  - id: p082
+    question: "Was sind Materialien und wofür werden sie gebraucht?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["verbraucht"]
+    expected_section: "2.5"
+    notes: "Kapitel 2.5 'Materialien' — abstrakte Ressource; Startmenge klassenabhängig (Alchemist 10/Tag, Waldläufer 5/Abenteuer)."
+
+  # ─────────────────────────────────────────
+  # REGELWERK — Ausrüstung, Tränke & Handel (p083–p095)
+  # ─────────────────────────────────────────
+
+  - id: p083
+    question: "Wie viele Rüstungspunkte und Schildpunkte gibt eine meisterliche schwere Rüstung?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["5", "7"]
+    expected_section: "2.5"
+    notes: "Kapitel 2.5 Rüstungstabelle — 5 RP / 7 SP (SP nur magische Variante). Tabellen-Lookup."
+
+  - id: p084
+    question: "Geben Roben Rüstungspunkte?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Schild"]
+    expected_section: "2.5"
+    notes: "Kapitel 2.5 / 7.1.3 — Roben geben nur Magisches Schild (SP), keine RP."
+
+  - id: p085
+    question: "Was ist der Unterschied zwischen leichten, normalen und schweren Waffen?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["zweihändig", "10"]
+    expected_section: "7.1.1"
+    notes: "Kapitel 7.1.1 Waffenkategorien."
+
+  - id: p086
+    question: "Wie viel Schaden macht ein Langschwert?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["STÄ"]
+    expected_section: "7.1.1"
+    notes: "Kapitel 7.1.1 Nahkampftabelle — 2x STÄ (normal). 'STÄ' matcht case-insensitiv auch 'Stärke'."
+
+  - id: p087
+    question: "Was ist die Besonderheit der Armbrust?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["nachlad"]
+    expected_section: "7.1.1"
+    notes: "Kapitel 7.1.1 — ein Geschoss pro Aktion, Nachladen als Bonusaktion; nicht mit Mehrfachschuss nutzbar (5.4.3)."
+
+  - id: p088
+    question: "Wie viel Schaden verursachen waffenlose Angriffe?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["STÄ"]
+    expected_section: "7.1.1"
+    notes: "Kapitel 7.1.1 — gelten als leichte Waffe, Schaden = STÄRKE."
+
+  - id: p089
+    question: "Wie viel Magischen Schild gewährt ein magischer Schild?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["RP"]
+    expected_section: "7.1.2"
+    notes: "Kapitel 7.1.2 — SP = RP + 2."
+
+  - id: p090
+    question: "Wie viele Lebenspunkte heilt ein meisterlicher Heiltrank?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["20"]
+    expected_section: "7.1.5"
+    notes: "Kapitel 7.1.5 Tränke-Tabelle — schlecht 5 / normal 10 / meisterlich 20."
+
+  - id: p091
+    question: "Was passiert, wenn beim Tränke herstellen eine Wurfzahl von 1 bis 3 fällt?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["1W8"]
+    expected_section: "5.4.6"
+    notes: "Konflikt-Test: 5.4.6 (Tränke herstellen) verweist auf die 1W8-Tabelle 'Misslungenes Gebräu'; 7.1.5 sagt vereinfacht 'Trank schlechter Qualität'. Inhaltlicher Widerspruch im Regelwerk."
+
+  - id: p092
+    question: "Welche Tränke kann ein Alchemist auf welchem Rang herstellen?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Heiltrank", "Antimagisches Serum"]
+    expected_section: "5.4.6"
+    notes: "Kapitel 5.4.6 Rezepttabelle — erste und letzte Zeile."
+
+  - id: p093
+    question: "Wie ist die Währung aufgebaut?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["10 Silber"]
+    expected_section: "7.4"
+    notes: "Kapitel 7.4"
+
+  - id: p094
+    question: "Wie viel teurer ist meisterliche Qualität gegenüber normaler Qualität?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["fünf", "doppel"]
+    expected_section: "7.4"
+    notes: "Kapitel 7.4 — Fünffache; Ausnahme Verbrauchsgüter: Doppelte."
+
+  - id: p095
+    question: "Kann man magische Gegenstände im Laden kaufen?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["nicht"]
+    expected_section: "7.4"
+    notes: "Kapitel 7.4 — Beute, Auftragslohn oder Zauberschmied-Werk, keine Ladenware."
+
+  # ─────────────────────────────────────────
+  # REGELWERK — Einzelne Skills & Zauber (p096–p110)
+  # Detailfragen gegen einzelne Fähigkeitskarten
+  # ─────────────────────────────────────────
+
+  - id: p096
+    question: "Wann darf ein Schurke den Skill Hinterhalt einsetzen?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["unvorbereitet"]
+    expected_section: "5.4.2"
+    notes: "Kapitel 5.4.2 — unvorbereitete Ziele, leichte/normale Waffen, nicht im Fokus des Gegners."
+
+  - id: p097
+    question: "Wie funktioniert der Krieger-Skill Deckung geben?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Bonusaktion", "reaktiv"]
+    expected_section: "5.4.1"
+    notes: "Kapitel 5.4.1 — aktive und reaktive Variante, beide verbrauchen die Bonusaktion."
+
+  - id: p098
+    question: "Welche Tiergefährten kann der Waldläufer rufen?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Fuchs", "Schwalbe", "Eichhörnchen", "Dachs"]
+    expected_section: "5.4.3"
+    notes: "Kapitel 5.4.3 'Tiergefährte rufen' — Distraktor: Tiermagie 'Ruf des Tiers' hat ähnliche legendäre Tiere."
+
+  - id: p099
+    question: "Wie oft darf man Verbände anlegen?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Kampf"]
+    expected_section: "5.2"
+    notes: "Kapitel 5.2 — pro Ziel nur einmal pro Kampf."
+
+  - id: p100
+    question: "Wie funktioniert die Falle platzieren des Alchemisten?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Gewandtheit"]
+    expected_section: "5.4.6"
+    notes: "Kapitel 5.4.6 — Auslösung mit GEWANDTHEIT-Probe −Rang; max. Rang/2 Fallen gleichzeitig."
+
+  - id: p101
+    question: "Wie funktioniert der Zauber Zauberspeicher?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["niedriger"]
+    expected_section: "5.5.4"
+    notes: "Kapitel 5.5.4 — gespeicherter Zauber ist 1 Rang niedriger; Distraktor: Monolithon (7.3) als Zauberspeicher-Träger."
+
+  - id: p102
+    question: "Was ist die Kontrollprobe beim Zauber Tote beschwören?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Kontroll"]
+    expected_section: "5.5.6"
+    notes: "Kapitel 5.5.6 — Trigger bei Schaden/Statuseffekt; bei Verlust greifen Untote willkürlich an."
+
+  - id: p103
+    question: "Welche Nebenwirkung hat der Zauber Altersbrand?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["1W6"]
+    expected_section: "5.5.7"
+    notes: "Kapitel 5.5.7 — Magier verliert 1W6 LP, multipliziert sich bei Mehrfachnutzung."
+
+  - id: p104
+    question: "Wie oft kann Zeit zurückdrehen im Kampf auf dasselbe Ziel gewirkt werden?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["einmal"]
+    expected_section: "5.5.7"
+    notes: "Kapitel 5.5.7"
+
+  - id: p105
+    question: "Was bewirkt das Stasisfeld?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["unverwundbar"]
+    expected_section: "5.5.7"
+    notes: "Kapitel 5.5.7"
+
+  - id: p106
+    question: "Was blockiert das Energieschild auf den verschiedenen Rängen?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Feuer", "Elementar"]
+    expected_section: "5.5.4"
+    notes: "Kapitel 5.5.4 Rangtabelle."
+
+  - id: p107
+    question: "Welche Werte haben die Golems, die man mit Golem rufen beschwört?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Kleiner Golem", "Normaler Golem"]
+    expected_section: "5.5.5"
+    notes: "Kapitel 5.5.5 — zwei Statblöcke im selben Abschnitt."
+
+  - id: p108
+    question: "Was passiert bei Flammenheilung, wenn der Zauber misslingt?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Feuerschaden"]
+    expected_section: "5.5.2"
+    notes: "Kapitel 5.5.2 Rangtabelle 'Risiko bei Misserfolg'."
+
+  - id: p109
+    question: "Was bewirkt der Basis-Skill Erholen und wie oft darf man ihn nutzen?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["einmal pro Kampf"]
+    expected_section: "5.2"
+    notes: "Kapitel 5.2"
+
+  - id: p110
+    question: "Was bewirkt die Karte Unsterblichkeitsschimmer im Schicksalsdeck?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Todeszähler"]
+    expected_section: "7.3"
+    notes: "Kapitel 7.3 — W20-Tabelle; Karte 17 erwähnt ebenfalls 'Überschaden' → Kollisionstest mit p042."
+
+  # ─────────────────────────────────────────
+  # REGELWERK — Eigenheiten & Artefakte (p111–p120)
+  # ─────────────────────────────────────────
+
+  - id: p111
+    question: "Welche Vor- und Nachteile hat die Eigenheit Ritterlichkeit?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Statuseffekt", "Ehre"]
+    expected_section: "6.3"
+    notes: "Kapitel 6.3 — immun gegen Statuseffekte, Ehrezähler (Start 10)."
+
+  - id: p112
+    question: "Was bewirkt die Eigenheit Preis des Lebens?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["1W6"]
+    expected_section: "6.4"
+    notes: "Kapitel 6.4 — 1W6 Seelenschaden im Schattenriss; 1×/Tag misslungene Probe wiederholen (+1). Gleicher Name wie Abenteuer 'Der Preis des Lebens' (a011)."
+
+  - id: p113
+    question: "Was bewirkt die Eigenheit Im Feuer geboren?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Kälte", "immun"]
+    expected_section: "6.5"
+    notes: "Kapitel 6.5"
+
+  - id: p114
+    question: "Welche Eigenheiten gibt es zu Magie und Zauberei?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Vergesslichkeit", "Manaschwäche"]
+    expected_section: "6.2"
+    notes: "Kapitel 6.2 — bisher ungetestete Eigenheiten-Gruppe."
+
+  - id: p115
+    question: "Welche Eigenheiten gibt es zu Sozialem und Ruf?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Eidbrecher", "Pazifist"]
+    expected_section: "6.6"
+    notes: "Kapitel 6.6 — bisher ungetestete Eigenheiten-Gruppe; geht über einen Seitenumbruch."
+
+  - id: p116
+    question: "Welche Eigenheiten gibt es zu Herkunft und Umgebung?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Alchemistischer Körper"]
+    expected_section: "6.5"
+    notes: "Kapitel 6.5"
+
+  - id: p117
+    question: "Welche Eigenheiten gibt es zu Fähigkeiten und Fokus?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Geniales Talent"]
+    expected_section: "6.7"
+    notes: "Kapitel 6.7"
+
+  - id: p118
+    question: "Was ist ein Monolithon und wie viele Manapunkte speichert er?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["250"]
+    expected_section: "7.3"
+    notes: "Kapitel 7.3 — Oberbegriff der sieben Monolithen; ein gespeicherter Zauber belegt 10 MP je Rang."
+
+  - id: p119
+    question: "Was bewirken die Dämmerlicht-Klingen?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Dämonen"]
+    expected_section: "7.3"
+    notes: "Kapitel 7.3 Legendäre Artefakte — Lyssara Vaydris trägt sie im Vault."
+
+  - id: p120
+    question: "Wie viele Fähigkeitspunkte und Talentpunkte bekommt man pro Abenteuer?"
+    source_type: pdf
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Abenteuer"]
+    expected_section: "2.6"
+    notes: "Kapitel 2.6 — 3–5 Fähigkeitspunkte, 2–3 Talentpunkte (Empfehlung)."
 
   # ─────────────────────────────────────────
   # IMAGE (10 Fragen)
@@ -516,7 +1310,7 @@ pairs:
     source_type: markdown
     category: adventure
     expected_sources: ["Geschichte - Söldner/Akt 1 - Erste Fäden/2. Im Namen der Reinheit/Im Namen der Reinheit.md"]
-    expected_answer_contains: ["Reinheit"]
+    expected_answer_contains: ["Läuterer"]
 
   - id: a003
     question: "Worum geht es im Chronos-Protokoll?"
@@ -529,7 +1323,7 @@ pairs:
     question: "Was ist die Kampagnenstruktur der Söldner-Kampagne?"
     source_type: markdown
     category: adventure
-    expected_sources: ["Geschichte - Söldner/Kampagnenstruktur (3 Akte, 12 Abenteuer).md"]
+    expected_sources: ["Geschichte - Söldner/Kampagnenstruktur.md"]
     expected_answer_contains: ["Akt"]
     notes: "Größte Datei im Vault — testet ob Übersichtsstruktur korrekt aufgeteilt wird"
 
@@ -544,16 +1338,19 @@ pairs:
     question: "Wer ist der Auftraggeber im Abenteuer Relikt der verlorenen Stadt?"
     source_type: pdf
     category: adventure
-    expected_sources: ["Geschichte - Akademie/Auftragsbrief_Relikt_der_verlorenen_Stadt.pdf"]
-    expected_answer_contains: []
-    notes: "PDF-Auftragsbrief — answer_contains leer da Inhalt unbekannt"
+    expected_sources:
+      - "Geschichte - Akademie/Auftragsbrief_Relikt_der_verlorenen_Stadt.pdf"
+      - "Geschichte - Akademie/Das Relikt der Verlorenen Stadt.md"
+    expected_answer_contains: ["Vonnex"]
+    notes: "Auftragsbrief-PDF + Abenteuer-Markdown — Szene 1: Co-Rektorin Sylma Vonnex überbringt den Auftrag im Namen von Arra von Morgenstern."
 
   - id: a007
     question: "Was ist das Ziel der Abenteuer in Akt 3 der Söldner-Kampagne?"
     source_type: markdown
     category: adventure
-    expected_sources: ["Geschichte - Söldner/Kampagnenstruktur (3 Akte, 12 Abenteuer).md"]
-    expected_answer_contains: ["Akt 3"]
+    expected_sources: ["Geschichte - Söldner/Kampagnenstruktur.md"]
+    expected_answer_contains: ["Mandate der Macht"]
+    notes: "Datei nummeriert römisch ('AKT III'), daher Titel statt 'Akt 3' als Stichwort."
 
   - id: a008
     question: "Was passiert im Abenteuer Venthir - Die Stadt der Unvollendeten?"
@@ -574,7 +1371,7 @@ pairs:
     source_type: markdown
     category: adventure
     expected_sources: ["Geschichte - Weihnachts-One-Shot/Der Maskenball des Winterkönigs.md"]
-    expected_answer_contains: ["Winterkönig"]
+    expected_answer_contains: ["Winterkönig", "Maske"]
 
   # ─────────────────────────────────────────
   # STRUKTUR-TESTS (6 Fragen)
@@ -603,34 +1400,40 @@ pairs:
     category: lore
     expected_sources:
       - "Orte/Arkenfeld.md"
-      - "Organisationen/Läuterer von Arkenis/Läuterer von Arkenis.md"
+      - "Organisationen/Haus Brahmus/Haus Brahmus.md"
+      - "Organisationen/Weiße Kanzlei/Weiße Kanzlei.md"
     expected_answer_contains: ["Läuterer"]
-    notes: "Multi-Source: erwartet Chunks aus mehreren Dateien gleichzeitig. Testet ob max_per_source-Soft-Cap korrekt diversifiziert statt eine einzelne Datei alle Slots belegen zu lassen."
+    notes: "Multi-Source: erwartet Chunks aus mehreren Dateien gleichzeitig. Testet ob max_per_source-Soft-Cap korrekt diversifiziert statt eine einzelne Datei alle Slots belegen zu lassen. (Läuterer-Organisationsdatei existiert nicht mehr.)"
 
   - id: s004
-    question: "Welche Stats hat der Heimkehrpfennig?"
-    source_type: markdown
+    question: "Wie bricht man den Fluch des Heimkehrpfennigs?"
+    source_type: pdf
     category: item
-    expected_sources: ["Gegenstände/Heimkehrpfennig.md"]
-    expected_answer_contains: ["Heimkehrpfennig"]
-    notes: "Tabellen-Atomicity: Frage gegen eine Stat-Tabelle ohne Fließtext. Testet ob die Tabelle als atomarer Chunk erhalten bleibt (nicht mid-row gesplittet) und über den Identity-Layer (filename stem) trotzdem matched."
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Grab"]
+    expected_section: "7.2.4"
+    notes: "Tabellen-Atomicity im PDF: Der Heimkehrpfennig ist eine mehrzeilige Zelle der Artefakttabelle (7.2.4); die Fluch-Bedingung steht am Ende der Zelle. Früher gegen Gegenstände/Heimkehrpfennig.md (existiert nicht mehr)."
 
   - id: s005
     question: "Wo wird Bruder Caelus erwähnt und welche Rolle spielt er?"
     source_type: markdown
     category: npc
     expected_sources:
+      - "NPCs/Neben NPCs/Bruder Caelus.md"
       - "Orte/Arkenfeld.md"
+      - "Orte/Verlorene Magierstädte/Thal'Emyra.md"
     expected_answer_contains: ["Caelus"]
-    notes: "Identity-Layer + Wikilink-Cross-Reference: Caelus wird in Arkenfeld.md nur als [[Bruder Caelus]] referenziert (kein eigener Steckbrief im Stadtviertel-Chunk). Testet ob der Wikilink-Kontext gefunden wird."
+    notes: "Ursprünglich Wikilink-Test (Caelus nur als [[Bruder Caelus]] in Arkenfeld.md/Thal'Emyra.md). Inzwischen gibt es eine eigene NPC-Datei — der 'Wo wird er erwähnt'-Teil prüft weiterhin, ob Arkenfeld/Thal'Emyra zusätzlich auftauchen (siehe details im Report)."
 
   - id: s006
     question: "Was ist der Veylana-Tempel und wo befindet er sich?"
     source_type: markdown
     category: location
-    expected_sources: ["Orte/Arkenfeld.md"]
+    expected_sources:
+      - "Orte/Arkenfeld.md"
+      - "Orte/Verlorene Magierstädte/Thal'Emyra.md"
     expected_answer_contains: ["Veylana", "Gotteslicht"]
-    notes: "Tiefe Section: Information liegt sowohl in einer Tabellenzeile (Gotteslicht > Geheim) als auch in der Verborgenes-Erbe-Sektion. Testet ob Tabellen-Inhalte über den Identity-Layer trotz fehlendem Fließtext im Chunk auffindbar sind."
+    notes: "Tiefe Section: Information liegt in Arkenfeld.md (Tabellenzeile Gotteslicht > Geheim) und ausführlich in Thal'Emyra.md ('Der vergessene Tempel Veylanas'). Testet Tabellen-Inhalte über den Identity-Layer."
 
   # ─────────────────────────────────────────
   # KEYWORD-FOCUS (6 Fragen)
@@ -643,8 +1446,9 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Langschwert"]
-    notes: "Keyword-case: exakter Item-Name + Preis-Frage. Vektor-Suche schwächelt auf kurzen, sehr spezifischen Begriffen — BM25 sollte den Waffen-Preis-Chunk direkt treffen."
+    expected_answer_contains: ["Langschwert", "10 G"]
+    expected_section: "7.4"
+    notes: "Keyword-case + Two-Hop: Die Preistabelle (7.4) listet nur Kategorien (Schwere Waffe 10 G); 'Langschwert = schwer' steht in 7.1.1. '10 G' matcht case-insensitiv auch '10 Gold'."
 
   - id: k002
     question: "Was bedeutet Vorteil und Nachteil beim Würfeln?"
@@ -652,6 +1456,7 @@ pairs:
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
     expected_answer_contains: ["Vorteil", "Nachteil"]
+    expected_section: "1.4"
     notes: "Keyword-case: kurze Regel-Fachbegriffe mit hoher Alltagswort-Überlagerung. Semantische Suche drifted gern in 'Vorteile einer Klasse'-Chunks ab — BM25 verankert auf dem exakten Term."
 
   - id: k003
@@ -660,6 +1465,7 @@ pairs:
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
     expected_answer_contains: ["Marke"]
+    expected_section: "2.5"
     notes: "Keyword-case: 'Marke' ist ein sehr kurzer, spezifischer Regelbegriff. Overlap mit p001, aber Formulierung zielt auf Definition — BM25 sollte den Definitions-Chunk über Lexikalmatch finden."
 
   - id: k004
@@ -672,11 +1478,12 @@ pairs:
 
   - id: k005
     question: "Was ist der Heimkehrpfennig genau?"
-    source_type: markdown
+    source_type: pdf
     category: item
-    expected_sources: ["Gegenstände/Heimkehrpfennig.md"]
+    expected_sources: ["pnp_regelbuch.pdf"]
     expected_answer_contains: ["Heimkehrpfennig"]
-    notes: "Keyword-case: Kompositum-Eigenname, der mangels Trainings-Kontext in E5-Embeddings schwach fokussiert. BM25 sollte via exaktem Tokenmatch vor Vektor-Suche treffen."
+    expected_section: "7.2.4"
+    notes: "Keyword-case: Kompositum-Eigenname, der mangels Trainings-Kontext in E5-Embeddings schwach fokussiert. BM25 sollte via exaktem Tokenmatch vor Vektor-Suche treffen. Jetzt im PDF (7.2.4)."
 
   - id: k006
     question: "Wie wird die Bonusaktion im Kampf eingesetzt?"
@@ -684,15 +1491,20 @@ pairs:
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
     expected_answer_contains: ["Bonusaktion"]
+    expected_section: "4.3"
     notes: "Keyword-case: exakter Regelbegriff. Overlap mit p005, aber fokussiert auf Einzelterm statt Paarbegriff — prüft ob Hybrid-Ranking den Bonusaktion-Chunk vor reinen Aktions-Chunks priorisiert."
 
   - id: k007
     question: "Was ist der Blaue Monolith?"
-    source_type: markdown
+    source_type: pdf
     category: item
-    expected_sources: ["Gegenstände/Blauer Monolith.md"]
-    expected_answer_contains: ["Monolith"]
-    notes: "Keyword-case: eines von sieben Farb-Monolith-Artefakten. Reine Vektor-Suche drifted zu 'Roter/Grüner Monolith' ab (semantisch fast identisch), BM25 verankert auf 'Blauer'."
+    expected_sources:
+      - "pnp_regelbuch.pdf"
+      - "Orte/Verlorene Magierstädte/Thal'Emyra.md"
+      - "Orte/Arkenfeld.md"
+    expected_answer_contains: ["Prisma"]
+    expected_section: "7.3"
+    notes: "Keyword-case: eines von sieben Farb-Monolith-Artefakten (Kapitel 7.3, alle im selben Abschnitt). Reine Vektor-Suche drifted zu 'Roter/Grüner Monolith' ab, BM25 verankert auf 'Blauer'. 'Prisma' (Prismaanker/Prismaform) gibt es nur beim Blauen."
 
   - id: k008
     question: "Was ist der Ephraskal-Handschuh?"
@@ -712,35 +1524,38 @@ pairs:
 
   - id: k010
     question: "Was bewirkt der Glutschmiedehammer?"
-    source_type: markdown
+    source_type: pdf
     category: item
-    expected_sources: ["Gegenstände/Glutschmiedehammer.md"]
-    expected_answer_contains: ["Glutschmiedehammer"]
-    notes: "Keyword-case: dreiteiliges Kompositum, BM25-affin."
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Glutschmiedehammer", "Konstrukt"]
+    expected_section: "7.2.1"
+    notes: "Keyword-case: dreiteiliges Kompositum, BM25-affin. Jetzt im PDF (7.2.1 Magische Waffen); Distraktor: Glutherz-Hammer (7.3)."
 
   - id: k011
     question: "Was ist der Sequenz-Schlüssel?"
     source_type: markdown
     category: item
     expected_sources: ["Gegenstände/Sequenz-Schlüssel.md"]
-    expected_answer_contains: ["Sequenz"]
+    expected_answer_contains: ["Sequenz", "Venthir"]
     notes: "Keyword-case: abstraktes Kompositum, semantisch nahe an 'Schlüssel'-Kontexten — BM25 verankert auf 'Sequenz'."
 
   - id: k012
     question: "Was kann der Mantel der Zwischenzeit?"
-    source_type: markdown
+    source_type: pdf
     category: item
-    expected_sources: ["Gegenstände/Mantel der Zwischenzeit (Legendär).md"]
-    expected_answer_contains: ["Zwischenzeit"]
-    notes: "Keyword-case: legendäres Artefakt mit sehr spezifischem Begriff 'Zwischenzeit'."
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Zwischenzeit", "Bonusaktion"]
+    expected_section: "7.3"
+    notes: "Keyword-case: legendäres Artefakt mit sehr spezifischem Begriff 'Zwischenzeit'. Jetzt im PDF (7.3)."
 
   - id: k013
     question: "Was ist das Schicksalsdeck?"
-    source_type: markdown
+    source_type: pdf
     category: item
-    expected_sources: ["Gegenstände/Schicksalsdeck.md"]
-    expected_answer_contains: ["Schicksalsdeck"]
-    notes: "Keyword-case: kurzer, hochspezifischer Kompositum-Term."
+    expected_sources: ["pnp_regelbuch.pdf", "Organisationen/Schattenorden/Schattenorden.md"]
+    expected_answer_contains: ["Schicksalsdeck", "W20"]
+    expected_section: "7.3"
+    notes: "Keyword-case: kurzer, hochspezifischer Kompositum-Term. Regeln jetzt im PDF (7.3, W20-Tabelle); Herkunft (Venthir/Alaric) im Schattenorden."
 
   - id: k014
     question: "Was ist das Siegelrunen-Schwert?"
@@ -839,7 +1654,7 @@ pairs:
     source_type: markdown
     category: lore
     expected_sources: ["Organisationen/Orden der letzten Dämmerung/Orden der Letzten Dämmerung.md"]
-    expected_answer_contains: ["Dämmerung"]
+    expected_answer_contains: ["Dämmerung", "Sol Invictus"]
 
   - id: m016
     question: "Was ist Chronos, der Geheimbund der Zeit?"
@@ -888,7 +1703,7 @@ pairs:
     source_type: markdown
     category: npc
     expected_sources: ["Organisationen/Schattenorden/Wichtige NPCs/Alaric von Lysander.md"]
-    expected_answer_contains: ["Alaric"]
+    expected_answer_contains: ["Alaric", "Archon"]
     notes: "Tiefe Verschachtelung in Organisations-Unterordner."
 
   - id: m023
@@ -903,7 +1718,7 @@ pairs:
     source_type: markdown
     category: location
     expected_sources: ["Orte/Verlorene Magierstädte/Thal'Emyra.md"]
-    expected_answer_contains: ["Thal"]
+    expected_answer_contains: ["Thal", "Arkenfeld"]
     notes: "Apostroph-Name in Unterordner — testet Pfad- und Token-Robustheit."
 
   - id: m025
@@ -952,4 +1767,600 @@ pairs:
     source_type: markdown
     category: adventure
     expected_sources: ["Geschichte - Söldner/Akt 3 - Mandate der Macht/3. Spiegelbruch/Spiegelbruch (III-3).md"]
-    expected_answer_contains: ["Spiegelbruch"]
+    expected_answer_contains: ["Spiegelbruch", "Isolde"]
+
+  # ─────────────────────────────────────────
+  # VAULT-DETAILFRAGEN (m026–m065)
+  # Fragen gegen einzelne Abschnitte/Tabellen statt "Wer ist X?".
+  # Quellen: Orte, NPCs, Gegner, Organisationen, Dämonen.
+  # ─────────────────────────────────────────
+
+  # — Arkenfeld & Thal'Emyra —
+
+  - id: m026
+    question: "In welchem Viertel von Arkenfeld liegt der Kräuterladen Sonnenquell und wem gehört er?"
+    source_type: markdown
+    category: location
+    expected_sources: ["Orte/Arkenfeld.md"]
+    expected_answer_contains: ["Dachstein", "Amara"]
+    notes: "Sub-Section-Recall: Info steht nur in der Landmarks-Zeile der Dachsteinviertel-Tabelle."
+
+  - id: m027
+    question: "Welche Taverne gibt es im Bruchgraben und wer ist dort anzutreffen?"
+    source_type: markdown
+    category: location
+    expected_sources: ["Orte/Arkenfeld.md"]
+    expected_answer_contains: ["Ochsen", "Bargrun"]
+    notes: "Tabellenzelle in ### Bruchgraben."
+
+  - id: m028
+    question: "Welche drei Wege führen zum Veylana-Tempel unter Arkenfeld?"
+    source_type: markdown
+    category: location
+    expected_sources:
+      - "Orte/Arkenfeld.md"
+      - "Orte/Verlorene Magierstädte/Thal'Emyra.md"
+    expected_answer_contains: ["Kinder des Erzes", "Schwestern"]
+    notes: "Multi-Source: steht in beiden Dateien leicht unterschiedlich formuliert (Verhüllte Passage vs. Kanal)."
+
+  - id: m029
+    question: "Welche Thal'Emyra-Schicht liegt unter welchem Viertel von Arkenfeld?"
+    source_type: markdown
+    category: lore
+    expected_sources:
+      - "Orte/Arkenfeld.md"
+      - "Orte/Verlorene Magierstädte/Thal'Emyra.md"
+    expected_answer_contains: ["Gotteslicht", "Bruchgraben"]
+    notes: "Mapping-Tabelle (Verborgenes Erbe) in Arkenfeld.md bzw. 'Arkenfeld als Nachfolgestadt' in Thal'Emyra.md."
+
+  - id: m030
+    question: "Wer kontrolliert Arkenfeld während SÖLDNER3 und wer befreit die Stadt?"
+    source_type: markdown
+    category: location
+    expected_sources: ["Orte/Arkenfeld.md"]
+    expected_answer_contains: ["Läuterer", "Kanzlei"]
+    notes: "Steckbrief-Tabelle mit Zeitbezug (Kontrolle normal / SÖLDNER3 / nach SÖLDNER3)."
+
+  - id: m031
+    question: "Wie wurde Thal'Emyra zerstört und was bedeutet K-37?"
+    source_type: markdown
+    category: lore
+    expected_sources:
+      - "Orte/Verlorene Magierstädte/Thal'Emyra.md"
+      - "Organisationen/Schattenorden/Wichtige NPCs/Alaric von Lysander.md"
+    expected_answer_contains: ["Alaric"]
+    notes: "Alias-Test: 'K-37' ist Alias in Thal'Emyra.md und Abschnitt in Alaric.md."
+
+  - id: m032
+    question: "Wer war Eona von Lysander?"
+    source_type: markdown
+    category: npc
+    expected_sources:
+      - "Orte/Verlorene Magierstädte/Thal'Emyra.md"
+      - "Organisationen/Schattenorden/Wichtige NPCs/Alaric von Lysander.md"
+    expected_answer_contains: ["Alaric"]
+    notes: "Entität ohne eigene Datei — nur als Abschnitt in Thal'Emyra.md und in Alarics Hintergrund."
+
+  - id: m033
+    question: "Was ist Veylana?"
+    source_type: markdown
+    category: lore
+    expected_sources: ["Orte/Verlorene Magierstädte/Thal'Emyra.md"]
+    expected_answer_contains: ["Gleichgewicht"]
+    notes: "Götter/Veylana - Nebelgöttin.md ist leer (0 Byte) — die Antwort muss aus 'Veylana — Das Prinzip' in Thal'Emyra.md kommen."
+
+  - id: m034
+    question: "Was ist der Unterschied zwischen Thal'Emyra und Venthir?"
+    source_type: markdown
+    category: lore
+    expected_sources: ["Orte/Verlorene Magierstädte/Thal'Emyra.md"]
+    expected_answer_contains: ["Resonanz"]
+    notes: "Vergleichstabelle 'Resonanz statt Verschmelzung'. Distraktor: Venthir.md."
+
+  # — Malek Nocthar —
+
+  - id: m035
+    question: "Welche Klassen und Eigenheiten hat Malek Nocthar?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["NPCs/Malek Nocthar.md"]
+    expected_answer_contains: ["Dunkle Magie", "Schurke"]
+    notes: "Abschnitt 'Rolle' — liegt hinter großen sim-Tabellen."
+
+  - id: m036
+    question: "Welche Untoten hat Malek Nocthar gespeichert?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["NPCs/Malek Nocthar.md"]
+    expected_answer_contains: ["Ardomis", "Rhadomir"]
+    notes: "Tabelle 'Gespeicherte Untote'."
+
+  - id: m037
+    question: "Warum vertraut Malek Nocthar keinen Lebenden mehr?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["NPCs/Malek Nocthar.md"]
+    expected_answer_contains: ["verra"]
+    notes: "Motivation/Hintergrund — Söldnertrupp hat ihn verraten. Vault nutzt ae/oe/ue-Umschrift ('Soeldnertrupp')."
+
+  # — Gegner —
+
+  - id: m038
+    question: "Welche Fähigkeiten setzt der Kultpriester ein?"
+    source_type: markdown
+    category: enemy
+    expected_sources: ["Gegner/Kultpriester.md"]
+    expected_answer_contains: ["Läuterndes Feuer"]
+    notes: "Taktik + sim-Tabellen; Fluch der Unreinheit steht nur in den alten Vault-Werten."
+
+  - id: m039
+    question: "Warum ist die Nebelerscheinung so schwer zu treffen?"
+    source_type: markdown
+    category: enemy
+    expected_sources: ["Gegner/Nebelerscheinung.md"]
+    expected_answer_contains: ["50"]
+    notes: "Passiv 'Verschwimmen' — 50 % Fehlschlag nach dem Trefferwurf."
+
+  - id: m040
+    question: "Wie bekämpft man Rankenwesen am besten?"
+    source_type: markdown
+    category: enemy
+    expected_sources: ["Gegner/Rankenwesen.md"]
+    expected_answer_contains: ["Feuer"]
+    notes: "Feuerempfindlich + Flächenangriffe; Datei enthält zwei Gegnertypen (Rankenschwarm, Dornenranke)."
+
+  - id: m041
+    question: "Wie kann man den Kampf gegen den Hüter der Passage vermeiden?"
+    source_type: markdown
+    category: enemy
+    expected_sources:
+      - "Gegner/Bossgegner/Hüter der Passage.md"
+      - "Gegenstände/Sequenz-Schlüssel.md"
+    expected_answer_contains: ["Sequenz"]
+    notes: "Abbruch-Optionen: Sequenz-Schlüssel, GESELLSCHAFT 8+, WISSEN 7+."
+
+  - id: m042
+    question: "Welche zwei Phasen hat der Kampf gegen den Hüter der Passage?"
+    source_type: markdown
+    category: enemy
+    expected_sources: ["Gegner/Bossgegner/Hüter der Passage.md"]
+    expected_answer_contains: ["Berechtigung"]
+    notes: "Phase 1 geistiger Druck (Berechtigungsprüfung, SP-Schaden), Phase 2 physischer Kampf."
+
+  - id: m043
+    question: "Wie macht man Siegel-Duelist Aldric schlagbar?"
+    source_type: markdown
+    category: enemy
+    expected_sources: ["Gegner/Bossgegner/Siegel-Duelist Aldric.md"]
+    expected_answer_contains: ["Knoten"]
+    notes: "Tabelle 'Schwächen & taktische Optionen' — Knoten zurückerobern, Fokuskristall zerstören."
+
+  - id: m044
+    question: "Was passiert, wenn Siegel-Duelist Aldric unter 20 Prozent seiner Lebenspunkte fällt?"
+    source_type: markdown
+    category: enemy
+    expected_sources: ["Gegner/Bossgegner/Siegel-Duelist Aldric.md"]
+    expected_answer_contains: ["Knoten"]
+    notes: "Kampfverlauf-Tabelle — sprengt den Knoten und flieht."
+
+  # — Vincar —
+
+  - id: m045
+    question: "Wer ist Vincar und an wen ist er gebunden?"
+    source_type: markdown
+    category: lore
+    expected_sources: ["Dämonen/Chronoversum/Vincar.md"]
+    expected_answer_contains: ["Rhadomir"]
+    notes: "Doppelt eingesperrt: gebunden an Rhadomir, der im Schwarzen Monolithen versiegelt ist."
+
+  - id: m046
+    question: "Was bewirkt der Bindungsname bei Vincar?"
+    source_type: markdown
+    category: lore
+    expected_sources: ["Dämonen/Chronoversum/Vincar.md"]
+    expected_answer_contains: ["Zügeln", "Peitschen"]
+    notes: "Optionale Regel 'Bindungsname'."
+
+  # — Orden der Letzten Dämmerung —
+
+  - id: m047
+    question: "Welche Ausrüstung trägt Escanor?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["Organisationen/Orden der letzten Dämmerung/Escanor, Flamme des Zeniths.md"]
+    expected_answer_contains: ["Rhitta"]
+
+  - id: m048
+    question: "Welchen Decknamen hat Escanor und zu welcher Fraktion gehört er?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["Organisationen/Orden der letzten Dämmerung/Escanor, Flamme des Zeniths.md"]
+    expected_answer_contains: ["Solmar"]
+    notes: "Info steht ganz oben ohne Heading, neben einem Bild-Embed."
+
+  - id: m049
+    question: "Wie ist der Orden der Letzten Dämmerung hierarchisch aufgebaut?"
+    source_type: markdown
+    category: lore
+    expected_sources: ["Organisationen/Orden der letzten Dämmerung/Orden der Letzten Dämmerung.md"]
+    expected_answer_contains: ["Solaris", "Glutw"]
+    notes: "Hierarchie-Tabelle. Vault nutzt ae/oe/ue-Umschrift ('Glutwaechter')."
+
+  - id: m050
+    question: "Was ist eine Dämmerlage?"
+    source_type: markdown
+    category: lore
+    expected_sources: ["Organisationen/Orden der letzten Dämmerung/Orden der Letzten Dämmerung.md"]
+    expected_answer_contains: ["Realit"]
+    notes: "Umlaut-Test: Datei schreibt 'Daemmerlage'/'Realitaet'; Frage mit Umlauten."
+
+  - id: m051
+    question: "Wer oder was ist Sol Invictus wirklich?"
+    source_type: markdown
+    category: lore
+    expected_sources:
+      - "Organisationen/Orden der letzten Dämmerung/Sol Invictus.md"
+      - "Organisationen/Orden der letzten Dämmerung/Orden der Letzten Dämmerung.md"
+      - "Dämonen/Infernum/Rhaz'Muell, der Knotenfürst.md"
+    expected_answer_contains: ["Rhaz"]
+    notes: "SL-Geheimnis: Sol Invictus = Rhaz'Muell. Sol Invictus.md verweist nur darauf — die Auflösung steht im Orden ('Verborgenes') und in der Rhaz'Muell-Datei."
+
+  - id: m052
+    question: "Welche Wirkung hat der Solarthron auf Dämonen und Zeitmagie?"
+    source_type: markdown
+    category: lore
+    expected_sources:
+      - "Organisationen/Orden der letzten Dämmerung/Sol Invictus.md"
+      - "Organisationen/Orden der letzten Dämmerung/Orden der Letzten Dämmerung.md"
+    expected_answer_contains: ["stabilisier"]
+    notes: "Mechanische Umgebungseffekte im Umkreis von 50 m."
+
+  - id: m053
+    question: "Was ist die Kodex-Münze?"
+    source_type: markdown
+    category: item
+    expected_sources: ["Organisationen/Orden der letzten Dämmerung/Sidequest - Die Kodex-Münze.md"]
+    expected_answer_contains: ["Aufnahme"]
+    notes: "Sidequest-Datei, Entität ohne eigene Item-Datei."
+
+  - id: m054
+    question: "Welche Leih-Ausrüstung bekommt ein Anwärter des Dämmerordens?"
+    source_type: markdown
+    category: item
+    expected_sources: ["Organisationen/Orden der letzten Dämmerung/Sidequest - Die Kodex-Münze.md"]
+    expected_answer_contains: ["Glutmantel"]
+    notes: "Tabelle in 'Stufe 1 — Die Ausstatter'."
+
+  # — Schattenorden —
+
+  - id: m055
+    question: "Wie ist der Schattenorden hierarchisch aufgebaut?"
+    source_type: markdown
+    category: lore
+    expected_sources: ["Organisationen/Schattenorden/Schattenorden.md"]
+    expected_answer_contains: ["Archon", "Sucher"]
+
+  - id: m056
+    question: "Wer sind die Meister der Verbotenen Runen im Schattenorden?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["Organisationen/Schattenorden/Meister der Pfade.md"]
+    expected_answer_contains: ["Kaelvorr", "Serynthia"]
+    notes: "INHALTLICHER WIDERSPRUCH: Meister der Pfade.md nennt Kaelvorr + Serynthia; Schattenorden.md nennt Elyndar Vaelis als Runen-Meister und Kaelvorr/Serynthia 'Pfad unklar'."
+
+  - id: m057
+    question: "Was sind die Grundsätze des Schattenordens?"
+    source_type: markdown
+    category: lore
+    expected_sources: ["Organisationen/Schattenorden/Schattenorden.md"]
+    expected_answer_contains: ["Geheimhaltung"]
+
+  - id: m058
+    question: "Was ist Haus Lysander?"
+    source_type: markdown
+    category: lore
+    expected_sources:
+      - "Organisationen/Schattenorden/Schattenorden.md"
+      - "Organisationen/Schattenorden/Wichtige NPCs/Alaric von Lysander.md"
+      - "Organisationen/Schattenorden/Wichtige NPCs/Lyssara Vaydris.md"
+    expected_answer_contains: ["Alaric"]
+    notes: "Entität ohne eigene Datei; über drei Dateien verteilt."
+
+  - id: m059
+    question: "Wer ist Thalion Feuerherz und welches Geheimnis verbirgt er?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["Organisationen/Schattenorden/Neben NPCs/Thalion Feuerherz.md"]
+    expected_answer_contains: ["Lyssara"]
+    notes: "Verschweigt seinen Familiennamen vor Lyssara/dem Orden."
+
+  - id: m060
+    question: "Wie nennen Dämonen Alaric von Lysander?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["Organisationen/Schattenorden/Wichtige NPCs/Alaric von Lysander.md"]
+    expected_answer_contains: ["Buchhalter"]
+    notes: "Kenningar-Liste tief in einer sehr langen Datei."
+
+  - id: m061
+    question: "Welche Untoten hat Lyssara Vaydris gespeichert?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["Organisationen/Schattenorden/Wichtige NPCs/Lyssara Vaydris.md"]
+    expected_answer_contains: ["Serapha"]
+    notes: "Liste nach der Zaubertabelle."
+
+  - id: m062
+    question: "Welches Doppelleben führt Prof. Sylma Vonnex?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["Organisationen/Schattenorden/Wichtige NPCs/Prof. Sylma Vonnex.md"]
+    expected_answer_contains: ["Chaos", "Akademie"]
+
+  - id: m063
+    question: "Welchen Deal bietet Veyra Dunthalis den Spielern an?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["Organisationen/Schattenorden/Wichtige NPCs/Veyra Dunthalis.md"]
+    expected_answer_contains: ["Labor"]
+    notes: "Deal bei ~⅓ LP: Dossier + Probanden gegen Fortbestand des Labors."
+
+  - id: m064
+    question: "Was ist die Schwäche von Xarathos Kyrilath im Kampf?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["Organisationen/Schattenorden/Wichtige NPCs/Xarathos Kyrilath.md"]
+    expected_answer_contains: ["Nahkampf"]
+
+  - id: m065
+    question: "Welche Effekte kann das Chaosfeld von Xarathos auslösen?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["Organisationen/Schattenorden/Wichtige NPCs/Xarathos Kyrilath.md"]
+    expected_answer_contains: ["Rückstoß", "Nulleffekt"]
+    notes: "W6-Tabelle — erste und letzte Zeile; Tabellen-Atomicity."
+
+  # — Sequenz-Schlüssel —
+
+  - id: m066
+    question: "Wie wird der Sequenz-Schlüssel kalibriert?"
+    source_type: markdown
+    category: item
+    expected_sources:
+      - "Gegenstände/Sequenz-Schlüssel.md"
+      - "Geschichte - Söldner/Akt 3 - Mandate der Macht/3. Spiegelbruch/Spiegelbruch (III-3).md"
+    expected_answer_contains: ["Kollegium"]
+    notes: "Drei Proben (WISSEN 6+, ZAUBERMANIPULATION 7+, MAGIESINN 6+) — steht in beiden Dateien."
+
+  - id: m067
+    question: "Wer trägt den Sequenz-Schlüssel, bevor die Spieler ihn bekommen?"
+    source_type: markdown
+    category: item
+    expected_sources: ["Gegenstände/Sequenz-Schlüssel.md"]
+    expected_answer_contains: ["Edric"]
+
+  # ─────────────────────────────────────────
+  # ABENTEUER-DETAILS (a016–a031)
+  # Szenen, Mechaniken und NSCs innerhalb einzelner Abenteuer.
+  # ─────────────────────────────────────────
+
+  # — Das Relikt der Verlorenen Stadt (Akademie) —
+
+  - id: a016
+    question: "Was sollen die Spieler im Abenteuer Das Relikt der Verlorenen Stadt bergen und wo?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Akademie/Das Relikt der Verlorenen Stadt.md"]
+    expected_answer_contains: ["Amulett", "Venthir"]
+    notes: "Amulett des Ältesten Rats in Venthir. Distraktor: Auftragsbrief-PDF (a006)."
+
+  - id: a017
+    question: "Wie öffnet man das Tor der verlorenen Stadt im Relikt-Abenteuer?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Akademie/Das Relikt der Verlorenen Stadt.md"]
+    expected_answer_contains: ["Rune"]
+    notes: "Vier Elementrunen aktivieren; je Rune erwacht ein Wächter; mind. einer muss überleben."
+
+  - id: a018
+    question: "Wie besiegt man den Wächter des Torus?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Akademie/Das Relikt der Verlorenen Stadt.md"]
+    expected_answer_contains: ["Barriere"]
+
+  # — Im Namen der Reinheit (I-2) —
+
+  - id: a019
+    question: "Welche Spuren können die Spieler in Im Namen der Reinheit verfolgen?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Söldner/Akt 1 - Erste Fäden/2. Im Namen der Reinheit/Im Namen der Reinheit.md"]
+    expected_answer_contains: ["Palisaden"]
+    notes: "Drei Spuren (echt → Palisadenlager, falsch → Jagdhütte/Wölfe, Köder → Morast)."
+
+  - id: a020
+    question: "Wie viel Zeit haben die Spieler, bevor beim Läuterer-Ritual die erste Gefangene stirbt?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Söldner/Akt 1 - Erste Fäden/2. Im Namen der Reinheit/Im Namen der Reinheit.md"]
+    expected_answer_contains: ["3 Runden"]
+    notes: "Timer-Tabelle im Ritual-Abschnitt."
+
+  - id: a021
+    question: "Was ist das Buch der Reinigung?"
+    source_type: markdown
+    category: item
+    expected_sources:
+      - "Geschichte - Söldner/Akt 1 - Erste Fäden/2. Im Namen der Reinheit/Im Namen der Reinheit.md"
+      - "Organisationen/Läuterer von Arkenis/Buch der Reinigung.md"
+      - "Orte/Verlorene Magierstädte/Thal'Emyra.md"
+    expected_answer_contains: ["Läuterer"]
+    notes: "Multi-Source: eigene Item-Datei, Abenteuer-Tabelle und Thal'Emyra-Bezug (verzerrte Nebelglyphen)."
+
+  - id: a022
+    question: "Wer ist Silithar und kann man ihn in Im Namen der Reinheit besiegen?"
+    source_type: markdown
+    category: enemy
+    expected_sources:
+      - "Geschichte - Söldner/Akt 1 - Erste Fäden/2. Im Namen der Reinheit/Im Namen der Reinheit.md"
+      - "Dämonen/Silithar.md"
+    expected_answer_contains: ["nicht besiegbar"]
+    notes: "Nur abwehrbar; endgültige Verbannung erst per Ritual im Veylana-Tempel (SÖLDNER3)."
+
+  - id: a023
+    question: "Was erhalten die Spieler am Ende von Im Namen der Reinheit von der Großmutter?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Söldner/Akt 1 - Erste Fäden/2. Im Namen der Reinheit/Im Namen der Reinheit.md"]
+    expected_answer_contains: ["Medaillon"]
+    notes: "Medaillon Veylanas — Foreshadowing für SÖLDNER3."
+
+  # — Der Maskenball des Winterkönigs (One-Shot) —
+
+  - id: a024
+    question: "Welche vier Masken gibt es beim Maskenball des Winterkönigs?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Weihnachts-One-Shot/Der Maskenball des Winterkönigs.md"]
+    expected_answer_contains: ["Kinderfreude", "Wärme", "Sternenlicht", "Schneeschweigen"]
+    notes: "Vier ### Sub-Sections unter 'Die vier Wintermasken' — Sub-Section-Recall."
+
+  - id: a025
+    question: "Welche Werte hat der Eisscherben-Wächter?"
+    source_type: markdown
+    category: enemy
+    expected_sources: ["Geschichte - Weihnachts-One-Shot/Der Maskenball des Winterkönigs.md"]
+    expected_answer_contains: ["14"]
+    notes: "Statblock innerhalb einer Abenteuerdatei (LP 14, RP 2)."
+
+  - id: a026
+    question: "Welches Geschenk gehört beim Maskenball zu welchem Hofgast?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Weihnachts-One-Shot/Der Maskenball des Winterkönigs.md"]
+    expected_answer_contains: ["Brandolf", "Livia"]
+
+  # — Spiegelbruch (III-3) —
+
+  - id: a027
+    question: "Was ist mit Isolde Vaer im Abenteuer Spiegelbruch los?"
+    source_type: markdown
+    category: adventure
+    expected_sources:
+      - "Geschichte - Söldner/Akt 3 - Mandate der Macht/3. Spiegelbruch/Spiegelbruch (III-3).md"
+      - "NPCs/Neben NPCs/Isolde Vaer.md"
+    expected_answer_contains: ["Nahlith"]
+
+  - id: a028
+    question: "Wie läuft der Exorzismus in Spiegelbruch ab?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Söldner/Akt 3 - Mandate der Macht/3. Spiegelbruch/Spiegelbruch (III-3).md"]
+    expected_answer_contains: ["Binden", "Entkoppeln", "Vertreiben"]
+    notes: "Drei #### Phasen — Sub-Section-Recall in der längsten der Testdateien."
+
+  - id: a029
+    question: "Warum handelt Rektor Aldwin Greve so passiv?"
+    source_type: markdown
+    category: npc
+    expected_sources: ["Geschichte - Söldner/Akt 3 - Mandate der Macht/3. Spiegelbruch/Spiegelbruch (III-3).md"]
+    expected_answer_contains: ["manipuliert"]
+    notes: "NSC ohne eigene Datei; manipuliert, nicht besessen."
+
+  - id: a030
+    question: "Welche Beweise gegen Nahlith können die Spieler in Spiegelbruch finden?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Söldner/Akt 3 - Mandate der Macht/3. Spiegelbruch/Spiegelbruch (III-3).md"]
+    expected_answer_contains: ["Genehmigung", "Spiegel"]
+    notes: "Beweis-Tabelle in Kapitel 2."
+
+  - id: a031
+    question: "Welche Auswirkungen hat Spiegelbruch auf das Finale in Venthir?"
+    source_type: markdown
+    category: adventure
+    expected_sources: ["Geschichte - Söldner/Akt 3 - Mandate der Macht/3. Spiegelbruch/Spiegelbruch (III-3).md"]
+    expected_answer_contains: ["Ruptur"]
+    notes: "Flags-Tabelle (Nahlith verbannt → Ruptur-Uhr +1; Schlüssel kalibriert)."
+
+  # ─────────────────────────────────────────
+  # CROSS-SOURCE: VAULT ↔ REGELWERK (x001–x008)
+  # Der Vault nennt eine Eigenheit/einen Zauber/ein Artefakt, die
+  # Regeldefinition steht nur im PDF. Hit zählt bei EINER Quelle — die
+  # Antwortqualität (answer_contains) zielt auf den Regelteil.
+  # ─────────────────────────────────────────
+
+  - id: x001
+    question: "Malek Nocthar hat die Eigenheit Schattenfreund – was bewirkt sie laut Regelwerk?"
+    source_type: mixed
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf", "NPCs/Malek Nocthar.md"]
+    expected_answer_contains: ["Heimlichkeit", "unsichtbar"]
+    expected_section: "6.4"
+    notes: "Kapitel 6.4 + NPC-Datei."
+
+  - id: x002
+    question: "Was bewirkt Ritterlichkeit bei Escanor?"
+    source_type: mixed
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf", "Organisationen/Orden der letzten Dämmerung/Escanor, Flamme des Zeniths.md"]
+    expected_answer_contains: ["Statuseffekt"]
+    expected_section: "6.3"
+    notes: "INHALTLICHER WIDERSPRUCH: Escanor.md beschreibt Ritterlichkeit als '1×/Tag Fähigkeit ohne Kosten', Regelwerk 6.3 als 'immun gegen Statuseffekte'. Gute Antwort benennt die Regelwirkung."
+
+  - id: x003
+    question: "Was bewirkt der legendäre Effekt von Mordlust, den Malek Nocthar beherrscht?"
+    source_type: mixed
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf", "NPCs/Malek Nocthar.md"]
+    expected_answer_contains: ["Bonusaktion"]
+    expected_section: "5.4.2"
+    notes: "Kapitel 5.4.2 — Kill resettet Aktion + Bonusaktion."
+
+  - id: x004
+    question: "Thalion Feuerherz trägt eine Phönixfeder – was kann sie?"
+    source_type: mixed
+    category: item
+    expected_sources: ["pnp_regelbuch.pdf", "Organisationen/Schattenorden/Neben NPCs/Thalion Feuerherz.md"]
+    expected_answer_contains: ["Wiederbeleb"]
+    expected_section: "7.2.4"
+    notes: "Kapitel 7.2.4 Artefakttabelle."
+
+  - id: x005
+    question: "Was bewirkt das Lethe-Band, das Lyssara Vaydris trägt?"
+    source_type: mixed
+    category: item
+    expected_sources: ["pnp_regelbuch.pdf", "Organisationen/Schattenorden/Wichtige NPCs/Lyssara Vaydris.md"]
+    expected_answer_contains: ["Erinnerung"]
+    expected_section: "7.2.4"
+    notes: "Kapitel 7.2.4 — steht identisch in beiden Quellen."
+
+  - id: x006
+    question: "Wie viele besiegte Gegner darf man mit legendärem Tote beschwören speichern und wie viele hat Lyssara Vaydris gespeichert?"
+    source_type: mixed
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf", "Organisationen/Schattenorden/Wichtige NPCs/Lyssara Vaydris.md"]
+    expected_answer_contains: ["Boss"]
+    expected_section: "5.5.6"
+    notes: "INHALTLICHER WIDERSPRUCH: Regel 5.5.6 erlaubt 2 normale / 1 normal + 1 Miniboss / 1 Boss; Lyssara hat 6 gespeichert. Testet ob beide Quellen kombiniert werden."
+
+  - id: x007
+    question: "Welchen Effekt hat die Tempoblase, die Vincar einsetzt, laut Regelwerk?"
+    source_type: mixed
+    category: mechanic
+    expected_sources: ["pnp_regelbuch.pdf", "Dämonen/Chronoversum/Vincar.md"]
+    expected_answer_contains: ["50"]
+    expected_section: "5.5.7"
+    notes: "Kapitel 5.5.7 — Projektile 50 % Fehlschlag, Zauber 50 % effektiv. Vincar.md beschreibt sie abweichend ('Rüstungen kollabieren')."
+
+  - id: x008
+    question: "Was ist der Heimkehrpfennig und bei welchem Gegner kann man ihn erbeuten?"
+    source_type: mixed
+    category: item
+    expected_sources:
+      - "pnp_regelbuch.pdf"
+      - "Geschichte - Söldner/Akt 1 - Erste Fäden/2. Im Namen der Reinheit/Im Namen der Reinheit.md"
+    expected_answer_contains: ["Kultpriester"]
+    expected_section: "7.2.4"
+    notes: "Loot-Tabelle in I-2 + Artefakttabelle 7.2.4."

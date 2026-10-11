@@ -14,6 +14,43 @@ logger = logging.getLogger(__name__)
 
 _NUMBERED_HEADING = re.compile(r'^(#{1,6})(\s+)(\*{0,2}\d+[\d.]*\s*.+)', re.MULTILINE)
 _IMAGE_REF = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
+# A word hyphenated across a line break inside a table cell ("Le-<br>benspunkten")
+_CELL_HYPHENATION = re.compile(r'(\w)-<br>(\w+)')
+_KEEP_HYPHEN_BEFORE = frozenset({"und", "oder", "bis", "sowie"})
+# Table-of-contents pages: dot leaders ("Proben . . . . . 1") or a TOC heading
+_DOT_LEADER = re.compile(r'(?:\. ){3,}')
+_TOC_HEADINGS = frozenset({"inhaltsverzeichnis", "inhalt", "table of contents", "contents"})
+_MIN_DOT_LEADERS = 5
+
+
+def _is_toc_section(heading_hierarchy: list[str], content: str) -> bool:
+    """True for a table-of-contents section.
+
+    Its chunks list every chapter title with page numbers, so they match almost
+    any question lexically and push the real rule text out of the top results.
+    """
+    top = re.sub(r'\*{1,2}', '', heading_hierarchy[0]).strip().lower() if heading_hierarchy else ""
+    return top in _TOC_HEADINGS or len(_DOT_LEADER.findall(content)) >= _MIN_DOT_LEADERS
+
+
+def _join_cell_hyphenation(md_text: str) -> str:
+    """Rejoin words split across lines inside table cells.
+
+    pymupdf4llm dehyphenates body text but keeps cell line breaks as ``<br>``,
+    so table content contains fragments like "Wir-<br>kungsdauer" that neither
+    embeddings nor BM25 match. Real hyphens stay: compounds with a capitalised
+    second part ("Kampf-<br>Probe") and elisions before a conjunction ("Boss-<br>und").
+    """
+    def join(m: re.Match) -> str:
+        """Drop the line break, and the hyphen too when it only marks a syllable split."""
+        nxt = m.group(2)
+        if nxt in _KEEP_HYPHEN_BEFORE:
+            return f"{m.group(1)}- {nxt}"
+        if nxt[0].islower() or nxt.isupper():
+            return f"{m.group(1)}{nxt}"
+        return f"{m.group(1)}-{nxt}"
+
+    return _CELL_HYPHENATION.sub(join, md_text)
 
 
 def _normalize_pdf_headings(md_text: str) -> str:
@@ -172,6 +209,7 @@ class PDFParser(BaseParser):
                 text = _apply_toc_headings(text, toc_items)
                 # 2. Fallback regex for numbered headings not in TOC
                 text = _normalize_pdf_headings(text)
+                text = _join_cell_hyphenation(text)
 
                 # Extract image references
                 if cfg.extract_images:
@@ -191,6 +229,9 @@ class PDFParser(BaseParser):
             for heading_hierarchy, section_content in sections:
                 section_content = section_content.strip()
                 if not section_content:
+                    continue
+                if _is_toc_section(heading_hierarchy, section_content):
+                    logger.info("Skipping table of contents %s in %s", heading_hierarchy, source_file)
                     continue
 
                 documents.append(ParsedDocument(

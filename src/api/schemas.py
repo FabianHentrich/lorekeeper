@@ -30,6 +30,7 @@ class QueryResponse(BaseModel):
     retrieval_scores: list[float]
     model_used: str
     latency_ms: float
+    search_query: str = ""  # question used for retrieval — differs from the input when a follow-up was condensed
 
 
 class IngestJobResponse(BaseModel):

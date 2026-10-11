@@ -127,6 +127,12 @@ def _render_retrieval_result(result: dict):
         f"K={config.get('top_k', '?')} R={config.get('top_k_rerank', '?')} "
         f"C={config.get('max_per_source', '?')} H={_hybrid_label(config.get('hybrid'))}",
     )
+    if result.get("section_total"):
+        sec_rate = result.get("section_hit_rate") or 0
+        st.caption(
+            f"Abschnitt-Treffer (expected_section): {sec_rate:.1%} "
+            f"({round(sec_rate * result['section_total'])}/{result['section_total']})"
+        )
 
     # Breakdown
     if breakdown:
@@ -143,6 +149,9 @@ def _render_retrieval_result(result: dict):
         for d in details:
             hit = d.get("hit", False)
             icon = "✅" if hit else "❌"
+            # Right file, wrong section (typical for the rulebook PDF)
+            if hit and d.get("section_hit") is False:
+                icon = "⚠️"
             qid = d.get("id", "?")
             question = d.get("question", "")
             score = d.get("top_score", 0)
@@ -157,6 +166,11 @@ def _render_retrieval_result(result: dict):
                     st.markdown("**Gefunden:**")
                     for s in d.get("retrieved_files", [])[:5]:
                         st.code(s, language=None)
+                if d.get("expected_section"):
+                    sec_icon = "✅" if d.get("section_hit") else "❌"
+                    st.markdown(f"**Abschnitt {d['expected_section']}:** {sec_icon}")
+                    for h in d.get("retrieved_headings", [])[:8]:
+                        st.code(h or "—", language=None)
 
     if errors:
         st.warning(f"{len(errors)} Fehler aufgetreten")
@@ -206,12 +220,13 @@ with tab_gs:
                 "category": p.get("category", ""),
                 "expected_sources": ", ".join(p.get("expected_sources", [])),
                 "expected_answer_contains": ", ".join(p.get("expected_answer_contains", [])),
+                "expected_section": p.get("expected_section", ""),
                 "notes": p.get("notes", ""),
             })
 
         df = pd.DataFrame(rows) if rows else pd.DataFrame(
             columns=["id", "question", "source_type", "category",
-                     "expected_sources", "expected_answer_contains", "notes"]
+                     "expected_sources", "expected_answer_contains", "expected_section", "notes"]
         )
 
         edited = st.data_editor(
@@ -221,7 +236,7 @@ with tab_gs:
                 "id": st.column_config.TextColumn("ID", width="small"),
                 "question": st.column_config.TextColumn("Frage"),
                 "source_type": st.column_config.SelectboxColumn(
-                    "Source Type", options=["markdown", "pdf", "image"], width="small",
+                    "Source Type", options=["markdown", "pdf", "image", "mixed"], width="small",
                 ),
                 "category": st.column_config.TextColumn("Kategorie", width="small"),
                 "expected_sources": st.column_config.TextColumn(
@@ -231,6 +246,11 @@ with tab_gs:
                 "expected_answer_contains": st.column_config.TextColumn(
                     "Answer Contains",
                     help="Komma-getrennte Keywords für die E2E-Prüfung",
+                ),
+                "expected_section": st.column_config.TextColumn(
+                    "Abschnitt",
+                    help="Nummerierter Abschnitt, in dem ein Treffer liegen muss, z.B.: 4.10",
+                    width="small",
                 ),
                 "notes": st.column_config.TextColumn("Notizen"),
             },
@@ -257,6 +277,7 @@ with tab_gs:
                     "expected_answer_contains": [
                         s.strip() for s in (row.get("expected_answer_contains") or "").split(",") if s.strip()
                     ],
+                    "expected_section": (row.get("expected_section") or "").strip(),
                     "notes": (row.get("notes") or "").strip(),
                 })
             try:

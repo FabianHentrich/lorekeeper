@@ -26,7 +26,7 @@ prompts — to catch regressions before they bite during a session.
 ## TL;DR
 
 ```bash
-# Fast loop: retrieval only, no LLM call (~20s for 116 questions)
+# Fast loop: retrieval only, no LLM call (~1 min for 262 questions)
 python -m evaluation.evaluate_retrieval
 
 # Override per-run parameters
@@ -42,16 +42,17 @@ Reports are written to `evaluation/results/` as timestamped JSON.
 
 ## The Golden Set (`evaluation/qa_pairs.yaml`)
 
-116 manually-curated questions covering:
+262 manually-curated questions covering:
 
 | Block | Count | What it tests |
 |---|---|---|
-| `markdown` (m001–m025) | 25 | Entity-centric Q→file recall (NPC, location, organisation, item, enemy). Covers all major vault folders — Orte, NPCs, Organisationen, Dämonen, verlorene Magierstädte. |
-| `pdf` (p001–p040) | 40 | Rulebook PDF covering all 6 chapters — Grundregeln (Ass-Regel, Kombinationswürfe), Charaktergrundlagen (Talentpunkte, Legendärer Rang), Talente, Kampfregeln (Schadenstypen, Statuseffekte, Rüstung), alle 6 nicht-magischen Klassen (Krieger, Schurke, Waldläufer, Gladiator, Mönch, Alchemist), alle 7 Magieschulen (Elementar, Tier, Zauberschmied, Golem, Dunkle, Zeit, Basisausrüstung), and 3 Eigenheiten-Kategorien. |
+| `markdown` (m001–m067) | 67 | Entity-centric Q→file recall (NPC, location, organisation, item, enemy) plus section-level detail questions (m026–m067) against single tables/sub-sections — Arkenfeld districts, Thal'Emyra, Malek, Gegner weaknesses, Dämmerorden, Schattenorden, Sequenz-Schlüssel. Some keep `source_type: pdf` because their item moved into the rulebook (m005). |
+| `pdf` (p001–p120) | 120 | Rulebook PDF covering all 7 chapters. p001–p041: one question per chapter/class. p042–p120: specific rules — Kampfunfähigkeit/Überschaden/Heroische Runde vs. Überheilung, kritischer Treffer, Schadens-/Statuseffekt-Details, Ressourcen & Level-Tabelle, Ausrüstung/Tränke/Handel, einzelne Skill- und Zauberkarten, alle 7 Eigenheiten-Gruppen, Artefakte. |
 | `image` (i001–i010) | 10 | Image questions resolve to the **associated `.md` file** (images are excluded from retrieval — see `embedding-strategy.md`) |
-| `adventure` (a001–a015) | 15 | Adventure/campaign structure, multi-act recall. Covers all 12 Söldner-Kampagnen-Abenteuer plus Weihnachts-One-Shot and Akademie-Auftragsbrief. |
+| `adventure` (a001–a031) | 31 | Adventure/campaign structure, multi-act recall (a001–a015) plus scene/mechanic questions inside single adventures (a016–a031): Relikt der Verlorenen Stadt, Im Namen der Reinheit, Maskenball des Winterkönigs, Spiegelbruch. |
 | `s001–s006` **structure tests** | 6 | Sub-section recall, multi-source diversity, table atomicity, identity-layer, wikilink cross-references |
 | `k001–k020` **keyword tests** | 20 | Exact-term questions designed to reward BM25 over pure vector — rare proper nouns (Rhaz'Muell, Thal'Emyra, Artheon Knisterhand Faraday), distinct compounds (Ephraskal-Handschuh, Venthir-Siegelnetz-Blaupause, Sequenz-Schlüssel), and single-color variant collisions (Blauer/Roter/Grüner Monolith). Use with the A/B run to measure hybrid lift. |
+| `x001–x008` **cross-source** (`source_type: mixed`) | 8 | Vault file names an Eigenheit/Zauber/Artefakt whose rules live only in the PDF (e.g. Maleks Schattenfreund, Escanors Ritterlichkeit). Several flag content contradictions between vault and rulebook in `notes`. |
 
 The structure tests (`s00x`) exist specifically to catch failure modes that
 the entity tests miss:
@@ -70,12 +71,13 @@ the entity tests miss:
 ```yaml
 - id: m001
   question: "Wo liegt Arkenfeld und was ist das für ein Ort?"
-  source_type: markdown          # markdown | pdf | image
+  source_type: markdown          # markdown | pdf | image | mixed
   category: location             # label only — not stored in ChromaDB
   expected_sources:
     - "Orte/Arkenfeld.md"        # path relative to source base path
   expected_answer_contains:
     - "Arkenfeld"                # substrings the LLM answer should contain
+  expected_section: "4.10"       # optional: numbered heading a retrieved chunk must lie in
   notes: "optional"
 ```
 
@@ -92,6 +94,17 @@ the metric stable across path-separator quirks and lets multi-source
 questions be marked as hits even if only one of several expected files is
 returned — the per-question `details` block in the JSON report shows
 exactly what was retrieved.
+
+For the rulebook this means a hit is almost always true — every chunk
+comes from `pnp_regelbuch.pdf`, so the wrong section still counts. That is
+what `expected_section` is for: a numbered heading prefix (`"4.10"`) that at
+least one retrieved chunk heading must start with. Sub-sections count
+(`"5.4"` matches `5.4.1 Krieger`), siblings don't (`"4.1"` ≠ `4.10`). The
+report adds `section_hit_rate`, `section_total` and `section_misses`
+(with the retrieved headings); the Evaluation page marks "right file,
+wrong section" with ⚠️. For the end-to-end check, pick
+`expected_answer_contains` keywords that exist only in the correct section
+(e.g. `Todeszähler` for Überschaden, not `Überheilung`).
 
 ---
 

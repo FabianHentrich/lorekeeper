@@ -222,7 +222,7 @@ lorekeeper/
 │   └── test_code_quality.py       # ruff check + mypy als Teil von pytest
 │
 ├── evaluation/
-│   ├── qa_pairs.yaml              # Golden Set: 40 Fragen (markdown/pdf/image/adventure)
+│   ├── qa_pairs.yaml              # Golden Set: 262 Fragen (markdown/pdf/image/adventure/mixed)
 │   ├── evaluate.py                # End-to-End Evaluation (inkl. LLM via /query)
 │   ├── evaluate_retrieval.py      # Retrieval-Only Evaluation (kein LLM, schnell)
 │   └── results/                   # Ergebnisse als JSON
@@ -758,6 +758,12 @@ User: "Welche Feinde hat er?"
 → Condensed: "Welche Feinde hat der Krieger Aldric aus den Nordlanden?"
 ```
 
+Umgeschrieben wird nur, wenn die Frage vom Verlauf abhängt (`needs_condense()` in
+`src/conversation/manager.py`: Pronomen/Rückverweise wie „er“, „sein“, „dazu“, „dort“,
+führendes „und/aber“, „das/es“ am Satzende oder ≤ 2 Wörter). Eigenständige Fragen gehen
+unverändert ins Retrieval. Die tatsächlich gesuchte Frage steht als `search_query` in der
+Antwort; die UI zeigt sie als „🔎 Gesucht nach: …“, wenn sie umgeschrieben wurde.
+
 Das verbessert die Retrieval-Qualität erheblich, da die Standalone-Frage
 ohne Konversationskontext sinnvolle Embeddings erzeugt.
 
@@ -943,11 +949,13 @@ class SourceReference(BaseModel):
 #          "session_id": "...",
 #          "sources": [...],
 #          "model_used": "...",
+#          "search_query": "...",
 #          "usage": {"tokens_in": N, "tokens_out": N, "tokens_thinking": N},
 #          "session_usage": {"tokens_in": N, "tokens_out": N, "tokens_thinking": N}}\n\n
 # Das "done"-Event enthält:
 #   - session_id   → für Folgefragen
 #   - model_used   → Modell, das tatsächlich geantwortet hat (nach Fallback das Fallback-Modell)
+#   - search_query → Frage, mit der gesucht wurde (bei Folgefragen ggf. die umgeschriebene)
 #   - usage        → Token-Verbrauch dieser einzelnen Anfrage
 #   - session_usage → kumulierte Session-Totals (für die Header-Metric in der UI)
 # usage wird aus dem Stream extrahiert (Ollama: stream_options.include_usage,
@@ -1259,7 +1267,7 @@ OLLAMA_MODEL=gemma4:26b-a4b-q4_K_M python -m src.main
 
 ## 7. Evaluation
 
-LoreKeeper hat ein Golden Set (`evaluation/qa_pairs.yaml`, 46 Fragen) und
+LoreKeeper hat ein Golden Set (`evaluation/qa_pairs.yaml`, 262 Fragen) und
 zwei Eval-Skripte:
 
 - **`evaluation/evaluate_retrieval.py`** — schneller Loop ohne LLM, misst

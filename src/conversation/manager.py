@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -7,6 +8,34 @@ from datetime import UTC, datetime
 from src.config.manager import ConversationConfig
 
 logger = logging.getLogger(__name__)
+
+# Words that only make sense with the previous turn ("Was ist sein Ziel?", "Wie funktioniert das?")
+_REFERENCE_WORDS = frozenset({
+    "er", "ihn", "ihm", "sie", "ihr", "ihre", "ihren", "ihrem", "ihrer", "ihres", "ihnen",
+    "sein", "seine", "seinen", "seinem", "seiner", "seines", "dessen", "deren",
+    "dies", "diese", "diesen", "diesem", "dieser", "dieses",
+    "dort", "dorthin", "dabei", "dazu", "davon", "damit", "darauf", "daran", "dafür",
+    "dagegen", "darüber", "darunter", "darin", "daraus", "dahinter", "deshalb", "deswegen",
+    "genannte", "genannten", "vorherige", "vorherigen", "letzte", "letzten",
+})
+_LEADING_CONNECTORS = frozenset({"und", "aber", "oder", "auch", "sowie"})
+# "das"/"es" are articles or idioms ("Was ist das Schicksalsdeck?", "Gibt es...") — referential only at the end
+_TRAILING_REFERENCES = frozenset({"das", "es"})
+_WORD_RE = re.compile(r"[\wäöüß]+", re.IGNORECASE)
+
+
+def needs_condense(question: str) -> bool:
+    """Heuristic: does this question depend on the previous turn and need rewriting?
+
+    False positives only cost an extra LLM call; standalone questions skip the
+    rewrite so retrieval runs on exactly what the user typed.
+    """
+    words = _WORD_RE.findall(question.lower())
+    if len(words) <= 2:
+        return True
+    if words[0] in _LEADING_CONNECTORS or words[-1] in _TRAILING_REFERENCES:
+        return True
+    return any(w in _REFERENCE_WORDS for w in words)
 
 
 @dataclass

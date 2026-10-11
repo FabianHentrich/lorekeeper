@@ -267,6 +267,39 @@ def test_query_uses_condensed_question_in_qa_prompt(client, fake_services):
     assert fake_services.prompt_manager.last_qa_question == "Wer ist der Vater von Arkenfeld?"
 
 
+def test_query_skips_condense_for_standalone_question(client, fake_services):
+    """Ensure a self-contained question is retrieved verbatim even with chat history."""
+    cm = fake_services.conversation_manager
+    cm.config.condense_question = True
+    cm.get_history_for_condense = lambda sid: [{"role": "user", "content": "Wer ist Arkenfeld?"}]
+
+    async def _condense(prompt, provider):
+        raise AssertionError("condense must not run for a standalone question")
+
+    fake_services.generator.condense_question = _condense
+
+    response = client.post("/query", json={"question": "was ist überschaden"})
+    assert response.status_code == 200
+    assert fake_services.retriever.last_call["query"] == "was ist überschaden"
+    assert response.json()["search_query"] == "was ist überschaden"
+
+
+def test_query_stream_done_event_carries_condensed_search_query(client, fake_services):
+    """Ensure the UI learns which rewritten question was actually searched."""
+    cm = fake_services.conversation_manager
+    cm.config.condense_question = True
+    cm.get_history_for_condense = lambda sid: [{"role": "user", "content": "Wer ist Arkenfeld?"}]
+
+    async def _condense(prompt, provider):
+        return "Wer ist der Vater von Arkenfeld?"
+
+    fake_services.generator.condense_question = _condense
+
+    done = _parse_sse(client.post("/query/stream", json={"question": "Wer ist sein Vater?"}).text)[-1]
+    assert done["type"] == "done"
+    assert done["search_query"] == "Wer ist der Vater von Arkenfeld?"
+
+
 def test_query_falls_back_to_original_question_when_condense_fails(client, fake_services):
     """Ensure a failing condense LLM call degrades to the raw question instead of a 500."""
     cm = fake_services.conversation_manager

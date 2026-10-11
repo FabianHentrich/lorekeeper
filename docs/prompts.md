@@ -153,7 +153,9 @@ What is Arkenfeld?
 
 ### `condense` — Question Condensing
 
-Only called when `conversation.condense_question: true` and conversation history is present.
+Only called when `conversation.condense_question: true`, conversation history is present, and the
+question looks like a follow-up (`needs_condense()` in `src/conversation/manager.py` — pronouns,
+back-references, leading „und/aber“, or ≤ 2 words). Standalone questions are retrieved verbatim.
 Reformulates follow-up questions into standalone questions.
 
 **Available variables:**

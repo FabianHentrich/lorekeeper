@@ -309,6 +309,8 @@ else:
 for msg in _visible:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
+        if msg.get("search_query"):
+            st.caption(f"🔎 Gesucht nach: {msg['search_query']}")
         if msg.get("usage"):
             st.caption(_fmt_usage(msg["usage"]))
         if msg.get("sources"):
@@ -361,6 +363,7 @@ if prompt := st.chat_input("Stelle eine Frage über deine Welt..."):
             full_response = ""
             sources = []
             usage = {}
+            search_query = ""
             error_message = None
             placeholder = st.empty()
 
@@ -382,6 +385,9 @@ if prompt := st.chat_input("Stelle eine Frage über deine Welt..."):
                     st.session_state.session_id = data.get("session_id")
                     sources = data.get("sources", [])
                     usage = data.get("usage", {}) or {}
+                    # Only shown when a follow-up was rewritten before retrieval
+                    if data.get("search_query", prompt) != prompt:
+                        search_query = data["search_query"]
                     sess_usage = data.get("session_usage")
                     if sess_usage:
                         st.session_state.session_usage = sess_usage
@@ -397,6 +403,9 @@ if prompt := st.chat_input("Stelle eine Frage über deine Welt..."):
             else:
                 placeholder.markdown(full_response)
 
+                if search_query:
+                    st.caption(f"🔎 Gesucht nach: {search_query}")
+
                 if usage:
                     st.caption(_fmt_usage(usage))
 
@@ -409,6 +418,7 @@ if prompt := st.chat_input("Stelle eine Frage über deine Welt..."):
                     "content": full_response,
                     "sources": sources,
                     "usage": usage,
+                    "search_query": search_query,
                 })
 
         except requests.exceptions.ConnectionError:

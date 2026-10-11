@@ -188,6 +188,24 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 
 **Aufwand**: Gering-Mittel.
 
+### 3.10 Regelwerk-Slot im Retrieval (Vault ↔ Regelwerk)
+
+**Problem**: Fragen, die eine Vault-Entität *und* einen Regelbegriff nennen („Was bewirkt Ritterlichkeit bei Escanor?“, „Was kann Thalions Phönixfeder?“), liefern nur Chunks aus der NPC-Datei. Die Regeldefinition im PDF erreicht die Top-8 nicht — die NPC-Datei belegt alle Plätze bis zum `max_per_source`-Cap, der Rest geht an andere Vault-Dateien. Messbar im Golden Set: x002–x008 sind Abschnitt-Misses (`expected_section`), obwohl der Datei-Hit stimmt.
+
+**Lösung**: Nach dem Rerank mindestens einen Platz für die Gruppe `rules` reservieren, wenn ein Regel-Chunk unter den Kandidaten ist und einen Mindest-Rerank-Score erreicht (analog zum bestehenden Backfill im Soft-Cap). Optional nur auslösen, wenn die Frage einen Begriff enthält, der als Abschnittsüberschrift im Regelwerk existiert (Eigenheit, Zauber, Artefakt). Danach Golden Set mit Abschnittsprüfung laufen lassen; Ziel: x002–x008 treffen, ohne die übrigen 122/137 zu verschlechtern.
+
+**Aufwand**: Mittel.
+
+**Restliche Abschnitt-Misses (separat ansehen)**: Wortähnlichkeit zieht falsche Dateien („Armbrust“ → Bargrun der Armdrücker, „Verbände“ → Balancing-Notiz) und Nachbarabschnitte gewinnen (Erlernen → 5.3 statt 5.1, Vorteil/Nachteil → 1.1 statt 1.4).
+
+## 4.0 Zugriff auf Lorekeeper aus dem Netzwerk und dem Internet (falls das machbar ist)
+
+**Problem**: mein Laptop ist nicht stark genung um ein LLM laufen zu lassen. deshalb will ich meinen gaming PC laufen lassen und die UI am laptop abrufen. und dann mindetsens aus dem selben netzwerk aber potenziell auch aus dem internet wenn wir nicht zu hause sind. alternative dazu wäre nur den gemini key bezahlvariante zu nehmen. da kann man aber meines wissens nach keine Budget einstellen sodass da das finanzielle risiko steht wenn was schief geht.
+
+**Lösung**: 
+
+**Aufwand**: 
+
 ---
 
 ## Priorisierungsvorschlag
@@ -206,3 +224,4 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 | 10 | API-Authentifizierung | Mittel — nur relevant bei Netzwerk-/Docker-Betrieb | Gering-Mittel | Vor Remote-Deployment |
 | 11 | Laufenden Ingest-Job wieder aufnehmen | Gering-Mittel | Gering | Nach Bugfix-Phase |
 | 12 | Nicht-blockierender Ingest-Fortschritt | Mittel — Sources-Seite bleibt bedienbar | Gering-Mittel | Nach Bugfix-Phase, zusammen mit 11 |
+| 13 | Regelwerk-Slot im Retrieval | Mittel — Vault↔Regel-Fragen finden die Regeldefinition | Mittel | Nach Bugfix-Phase |

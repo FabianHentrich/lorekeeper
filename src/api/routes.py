@@ -23,6 +23,7 @@ from src.api.schemas import (
     StatsResponse,
     SwitchProviderRequest,
 )
+from src.conversation.manager import needs_condense
 from src.generation.generator import Generator
 from src.generation.providers.base import StreamResult
 
@@ -63,9 +64,9 @@ def _get_services():
 
 
 async def _prepare_query(request: QueryRequest):
-    """Shared condense+retrieve step. Returns (session, chunks, chunk_dicts,
-    system_prompt, qa_prompt) — qa_prompt is None when no chunks passed the
-    threshold."""
+    """Shared condense+retrieve step. Returns (session, chunks, system_prompt,
+    qa_prompt, search_query) — qa_prompt is None when no chunks passed the
+    threshold; search_query is the (possibly condensed) question used for retrieval."""
     cm, gen, condense_prov, pm, ret, _vs, _prov = _get_services()
 
     session = cm.get_or_create_session(request.session_id)
@@ -73,11 +74,15 @@ async def _prepare_query(request: QueryRequest):
 
     history = cm.get_history_for_condense(session.session_id)
     if history and cm.config.condense_question:
-        condense_prompt = pm.render_condense(history=history, question=question)
-        try:
-            question = await gen.condense_question(condense_prompt, condense_prov)
-        except Exception as e:
-            logger.warning(f"Condense failed ({e}); retrieving with the original question")
+        if needs_condense(question):
+            condense_prompt = pm.render_condense(history=history, question=question)
+            try:
+                question = await gen.condense_question(condense_prompt, condense_prov)
+                logger.info(f"Condensed question: {request.question!r} → {question!r}")
+            except Exception as e:
+                logger.warning(f"Condense failed ({e}); retrieving with the original question")
+        else:
+            logger.info(f"Condense skipped (standalone question): {question!r}")
 
     chunks = await ret.retrieve(
         query=question,
@@ -101,7 +106,7 @@ async def _prepare_query(request: QueryRequest):
         system_prompt = ""
         qa_prompt = None
 
-    return session, chunks, system_prompt, qa_prompt
+    return session, chunks, system_prompt, qa_prompt, question
 
 
 def _chunk_to_source_dict(c) -> dict:
@@ -121,7 +126,7 @@ async def query(request: QueryRequest):
     """Execute a query against the knowledge base and return the generated answer and sources."""
     start = time.time()
     _, gen, _, pm, _, _, _ = _get_services()
-    session, chunks, system_prompt, qa_prompt = await _prepare_query(request)
+    session, chunks, system_prompt, qa_prompt, search_query = await _prepare_query(request)
 
     if qa_prompt is not None:
         try:
@@ -148,6 +153,7 @@ async def query(request: QueryRequest):
         retrieval_scores=[c.score for c in chunks],
         model_used=model_used,
         latency_ms=latency_ms,
+        search_query=search_query,
     )
 
 
@@ -155,7 +161,7 @@ async def query(request: QueryRequest):
 async def query_stream(request: QueryRequest):
     """Execute a query and stream the generated answer tokens over server-sent events (SSE)."""
     _, gen, _, pm, _, _, prov = _get_services()
-    session, chunks, system_prompt, qa_prompt = await _prepare_query(request)
+    session, chunks, system_prompt, qa_prompt, search_query = await _prepare_query(request)
     sources = [_chunk_to_source_dict(c) for c in chunks]
 
     async def event_stream():
@@ -194,6 +200,7 @@ async def query_stream(request: QueryRequest):
             "session_id": session.session_id,
             "sources": sources,
             "model_used": stream_ctx.model or prov.model,
+            "search_query": search_query,
             "usage": usage,
             "session_usage": session.usage_totals,
         })

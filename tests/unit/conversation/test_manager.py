@@ -1,7 +1,7 @@
 import pytest
 
 from src.config.manager import ConversationConfig
-from src.conversation.manager import ConversationManager
+from src.conversation.manager import ConversationManager, needs_condense
 
 
 @pytest.fixture
@@ -105,3 +105,30 @@ class TestConversationManager:
         """
         assert cm.get_session("nonexistent") is None
         assert cm.get_history("nonexistent") == []
+
+
+class TestNeedsCondense:
+    """Heuristic deciding whether a follow-up is rewritten before retrieval."""
+
+    @pytest.mark.parametrize("question", [
+        "was ist überschaden",
+        "Was ist das Schicksalsdeck?",
+        "Gibt es eine Karte von Arkenfeld?",
+        "Welche Fähigkeiten hat der Waldläufer?",
+    ])
+    def test_standalone_questions_skip_condense(self, question):
+        """Self-contained questions — including 'das'/'es' as article or idiom — go to retrieval verbatim."""
+        assert needs_condense(question) is False
+
+    @pytest.mark.parametrize("question", [
+        "Wer ist sein Vater?",
+        "Welche Ausrüstung trägt er?",
+        "Wie funktioniert das?",
+        "Und der Mönch?",
+        "Was steht dazu im Regelwerk?",
+        "Warum?",
+        "Mehr Details",
+    ])
+    def test_follow_ups_need_condense(self, question):
+        """Pronouns, back-references, leading connectors and very short questions trigger the rewrite."""
+        assert needs_condense(question) is True

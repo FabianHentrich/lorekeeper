@@ -22,6 +22,21 @@ import yaml
 logger = logging.getLogger(__name__)
 
 
+def section_hit(expected_section: str, headings: list[str]) -> bool:
+    """True if any retrieved heading lies in the expected numbered section.
+
+    Headings look like "**4.10 Kampfunfähigkeit und Tod** > **Kampfunfähigkeit**";
+    "4.10" matches that and sub-sections ("5.4" matches "5.4.1 Krieger") but not
+    "4.1 Der Ablauf eines Kampfes" for "4.10".
+    """
+    for heading in headings:
+        for part in heading.replace("*", "").split(" > "):
+            part = part.strip()
+            if part.startswith(expected_section + " ") or part.startswith(expected_section + "."):
+                return True
+    return False
+
+
 def load_qa_pairs(path: str) -> list[dict]:
     """Parse the configured YAML file returning a list of dicts with questions and expected formats."""
     data = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
@@ -44,6 +59,8 @@ async def run_evaluation_with_retriever(
     """
     results = []
     hits = 0
+    section_hits = 0
+    section_total = 0
     total = len(qa_pairs)
 
     for idx, pair in enumerate(qa_pairs):
@@ -77,6 +94,7 @@ async def run_evaluation_with_retriever(
 
         latency_ms = (time.time() - start) * 1000
         retrieved_files = [c.source_file for c in chunks]
+        retrieved_headings = [c.heading for c in chunks]
 
         # Hit: any expected source filename appears in retrieved source_files
         hit = any(
@@ -85,6 +103,15 @@ async def run_evaluation_with_retriever(
         )
         if hit:
             hits += 1
+
+        # File-level hits are near-meaningless for one large PDF — every chunk is from it
+        expected_section = pair.get("expected_section", "")
+        sec_hit: bool | None = None
+        if expected_section:
+            section_total += 1
+            sec_hit = section_hit(expected_section, retrieved_headings)
+            if sec_hit:
+                section_hits += 1
 
         top_score = round(chunks[0].score, 4) if chunks else 0.0
         logger.debug(
@@ -100,7 +127,10 @@ async def run_evaluation_with_retriever(
             "category": category,
             "expected_sources": expected_sources,
             "retrieved_files": retrieved_files,
+            "retrieved_headings": retrieved_headings,
             "hit": hit,
+            "expected_section": expected_section,
+            "section_hit": sec_hit,
             "top_score": top_score,
             "latency_ms": round(latency_ms),
         })
@@ -144,8 +174,11 @@ async def run_evaluation_with_retriever(
         },
         "total_questions": total,
         "hit_rate": round(hit_rate, 3),
+        "section_hit_rate": round(section_hits / section_total, 3) if section_total else None,
+        "section_total": section_total,
         "breakdown_by_source_type": breakdown_rates,
         "misses": [r for r in results if not r.get("hit") and "error" not in r],
+        "section_misses": [r for r in results if r.get("section_hit") is False],
         "errors": [r for r in results if "error" in r],
         "details": results,
     }
@@ -217,6 +250,9 @@ def main():
     print()
     for st, stats in report["breakdown_by_source_type"].items():
         print(f"  {st:<12} {stats['hit_rate']:.1%}  ({stats['hits']}/{stats['total']})")
+    if report["section_total"]:
+        sec_hits = round(report["section_hit_rate"] * report["section_total"])
+        print(f"  {'section':<12} {report['section_hit_rate']:.1%}  ({sec_hits}/{report['section_total']})")
     print()
     if report["misses"]:
         print("Misses:")
@@ -224,6 +260,12 @@ def main():
             print(f"  [{m['id']}] {m['question'][:60]}")
             print(f"        erwartet: {m['expected_sources']}")
             print(f"        erhalten: {m['retrieved_files'][:3]}")
+    if report["section_misses"]:
+        print("Section-Misses:")
+        for m in report["section_misses"]:
+            print(f"  [{m['id']}] {m['question'][:60]}")
+            print(f"        erwartet: Abschnitt {m['expected_section']}")
+            print(f"        erhalten: {m['retrieved_headings'][:3]}")
     print(f"\nReport: {report_path}")
 
 

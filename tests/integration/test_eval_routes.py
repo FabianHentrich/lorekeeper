@@ -163,6 +163,33 @@ def test_retrieval_eval_run(client, tmp_eval_dir):
     assert result["hit_rate"] == 1.0
 
 
+def test_retrieval_eval_reports_section_hits(client, tmp_eval_dir):
+    """Questions with expected_section get a section-level verdict next to the file-level hit."""
+    import yaml
+    pairs = [
+        {"id": "t001", "question": "Was ist Arkenfeld?", "source_type": "markdown",
+         "expected_sources": ["Orte/Arkenfeld.md"], "expected_section": "4.10"},
+        {"id": "t002", "question": "Was ist Arkenfeld?", "source_type": "markdown",
+         "expected_sources": ["Orte/Arkenfeld.md"]},
+    ]
+    tmp_eval_dir.qa_path.write_text(yaml.dump({"pairs": pairs}, allow_unicode=True), encoding="utf-8")
+
+    job_id = client.post("/eval/run", json={"eval_type": "retrieval"}).json()["job_id"]
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        status = client.get(f"/eval/status/{job_id}").json()
+        if status["status"] in ("done", "error"):
+            break
+        time.sleep(0.2)
+
+    result = client.get(f"/eval/results/{status['result_file']}").json()
+    assert result["hit_rate"] == 1.0
+    assert result["section_total"] == 1
+    assert result["section_hit_rate"] == 0.0
+    assert [m["id"] for m in result["section_misses"]] == ["t001"]
+    assert result["details"][1]["section_hit"] is None
+
+
 def test_reject_concurrent_eval(client, tmp_eval_dir):
     """409 when an eval is already running to prevent OOM errors and lock contention."""
     import yaml

@@ -8,6 +8,8 @@ from src.ingestion.parsers.pdf import (
     PDFParser,
     _apply_toc_headings,
     _extract_image_docs,
+    _is_toc_section,
+    _join_cell_hyphenation,
     _normalize_pdf_headings,
 )
 
@@ -45,6 +47,47 @@ class TestNormalizePdfHeadings:
         result = _normalize_pdf_headings(text)
         assert result.count("# **1. Rassen**") == 1
         assert result.count("# **1.1 Elfen**") == 1
+
+
+class TestJoinCellHyphenation:
+    """Rejoining words that pymupdf4llm split across <br> line breaks inside table cells."""
+
+    def test_syllable_split_is_joined(self):
+        """A plain syllable split loses both the hyphen and the line break."""
+        assert _join_cell_hyphenation("| Le-<br>benspunkte |") == "| Lebenspunkte |"
+
+    def test_all_caps_split_is_joined(self):
+        """Talent names in capitals are rejoined too."""
+        assert _join_cell_hyphenation("WAHRNEH-<br>MUNG") == "WAHRNEHMUNG"
+
+    def test_capitalised_compound_keeps_hyphen(self):
+        """A capitalised second part means a real compound hyphen."""
+        assert _join_cell_hyphenation("Kampf-<br>Probe") == "Kampf-Probe"
+
+    def test_elision_before_conjunction_keeps_hyphen(self):
+        """'Mini-Boss- und Bossgegner' style elisions keep their hyphen and space."""
+        assert _join_cell_hyphenation("Boss-<br>und") == "Boss- und"
+
+    def test_plain_line_break_untouched(self):
+        """Line breaks without a trailing hyphen are not merged."""
+        assert _join_cell_hyphenation("Feuer<br>Kälte") == "Feuer<br>Kälte"
+
+
+class TestIsTocSection:
+    """Detecting table-of-contents sections that must not be indexed."""
+
+    def test_dot_leaders_detected(self):
+        """A block of chapter lines with dot leaders is a TOC, whatever its heading."""
+        content = "\n".join(f"|1.{i}|Kapitel {i} . . . . . . . . . . {i}|" for i in range(1, 7))
+        assert _is_toc_section(["**Übersicht**"], content)
+
+    def test_toc_heading_detected(self):
+        """A section titled 'Inhaltsverzeichnis' is a TOC even without dot leaders."""
+        assert _is_toc_section(["**Inhaltsverzeichnis**"], "1 Grundregeln 1")
+
+    def test_regular_section_kept(self):
+        """Normal rule text is indexed, including a stray ellipsis."""
+        assert not _is_toc_section(["**4.10 Kampfunfähigkeit und Tod**"], "Fällt ein Charakter auf 0 LP . . . dann")
 
 
 class TestApplyTocHeadings:
@@ -176,6 +219,20 @@ class TestPDFParser:
         assert len(text_docs) >= 2
         headings = [d.heading_hierarchy for d in text_docs]
         assert ["Kapitel 1", "Abschnitt A"] in headings
+
+    @patch("src.ingestion.parsers.pdf.pymupdf4llm.to_markdown")
+    def test_table_of_contents_not_indexed(self, mock_to_md, pdf_parser_no_ocr):
+        """The TOC section is dropped; the chapters after it are kept."""
+        toc = "\n".join(f"|1.{i}|Abschnitt {i} . . . . . . . . . {i}|" for i in range(1, 7))
+        mock_to_md.return_value = [
+            {"text": f"# Inhaltsverzeichnis\n{toc}\n# 1 Grundregeln\nRegeltext.", "toc_items": []},
+        ]
+
+        docs = pdf_parser_no_ocr.parse(Path("test.pdf"))
+
+        headings = [d.heading_hierarchy for d in docs]
+        assert ["Inhaltsverzeichnis"] not in headings
+        assert ["1 Grundregeln"] in headings
 
     @patch("src.ingestion.parsers.pdf.pymupdf4llm.to_markdown")
     def test_toc_items_fix_heading_levels(self, mock_to_md, pdf_parser_no_ocr):

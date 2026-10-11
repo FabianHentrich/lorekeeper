@@ -25,6 +25,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - ruff and mypy configuration in `pyproject.toml`, run as part of `pytest` via `tests/test_code_quality.py`
 
 ### Changed
+- PDF parser skips table-of-contents sections (dot leaders or an "Inhaltsverzeichnis" heading) — their chapter lists matched almost any question and crowded out the real rule text. Requires a re-index of PDF sources
+- PDF parser rejoins words hyphenated across line breaks inside table cells ("Wir-<br>kungsdauer" → "Wirkungsdauer"); body text was already dehyphenated by pymupdf4llm. Requires a re-index of PDF sources
+- Retrieval eval: optional `expected_section` per golden question checks that a retrieved chunk lies in the expected numbered rulebook section; report gains `section_hit_rate` / `section_misses`, the Evaluation page shows it and the Golden-Set editor has an "Abschnitt" column
+- Follow-up rewriting (condense) only runs when the question depends on the chat history (`needs_condense()` heuristic); standalone questions are retrieved verbatim instead of being rewritten from the previous answer
+- `/query` and the `/query/stream` `done` event return `search_query` (the question actually used for retrieval); the chat UI shows it as „🔎 Gesucht nach: …“ when it was rewritten, and the condensed question is logged in full
 - `OllamaProvider` reads `temperature`/`top_p`/`max_tokens` from `self.config` on each call instead of caching them at init, so runtime edits via the Settings page propagate without rebuilding the provider
 - Retrieval-tuning sliders moved from chat sidebar to Evaluation page (per-run overrides) and Settings page (defaults)
 - `/health` endpoint now returns instantly from a background-refreshed cache (60s interval) instead of blocking on LLM/ChromaDB checks per request
