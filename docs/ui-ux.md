@@ -89,7 +89,10 @@ With `LOREKEEPER_ADMIN_PASSWORD` set (home-network server, see `docs/operations.
   no backend calls until the password is entered;
 - the chat stays open, but the provider dropdown and the Gemini-key input are replaced by the
   active model and a **🔒 Admin-Login** expander;
-- a successful login holds for the browser session and unlocks every page.
+- a successful login holds for the browser session and unlocks every page;
+- guessing is slowed down server-wide: each wrong password waits 1 s, and 5 wrong
+  attempts within 5 minutes lock the login (both forms, all sessions) for 5 minutes.
+  Sessions that are already logged in keep working. Restarting the UI resets the lock.
 
 Without a password everything is open, as in the local single-user setup.
 

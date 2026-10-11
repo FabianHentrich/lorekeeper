@@ -203,7 +203,7 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 
 **Restliche Abschnitt-Misses (separat ansehen)**: Wortähnlichkeit zieht falsche Dateien („Armbrust“ → Bargrun der Armdrücker, „Verbände“ → Balancing-Notiz) und Nachbarabschnitte gewinnen (Erlernen → 5.3 statt 5.1, Vorteil/Nachteil → 1.1 statt 1.4).
 
-### 3.11 Spieler-/Spielleiter-Modus — ✅ Umgesetzt, Sicherheitstests offen
+### 3.11 Spieler-/Spielleiter-Modus — ✅ Erledigt (inkl. Sicherheitstests)
 
 **Problem**: Im Heimnetz nutzen auch Spieler LoreKeeper (z.B. am Handy). Der Vault enthält Spielleiter-Wissen (Plot, NPC-Geheimnisse wie Sol Invictus = Rhaz'Muell), das Spieler nicht sehen sollen; für sie ist nur das Regelwerk relevant.
 
@@ -214,7 +214,17 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 - Live geprüft: „Wer ist Sol Invictus wirklich?“ / „Was ist mit Isolde Vaer los?“ im Spieler-Modus finden nur Regelbuch/Charakterbogen, Antwort „keine Informationen“.
 - Doku: `docs/ui-ux.md` (Role selection), `docs/configuration.md` (`player_visible`), `docs/operations.md`.
 
-**Offen — Sicherheitstests** (nächster Schritt): systematisch prüfen, dass im Spieler-Modus kein Spielleiter-Inhalt in Antwort oder Quellenliste landen kann — Retrieval-Pfade (Vektor, BM25/Hybrid, Section Expansion, Rerank-Backfill), Condense/Session-Verlauf, Rollenwechsel, Cache, manipulierte Session-State-Werte, Fehlerfälle (Backend nicht erreichbar, leere Freigabe), Golden-Set-Fragen mit SL-Wissen im Spieler-Modus.
+**Sicherheitstests — ✅ Erledigt** (Details `CONTRIBUTING.md` → „Security checks“):
+- A, deterministisch: Retrieval-Pfade mit Köder-Inhalten (Vektor, BM25/Hybrid, Rerank-Backfill, Section Expansion ohne Top-Rank-Limit, Condense) — `tests/integration/test_player_mode_security.py`.
+- B, deterministisch: UI/Session (manipulierter/übriggebliebener Session-State, Folgefragen, Fail-closed bei Backend-Fehler, Freigabe-Entzug) und Login-Bruteforce — `tests/ui/test_player_mode_security.py`.
+- C, live (`pytest -m live`): alle Vault-Fragen des Golden Sets im Spieler-Modus (Vektor + Hybrid) und fünf SL-Geheimnisse über den vollen Antwortpfad — `tests/live/test_player_mode_live.py`.
+- Mutationsgeprüft (7 absichtlich eingebaute Lücken werden erkannt).
+
+**Behoben im Zuge der Tests**:
+- **Login-Bruteforce**: unbegrenzte Passwortversuche → jetzt 1 s Verzögerung pro Fehlversuch, nach 5 Fehlversuchen in 5 min Login-Sperre für 5 min (serverweit, beide Login-Formulare; angemeldete Sessions unberührt).
+- **Veraltete Freigabe**: Entzog die SL einer Quelle die Spieler-Freigabe, suchte der Chat bis zu 30 s weiter darin (Sidebar-Cache) → Speichern auf der Sources-Seite leert jetzt den gesamten Streamlit-Cache.
+- **Section Expansion verlor Chunks**: Duplikat-Erkennung nur über (Dateiname, Chunk-Nr.) — gleichnamige Dateien in zwei Quellen verdrängten sich gegenseitig → jetzt mit `source_id`.
+- `/eval/preview` akzeptiert `metadata_filters` und liefert `source_id` je Chunk (für die Live-Checks).
 
 **Aufwand**: Gering-Mittel (umgesetzt); Sicherheitstests Mittel.
 
@@ -337,23 +347,23 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 
 ## Priorisierungsvorschlag
 
-Erledigt: 3.11 Spieler-/Spielleiter-Modus (ohne Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
+Erledigt: 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
+
+**Offen am Gaming-PC (Nutzer)**: alte Autostart-Aufgabe „LoreKeeper Server“ als Admin entfernen (`Unregister-ScheduledTask -TaskName "LoreKeeper Server" -Confirm:$false`); DHCP-Reservierung für `192.168.178.34` im Router.
 
 | Reihenfolge | Punkt | Impact | Aufwand | Begründung |
 |---|---|---|---|---|
-| 1 | ~~5.2 Performance-Tests~~ | | | ✅ Erledigt (Startup-Messung mit 4.1) — dabei `localhost`-Delay gefunden und behoben |
-| 2 | ~~4.1 Heimnetz + 3.7 Zugriffsschutz~~ | | | ✅ Umgesetzt und eingerichtet (Handy-Test erfolgreich); alte Autostart-Aufgabe noch per Admin entfernen |
-| 2a | 3.11 Spieler-/Spielleiter-Modus — Sicherheitstests | Hoch — Spieler dürfen kein SL-Wissen sehen | Mittel | Feature umgesetzt; Tests sind der nächste Schritt |
-| 3 | 3.8/3.9 Ingest-Fortschritt + 5.3 UI-Reste (`/config` cachen, `/folders` cachen) | Gering-Mittel — Sources-Seite bleibt bedienbar | Gering-Mittel | Hauptursache der UI-Trägheit ist behoben; Rest sind Komfort und Millisekunden |
+| 1 | 6.0 PnP-Simulation zugreifbar machen | offen | offen | Nächstes neues Thema — erst Daten (HTML, `pnp_sim`-Exporte) gemeinsam ansehen und Umfang klären |
+| 2 | 3.10 Regelwerk-Slot im Retrieval | Mittel — SL-Fragen, die Vault und Regel mischen | Mittel | Mit Abschnittsprüfung messbar (x002–x008) |
+| 3 | 3.8/3.9 Ingest-Fortschritt + 5.3 UI-Reste (`/config`, `/folders` cachen) | Gering-Mittel — Sources-Seite bleibt bedienbar | Gering-Mittel | Komfort; UI-Trägheit selbst ist behoben |
 | 4 | 5.3 Reranker/Embeddings auf GPU (CUDA-PyTorch) | Mittel — ~0,5 s pro Frage, schnellere Indexierung | Gering (Code) | Neue Abhängigkeit — erst entscheiden |
-| 5 | 6.0 PnP-Simulation zugreifbar machen | offen | offen | Erst Daten ansehen und klären |
-| 6 | 3.10 Regelwerk-Slot im Retrieval | Mittel — Vault↔Regel-Fragen | Mittel | Mit Abschnittsprüfung messbar |
-| 7 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel | Gering | Zusammen mit 5.2-Chunk-Prüfung |
-| 8 | 3.6 Chat-Verlauf im Antwort-Prompt | Mittel — bessere Folgefragen | Gering-Mittel | Kontext jetzt 16k |
-| 9 | 3.4 Antwort-Feedback | Gering-Mittel | Gering | Quick Win |
-| 10 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | |
-| 11 | 3.2 Session-History | Mittel | Mittel | |
-| 12 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | Später, nach 4.1 |
-| 13 | 3.5 Wikilink-Expansion | Mittel | Mittel | Experimentell |
-| 14 | 3.3 Chunk-Inspector | Gering (Dev-Tool) | Gering-Mittel | Wenn nötig |
-| 15 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | Später |
+| 5 | 5.2 Startup-Messung | Gering — Regressionsschutz für den Start | Gering | Jetzt mit dem Server-Modus (4.1) möglich |
+| 6 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | Mit der Chunk-Prüfung aus 5.2 messbar |
+| 7 | 3.6 Chat-Verlauf im Antwort-Prompt | Mittel — bessere Folgefragen | Gering-Mittel | Kontext jetzt 16k; Spieler-Modus beachten (nur eigener Verlauf) |
+| 8 | 3.4 Antwort-Feedback | Gering-Mittel | Gering | Quick Win |
+| 9 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | |
+| 10 | 3.2 Session-History | Mittel | Mittel | Spieler-/SL-Sessions getrennt halten |
+| 11 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | Später; dann auch HTTPS-Frage erledigt |
+| 12 | 3.5 Wikilink-Expansion | Mittel | Mittel | Experimentell; im Spieler-Modus darf sie keine SL-Quellen nachladen |
+| 13 | 3.3 Chunk-Inspector | Gering (Dev-Tool) | Gering-Mittel | Wenn nötig |
+| 14 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | Später |

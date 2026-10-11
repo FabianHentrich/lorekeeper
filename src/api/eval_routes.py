@@ -94,6 +94,7 @@ async def retrieval_preview(req: RetrievalPreviewRequest):
         top_k_rerank=req.top_k_rerank,
         max_per_source=req.max_per_source,
         hybrid=req.hybrid,
+        metadata_filters=req.metadata_filters,
     )
     latency_ms = (time.time() - start) * 1000
 
@@ -102,6 +103,7 @@ async def retrieval_preview(req: RetrievalPreviewRequest):
     return RetrievalPreviewResponse(
         chunks=[
             RetrievedChunkResponse(
+                source_id=c.metadata.get("source_id", ""),
                 source_file=c.source_file,
                 document_type=c.document_type,
                 heading=c.heading,

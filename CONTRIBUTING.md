@@ -119,6 +119,31 @@ a small vault over HTTP and queries it via `/query/stream`, with real parsing,
 embeddings (small MiniLM model) and ChromaDB, and a fake LLM. It loads the
 embedding model, so it takes noticeably longer than the rest.
 
+### Security checks (player mode, admin login)
+
+The player mode must never hand game-master content to players. Three levels:
+
+- **Retrieval, deterministic** — `tests/integration/test_player_mode_security.py`:
+  a rules source (released) and a game-master source with secrets deliberately
+  phrased to match rule questions, real embeddings + in-memory ChromaDB, a fake
+  cross-encoder that ranks game-master text first, cap backfill, section
+  expansion without top-rank limit, vector and hybrid search, condense with a
+  bait follow-up. Neither chunks, sources nor the LLM prompt may contain a secret.
+- **UI and session, deterministic** — `tests/ui/test_player_mode_security.py`:
+  tampered/leftover session state, every follow-up filtered, fail closed when
+  `/sidebar-state` fails or lacks the list, revoking a source takes effect on the
+  next question, and the admin-login brute-force protection.
+- **Live, `pytest -m live`** (excluded by default) — `tests/live/test_player_mode_live.py`
+  against the running backend and the real index: every golden-set question about
+  vault knowledge, vector and hybrid, must retrieve only released sources; five
+  game-master secrets asked through the full answer path (LLM) must not appear.
+  Takes ~7 minutes (251 checks).
+
+The deterministic tests were mutation-checked: breaking the BM25 filter, keying
+section expansion by file name only, dropping the vector filter, merging game-master
+filters into the player filter, failing open, old cache clearing and skipping the
+lockout check each make them fail.
+
 ### Performance checks
 
 Two kinds, so a change that makes LoreKeeper noticeably less efficient shows up

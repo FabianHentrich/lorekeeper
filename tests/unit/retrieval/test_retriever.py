@@ -499,6 +499,19 @@ class TestSectionExpansion:
         vs.get_chunks_for_file.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_same_file_name_in_two_sources_is_not_deduplicated(self, embed_service):
+        """Chunks are identified by (source_id, file, index) — equal names in two sources are different chunks."""
+        other = {"id": "o", "content": "other source", "score": 0.5,
+                 "metadata": {"source_file": "regelbuch.pdf", "source_id": "other", "document_type": "pdf",
+                              "heading_hierarchy": "Anhang", "chunk_index": 10}}
+        hits = [_hit("Waldläufer > Mehrfachschuss", 14, 0.9), _hit("Waldläufer > Kurzprofil", 11, 0.8), other]
+        retriever, _ = self._retriever(embed_service, hits)
+
+        results = await retriever.retrieve("waldläufer")
+
+        assert ("other", 10) in {(r.metadata["source_id"], r.metadata["chunk_index"]) for r in results}
+
+    @pytest.mark.asyncio
     async def test_disabled_expansion_keeps_hits(self, embed_service):
         """Verify section_expansion.enabled=False leaves retrieval untouched."""
         hits = [_hit("Waldläufer > Mehrfachschuss", 14), _hit("Waldläufer > Kurzprofil", 11)]

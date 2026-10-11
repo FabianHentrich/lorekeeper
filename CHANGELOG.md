@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Security checks for the player mode: deterministic retrieval tests with game-master bait (`tests/integration/test_player_mode_security.py`), UI/session and login tests (`tests/ui/test_player_mode_security.py`), and live checks against the running backend via `pytest -m live` (`tests/live/`); mutation-checked. `/eval/preview` accepts `metadata_filters` and returns `source_id` per chunk
 - **Player / game-master mode**: before the chat opens, the user picks 🎲 Spieler or 📜 Spielleiter (`ui/roles.py`). Players only search sources marked `player_visible` (new source field, "🎲 Spieler" column on the Sources page; `/sidebar-state` returns `player_source_ids`) and see no source filters; game masters get everything. Switching roles starts a new session. A spoiler guard, not access control — no password for either role
 - **Home-network server** (roadmap 4.1/3.7): `start.ps1 -Server` (UI on `0.0.0.0`, backend stays on `127.0.0.1`, no auto-reload), `scripts/setup-lan.ps1` (firewall rule TCP 8501, Private profile only; no autostart), `LOREKEEPER_ADMIN_PASSWORD` gate for the admin pages and the chat's provider/Gemini-key controls (`ui/admin_gate.py`)
 - Performance checks (roadmap 5.2): deterministic budgets in the normal test run — backend requests per Streamlit page render/rerun/chat message (`tests/ui/`, `AppTest` + fake backend), LLM calls per request, no `localhost` service URLs — and timing checks against `tests/perf/baseline.json` via `pytest -m perf` (page render time; golden-set retrieval latency, chunks per question, section hit rate through the running backend)
@@ -53,6 +54,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `BaseLLMProvider.model` no longer defaults to `"unknown"` — provider implementations must set `self.model` in `__init__`
 
 ### Fixed
+- Admin login had no limit on password attempts — now 1 s delay per wrong attempt and a 5-minute lock after 5 wrong attempts (server-wide, both login forms; logged-in sessions unaffected)
+- Revoking a source's player release kept it searchable for up to 30 s (cached `/sidebar-state`) — saving on the Sources page now clears the whole Streamlit cache
+- Section expansion de-duplicated chunks by (file name, chunk index) only, so equally named files in two sources dropped each other's chunks — the key now includes `source_id`
 - Documentation: corrected stale values and inconsistencies across docs
 - Ingest stats: `chunks_deleted` counted orphaned files instead of deleted chunks
 - Sources page: chunk total stayed stale after an ingest; status polling looped forever when the backend was unreachable

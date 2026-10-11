@@ -22,9 +22,11 @@ class RetrievalPreviewRequest(BaseModel):
     top_k_rerank: int = 8
     max_per_source: int = 3
     hybrid: bool | None = None
+    metadata_filters: dict | None = None  # same as /query — e.g. the player-mode source filter
 
 
 class RetrievedChunkResponse(BaseModel):
+    source_id: str = ""
     source_file: str
     document_type: str
     heading: str | None

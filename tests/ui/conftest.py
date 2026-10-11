@@ -27,6 +27,13 @@ def _no_admin_password(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _fresh_login_limiter(monkeypatch):
+    """Login rate limiting is process-wide state — reset it, and skip the per-failure delay."""
+    monkeypatch.setattr(admin_gate, "_failures", [])
+    monkeypatch.setattr(admin_gate, "FAILURE_DELAY_S", 0.0)
+
+
+@pytest.fixture(autouse=True)
 def _fresh_streamlit_cache():
     """st.cache_data lives for the whole process — without clearing, a page would reuse
     another test's fake responses (e.g. the cached /sidebar-state)."""
@@ -119,12 +126,15 @@ class FakeBackend:
         self.calls: list[str] = []
         self.unknown: list[str] = []
         self.bodies: dict[str, list] = {}   # "METHOD /path" -> JSON bodies sent, in order
+        self.fail_paths: set[str] = set()   # paths that raise ConnectionError (backend down)
 
     def _handler(self, method: str):
         def handle(url, *args, **kwargs):
             path = "/" + url.split("://", 1)[-1].split("/", 1)[-1]
             self.calls.append(f"{method} {path}")
             self.bodies.setdefault(f"{method} {path}", []).append(kwargs.get("json"))
+            if path in self.fail_paths:
+                raise requests.ConnectionError(f"fake backend down: {path}")
             if path == "/query/stream":
                 return _Response({}, stream_events=_STREAM_EVENTS)
             if path not in PAYLOADS:

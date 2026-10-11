@@ -111,8 +111,9 @@ def _refresh(message: str | None = None):
     rendered right before st.rerun() would be wiped immediately."""
     if message:
         st.session_state["_flash"] = message
-    _fetch_sources.clear()
-    _fetch_stats.clear()
+    # All st.cache_data entries, process-wide — including the chat's cached /sidebar-state,
+    # so a source revoked for players stops being searched with their very next question
+    st.cache_data.clear()
     st.rerun()
 
 

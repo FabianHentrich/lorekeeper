@@ -36,9 +36,12 @@ class FakeRetrievedChunk:
 
 class FakeRetriever:
     """Mock stub intercepting similarity searches."""
+    last_filters: dict | None = None
+
     async def retrieve(self, query, top_k=None, metadata_filters=None,
                        top_k_rerank=None, max_per_source=None, hybrid=None):
-        return [FakeRetrievedChunk()]
+        FakeRetriever.last_filters = metadata_filters
+        return [FakeRetrievedChunk(metadata={"source_id": "vault"})]
 
 
 # ─── Fixtures ───────────────────────────────────────────────────────────────────
@@ -123,6 +126,16 @@ def test_preview(client):
     assert len(data["chunks"]) == 1
     assert data["chunks"][0]["source_file"] == "Orte/Arkenfeld.md"
     assert data["latency_ms"] >= 0
+
+
+def test_preview_passes_filters_and_reports_source_id(client):
+    """The live player-mode checks (tests/perf) preview with the player filter and verify source_id."""
+    player_filter = {"source_id": {"$in": ["regelbuch"]}}
+    data = client.post("/eval/preview", json={"question": "Was ist eine Marke?",
+                                              "metadata_filters": player_filter}).json()
+
+    assert FakeRetriever.last_filters == player_filter
+    assert data["chunks"][0]["source_id"] == "vault"
 
 
 # ─── Retrieval Eval Job ─────────────────────────────────────────────────────────

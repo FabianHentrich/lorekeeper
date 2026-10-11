@@ -10,9 +10,16 @@ The backend stays on 127.0.0.1 — only the UI is reachable in the home network
 - ``LOREKEEPER_API_URL`` (``.env``, default ``http://127.0.0.1:8000``) replaces the
   former "API URL" sidebar field, which let any visitor point the UI server at
   arbitrary URLs.
+
+Password guessing is slowed down server-wide (not per browser session, which an
+attacker could simply renew): every wrong attempt waits ``FAILURE_DELAY_S``, and
+``MAX_FAILURES`` wrong attempts within ``LOCKOUT_S`` lock the login for everyone
+for ``LOCKOUT_S``. Sessions that are already logged in are not affected.
 """
 import hmac
 import os
+import threading
+import time
 from pathlib import Path
 
 import streamlit as st
@@ -22,6 +29,15 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 # 127.0.0.1, not localhost: on Windows localhost resolves to IPv6 first and costs ~2 s per connection
 DEFAULT_API_URL = "http://127.0.0.1:8000"
+
+MAX_FAILURES = 5
+LOCKOUT_S = 300.0
+FAILURE_DELAY_S = 1.0
+
+# Module state lives as long as the Streamlit server process: shared by all browser sessions
+_failures: list[float] = []
+_lock = threading.Lock()
+_now = time.monotonic
 
 
 def api_url() -> str:
@@ -38,15 +54,45 @@ def is_admin() -> bool:
     return not _password() or bool(st.session_state.get("_is_admin", False))
 
 
+def lockout_remaining() -> float:
+    """Seconds until login attempts are accepted again (0 = not locked)."""
+    with _lock:
+        now = _now()
+        _failures[:] = [t for t in _failures if now - t < LOCKOUT_S]
+        if len(_failures) < MAX_FAILURES:
+            return 0.0
+        return LOCKOUT_S - (now - _failures[-MAX_FAILURES])
+
+
+def check_password(entered: str) -> bool:
+    """Constant-time check with server-wide rate limiting; False while locked out."""
+    if lockout_remaining() > 0:
+        return False
+    if hmac.compare_digest(entered.encode(), _password().encode()):
+        with _lock:
+            _failures.clear()
+        return True
+    with _lock:
+        _failures.append(_now())
+    time.sleep(FAILURE_DELAY_S)
+    return False
+
+
 def admin_login_form(key: str) -> None:
     """Password form; a correct password unlocks the admin areas for this browser session."""
     with st.form(key, clear_on_submit=True):
         entered = st.text_input("Passwort", type="password")
         if st.form_submit_button("Anmelden"):
-            if hmac.compare_digest(entered.encode(), _password().encode()):
+            if lockout_remaining() > 0:
+                st.error(f"Zu viele Fehlversuche — Anmeldung für {lockout_remaining() / 60:.0f} Minuten gesperrt.")
+                return
+            if check_password(entered):
                 st.session_state["_is_admin"] = True
                 st.rerun()
-            st.error("Falsches Passwort.")
+            if lockout_remaining() > 0:
+                st.error(f"Zu viele Fehlversuche — Anmeldung für {lockout_remaining() / 60:.0f} Minuten gesperrt.")
+            else:
+                st.error("Falsches Passwort.")
 
 
 def require_admin() -> None:
