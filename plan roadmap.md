@@ -230,7 +230,15 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 
 **Ziel**: Bei Weiterentwicklungen sofort sehen, wenn etwas deutlich ineffizienter wird — vor allem bei der Antwortzeit und der UI-Reaktion, beim Start nur einfache Hebel.
 
-**Problem**: Es wird nichts gemessen. Bekannt ist nur aus Stichproben: qwen3:14b ~17 s bis zum ersten Token (mit 29 Chunks im Kontext, weil die Section Expansion den ganzen Krieger-Abschnitt nachgeladen hat), Retrieval ~1 s, Start ~12 s (Modelle laden). Ob die Ollama-Kontextgröße (`num_ctx`) den Prompt abschneidet, ist ungeprüft.
+**Stand (2026-10-11)**:
+
+| Bereich | Status | Ergebnis |
+|---|---|---|
+| Antwortzeit | ✅ große Hebel erledigt (5.1, 5.3) | Erster Token 8,7 s → **1,1 s**, gesamt 13,9 s → **3,7 s** (Überschaden, warm); kein abgeschnittener Prompt mehr; kein 16-s-Kaltstart innerhalb 1 h |
+| Retrieval | ⚠️ offen | 0,6–0,8 s, davon Rerank 0,5–0,75 s — läuft auf der **CPU** (PyTorch-CPU-Build), siehe 5.3 |
+| UI-Reaktion | ❌ nicht gemessen, nichts umgesetzt | Hebel bekannt (5.3), erst mit 5.2 messen |
+| Start | ❌ offen | ~12 s (Embedding-Modell ~7 s, Reranker ~4 s); nur einfache Hebel geplant |
+| Regressionsschutz | ❌ offen (5.2) | Das eigentliche Ziel — derzeit fällt eine Verschlechterung nur auf, wenn man die Timings-Caption liest |
 
 ### 5.1 Messen: Stage-Timings — ✅ Erledigt
 
@@ -265,34 +273,43 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 - **Antwortzeit — Kontextfenster (gemessen)**: `ollama ps` zeigt `CONTEXT 4096` für qwen3:14b. Die Krieger-Frage brauchte 3621 Eingabe- + 919 Ausgabe-Tokens — am bzw. über dem Limit; bei größerer Section Expansion wird der Prompt-Anfang (Systemprompt) still abgeschnitten. ✅ **Erledigt**: `OLLAMA_CONTEXT_LENGTH=16384` als Benutzer-Umgebungsvariable gesetzt (der OpenAI-kompatible Endpoint ignoriert `num_ctx` pro Request, getestet). Danach `CONTEXT 16384`, 11 GB von 16 GB VRAM, weiterhin 100 % GPU, keine messbare Verlangsamung (warm: erster Token 1,1 s / 2,3 s).
 - **Antwortzeit — Modell entladen nach 5 Minuten (gemessen)**: Ollama entlädt das Modell nach 5 min Leerlauf; die erste Frage danach wartet ~16 s aufs Laden (erster Token 18 s statt 1,1 s). ✅ **Erledigt**: `OLLAMA_KEEP_ALIVE=1h` als Benutzer-Umgebungsvariable — das Modell bleibt bis 1 h nach der letzten Frage geladen (`ollama ps`: „59 minutes from now“). Belegt in der Zeit ~11 GB VRAM; `-1` hielte es dauerhaft geladen.
 - **Präzision/Kontext — Section Expansion begrenzt** ✅ **Erledigt**: `section_expansion.top_rank: 3` — expandiert nur, wenn ein Treffer der Sektion unter den ersten 3 Chunks liegt. Golden Set (0 = altes Verhalten / 3 / 2 / 1): Ø Chunks 13,9 / 12,6 / 11,9 / 10,7; expandierte Fragen 144 / 119 / 102 / 75; Abschnitt-Treffer überall 89,1 %. Bei 3 fallen nur Fehl-Expansionen weg (z.B. Geisterwesen-Statblöcke bei „Eigenheiten Geist und Psyche“); 2 und 1 schneiden bereits relevante Übersichts-Chunks ab (Akademie-Geschichte, Szenenübersicht, Arkenfeld-Steckbrief). Offen: Gesamtbudget über alle expandierten Sektionen (max. 49 Chunks bleiben möglich). Unnötige Condense-Aufrufe sind bereits entfernt (`needs_condense`).
-- **UI-Reaktion**: Chat holt vor jeder Nachricht `/config` (cachen); Sources-Seite blockiert beim Polling (3.8/3.9); Kosten eines Reruns mit langer Chat-Historie und Quellen-Expandern prüfen.
-- **Start**: nur einfache Hebel — Reranker/BM25 erst bei erster Anfrage laden (lazy), `--reload` im Server-Modus aus (4.1).
+- **Retrieval — Reranker/Embeddings auf der CPU (gemessen, offen)**: `torch 2.14.1+cpu` ist installiert, `torch.cuda.is_available()` = False. Rerank kostet 0,5–0,75 s pro Frage, Re-Indexierung des Regelwerks ~80 s. Mit CUDA-PyTorch liefen beide auf der GPU (Platz: Modell 11 GB + Reranker/Embedding ~1–2 GB von 16 GB). **Neue Abhängigkeit** (CUDA-Build von torch, ~2–3 GB Download) → vorher entscheiden; danach Timings und VRAM messen.
+- **Kontext — Gesamtbudget für Section Expansion (offen)**: Mehrere expandierte Sektionen können zusammen noch bis zu 49 Chunks ergeben (z.B. „Wie wird die Bonusaktion im Kampf eingesetzt?“). Ein Budget über alle Sektionen (z.B. max. 20 Chunks) begrenzt das; messbar mit der Chunk-Prüfung aus 5.2.
+- **UI-Reaktion (nicht gemessen, offen)**: Chat holt vor jeder Nachricht `/config` (cachen); Sources-Seite blockiert beim Polling (3.8/3.9); Kosten eines Reruns mit langer Chat-Historie und Quellen-Expandern prüfen. Erst mit den `AppTest`-Prüfungen aus 5.2 messen, dann gezielt beheben.
+- **Start (offen)**: nur einfache Hebel — `--reload` im Server-Modus aus (4.1); Reranker wird in `src/main.py` beim Start vorgeladen (~4 s) — lazy laden verschiebt die Zeit nur auf die erste Frage, lohnt also nur mit CUDA (dann deutlich schneller geladen).
+- **Generierung**: Lange Antworten (Krieger: 655 Tokens ≈ 12 s) sind durch die Modellgeschwindigkeit (~50 Token/s) begrenzt — kein Performance-Bug; Stellschraube wäre ein Prompt, der kürzere Antworten verlangt (Produktentscheidung).
 
 **Aufwand**: je Hebel Gering bis Mittel.
 
 
-## 6.0 PnP Simulation zugreifbar machen. 
- reichen die HTML-Dateien als zugriff? und welche daten sollte ich dem LLM geben? wie wird das ganze indexiert?
+## 6.0 PnP-Simulation zugreifbar machen
+
+**Fragen (zu klären)**: Reichen die HTML-Dateien als Zugriff? Welche Daten soll das LLM bekommen? Wie wird das Ganze indexiert?
+
+**Nächster Schritt**: HTML-Dateien und `pnp_sim`-Exporte gemeinsam ansehen (was steht drin, was ist generiert, was ändert sich wie oft), dann Lösung und Aufwand festlegen. Bezug: Die Vault-Gegnerseiten enthalten bereits `sim:start`/`sim:end`-Blöcke aus `pnp_sim` (`scripts/begegnungen/vault_export.py`).
+
+**Aufwand**: offen.
 
 ---
 
 ## Priorisierungsvorschlag
 
-Erledigt: 1 PDF-Parsing, 3.1 Hybrid Search.
+Erledigt: 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
 
 | Reihenfolge | Punkt | Impact | Aufwand | Begründung |
 |---|---|---|---|---|
-| 1 | ~~5.1 Stage-Timings~~ | | | ✅ Erledigt |
-| 2 | 5.3 Hebel Antwortzeit (qwen3-Thinking aus, `num_ctx`, Section Expansion) | Hoch — ~7 s weniger pro Antwort, kein abgeschnittener Prompt | Gering | Gemessen, Fix ist klein |
-| 3 | 4.1 Heimnetz + 3.7 Zugriffsschutz | Hoch — Gaming-PC als Server nutzbar | Gering | 3.7 muss vor dem Öffnen des Ports stehen |
-| 4 | 5.2 Performance-Tests | Mittel — Regressionsschutz | Mittel | Deterministische Prüfungen zuerst, zeitbasierte danach |
-| 5 | 3.8 + 3.9 Ingest-Job / Fortschritt | Mittel — Sources-Seite bleibt bedienbar | Gering-Mittel | Zusammen, Teil der UI-Reaktion |
+| 1 | 5.2 Performance-Tests (deterministisch zuerst) | Hoch — das eigentliche Ziel: Verschlechterungen sofort sehen | Mittel | Sichert die erreichten Werte ab, bevor weiter umgebaut wird; liefert die UI-Messung |
+| 2 | 4.1 Heimnetz + 3.7 Zugriffsschutz | Hoch — Gaming-PC als Server nutzbar | Gering | 3.7 muss vor dem Öffnen des Ports stehen |
+| 3 | 5.3 UI-Reaktion + 3.8/3.9 Ingest-Fortschritt | Mittel — Seiten reagieren flüssig | Gering-Mittel | Nach der Messung aus 5.2 gezielt |
+| 4 | 5.3 Reranker/Embeddings auf GPU (CUDA-PyTorch) | Mittel — ~0,5 s pro Frage, schnellere Indexierung | Gering (Code) | Neue Abhängigkeit — erst entscheiden |
+| 5 | 6.0 PnP-Simulation zugreifbar machen | offen | offen | Erst Daten ansehen und klären |
 | 6 | 3.10 Regelwerk-Slot im Retrieval | Mittel — Vault↔Regel-Fragen | Mittel | Mit Abschnittsprüfung messbar |
-| 7 | 3.6 Chat-Verlauf im Antwort-Prompt | Mittel — bessere Folgefragen | Gering-Mittel | Kontextlänge nach 5.3 im Griff |
-| 8 | 3.4 Antwort-Feedback | Gering-Mittel | Gering | Quick Win |
-| 9 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | |
-| 10 | 3.2 Session-History | Mittel | Mittel | |
-| 11 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | Später, nach 4.1 |
-| 12 | 3.5 Wikilink-Expansion | Mittel | Mittel | Experimentell |
-| 13 | 3.3 Chunk-Inspector | Gering (Dev-Tool) | Gering-Mittel | Wenn nötig |
-| 14 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | Später |
+| 7 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel | Gering | Zusammen mit 5.2-Chunk-Prüfung |
+| 8 | 3.6 Chat-Verlauf im Antwort-Prompt | Mittel — bessere Folgefragen | Gering-Mittel | Kontext jetzt 16k |
+| 9 | 3.4 Antwort-Feedback | Gering-Mittel | Gering | Quick Win |
+| 10 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | |
+| 11 | 3.2 Session-History | Mittel | Mittel | |
+| 12 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | Später, nach 4.1 |
+| 13 | 3.5 Wikilink-Expansion | Mittel | Mittel | Experimentell |
+| 14 | 3.3 Chunk-Inspector | Gering (Dev-Tool) | Gering-Mittel | Wenn nötig |
+| 15 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | Später |
