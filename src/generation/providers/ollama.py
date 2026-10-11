@@ -45,17 +45,24 @@ class OllamaProvider(BaseLLMProvider):
         )
 
     def _is_qwen3(self) -> bool:
-        """True when the configured model is a Qwen3 variant (affects /no_think handling)."""
+        """True when the configured model is a Qwen3 variant (thinking is switched off)."""
         return "qwen3" in self.model.lower()
+
+    def _thinking_off(self) -> dict:
+        """Request body extension that disables Qwen3 reasoning.
+
+        Ollama ignores the old "/no_think" prompt suffix and streams reasoning in a
+        separate ``reasoning`` field (~7 s before the first answer token);
+        ``reasoning_effort: "none"`` switches it off, ``think: false`` does not.
+        """
+        return {"reasoning_effort": "none"} if self._is_qwen3() else {}
 
     async def generate(self, prompt: str, system_prompt: str = "", **kwargs) -> LLMResponse:
         """Produce a complete, non-streamed response and return it wrapped in an LLMResponse."""
         messages: list[ChatCompletionMessageParam] = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
-        # Disable Qwen3 thinking mode for faster responses
-        user_content = prompt + " /no_think" if self._is_qwen3() else prompt
-        messages.append({"role": "user", "content": user_content})
+        messages.append({"role": "user", "content": prompt})
 
         start = time.time()
         response = await self._client.chat.completions.create(
@@ -66,6 +73,7 @@ class OllamaProvider(BaseLLMProvider):
             max_tokens=kwargs.get("max_tokens", self.config.max_tokens),
             timeout=self.config.timeout,
             stream=False,
+            extra_body=self._thinking_off(),
         )
         latency_ms = (time.time() - start) * 1000
 
@@ -102,8 +110,7 @@ class OllamaProvider(BaseLLMProvider):
         messages: list[ChatCompletionMessageParam] = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
-        user_content = prompt + " /no_think" if self._is_qwen3() else prompt
-        messages.append({"role": "user", "content": user_content})
+        messages.append({"role": "user", "content": prompt})
 
         stream = await self._client.chat.completions.create(
             model=self.model,
@@ -114,6 +121,7 @@ class OllamaProvider(BaseLLMProvider):
             timeout=self.config.timeout,
             stream=True,
             stream_options={"include_usage": True},
+            extra_body=self._thinking_off(),
         )
 
         # Buffer-based <think>…</think> filter: robust against tags split
@@ -124,14 +132,21 @@ class OllamaProvider(BaseLLMProvider):
         TAG_OPEN = "<think>"
         TAG_CLOSE = "</think>"
         MAX_PARTIAL = max(len(TAG_OPEN), len(TAG_CLOSE)) - 1
+        # Reasoning Ollama still sends in the separate field (thinking models other
+        # than Qwen3, or a server that ignores reasoning_effort) — counted, never shown
+        reasoning_chunks = 0
 
         async for chunk in stream:
+            if chunk.choices:
+                extra = getattr(chunk.choices[0].delta, "model_extra", None)
+                if isinstance(extra, dict) and extra.get("reasoning"):
+                    reasoning_chunks += 1
             usage = getattr(chunk, "usage", None)
             if usage and stream_result is not None:
                 stream_result.usage = {
                     "tokens_in": usage.prompt_tokens or 0,
                     "tokens_out": usage.completion_tokens or 0,
-                    "tokens_thinking": 0,
+                    "tokens_thinking": reasoning_chunks,
                 }
             if not (chunk.choices and chunk.choices[0].delta.content):
                 continue

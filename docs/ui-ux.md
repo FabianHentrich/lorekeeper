@@ -250,8 +250,8 @@ If `source_path` does not exist, a warning is shown.
 | Header metric (top right) | `session_usage` field of the `done` event, mirrored into `st.session_state.session_usage` | `Session-Tokens` metric with thousand separators and tooltip breakdown |
 
 `tokens_thinking` is populated by Gemini 2.5 (`thoughts_token_count`) when
-thinking is enabled. For Ollama with Qwen3, `/no_think` is set, so the value
-is always `0` and the icon is hidden.
+thinking is enabled. For Ollama with Qwen3, thinking is switched off
+(`reasoning_effort: "none"`), so the value is normally `0` and the icon is hidden.
 
 ---
 

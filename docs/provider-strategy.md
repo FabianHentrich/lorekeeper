@@ -79,7 +79,7 @@ llm:
 | ≥ 16 GB | `qwen3:14b` | Excellent |
 
 **Qwen3-specific:** LoreKeeper automatically filters `<think>...</think>` blocks out of the
-stream. Reasoning behavior is disabled via `/no_think` (faster responses).
+stream. Reasoning is disabled via `reasoning_effort: "none"` in the request body (faster responses).
 
 ### Gemini
 
@@ -171,7 +171,7 @@ provider-specific quirks.
 |---|---|---|
 | `tokens_in` | ✅ `prompt_tokens` (from OpenAI-compatible response) | ✅ `usage_metadata.prompt_token_count` |
 | `tokens_out` | ✅ `completion_tokens` | ✅ `usage_metadata.candidates_token_count` |
-| `tokens_thinking` | ❌ Always `0` — `/no_think` is set, see below | ✅ `usage_metadata.thoughts_token_count` (when thinking is enabled) |
+| `tokens_thinking` | Reasoning chunks still received in the `reasoning` field — normally `0`, see below | ✅ `usage_metadata.thoughts_token_count` (when thinking is enabled) |
 
 ### Ollama specifics
 
@@ -183,11 +183,15 @@ LoreKeeper would report zeros. The flag is set in
 per-call `StreamResult.usage`, which the route reads after the stream
 finishes (no shared provider state, so concurrent streams don't mix).
 
-`tokens_thinking` is intentionally always `0` for Qwen3: LoreKeeper appends
-`/no_think` to user prompts (see `OllamaProvider._is_qwen3`) to skip the
-`<think>...</think>` block entirely. This trades off reasoning quality for
-latency and matches Ollama's local-first cost model — there is no $-per-token
-penalty to optimize against, so the goal is "answer fast".
+Qwen3 thinking is switched off with `extra_body={"reasoning_effort": "none"}`
+(`OllamaProvider._thinking_off`). Current Ollama versions ignore the older
+`/no_think` prompt suffix and stream reasoning in a separate `reasoning` delta
+field instead of `<think>` tags — measured at ~7 s before the first answer
+token on qwen3:14b. `think: false` in the body is ignored as well. Any
+reasoning that still arrives (other thinking models, older servers) is never
+shown and is counted as `tokens_thinking`, so a non-zero value means thinking
+is back on. This trades reasoning quality for latency — there is no
+$-per-token penalty locally, so the goal is "answer fast".
 
 ### Gemini specifics
 

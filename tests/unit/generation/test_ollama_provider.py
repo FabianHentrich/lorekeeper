@@ -57,6 +57,30 @@ class TestOllamaProvider:
         assert result.provider == "ollama"
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("model, extra_body", [
+        ("qwen3:14b", {"reasoning_effort": "none"}),
+        ("llama3:8b", {}),
+    ])
+    async def test_qwen3_thinking_disabled_via_reasoning_effort(self, model, extra_body):
+        """
+        Verify Qwen3 thinking is switched off via reasoning_effort — Ollama ignores the
+        old "/no_think" prompt suffix, which must no longer be appended.
+        """
+        provider = OllamaProvider(config=OllamaConfig(model=model))
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "ok"
+        mock_response.usage = None
+        provider._client = AsyncMock()
+        provider._client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        await provider.generate("Frage")
+
+        kwargs = provider._client.chat.completions.create.call_args.kwargs
+        assert kwargs["extra_body"] == extra_body
+        assert kwargs["messages"][-1]["content"] == "Frage"
+
+    @pytest.mark.asyncio
     async def test_generate_uses_live_config_timeout(self):
         """
         Verify the request timeout comes from the config on each call, so Settings-page
@@ -194,3 +218,46 @@ class TestOllamaProvider:
 
         assert "".join(out) == "hello world"
         assert ctx.usage == {"tokens_in": 7, "tokens_out": 11, "tokens_thinking": 0}
+
+    @pytest.mark.asyncio
+    async def test_stream_counts_reasoning_field_without_emitting_it(self):
+        """
+        Verify reasoning Ollama sends in the separate field is counted as thinking
+        tokens but never reaches the answer text.
+        """
+        from openai.types.chat.chat_completion_chunk import ChoiceDelta
+
+        provider = OllamaProvider(config=OllamaConfig(model="qwen3:14b"))
+
+        def make_chunk(delta=None, usage=None):
+            chunk = MagicMock()
+            chunk.choices = [MagicMock(delta=ChoiceDelta.model_validate(delta))] if delta else []
+            chunk.usage = usage
+            return chunk
+
+        pieces = [
+            make_chunk({"content": "", "reasoning": "Hmm, "}),
+            make_chunk({"content": "", "reasoning": "überlegen"}),
+            make_chunk({"content": "Antwort"}),
+            make_chunk(usage=MagicMock(prompt_tokens=3, completion_tokens=4)),
+        ]
+
+        class FakeStream:
+            def __init__(self, items):
+                self._iter = iter(items)
+            def __aiter__(self):
+                return self
+            async def __anext__(self):
+                try:
+                    return next(self._iter)
+                except StopIteration:
+                    raise StopAsyncIteration from None
+
+        provider._client = AsyncMock()
+        provider._client.chat.completions.create = AsyncMock(return_value=FakeStream(pieces))
+
+        ctx = StreamResult()
+        out = [tok async for tok in provider.generate_stream("p", stream_result=ctx)]
+
+        assert "".join(out) == "Antwort"
+        assert ctx.usage["tokens_thinking"] == 2

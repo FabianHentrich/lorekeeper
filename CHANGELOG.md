@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - ruff and mypy configuration in `pyproject.toml`, run as part of `pytest` via `tests/test_code_quality.py`
 
 ### Changed
+- Qwen3 thinking is switched off via `reasoning_effort: "none"` instead of the `/no_think` prompt suffix, which current Ollama ignores — the model was silently reasoning for ~7 s before every answer. Reasoning that still arrives in Ollama's `reasoning` field is counted as `tokens_thinking`
 - PDF parser skips table-of-contents sections (dot leaders or an "Inhaltsverzeichnis" heading) — their chapter lists matched almost any question and crowded out the real rule text. Requires a re-index of PDF sources
 - PDF parser rejoins words hyphenated across line breaks inside table cells ("Wir-<br>kungsdauer" → "Wirkungsdauer"); body text was already dehyphenated by pymupdf4llm. Requires a re-index of PDF sources
 - Retrieval eval: optional `expected_section` per golden question checks that a retrieved chunk lies in the expected numbered rulebook section; report gains `section_hit_rate` / `section_misses`, the Evaluation page shows it and the Golden-Set editor has an "Abschnitt" column
