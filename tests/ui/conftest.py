@@ -5,6 +5,7 @@ for a stub that answers from canned payloads and records every call, so tests ca
 count backend round-trips per render without a running server.
 """
 import json
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,6 +13,25 @@ import pytest
 import requests
 
 UI_DIR = Path(__file__).resolve().parents[2] / "ui"
+
+# Pages import the shared ui/admin_gate.py like `streamlit run ui/LoreKeeper.py` does
+sys.path.insert(0, str(UI_DIR))
+import admin_gate  # noqa: E402,F401 — load .env once now, so the fixture below wins over it
+
+
+@pytest.fixture(autouse=True)
+def _no_admin_password(monkeypatch):
+    """Pages render ungated unless a test sets LOREKEEPER_ADMIN_PASSWORD (the real .env may set one)."""
+    monkeypatch.delenv("LOREKEEPER_ADMIN_PASSWORD", raising=False)
+    monkeypatch.delenv("LOREKEEPER_API_URL", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_streamlit_cache():
+    """st.cache_data lives for the whole process — without clearing, a page would reuse
+    another test's fake responses (e.g. the cached /sidebar-state)."""
+    import streamlit as st
+    st.cache_data.clear()
 
 PAGES = {
     "chat": UI_DIR / "LoreKeeper.py",
@@ -29,6 +49,7 @@ PAYLOADS: dict[str, object] = {
         "provider": {"provider": "ollama", "model": "qwen3:14b"},
         "gemini_status": {"has_key": False, "source": "none"},
         "available_categories": ["misc"],
+        "player_source_ids": ["regelbuch"],
     },
     "/sources": {"sources": [{
         "id": "vault", "path": "C:/Vault", "group": "lore", "default_category": "misc",
@@ -97,17 +118,28 @@ class FakeBackend:
     def __init__(self):
         self.calls: list[str] = []
         self.unknown: list[str] = []
+        self.bodies: dict[str, list] = {}   # "METHOD /path" -> JSON bodies sent, in order
 
     def _handler(self, method: str):
         def handle(url, *args, **kwargs):
             path = "/" + url.split("://", 1)[-1].split("/", 1)[-1]
             self.calls.append(f"{method} {path}")
+            self.bodies.setdefault(f"{method} {path}", []).append(kwargs.get("json"))
             if path == "/query/stream":
                 return _Response({}, stream_events=_STREAM_EVENTS)
             if path not in PAYLOADS:
                 self.unknown.append(f"{method} {path}")
             return _Response(PAYLOADS.get(path, {}))
         return handle
+
+
+def open_page(page: str, role: str | None = "game_master"):
+    """AppTest for a page; the chat starts with a role already picked unless role=None."""
+    from streamlit.testing.v1 import AppTest
+    at = AppTest.from_file(str(PAGES[page]), default_timeout=60)
+    if page == "chat" and role is not None:
+        at.session_state["_role"] = role
+    return at
 
 
 @pytest.fixture

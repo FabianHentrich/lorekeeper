@@ -185,6 +185,30 @@ def test_put_sources_persists_to_sidecar(client, env):
     assert [s["id"] for s in saved["sources"]] == ["neu"]
 
 
+def test_player_visible_defaults_off_and_round_trips(client, env):
+    """New sources are game-master-only; the player flag survives PUT, sources.yaml and GET."""
+    r = client.put("/sources", json={"sources": [
+        {**_src("regeln", env), "player_visible": True}, _src("lore", env),
+    ]})
+    assert r.status_code == 200
+
+    saved = {s["id"]: s for s in yaml.safe_load(env.sources_path.read_text(encoding="utf-8"))["sources"]}
+    assert saved["regeln"]["player_visible"] is True
+    assert "player_visible" not in saved["lore"]          # default (off) is not written
+    listed = {s["id"]: s["player_visible"] for s in client.get("/sources").json()["sources"]}
+    assert listed == {"regeln": True, "lore": False}
+
+
+def test_sidebar_state_lists_player_sources(client, env, monkeypatch):
+    """The chat's player mode gets exactly the sources marked player_visible."""
+    monkeypatch.setattr(main_module, "provider", SimpleNamespace(provider="ollama", model="qwen3:14b"))
+    env.config.settings.ingestion.sources[1].player_visible = True
+
+    body = client.get("/sidebar-state").json()
+
+    assert body["player_source_ids"] == ["Pen & Paper"]
+
+
 def test_put_sources_missing_field_400(client, env):
     assert client.put("/sources", json={}).status_code == 400
 

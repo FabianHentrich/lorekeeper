@@ -1,4 +1,12 @@
 # LoreKeeper Startup Script
+#
+#   .\start.ps1           Development: auto-reload on code changes, UI only on this PC (127.0.0.1)
+#   .\start.ps1 -Server   Home-network server: no auto-reload, UI reachable in the LAN, no browser
+#                         (one-time firewall rule: scripts\setup-lan.ps1, see roadmap 4.1; no autostart)
+#
+# The backend always stays on 127.0.0.1 — the UI talks to it server-side, so only port 8501 is exposed.
+
+param([switch]$Server)
 
 $ErrorActionPreference = "Stop"
 
@@ -7,7 +15,7 @@ $VENV         = Join-Path $ROOT ".venv\Scripts\Activate.ps1"
 $PYTHON       = Join-Path $ROOT ".venv\Scripts\python.exe"
 $STREAMLIT    = Join-Path $ROOT ".venv\Scripts\streamlit.exe"  # fallback check below
 $HEALTH_URL   = "http://127.0.0.1:8000/health"
-$UI_URL       = "http://localhost:8501"
+$UI_URL       = "http://127.0.0.1:8501"
 $BACKEND_PORT = 8000
 $UI_PORT      = 8501
 $TIMEOUT      = 90
@@ -16,6 +24,14 @@ $TIMEOUT      = 90
 if (-not (Test-Path $VENV)) {
     Write-Error "Virtual environment not found. Run: python -m venv .venv && pip install -r requirements.txt"
     exit 1
+}
+
+if ($Server) {
+    $envFile = Join-Path $ROOT ".env"
+    $hasPassword = (Test-Path $envFile) -and (Select-String -Path $envFile -Pattern '^\s*LOREKEEPER_ADMIN_PASSWORD\s*=\s*\S' -Quiet)
+    if (-not $hasPassword) {
+        Write-Warning "LOREKEEPER_ADMIN_PASSWORD is not set in .env - in the LAN everyone can open the admin pages (Sources, Settings, wipe)."
+    }
 }
 
 function Test-PortInUse($port) {
@@ -40,10 +56,12 @@ if (Test-PortInUse $UI_PORT) {
 # --- Start backend ----------------------------------------------------
 if (-not $skipBackend) {
     Write-Host "Starting backend..." -ForegroundColor Cyan
+    $backendArgs = @("-m", "uvicorn", "src.main:app", "--host", "127.0.0.1", "--port", "$BACKEND_PORT")
+    if (-not $Server) { $backendArgs += @("--reload", "--reload-dir", "src") }
     Start-Process -FilePath $PYTHON `
-        -ArgumentList "-m", "uvicorn", "src.main:app", "--reload", "--reload-dir", "src", "--port", "$BACKEND_PORT" `
+        -ArgumentList $backendArgs `
         -WorkingDirectory $ROOT `
-        -WindowStyle Normal
+        -WindowStyle $(if ($Server) { "Minimized" } else { "Normal" })
 
     Write-Host -NoNewline "Waiting for backend " -ForegroundColor Yellow
     $elapsed = 0
@@ -76,23 +94,31 @@ if (-not $skipBackend) {
 # --- Start UI ---------------------------------------------------------
 if (-not $skipUI) {
     Write-Host "Starting Streamlit UI..." -ForegroundColor Cyan
+    $uiAddress = if ($Server) { "0.0.0.0" } else { "127.0.0.1" }
     Start-Process -FilePath $PYTHON `
-        -ArgumentList "-m", "streamlit", "run", "ui/LoreKeeper.py", "--server.headless", "true" `
+        -ArgumentList "-m", "streamlit", "run", "ui/LoreKeeper.py", "--server.headless", "true", "--server.address", $uiAddress `
         -WorkingDirectory $ROOT `
-        -WindowStyle Normal
+        -WindowStyle $(if ($Server) { "Minimized" } else { "Normal" })
 
-    # Wait briefly for Streamlit to bind, then open browser
-    Start-Sleep -Seconds 3
-    Start-Process $UI_URL
+    if (-not $Server) {
+        # Wait briefly for Streamlit to bind, then open browser
+        Start-Sleep -Seconds 3
+        Start-Process $UI_URL
+    }
 } else {
     Write-Host "UI already running on port $UI_PORT." -ForegroundColor Green
 }
 
 # --- Summary ----------------------------------------------------------
 Write-Host ""
-Write-Host "LoreKeeper is running." -ForegroundColor Green
-Write-Host "  Backend : http://localhost:$BACKEND_PORT"
+Write-Host "LoreKeeper is running$(if ($Server) { ' (server mode)' })." -ForegroundColor Green
+Write-Host "  Backend : http://127.0.0.1:$BACKEND_PORT (this PC only)"
 Write-Host "  UI      : $UI_URL"
-Write-Host "  Docs    : http://localhost:$BACKEND_PORT/docs"
+if ($Server) {
+    Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" } |
+        ForEach-Object { Write-Host "  LAN     : http://$($_.IPAddress):$UI_PORT" }
+}
+Write-Host "  Docs    : http://127.0.0.1:$BACKEND_PORT/docs"
 Write-Host ""
 Write-Host "Close the process windows to stop." -ForegroundColor DarkGray

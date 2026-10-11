@@ -1338,6 +1338,12 @@ uvicorn src.main:app --reload --port 8000
 streamlit run ui/LoreKeeper.py
 ```
 
+Oder beides in einem Schritt: `.\start.ps1` (Entwicklung) bzw. `.\start.ps1 -Server`
+(Heimnetz-Server: UI im LAN erreichbar, Backend bleibt auf `127.0.0.1`, kein Auto-Reload).
+Einrichtung des Heimnetz-Betriebs (Passwort, Firewall; bewusst kein Autostart): `docs/operations.md`
+→ „Home-network server (LAN)“. Die UI lauscht standardmäßig nur auf `127.0.0.1`
+(`.streamlit/config.toml`); der Zugriffsschutz steckt in `ui/admin_gate.py`.
+
 > Ollama läuft als Windows-Dienst im Hintergrund — kein manuelles Starten nötig.
 > Falls nicht: `ollama serve` in einem dritten Terminal.
 

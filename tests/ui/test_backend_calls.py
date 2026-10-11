@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from tests.ui.conftest import PAGES
+from tests.ui.conftest import open_page
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -27,7 +27,7 @@ BUDGETS = {
 
 
 def _run(page: str) -> AppTest:
-    at = AppTest.from_file(str(PAGES[page]), default_timeout=60)
+    at = open_page(page)
     at.run()
     assert not at.exception, [e.message for e in at.exception]
     return at

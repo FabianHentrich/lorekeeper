@@ -5,10 +5,13 @@ Edit active prompts, save/load/delete variants, compare side-by-side.
 
 import requests
 import streamlit as st
+from admin_gate import api_url, require_admin
 
 st.set_page_config(page_title="Prompts — LoreKeeper", page_icon="✏", layout="wide")
 
-API_URL = st.session_state.get("_api_url", "http://127.0.0.1:8000")
+require_admin()
+
+API_URL = api_url()
 
 _TEMPLATE_KEYS = ("system", "qa", "condense", "no_context")
 _TEMPLATE_HELP = {

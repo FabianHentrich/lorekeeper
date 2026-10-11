@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Player / game-master mode**: before the chat opens, the user picks 🎲 Spieler or 📜 Spielleiter (`ui/roles.py`). Players only search sources marked `player_visible` (new source field, "🎲 Spieler" column on the Sources page; `/sidebar-state` returns `player_source_ids`) and see no source filters; game masters get everything. Switching roles starts a new session. A spoiler guard, not access control — no password for either role
+- **Home-network server** (roadmap 4.1/3.7): `start.ps1 -Server` (UI on `0.0.0.0`, backend stays on `127.0.0.1`, no auto-reload), `scripts/setup-lan.ps1` (firewall rule TCP 8501, Private profile only; no autostart), `LOREKEEPER_ADMIN_PASSWORD` gate for the admin pages and the chat's provider/Gemini-key controls (`ui/admin_gate.py`)
 - Performance checks (roadmap 5.2): deterministic budgets in the normal test run — backend requests per Streamlit page render/rerun/chat message (`tests/ui/`, `AppTest` + fake backend), LLM calls per request, no `localhost` service URLs — and timing checks against `tests/perf/baseline.json` via `pytest -m perf` (page render time; golden-set retrieval latency, chunks per question, section hit rate through the running backend)
 - Per-query stage timings: `/query` and the `/query/stream` `done` event return `timings` (condense, retrieval with embed/search/bm25/rerank/expand stages, time to first token, total, chunk count, prompt size); one `Query timings:` log line per request; the chat shows them under each answer
 - **Settings page** (`ui/pages/4_Settings.py`): central tab-based UI for editing retrieval, LLM, conversation and chunking defaults. Saves diff-only to `settings.yaml` and mutates the running services in place
@@ -27,6 +29,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - ruff and mypy configuration in `pyproject.toml`, run as part of `pytest` via `tests/test_code_quality.py`
 
 ### Changed
+- The Streamlit UI listens on `127.0.0.1` by default (`.streamlit/config.toml`, `start.ps1`); before, it accepted connections on all network interfaces without any protection. `start.ps1 -Server` opens it to the home network on purpose
+- The "API URL" field in the chat sidebar is gone — the backend URL comes from `LOREKEEPER_API_URL` (default `http://127.0.0.1:8000`), so visitors can no longer point the UI server at arbitrary URLs
 - Default URLs for the backend (UI, e2e eval) and Ollama use `127.0.0.1` instead of `localhost`. On Windows `localhost` resolves to IPv6 `::1` first while uvicorn and Ollama listen on IPv4 only, so every new connection waited ~2 s: measured 2000 ms vs. 3 ms per request — about 4 s on every chat message and ~10 s per Sources page render. A browser session whose sidebar "API URL" still points at `localhost` keeps the delay until changed
 - Section expansion only fires when one of the section's hits is among the first `section_expansion.top_rank` (default 3) reranked chunks — two stray low-ranked hits no longer pull an unrelated section into the context (golden set: Ø chunks 13.9 → 12.6, section hit rate unchanged)
 - Docs: Ollama needs `OLLAMA_CONTEXT_LENGTH` (16384 recommended) — the default 4096-token context was nearly exhausted by section-expanded rule questions and the OpenAI-compatible endpoint ignores a per-request `num_ctx`

@@ -13,6 +13,7 @@ from urllib.parse import quote
 import pandas as pd
 import requests
 import streamlit as st
+from admin_gate import api_url, require_admin
 
 
 def _poll_ingest_job(api_url: str, job_id: str, label: str = "Indizierung"):
@@ -84,7 +85,9 @@ _POLL_MAX_FAILURES = 30  # ~30 s of unreachable backend before giving up
 
 st.set_page_config(page_title="Sources — LoreKeeper", page_icon="⚙", layout="wide")
 
-API_URL = st.session_state.get("_api_url", "http://127.0.0.1:8000")
+require_admin()
+
+API_URL = api_url()
 
 st.title("⚙ Sources")
 st.caption(
@@ -212,6 +215,7 @@ if sources:
                 else f"{k}→{v}"
                 for k, v in (s.get("category_map") or {}).items()
             ),
+            "player_visible": bool(s.get("player_visible", False)),
         })
     df = pd.DataFrame(df_rows)
 
@@ -229,6 +233,12 @@ if sources:
                 "Category-Map",
                 help="Ordner→Kategorie oder Ordner→Kategorie:Gruppe. "
                      "Beispiel: NPCs→npc, Geschichte→story:adventure",
+            ),
+            "player_visible": st.column_config.CheckboxColumn(
+                "🎲 Spieler",
+                help="Im Spieler-Modus des Chats durchsuchbar. Nur Quellen ohne Spielleiter-Wissen "
+                     "freigeben (z.B. Regelbuch, Charakterbogen). Wirkt sofort, ohne Reindex.",
+                width="small",
             ),
         },
         hide_index=True,
@@ -262,6 +272,7 @@ if sources:
                     "default_category": (row["default_category"] or None),
                     "category_map": cmap,
                     "exclude_patterns": original.get("exclude_patterns", []),
+                    "player_visible": bool(row["player_visible"]),
                 })
 
             try:

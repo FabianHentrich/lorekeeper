@@ -4,6 +4,7 @@ Das Benutzerinterface von LoreKeeper ist vollständig in Streamlit geschrieben. 
 
 ## Inhaltsverzeichnis
 1. [Streamlit Chat Interface](#streamlit-chat-interface)
+   - [Role selection: player / game master](#role-selection-player--game-master)
 2. [Sidebar Elements](#sidebar-elements)
 3. [Header](#header)
 4. [Chat Area](#chat-area)
@@ -22,7 +23,7 @@ Das Benutzerinterface von LoreKeeper ist vollständig in Streamlit geschrieben. 
 flowchart LR
     subgraph SIDEBAR["📋 Sidebar"]
         direction TB
-        S1["🔌 API URL<br/><i>http://127.0.0.1:8000</i>"]
+        S1["🔒 Admin-Login<br/><i>nur mit LOREKEEPER_ADMIN_PASSWORD</i>"]
         S2["🔀 LLM Provider<br/>Ollama ↔ Gemini · live switch<br/><i>Active: qwen3:14b</i>"]
         S3["💚 Status<br/>🟢 healthy · ChromaDB ✅ · LLM ✅<br/><i>cached 30s</i>"]
         S4["🎯 Quellen-Filter<br/>☑ 🗺️ Lore<br/>☑ 📖 Abenteuer<br/>☑ 📋 Regelwerk"]
@@ -52,14 +53,48 @@ flowchart LR
 
 ---
 
+### Role selection: player / game master
+
+Before the chat opens, `ui/LoreKeeper.py` shows **"Wer fragt?"** with two buttons
+(logic in `ui/roles.py`):
+
+| Role | Searches | Sidebar |
+|---|---|---|
+| **🎲 Spieler** | Only the sources marked **🎲 Spieler** on the Sources page (`player_visible` in `sources.yaml`; default: rulebook + Charakterbogen) — no lore, adventures or game-master material | Role, "🔄 Rolle wechseln", status, hybrid toggle; **no** source/category filters |
+| **📜 Spielleiter** | Everything, with the usual Lore/Abenteuer/Regelwerk and category filters | Full sidebar |
+
+- Every player question is sent with `metadata_filters = {"source_id": {"$in": [<player sources>]}}`
+  (from `/sidebar-state` → `player_source_ids`). The sidebar's group/category filters are
+  ignored for players, so nothing can widen the search.
+- The filter is applied inside the Streamlit process — the browser never talks to the
+  backend (which listens on `127.0.0.1` only), so it cannot drop or change it.
+- **"🔄 Rolle wechseln"** returns to the picker and starts a **new session** (chat, backend
+  session, token counter). Otherwise the chat history of a game-master conversation could
+  flow into a player's condensed follow-up question.
+- If no source is released for players, the chat input is disabled with a hint to the
+  Sources page.
+- **No access control:** anyone can pick "Spielleiter" — the mode keeps players from
+  accidentally reading spoilers, it does not lock them out. Admin pages and provider
+  controls stay behind `LOREKEEPER_ADMIN_PASSWORD` independently of the role.
+
 ## Sidebar Elements
 
-### API URL
-Connection target for the backend. Default: `http://127.0.0.1:8000` — not `localhost`: on Windows that resolves to IPv6 `::1` first while uvicorn listens on IPv4 only, adding ~2 s to every request.
-Can be changed to a remote server without restarting.
+### Backend URL and access protection (`ui/admin_gate.py`)
+The backend URL is no longer editable in the sidebar — it comes from `LOREKEEPER_API_URL`
+(default `http://127.0.0.1:8000`; not `localhost`: on Windows that resolves to IPv6 `::1`
+first while uvicorn listens on IPv4 only, adding ~2 s to every request).
+
+With `LOREKEEPER_ADMIN_PASSWORD` set (home-network server, see `docs/operations.md`):
+- the admin pages (Sources, Evaluation, Prompts, Settings) show only a login form and make
+  no backend calls until the password is entered;
+- the chat stays open, but the provider dropdown and the Gemini-key input are replaced by the
+  active model and a **🔒 Admin-Login** expander;
+- a successful login holds for the browser session and unlocks every page.
+
+Without a password everything is open, as in the local single-user setup.
 
 ### LLM Provider
-Dropdown for switching between Ollama and Gemini at runtime.
+Dropdown for switching between Ollama and Gemini at runtime (admin only when a password is set).
 - Switch fails → dropdown reverts + error message
 - Successful switch → confirmation message
 
@@ -289,7 +324,7 @@ running in the backend). A `409` (another job running) is shown as a warning.
 
 | Backend call | Notes |
 |---|---|
-| `GET /sources` (read), `PUT /sources` (save) | Editable `st.data_editor` table with columns *id, path, type, group, default_category, category_map*. |
+| `GET /sources` (read), `PUT /sources` (save) | Editable `st.data_editor` table with columns *id, path, type, group, default_category, category_map, 🎲 Spieler* (`player_visible` — searchable in the chat's player mode, takes effect immediately without reindex). |
 
 - `id` and `path` are read-only in-line; `type` is auto-derived (`file` / `folder` / `missing`) from `Path.is_file/exists`.
 - `category_map` is edited as compact text: `key→category` (inherits source group) or `key→category:group` (overrides group). Example: `NPCs→npc, Geschichte→story:adventure`. Parsed back into string or dict entries on save.
@@ -601,6 +636,8 @@ post-save view reflects disk state.
 | `messages` | `list[dict]` | Full chat history including `sources` and per-message `usage` |
 | `session_id` | `str \| None` | Backend session UUID for conversation context |
 | `session_usage` | `dict` | Cumulative `{tokens_in, tokens_out, tokens_thinking}` for the active session, displayed in the header metric |
+| `_role` | `"player" \| "game_master"` | Chat role picked before the chat opens; missing → role picker. Removing it (Rolle wechseln) also resets chat and session |
+| `_is_admin` | `bool` | Set by a successful admin login (`ui/admin_gate.py`); unlocks admin pages and provider controls for this browser session |
 | `_selected_provider` | `str` | Currently selected provider (widget state) |
 | `_provider_switch_ok` | `bool` | Temporary flag: switch succeeded |
 | `_provider_switch_error` | `str` | Temporary flag: error message on switch failure |

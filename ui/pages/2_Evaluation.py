@@ -9,10 +9,13 @@ import time
 import pandas as pd
 import requests
 import streamlit as st
+from admin_gate import api_url, require_admin
 
 st.set_page_config(page_title="Evaluation — LoreKeeper", page_icon="🎯", layout="wide")
 
-API_URL = st.session_state.get("_api_url", "http://127.0.0.1:8000")
+require_admin()
+
+API_URL = api_url()
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────

@@ -86,6 +86,7 @@ class SidebarState(BaseModel):
     provider: ProviderInfo
     gemini_status: GeminiKeyStatus
     available_categories: list[str]
+    player_source_ids: list[str] = []  # sources searchable in the chat's player mode
 
 
 class SwitchProviderRequest(BaseModel):

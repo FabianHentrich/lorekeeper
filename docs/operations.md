@@ -9,15 +9,16 @@ This document covers operational instructions for LoreKeeper: initial setup work
    - [Full Re-ingest](#full-re-ingest)
    - [Ingest via API (asynchronous)](#ingest-via-api-asynchronous)
    - [Exclusion Patterns](#exclusion-patterns)
-3. [Configuration](#configuration)
-4. [Common Issues](#common-issues)
+3. [Home-network server (LAN)](#home-network-server-lan)
+4. [Configuration](#configuration)
+5. [Common Issues](#common-issues)
    - [Ollama not responding](#ollama-not-responding)
    - [ChromaDB file lock](#chromadb-file-lock)
    - [Gemini 429 (rate limit)](#gemini-429-rate-limit)
    - [Reranker model not found](#reranker-model-not-found)
    - [PDF OCR not working](#pdf-ocr-not-working)
    - [Retrieval returns wrong document](#retrieval-returns-wrong-document)
-5. [Logs](#logs)
+6. [Logs](#logs)
 
 ---
 
@@ -104,6 +105,83 @@ exclude_patterns:
 
 ---
 
+## Home-network server (LAN)
+
+Run LoreKeeper on the gaming PC (Ollama + backend + UI) and use it from a laptop
+in the same network. Only the Streamlit UI (port 8501) is reachable; the backend
+stays on `127.0.0.1:8000` because the UI calls it server-side.
+
+**One-time setup on the gaming PC:**
+
+1. Set a password in `.env` — it protects the admin pages (Sources, Evaluation,
+   Prompts, Settings) and the provider/Gemini-key controls in the chat sidebar;
+   the chat itself stays open:
+   ```
+   LOREKEEPER_ADMIN_PASSWORD=<your password>
+   ```
+2. Classify the home network as **Private** (Settings → Network & Internet →
+   network properties). The firewall rule only applies to the Private profile.
+3. Run the setup script once **as administrator** — it adds the firewall rule
+   (inbound TCP 8501, Private only) and warns if the network is Public or a Python
+   block rule would override the allow rule. There is deliberately no autostart —
+   start the server yourself with `.\start.ps1 -Server` when you need it:
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts\setup-lan.ps1
+   powershell -ExecutionPolicy Bypass -File scripts\setup-lan.ps1 -Uninstall   # undo
+   ```
+4. Reserve the PC's IP address in the router (DHCP reservation) so the URL
+   stays the same. Ollama settings for the server: `OLLAMA_CONTEXT_LENGTH=16384`,
+   `OLLAMA_KEEP_ALIVE=1h` (see `docs/provider-strategy.md`).
+
+**Start modes (`start.ps1`):**
+
+| Command | Backend | UI | Use |
+|---|---|---|---|
+| `.\start.ps1` | `127.0.0.1`, auto-reload | `127.0.0.1` only, opens browser | Development on this PC |
+| `.\start.ps1 -Server` | `127.0.0.1`, no reload | `0.0.0.0` (LAN), minimized windows | Home-network server; prints the LAN URLs |
+
+Then open `http://<gaming-pc-ip>:8501` on the laptop or phone (tested on a phone
+in the home Wi-Fi). If Windows asks whether Python may accept connections, allow
+**Private networks** only — "Cancel" creates a block rule that overrides the port rule.
+
+**Day-to-day use:**
+
+- **Start the server** (no autostart — on purpose): `.\start.ps1 -Server` in the
+  project folder. Backend and UI open as two minimized windows in the taskbar;
+  the console prints the LAN URLs.
+- **Stop**: close both LoreKeeper windows.
+- **Develop on the gaming PC**: stop the server, then `.\start.ps1` — auto-reload,
+  UI only on this PC. Server mode does **not** reload on code changes: after an
+  update, stop and start `.\start.ps1 -Server` again.
+- `start.ps1` skips a part whose port is already in use ("already running"), so a
+  leftover window from the other mode has to be closed first.
+
+**Removing the old autostart task:** the first version of `setup-lan.ps1` registered
+a logon task "LoreKeeper Server". It needs admin rights to delete — either run
+`setup-lan.ps1` again as administrator (keeps the firewall rule, removes the task)
+or in an admin PowerShell:
+
+```powershell
+Unregister-ScheduledTask -TaskName "LoreKeeper Server" -Confirm:$false
+```
+
+**Why HTTP and not HTTPS:** inside the home network the traffic never leaves your
+own Wi-Fi/LAN, and Streamlit serves plain HTTP by default. HTTPS would need a
+certificate the browsers trust — a self-signed one triggers a warning on every
+device, a "real" one needs a domain name. The practical risk of HTTP at home is
+that someone **in your Wi-Fi** could read the traffic, including the admin
+password at login. For access from outside (4.2) the plan is Tailscale, which
+encrypts everything end-to-end, so plain HTTP inside the tunnel is fine there too.
+
+**Players at the table:** on their phones, players pick **🎲 Spieler** — they can only
+search the sources released for players (Sources page → column "🎲 Spieler"; default:
+rulebook and Charakterbogen). The game master picks **📜 Spielleiter**. This is a
+spoiler guard, not a lock: anyone can choose either role (see `docs/ui-ux.md`).
+
+Access from outside the home network (Tailscale) is planned as roadmap 4.2.
+
+---
+
 ## Configuration
 
 ### Override Order
@@ -118,6 +196,8 @@ Env variables  >  .env file  >  config/settings.local.yaml  >  config/settings.y
 | `LLM__PROVIDER` | Provider at startup (`ollama` or `gemini`) |
 | `LLM__OLLAMA__MODEL` | Override Ollama model |
 | `CHROMA_MODE` | `embedded` (default) or `client` (external ChromaDB server, unused) |
+| `LOREKEEPER_ADMIN_PASSWORD` | UI: password for admin pages and provider controls (empty = open) |
+| `LOREKEEPER_API_URL` | UI: backend URL (default `http://127.0.0.1:8000`) |
 
 ---
 

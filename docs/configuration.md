@@ -80,6 +80,7 @@ filter groups `lore`, `adventure`, `rules`.
 | `default_category` | `str` | no (yes for file sources) | Fallback `content_category` when no entry of `category_map` matches. |
 | `category_map` | `dict[str, str\|dict]` | no | Top-level folder name → category (and optionally group). Values can be a plain string (`npc`) or a dict (`{category: story, group: adventure}`). String values inherit the source-level `group`. Case-insensitive lookup. Folder sources only. |
 | `exclude_patterns` | `list[str]` | no | Additive to global `ingestion.exclude_patterns`. |
+| `player_visible` | `bool` | no (default `false`) | Searchable in the chat's **player mode** (🎲 Spieler). Only release sources without game-master knowledge (rulebook, character sheet). Editable as the "🎲 Spieler" column on the Sources page; takes effect immediately, no reindex. |
 
 **Example:**
 ```yaml

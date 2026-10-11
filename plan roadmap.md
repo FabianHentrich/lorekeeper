@@ -164,7 +164,7 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 
 **Aufwand**: Gering-Mittel. Achtung auf Kontextlänge bei kleinen Modellen ("Lost in the Middle").
 
-### 3.7 Zugriffsschutz für die UI
+### 3.7 Zugriffsschutz für die UI — ✅ Erledigt
 
 **Problem**: Die API selbst ist nicht exponiert — uvicorn bindet auf `127.0.0.1`, und alle API-Aufrufe macht der Streamlit-Prozess serverseitig. Exponiert ist die **Streamlit-UI**: sie lauscht standardmäßig auf allen Interfaces und hat keinen Login. Wer im selben Netz `http://<pc>:8501` öffnet, kann über die Admin-Seiten indizieren, die Collection löschen (`/admin/wipe`), Config und Gemini-Key ändern. Zusätzlich lässt das Feld „API URL“ in der Sidebar den Streamlit-Server beliebige URLs abfragen.
 
@@ -174,6 +174,8 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 - Backend bleibt auf `127.0.0.1` — ein API-Key wird erst nötig, wenn die API selbst je exponiert wird
 
 **Aufwand**: Gering. Teil von 4.1.
+
+**Umgesetzt** (`ui/admin_gate.py`): `LOREKEEPER_ADMIN_PASSWORD` in `.env` schützt Sources, Evaluation, Prompts, Settings sowie Provider-Wechsel und Gemini-Key in der Chat-Sidebar; der Chat bleibt offen (Entscheidung: nur Admin-Seiten schützen). Login gilt pro Browser-Session. Ohne Passwort alles offen wie bisher. „API URL“-Feld entfernt, Backend-URL aus `LOREKEEPER_API_URL`. Tests: `tests/ui/test_admin_gate.py`.
 
 ### 3.8 Laufenden Ingest-Job wieder aufnehmen
 
@@ -201,22 +203,53 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 
 **Restliche Abschnitt-Misses (separat ansehen)**: Wortähnlichkeit zieht falsche Dateien („Armbrust“ → Bargrun der Armdrücker, „Verbände“ → Balancing-Notiz) und Nachbarabschnitte gewinnen (Erlernen → 5.3 statt 5.1, Vorteil/Nachteil → 1.1 statt 1.4).
 
+### 3.11 Spieler-/Spielleiter-Modus — ✅ Umgesetzt, Sicherheitstests offen
+
+**Problem**: Im Heimnetz nutzen auch Spieler LoreKeeper (z.B. am Handy). Der Vault enthält Spielleiter-Wissen (Plot, NPC-Geheimnisse wie Sol Invictus = Rhaz'Muell), das Spieler nicht sehen sollen; für sie ist nur das Regelwerk relevant.
+
+**Lösung (umgesetzt)**: Vor dem Chat die Auswahl „🎲 Spieler“ / „📜 Spielleiter“ (`ui/roles.py`, `ui/LoreKeeper.py`), ohne Passwort (Entscheidung: Spoiler-Schutz, keine Zugangskontrolle).
+- Spieler durchsuchen nur Quellen mit `player_visible` (neues Source-Feld, Spalte „🎲 Spieler“ auf der Sources-Seite; freigegeben: `pnp_regelbuch`, `charakterbogen`). Filter `{"source_id": {"$in": [...]}}`, gesetzt im Streamlit-Prozess; Sidebar-Filter für Spieler ausgeblendet und ignoriert.
+- „🔄 Rolle wechseln“ startet eine neue Session (kein Spielleiter-Verlauf im Spieler-Kontext).
+- Ohne freigegebene Quelle ist der Spieler-Chat gesperrt.
+- Live geprüft: „Wer ist Sol Invictus wirklich?“ / „Was ist mit Isolde Vaer los?“ im Spieler-Modus finden nur Regelbuch/Charakterbogen, Antwort „keine Informationen“.
+- Doku: `docs/ui-ux.md` (Role selection), `docs/configuration.md` (`player_visible`), `docs/operations.md`.
+
+**Offen — Sicherheitstests** (nächster Schritt): systematisch prüfen, dass im Spieler-Modus kein Spielleiter-Inhalt in Antwort oder Quellenliste landen kann — Retrieval-Pfade (Vektor, BM25/Hybrid, Section Expansion, Rerank-Backfill), Condense/Session-Verlauf, Rollenwechsel, Cache, manipulierte Session-State-Werte, Fehlerfälle (Backend nicht erreichbar, leere Freigabe), Golden-Set-Fragen mit SL-Wissen im Spieler-Modus.
+
+**Aufwand**: Gering-Mittel (umgesetzt); Sicherheitstests Mittel.
+
 ## 4.0 Zugriff auf LoreKeeper aus dem Netzwerk und dem Internet
 
 **Problem**: Der Laptop ist zu schwach für ein lokales LLM. LoreKeeper soll auf dem Gaming-PC laufen (Ollama + Backend + UI) und vom Laptop aus bedient werden — zuerst im Heimnetz, später ggf. auch unterwegs. Die Alternative, nur noch Gemini (Bezahlvariante) zu nutzen, hat ein Kostenrisiko: Budgets in Google Cloud senden nach meinem Kenntnisstand nur Warnungen und stoppen nicht automatisch; begrenzen lässt sich das Risiko nur über heruntergesetzte Quotas (Requests/Minute bzw. /Tag) oder eine selbstgebaute Budget→Billing-aus-Automatik. Gemini bleibt deshalb Fallback, nicht Hauptweg.
 
 **Architektur-Befund**: Der Browser spricht nur mit Streamlit (Port 8501); alle API-Aufrufe laufen serverseitig im Streamlit-Prozess gegen `127.0.0.1:8000`. Es muss also **nur Port 8501** erreichbar sein, das Backend bleibt lokal.
 
-### 4.1 Heimnetz (LAN) — jetzt
+### 4.1 Heimnetz (LAN) — ✅ Umgesetzt, Einrichtung am Gaming-PC offen
 
 **Lösung**:
 1. **Erreichbarkeit**: Streamlit lauscht bereits auf allen Interfaces. Windows-Firewall-Regel nur für Port 8501 und nur im Netzwerkprofil „Privat“; feste IP für den Gaming-PC per DHCP-Reservierung im Router. Aufruf vom Laptop: `http://<gaming-pc-ip>:8501`.
 2. **Server-Modus in `start.ps1`**: Schalter (z.B. `-Server`) startet uvicorn ohne `--reload` (Code-Änderungen starten den Server nicht mitten in einer Session neu) und öffnet keinen Browser auf dem PC.
-3. **Autostart**: `start.ps1 -Server` als Aufgabe in der Aufgabenplanung bei Anmeldung; die Ollama-App startet ohnehin mit Windows. Ollama-Umgebungsvariablen auf dem Gaming-PC: `OLLAMA_CONTEXT_LENGTH=16384` (erledigt, siehe 5.3), `OLLAMA_KEEP_ALIVE=1h` (erledigt).
+3. **Kein Autostart** (Entscheidung): LoreKeeper wird bei Bedarf manuell mit `.\start.ps1 -Server` gestartet; die Ollama-App startet ohnehin mit Windows. Ollama-Umgebungsvariablen auf dem Gaming-PC: `OLLAMA_CONTEXT_LENGTH=16384` (erledigt, siehe 5.3), `OLLAMA_KEEP_ALIVE=1h` (erledigt).
 4. **Zugriffsschutz**: 3.7 (Passwort-Gate für Admin-Seiten, API-URL-Feld sperren) — Voraussetzung, sobald der Port offen ist.
 5. **Doku**: Abschnitt „Betrieb im Heimnetz“ in `ARCHITECTURE.md` (Deployment).
 
 **Aufwand**: Gering (inkl. 3.7).
+
+**Umgesetzt**:
+- `start.ps1 -Server`: uvicorn ohne `--reload`, explizit auf `127.0.0.1`; Streamlit auf `0.0.0.0`; minimierte Fenster, kein Browser; gibt die LAN-URLs aus und warnt, wenn kein Admin-Passwort gesetzt ist.
+- Entwicklungsmodus (`.\start.ps1`, aber auch `streamlit run` direkt via `.streamlit/config.toml`) bindet die UI jetzt nur noch an `127.0.0.1` — vorher lauschte sie ungeschützt auf allen Interfaces.
+- `scripts/setup-lan.ps1` (als Admin, einmalig, `-Uninstall` zum Rückgängigmachen): Firewall-Regel TCP 8501 nur Profil „Privat“; warnt bei Netzwerkprofil „Öffentlich“ und bei Python-Block-Regeln; kein Autostart (eine Autostart-Aufgabe aus der ersten Skript-Version wird entfernt).
+- Doku: `docs/operations.md` → „Home-network server (LAN)“.
+
+**Offen — Schritte am Gaming-PC (Nutzer)**:
+1. ✅ `LOREKEEPER_ADMIN_PASSWORD` in `.env` gesetzt.
+2. ✅ Heimnetz („Netzwerk 3“) auf „Privat“ umgestellt.
+3. ✅ `scripts\setup-lan.ps1` als Administrator ausgeführt; Server-Modus läuft (`0.0.0.0:8501`, Backend `127.0.0.1:8000`).
+4. Autostart-Aufgabe der ersten Skript-Version entfernen (braucht Admin): `Unregister-ScheduledTask -TaskName "LoreKeeper Server" -Confirm:$false`
+5. DHCP-Reservierung im Router (offen); ✅ Zugriff vom Handy im Heimnetz funktioniert.
+6. Danach: Startup-Messung (5.2) mit dem Server-Modus.
+
+**Befund**: Es existieren Inbound-Allow-Regeln für `python.exe` im Profil „Öffentlich“ (alle Ports) — für andere Python-Installationen (alte LoreKeeper-Kopie unter OneDrive, PortraitForge, globales Python 3.12), nicht für LoreKeeper. Nicht angefasst; ggf. selbst aufräumen.
 
 ### 4.2 Internet — später
 
@@ -304,12 +337,13 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 
 ## Priorisierungsvorschlag
 
-Erledigt: 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
+Erledigt: 3.11 Spieler-/Spielleiter-Modus (ohne Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
 
 | Reihenfolge | Punkt | Impact | Aufwand | Begründung |
 |---|---|---|---|---|
 | 1 | ~~5.2 Performance-Tests~~ | | | ✅ Erledigt (Startup-Messung mit 4.1) — dabei `localhost`-Delay gefunden und behoben |
-| 2 | 4.1 Heimnetz + 3.7 Zugriffsschutz | Hoch — Gaming-PC als Server nutzbar | Gering | 3.7 muss vor dem Öffnen des Ports stehen |
+| 2 | ~~4.1 Heimnetz + 3.7 Zugriffsschutz~~ | | | ✅ Umgesetzt und eingerichtet (Handy-Test erfolgreich); alte Autostart-Aufgabe noch per Admin entfernen |
+| 2a | 3.11 Spieler-/Spielleiter-Modus — Sicherheitstests | Hoch — Spieler dürfen kein SL-Wissen sehen | Mittel | Feature umgesetzt; Tests sind der nächste Schritt |
 | 3 | 3.8/3.9 Ingest-Fortschritt + 5.3 UI-Reste (`/config` cachen, `/folders` cachen) | Gering-Mittel — Sources-Seite bleibt bedienbar | Gering-Mittel | Hauptursache der UI-Trägheit ist behoben; Rest sind Komfort und Millisekunden |
 | 4 | 5.3 Reranker/Embeddings auf GPU (CUDA-PyTorch) | Mittel — ~0,5 s pro Frage, schnellere Indexierung | Gering (Code) | Neue Abhängigkeit — erst entscheiden |
 | 5 | 6.0 PnP-Simulation zugreifbar machen | offen | offen | Erst Daten ansehen und klären |

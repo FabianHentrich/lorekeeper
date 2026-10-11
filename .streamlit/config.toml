@@ -1,0 +1,5 @@
+# Project-level Streamlit settings (read from the working directory).
+[server]
+# Only this PC by default — `start.ps1 -Server` opens the UI to the home network
+# with --server.address 0.0.0.0 (roadmap 4.1). The backend always stays on 127.0.0.1.
+address = "127.0.0.1"

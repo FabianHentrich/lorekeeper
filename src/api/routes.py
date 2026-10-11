@@ -381,6 +381,7 @@ async def sidebar_state():
         provider=provider,
         gemini_status=gemini_status,
         available_categories=sorted(cats),
+        player_source_ids=[s.id for s in main_module.config.settings.ingestion.sources if s.player_visible],
     )
 
 

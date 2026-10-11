@@ -67,6 +67,7 @@ class SourceConfig(BaseModel):
     default_category: str | None = None         # Used for files & flat sources
     category_map: dict[str, str | dict[str, str]] = {}  # Top-folder -> category or {category, group}
     exclude_patterns: list[str] = []            # Additive to global excludes
+    player_visible: bool = False                # Searchable in the chat's player mode (default: game master only)
 
     @field_validator("category_map")
     @classmethod
