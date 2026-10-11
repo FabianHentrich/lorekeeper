@@ -1,6 +1,6 @@
 # LoreKeeper — Roadmap & Bearbeitungsliste
 
-Stand: 2026-04-14
+Stand: 2026-10-11
 
 ---
 
@@ -164,13 +164,16 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 
 **Aufwand**: Gering-Mittel. Achtung auf Kontextlänge bei kleinen Modellen ("Lost in the Middle").
 
-### 3.7 Authentifizierung für die API
+### 3.7 Zugriffsschutz für die UI
 
-**Problem**: Die API hat keinerlei Auth. Lokal unkritisch, aber im Docker-Setup bindet sie auf `0.0.0.0` — dann kann jeder im Netz `/sources/scan` (listet beliebige Pfade auf dem Host), `/admin/wipe` (löscht die Collection), `PUT /config` und `POST /provider/gemini/key` aufrufen.
+**Problem**: Die API selbst ist nicht exponiert — uvicorn bindet auf `127.0.0.1`, und alle API-Aufrufe macht der Streamlit-Prozess serverseitig. Exponiert ist die **Streamlit-UI**: sie lauscht standardmäßig auf allen Interfaces und hat keinen Login. Wer im selben Netz `http://<pc>:8501` öffnet, kann über die Admin-Seiten indizieren, die Collection löschen (`/admin/wipe`), Config und Gemini-Key ändern. Zusätzlich lässt das Feld „API URL“ in der Sidebar den Streamlit-Server beliebige URLs abfragen.
 
-**Lösung**: Einfacher API-Key aus `.env` (`LOREKEEPER_API_KEY`), geprüft per FastAPI-Dependency auf allen schreibenden/Admin-Routen; die Streamlit-UI schickt ihn als Header mit. Ohne gesetzten Key bleibt das Verhalten wie bisher (lokaler Betrieb). Zusätzlich `/sources/scan` auf erlaubte Basisverzeichnisse beschränken.
+**Lösung**:
+- Passwort-Gate (Secret aus `.env`) vor den Admin-Seiten (Sources, Settings, Prompts, Evaluation); der Chat bleibt frei oder hängt optional am selben Gate
+- „API URL“-Feld durch Config-Wert ersetzen (nicht im Browser editierbar)
+- Backend bleibt auf `127.0.0.1` — ein API-Key wird erst nötig, wenn die API selbst je exponiert wird
 
-**Aufwand**: Gering-Mittel.
+**Aufwand**: Gering. Teil von 4.1.
 
 ### 3.8 Laufenden Ingest-Job wieder aufnehmen
 
@@ -198,30 +201,87 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 
 **Restliche Abschnitt-Misses (separat ansehen)**: Wortähnlichkeit zieht falsche Dateien („Armbrust“ → Bargrun der Armdrücker, „Verbände“ → Balancing-Notiz) und Nachbarabschnitte gewinnen (Erlernen → 5.3 statt 5.1, Vorteil/Nachteil → 1.1 statt 1.4).
 
-## 4.0 Zugriff auf Lorekeeper aus dem Netzwerk und dem Internet (falls das machbar ist)
+## 4.0 Zugriff auf LoreKeeper aus dem Netzwerk und dem Internet
 
-**Problem**: mein Laptop ist nicht stark genung um ein LLM laufen zu lassen. deshalb will ich meinen gaming PC laufen lassen und die UI am laptop abrufen. und dann mindetsens aus dem selben netzwerk aber potenziell auch aus dem internet wenn wir nicht zu hause sind. alternative dazu wäre nur den gemini key bezahlvariante zu nehmen. da kann man aber meines wissens nach keine Budget einstellen sodass da das finanzielle risiko steht wenn was schief geht.
+**Problem**: Der Laptop ist zu schwach für ein lokales LLM. LoreKeeper soll auf dem Gaming-PC laufen (Ollama + Backend + UI) und vom Laptop aus bedient werden — zuerst im Heimnetz, später ggf. auch unterwegs. Die Alternative, nur noch Gemini (Bezahlvariante) zu nutzen, hat ein Kostenrisiko: Budgets in Google Cloud senden nach meinem Kenntnisstand nur Warnungen und stoppen nicht automatisch; begrenzen lässt sich das Risiko nur über heruntergesetzte Quotas (Requests/Minute bzw. /Tag) oder eine selbstgebaute Budget→Billing-aus-Automatik. Gemini bleibt deshalb Fallback, nicht Hauptweg.
 
-**Lösung**: 
+**Architektur-Befund**: Der Browser spricht nur mit Streamlit (Port 8501); alle API-Aufrufe laufen serverseitig im Streamlit-Prozess gegen `127.0.0.1:8000`. Es muss also **nur Port 8501** erreichbar sein, das Backend bleibt lokal.
 
-**Aufwand**: 
+### 4.1 Heimnetz (LAN) — jetzt
+
+**Lösung**:
+1. **Erreichbarkeit**: Streamlit lauscht bereits auf allen Interfaces. Windows-Firewall-Regel nur für Port 8501 und nur im Netzwerkprofil „Privat“; feste IP für den Gaming-PC per DHCP-Reservierung im Router. Aufruf vom Laptop: `http://<gaming-pc-ip>:8501`.
+2. **Server-Modus in `start.ps1`**: Schalter (z.B. `-Server`) startet uvicorn ohne `--reload` (Code-Änderungen starten den Server nicht mitten in einer Session neu) und öffnet keinen Browser auf dem PC.
+3. **Autostart**: `start.ps1 -Server` als Aufgabe in der Aufgabenplanung bei Anmeldung; Ollama startet als Windows-Dienst ohnehin mit.
+4. **Zugriffsschutz**: 3.7 (Passwort-Gate für Admin-Seiten, API-URL-Feld sperren) — Voraussetzung, sobald der Port offen ist.
+5. **Doku**: Abschnitt „Betrieb im Heimnetz“ in `ARCHITECTURE.md` (Deployment).
+
+**Aufwand**: Gering (inkl. 3.7).
+
+### 4.2 Internet — später
+
+**Lösung**: **Tailscale** (privates Mesh-VPN, kostenlos für Privatnutzung) auf Gaming-PC und Laptop → `http://gaming-pc:8501` funktioniert von überall, ohne Portfreigabe im Router und ohne öffentliche Erreichbarkeit. Alternative: Cloudflare Tunnel + Cloudflare Access (Login-Seite davor) — mehr Einrichtung.
+
+**Offener Punkt**: Der Gaming-PC muss laufen. Wake-on-LAN von unterwegs braucht ein immer laufendes Gerät im Heimnetz (Router-Funktion oder Raspberry Pi); sonst bleibt der PC an.
+
+**Aufwand**: Gering (Einrichtung, kaum Code).
+
+## 5.0 Performance-Optimierung und Performance-Tests
+
+**Ziel**: Bei Weiterentwicklungen sofort sehen, wenn etwas deutlich ineffizienter wird — vor allem bei der Antwortzeit und der UI-Reaktion, beim Start nur einfache Hebel.
+
+**Problem**: Es wird nichts gemessen. Bekannt ist nur aus Stichproben: qwen3:14b ~17 s bis zum ersten Token (mit 29 Chunks im Kontext, weil die Section Expansion den ganzen Krieger-Abschnitt nachgeladen hat), Retrieval ~1 s, Start ~12 s (Modelle laden). Ob die Ollama-Kontextgröße (`num_ctx`) den Prompt abschneidet, ist ungeprüft.
+
+### 5.1 Messen: Stage-Timings
+
+Pro Anfrage loggen und im `done`-Event mitliefern: Condense, Retrieval (Embedding / Vektorsuche / Rerank / Expansion), Zeit bis zum ersten Token, Gesamtzeit, Anzahl Chunks und Prompt-Größe (Zeichen bzw. `usage.tokens_in`). Grundlage für alles Weitere; die UI kann die Werte optional in der Caption zeigen.
+
+**Aufwand**: Gering.
+
+### 5.2 Performance-Tests (Regressionsschutz)
+
+Zwei Arten von Prüfungen — **deterministische** schlagen zuverlässig an und laufen im normalen `pytest`, **zeitbasierte** sind hardwareabhängig und laufen separat:
+
+| Prüfung | Art | Erkennt z.B. |
+|---|---|---|
+| Max. Chunks / Prompt-Zeichen im QA-Prompt pro Golden-Frage | deterministisch, fester Grenzwert | Kontext-Aufblähung wie die 29-Chunk-Expansion |
+| Anzahl LLM-Aufrufe pro Anfrage (Condense ja/nein) | deterministisch | unnötige Zusatz-Calls |
+| Anzahl Backend-Requests pro UI-Rerun je Seite (Streamlit `AppTest` mit Fake-Backend) | deterministisch | fehlendes Caching, Polling-Schleifen |
+| Retrieval-Latenz p50/p95 über das Golden Set | zeitbasiert, `pytest -m perf` | langsame Reranker-/Expansion-Änderungen |
+| Render-Zeit je UI-Seite (`AppTest`) | zeitbasiert, `pytest -m perf` | schwere Reruns beim Klicken / Seitenwechsel |
+| Startup bis `/health` = healthy | zeitbasiert, `pytest -m perf` | zusätzliche Modell-Ladezeit |
+
+Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`tests/perf/baseline.json`) mit Toleranz (z.B. Faktor 1,5) statt gegen absolute Werte; Baseline wird bewusst per Flag aktualisiert. LLM-Antwortzeiten werden nicht automatisch getestet (Modell-/Hardwareabhängig) — dafür liefert 5.1 die Messwerte.
+
+**Aufwand**: Mittel.
+
+### 5.3 Bekannte Hebel (nach der Messung angehen)
+
+- **Antwortzeit**: Section Expansion begrenzen (nur Abschnitte mit Top-Treffern, `max_per_source` respektieren); Ollama-`num_ctx` prüfen und setzen (`OLLAMA_CONTEXT_LENGTH` oder native API); unnötige Condense-Aufrufe sind bereits entfernt (`needs_condense`).
+- **UI-Reaktion**: Chat holt vor jeder Nachricht `/config` (cachen); Sources-Seite blockiert beim Polling (3.8/3.9); Kosten eines Reruns mit langer Chat-Historie und Quellen-Expandern prüfen.
+- **Start**: nur einfache Hebel — Reranker/BM25 erst bei erster Anfrage laden (lazy), `--reload` im Server-Modus aus (4.1).
+
+**Aufwand**: je Hebel Gering bis Mittel.
 
 ---
 
 ## Priorisierungsvorschlag
 
-| # | Feature | Impact | Aufwand | Empfehlung |
-|---|---------|--------|---------|------------|
-| 1 | ~~PDF-Parsing (OCR + Struktur)~~ | ~~Hoch~~ | ~~Mittel~~ | ✅ Erledigt |
-| 2 | Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar machen | Mittel | Danach |
-| 3 | ~~Hybrid Search (BM25)~~ | ~~Hoch~~ | ~~Mittel~~ | ✅ Erledigt |
-| 4 | Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | Später |
-| 5 | Antwort-Feedback | Gering-Mittel | Gering | Quick Win |
-| 6 | Session-History | Mittel | Mittel | Wenn Zeit |
-| 7 | Chunk-Inspector | Gering (Dev-Tool) | Gering-Mittel | Wenn nötig |
-| 8 | Wikilink-Expansion | Mittel | Mittel | Experimentell |
-| 9 | Chat-Verlauf im Antwort-Prompt | Mittel — bessere Folgefragen | Gering-Mittel | Nach Bugfix-Phase |
-| 10 | API-Authentifizierung | Mittel — nur relevant bei Netzwerk-/Docker-Betrieb | Gering-Mittel | Vor Remote-Deployment |
-| 11 | Laufenden Ingest-Job wieder aufnehmen | Gering-Mittel | Gering | Nach Bugfix-Phase |
-| 12 | Nicht-blockierender Ingest-Fortschritt | Mittel — Sources-Seite bleibt bedienbar | Gering-Mittel | Nach Bugfix-Phase, zusammen mit 11 |
-| 13 | Regelwerk-Slot im Retrieval | Mittel — Vault↔Regel-Fragen finden die Regeldefinition | Mittel | Nach Bugfix-Phase |
+Erledigt: 1 PDF-Parsing, 3.1 Hybrid Search.
+
+| Reihenfolge | Punkt | Impact | Aufwand | Begründung |
+|---|---|---|---|---|
+| 1 | 5.1 Stage-Timings | Hoch — Grundlage für alle Performance-Arbeit | Gering | Erst messen, dann optimieren |
+| 2 | 4.1 Heimnetz + 3.7 Zugriffsschutz | Hoch — Gaming-PC als Server nutzbar | Gering | 3.7 muss vor dem Öffnen des Ports stehen |
+| 3 | 5.3 Hebel Antwortzeit (Section Expansion, `num_ctx`) | Hoch — spürbar schnellere Antworten | Gering-Mittel | Mit Messwerten aus 5.1 belegen |
+| 4 | 5.2 Performance-Tests | Mittel — Regressionsschutz | Mittel | Deterministische Prüfungen zuerst, zeitbasierte danach |
+| 5 | 3.8 + 3.9 Ingest-Job / Fortschritt | Mittel — Sources-Seite bleibt bedienbar | Gering-Mittel | Zusammen, Teil der UI-Reaktion |
+| 6 | 3.10 Regelwerk-Slot im Retrieval | Mittel — Vault↔Regel-Fragen | Mittel | Mit Abschnittsprüfung messbar |
+| 7 | 3.6 Chat-Verlauf im Antwort-Prompt | Mittel — bessere Folgefragen | Gering-Mittel | Kontextlänge nach 5.3 im Griff |
+| 8 | 3.4 Antwort-Feedback | Gering-Mittel | Gering | Quick Win |
+| 9 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | |
+| 10 | 3.2 Session-History | Mittel | Mittel | |
+| 11 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | Später, nach 4.1 |
+| 12 | 3.5 Wikilink-Expansion | Mittel | Mittel | Experimentell |
+| 13 | 3.3 Chunk-Inspector | Gering (Dev-Tool) | Gering-Mittel | Wenn nötig |
+| 14 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | Später |
