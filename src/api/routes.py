@@ -63,10 +63,27 @@ def _get_services():
     return conversation_manager, generator, condense_provider, prompt_manager, retriever, vectorstore, provider
 
 
-async def _prepare_query(request: QueryRequest):
+def _ms(since: float) -> int:
+    """Milliseconds elapsed since a ``time.perf_counter()`` reading."""
+    return round((time.perf_counter() - since) * 1000)
+
+
+def _log_timings(timings: dict) -> None:
+    """One INFO line per answered query — the basis for spotting slow stages."""
+    stages = " ".join(f"{k}={v}" for k, v in timings.get("retrieval_stages_ms", {}).items())
+    logger.info(
+        f"Query timings: condense={timings.get('condense_ms', 0)}ms "
+        f"retrieval={timings.get('retrieval_ms', 0)}ms ({stages}) "
+        f"first_token={timings.get('first_token_ms', 0)}ms total={timings.get('total_ms', 0)}ms "
+        f"chunks={timings.get('chunks', 0)} prompt_chars={timings.get('prompt_chars', 0)}"
+    )
+
+
+async def _prepare_query(request: QueryRequest, timings: dict):
     """Shared condense+retrieve step. Returns (session, chunks, system_prompt,
     qa_prompt, search_query) — qa_prompt is None when no chunks passed the
-    threshold; search_query is the (possibly condensed) question used for retrieval."""
+    threshold; search_query is the (possibly condensed) question used for retrieval.
+    Condense/retrieval durations, chunk count and prompt size are written into ``timings``."""
     cm, gen, condense_prov, pm, ret, _vs, _prov = _get_services()
 
     session = cm.get_or_create_session(request.session_id)
@@ -76,14 +93,18 @@ async def _prepare_query(request: QueryRequest):
     if history and cm.config.condense_question:
         if needs_condense(question):
             condense_prompt = pm.render_condense(history=history, question=question)
+            t0 = time.perf_counter()
             try:
                 question = await gen.condense_question(condense_prompt, condense_prov)
                 logger.info(f"Condensed question: {request.question!r} → {question!r}")
             except Exception as e:
                 logger.warning(f"Condense failed ({e}); retrieving with the original question")
+            timings["condense_ms"] = _ms(t0)
         else:
             logger.info(f"Condense skipped (standalone question): {question!r}")
 
+    stages: dict[str, float] = {}
+    t0 = time.perf_counter()
     chunks = await ret.retrieve(
         query=question,
         top_k=request.top_k,
@@ -91,7 +112,11 @@ async def _prepare_query(request: QueryRequest):
         top_k_rerank=request.top_k_rerank,
         max_per_source=request.max_per_source,
         hybrid=request.hybrid_search,
+        timings=stages,
     )
+    timings["retrieval_ms"] = _ms(t0)
+    timings["retrieval_stages_ms"] = {k: round(v) for k, v in stages.items()}
+    timings["chunks"] = len(chunks)
 
     if chunks:
         chunk_dicts = [
@@ -106,6 +131,7 @@ async def _prepare_query(request: QueryRequest):
         system_prompt = ""
         qa_prompt = None
 
+    timings["prompt_chars"] = len(system_prompt) + len(qa_prompt or "")
     return session, chunks, system_prompt, qa_prompt, question
 
 
@@ -125,8 +151,10 @@ def _chunk_to_source_dict(c) -> dict:
 async def query(request: QueryRequest):
     """Execute a query against the knowledge base and return the generated answer and sources."""
     start = time.time()
+    t_start = time.perf_counter()
     _, gen, _, pm, _, _, _ = _get_services()
-    session, chunks, system_prompt, qa_prompt, search_query = await _prepare_query(request)
+    timings: dict = {}
+    session, chunks, system_prompt, qa_prompt, search_query = await _prepare_query(request, timings)
 
     if qa_prompt is not None:
         try:
@@ -145,6 +173,8 @@ async def query(request: QueryRequest):
 
     sources = [SourceReference(**_chunk_to_source_dict(c)) for c in chunks]
     latency_ms = (time.time() - start) * 1000
+    timings["total_ms"] = _ms(t_start)
+    _log_timings(timings)
 
     return QueryResponse(
         answer=answer,
@@ -154,14 +184,17 @@ async def query(request: QueryRequest):
         model_used=model_used,
         latency_ms=latency_ms,
         search_query=search_query,
+        timings=timings,
     )
 
 
 @router.post("/query/stream")
 async def query_stream(request: QueryRequest):
     """Execute a query and stream the generated answer tokens over server-sent events (SSE)."""
+    t_start = time.perf_counter()
     _, gen, _, pm, _, _, prov = _get_services()
-    session, chunks, system_prompt, qa_prompt, search_query = await _prepare_query(request)
+    timings: dict = {}
+    session, chunks, system_prompt, qa_prompt, search_query = await _prepare_query(request, timings)
     sources = [_chunk_to_source_dict(c) for c in chunks]
 
     async def event_stream():
@@ -176,11 +209,14 @@ async def query_stream(request: QueryRequest):
                     qa_prompt=qa_prompt,
                     stream_result=stream_ctx,
                 ):
+                    if not full_answer:
+                        timings["first_token_ms"] = _ms(t_start)
                     full_answer += token
                     event = json.dumps({"type": "token", "content": token})
                     yield f"data: {event}\n\n"
             else:
                 full_answer = pm.render_no_context(question=request.question)
+                timings["first_token_ms"] = _ms(t_start)
                 event = json.dumps({"type": "token", "content": full_answer})
                 yield f"data: {event}\n\n"
         except Exception as e:
@@ -194,6 +230,8 @@ async def query_stream(request: QueryRequest):
         usage = dict(stream_ctx.usage)
         if usage:
             session.add_usage(usage)
+        timings["total_ms"] = _ms(t_start)
+        _log_timings(timings)
 
         done_event = json.dumps({
             "type": "done",
@@ -201,6 +239,7 @@ async def query_stream(request: QueryRequest):
             "sources": sources,
             "model_used": stream_ctx.model or prov.model,
             "search_query": search_query,
+            "timings": timings,
             "usage": usage,
             "session_usage": session.usage_totals,
         })

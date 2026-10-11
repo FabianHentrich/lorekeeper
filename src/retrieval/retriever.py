@@ -1,4 +1,5 @@
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -101,15 +102,21 @@ class Retriever:
         top_k_rerank: int | None = None,
         max_per_source: int | None = None,
         hybrid: bool | None = None,
+        timings: dict[str, float] | None = None,
     ) -> list[RetrievedChunk]:
         """Search the vector store for chunks most relevant to the given query.
 
         If hybrid search is enabled (either globally or via the request flag), it combines dense embeddings
         with BM25 keyword matching via Reciprocal Rank Fusion. It then drops any chunk falling below the
         configured score threshold, and optionally reranks the surviving candidates via a cross-encoder model.
+        When ``timings`` is given, per-stage durations in ms are written into it (embed, search, bm25,
+        rerank, expand).
         """
+        stage_ms = timings if timings is not None else {}
         top_k = top_k or self.config.top_k
+        t0 = time.perf_counter()
         query_embedding = await self.embedding_service.embed_text(query)
+        stage_ms["embed"] = (time.perf_counter() - t0) * 1000
 
         # Build where filter — images are excluded from LLM context (their content
         # is just a filename stub and pollutes ranking). They appear as UI sources
@@ -130,12 +137,14 @@ class Retriever:
         )
 
         # 1. Vector search (always)
+        t0 = time.perf_counter()
         vector_results = await run_in_threadpool(
             self.vectorstore.query,
             query_embedding=query_embedding,
             top_k=top_k,
             where=where,
         )
+        stage_ms["search"] = (time.perf_counter() - t0) * 1000
 
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f"Vectorstore returned {len(vector_results)} candidates (pre-threshold):")
@@ -158,6 +167,7 @@ class Retriever:
 
         # 2. BM25 search + RRF fusion (if hybrid enabled)
         if use_hybrid:
+            t0 = time.perf_counter()
             if not self.bm25_index.is_built:
                 logger.info("Building BM25 index from vectorstore (lazy init)...")
                 await run_in_threadpool(
@@ -181,6 +191,7 @@ class Retriever:
                 vector_results, bm25_results,
                 bm25_weight=self.config.hybrid.bm25_weight,
             )
+            stage_ms["bm25"] = (time.perf_counter() - t0) * 1000
         else:
             results = vector_results
 
@@ -197,10 +208,14 @@ class Retriever:
         ]
 
         if self.config.reranking.enabled and chunks:
+            t0 = time.perf_counter()
             chunks = await self._rerank(query, chunks, top_k_rerank=top_k_rerank, max_per_source=max_per_source)
+            stage_ms["rerank"] = (time.perf_counter() - t0) * 1000
 
         if self.config.section_expansion.enabled and chunks:
+            t0 = time.perf_counter()
             chunks = await self._expand_sections(chunks)
+            stage_ms["expand"] = (time.perf_counter() - t0) * 1000
 
         logger.info(f"Retrieved {len(chunks)} chunks (query: {query[:60]}...)")
         return chunks

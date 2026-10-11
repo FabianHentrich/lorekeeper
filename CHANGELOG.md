@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Per-query stage timings: `/query` and the `/query/stream` `done` event return `timings` (condense, retrieval with embed/search/bm25/rerank/expand stages, time to first token, total, chunk count, prompt size); one `Query timings:` log line per request; the chat shows them under each answer
 - **Settings page** (`ui/pages/4_Settings.py`): central tab-based UI for editing retrieval, LLM, conversation and chunking defaults. Saves diff-only to `settings.yaml` and mutates the running services in place
 - `GET /config` and `PUT /config` endpoints backed by `ConfigManager.save_settings()` with an allow-list (`src/config/manager.py:_EDITABLE_KEYS`) that keeps secrets and infrastructure knobs off the UI surface
 - Read-only display of `embeddings.*` and `vectorstore.*` in the Settings page (changing these still requires `.env` + restart)

@@ -123,7 +123,10 @@ class FakeRetriever:
         ]
         self.last_call: dict = {}
 
-    async def retrieve(self, query: str, top_k=None, metadata_filters=None, top_k_rerank=None, max_per_source=None, hybrid=None):
+    async def retrieve(self, query: str, top_k=None, metadata_filters=None, top_k_rerank=None, max_per_source=None,
+                       hybrid=None, timings=None):
+        if timings is not None:
+            timings.update({"embed": 1.0, "search": 2.0})
         self.last_call = {
             "query": query,
             "top_k": top_k,
@@ -383,6 +386,39 @@ def test_query_stream_yields_tokens_and_done_event(client, fake_services):
     assert done["model_used"] == "qwen3:8b"
     assert len(done["sources"]) == 1
     assert done["sources"][0]["file"] == "Arkenfeld.md"
+
+
+def test_query_returns_stage_timings(client, fake_services):
+    """Ensure /query reports retrieval stages, chunk count and prompt size for performance tracking."""
+    timings = client.post("/query", json={"question": "Wo liegt Arkenfeld?"}).json()["timings"]
+    assert timings["retrieval_stages_ms"] == {"embed": 1, "search": 2}
+    assert timings["chunks"] == 1
+    assert timings["prompt_chars"] > 0
+    assert timings["total_ms"] >= timings["retrieval_ms"] >= 0
+    assert "condense_ms" not in timings
+
+
+def test_query_stream_done_event_carries_timings(client, fake_services):
+    """Ensure the done event reports time to first token alongside the total."""
+    done = _parse_sse(client.post("/query/stream", json={"question": "Wo liegt Arkenfeld?"}).text)[-1]
+    timings = done["timings"]
+    assert 0 <= timings["first_token_ms"] <= timings["total_ms"]
+    assert timings["chunks"] == 1
+
+
+def test_query_reports_condense_time_for_follow_ups(client, fake_services):
+    """Ensure a rewritten follow-up shows up as its own stage."""
+    cm = fake_services.conversation_manager
+    cm.config.condense_question = True
+    cm.get_history_for_condense = lambda sid: [{"role": "user", "content": "Wer ist Arkenfeld?"}]
+
+    async def _condense(prompt, provider):
+        return "Wer ist der Vater von Arkenfeld?"
+
+    fake_services.generator.condense_question = _condense
+
+    timings = client.post("/query", json={"question": "Wer ist sein Vater?"}).json()["timings"]
+    assert timings["condense_ms"] >= 0
 
 
 def test_query_stream_reports_model_that_answered(client, fake_services):

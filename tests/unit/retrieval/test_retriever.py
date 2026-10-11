@@ -76,6 +76,14 @@ class TestRetrieve:
         assert chunk.score == pytest.approx(0.9)
 
     @pytest.mark.asyncio
+    async def test_stage_timings_reported(self, retriever):
+        """Per-stage durations land in the caller's dict; disabled stages are absent."""
+        timings: dict[str, float] = {}
+        await retriever.retrieve("where is arkenfeld", timings=timings)
+        assert set(timings) == {"embed", "search", "expand"}
+        assert all(v >= 0 for v in timings.values())
+
+    @pytest.mark.asyncio
     async def test_image_type_excluded_via_filter(self, retriever, vectorstore):
         """Verify standard query constraints forcefully eject inline image references from standard text search."""
         await retriever.retrieve("query")

@@ -31,6 +31,7 @@ class QueryResponse(BaseModel):
     model_used: str
     latency_ms: float
     search_query: str = ""  # question used for retrieval — differs from the input when a follow-up was condensed
+    timings: dict = {}  # condense/retrieval/total ms, retrieval stages, chunk count, prompt size
 
 
 class IngestJobResponse(BaseModel):

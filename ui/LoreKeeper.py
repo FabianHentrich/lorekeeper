@@ -50,6 +50,21 @@ def _render_sources(sources: list[dict]):
             if preview:
                 st.caption(preview)
 
+def _fmt_timings(t: dict) -> str:
+    """Format per-query stage timings (seconds) and context size for the caption under an answer."""
+    if not t:
+        return ""
+    parts = []
+    if "first_token_ms" in t:
+        parts.append(f"⏱ 1. Token {t['first_token_ms'] / 1000:.1f} s")
+    parts.append(f"gesamt {t.get('total_ms', 0) / 1000:.1f} s")
+    if t.get("condense_ms"):
+        parts.append(f"Umformulieren {t['condense_ms'] / 1000:.1f} s")
+    parts.append(f"Suche {t.get('retrieval_ms', 0) / 1000:.1f} s")
+    parts.append(f"{t.get('chunks', 0)} Chunks")
+    return " · ".join(parts)
+
+
 def _fmt_usage(u: dict) -> str:
     """
     Format token usage statistics into a terse inline string representation
@@ -313,6 +328,8 @@ for msg in _visible:
             st.caption(f"🔎 Gesucht nach: {msg['search_query']}")
         if msg.get("usage"):
             st.caption(_fmt_usage(msg["usage"]))
+        if msg.get("timings"):
+            st.caption(_fmt_timings(msg["timings"]))
         if msg.get("sources"):
             with st.expander("📎 Quellen"):
                 _render_sources(msg["sources"])
@@ -363,6 +380,7 @@ if prompt := st.chat_input("Stelle eine Frage über deine Welt..."):
             full_response = ""
             sources = []
             usage = {}
+            timings = {}
             search_query = ""
             error_message = None
             placeholder = st.empty()
@@ -385,6 +403,7 @@ if prompt := st.chat_input("Stelle eine Frage über deine Welt..."):
                     st.session_state.session_id = data.get("session_id")
                     sources = data.get("sources", [])
                     usage = data.get("usage", {}) or {}
+                    timings = data.get("timings", {}) or {}
                     # Only shown when a follow-up was rewritten before retrieval
                     if data.get("search_query", prompt) != prompt:
                         search_query = data["search_query"]
@@ -409,6 +428,9 @@ if prompt := st.chat_input("Stelle eine Frage über deine Welt..."):
                 if usage:
                     st.caption(_fmt_usage(usage))
 
+                if timings:
+                    st.caption(_fmt_timings(timings))
+
                 if sources:
                     with st.expander("📎 Quellen"):
                         _render_sources(sources)
@@ -418,6 +440,7 @@ if prompt := st.chat_input("Stelle eine Frage über deine Welt..."):
                     "content": full_response,
                     "sources": sources,
                     "usage": usage,
+                    "timings": timings,
                     "search_query": search_query,
                 })
 

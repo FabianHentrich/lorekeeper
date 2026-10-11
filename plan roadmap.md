@@ -232,11 +232,15 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 
 **Problem**: Es wird nichts gemessen. Bekannt ist nur aus Stichproben: qwen3:14b ~17 s bis zum ersten Token (mit 29 Chunks im Kontext, weil die Section Expansion den ganzen Krieger-Abschnitt nachgeladen hat), Retrieval ~1 s, Start ~12 s (Modelle laden). Ob die Ollama-Kontextgröße (`num_ctx`) den Prompt abschneidet, ist ungeprüft.
 
-### 5.1 Messen: Stage-Timings
+### 5.1 Messen: Stage-Timings — ✅ Erledigt
 
 Pro Anfrage loggen und im `done`-Event mitliefern: Condense, Retrieval (Embedding / Vektorsuche / Rerank / Expansion), Zeit bis zum ersten Token, Gesamtzeit, Anzahl Chunks und Prompt-Größe (Zeichen bzw. `usage.tokens_in`). Grundlage für alles Weitere; die UI kann die Werte optional in der Caption zeigen.
 
 **Aufwand**: Gering.
+
+**Umgesetzt**: `timings` in `/query` und im `done`-Event (`condense_ms`, `retrieval_ms` + `retrieval_stages_ms` {embed, search, bm25, rerank, expand}, `first_token_ms`, `total_ms`, `chunks`, `prompt_chars`), eine Log-Zeile `Query timings: …` pro Anfrage, Caption „⏱ 1. Token … · gesamt … · Suche … · N Chunks“ unter jeder Antwort.
+
+**Erste Messung (qwen3:14b, warm, GPU)**: Retrieval 0,6–0,8 s (davon Rerank ~0,5–0,75 s), erster Token nach 8,7–9,9 s, gesamt 14–20 s. → Der große Block vor dem ersten Token ist **nicht** Retrieval, sondern verstecktes Denken (siehe 5.3).
 
 ### 5.2 Performance-Tests (Regressionsschutz)
 
@@ -257,11 +261,17 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 
 ### 5.3 Bekannte Hebel (nach der Messung angehen)
 
-- **Antwortzeit**: Section Expansion begrenzen (nur Abschnitte mit Top-Treffern, `max_per_source` respektieren); Ollama-`num_ctx` prüfen und setzen (`OLLAMA_CONTEXT_LENGTH` oder native API); unnötige Condense-Aufrufe sind bereits entfernt (`needs_condense`).
+- **Antwortzeit — qwen3 denkt trotz `/no_think` (gemessen, größter Hebel)**: Ollama ignoriert das an den Prompt gehängte `/no_think`; qwen3 erzeugt Reasoning-Tokens im separaten Feld `reasoning`, das LoreKeeper weder anzeigt noch zählt (`tokens_thinking` bleibt 0). Kostet ~7 s pro Antwort. Direkter Test gegen Ollama: `reasoning_effort: "none"` (bzw. `reasoning: {effort: "none"}`) schaltet es ab (0 Reasoning-Chunks), `think: false` wird ignoriert. Fix: im `OllamaProvider` für Qwen3 `extra_body={"reasoning_effort": "none"}` statt `/no_think`; `tokens_thinking` aus dem `reasoning`-Feld befüllen.
+- **Antwortzeit — Kontextfenster (gemessen)**: `ollama ps` zeigt `CONTEXT 4096` für qwen3:14b. Die Krieger-Frage brauchte 3621 Eingabe- + 919 Ausgabe-Tokens — am bzw. über dem Limit; bei größerer Section Expansion wird der Prompt-Anfang (Systemprompt) still abgeschnitten. Fix: `OLLAMA_CONTEXT_LENGTH` (z.B. 8192–16384, VRAM prüfen) oder `num_ctx` über die native API.
+- **Antwortzeit**: Section Expansion begrenzen (nur Abschnitte mit Top-Treffern, `max_per_source` respektieren); unnötige Condense-Aufrufe sind bereits entfernt (`needs_condense`).
 - **UI-Reaktion**: Chat holt vor jeder Nachricht `/config` (cachen); Sources-Seite blockiert beim Polling (3.8/3.9); Kosten eines Reruns mit langer Chat-Historie und Quellen-Expandern prüfen.
 - **Start**: nur einfache Hebel — Reranker/BM25 erst bei erster Anfrage laden (lazy), `--reload` im Server-Modus aus (4.1).
 
 **Aufwand**: je Hebel Gering bis Mittel.
+
+
+## 6.0 PnP Simulation zugreifbar machen. 
+ reichen die HTML-Dateien als zugriff? und welche daten sollte ich dem LLM geben? wie wird das ganze indexiert?
 
 ---
 
@@ -271,9 +281,9 @@ Erledigt: 1 PDF-Parsing, 3.1 Hybrid Search.
 
 | Reihenfolge | Punkt | Impact | Aufwand | Begründung |
 |---|---|---|---|---|
-| 1 | 5.1 Stage-Timings | Hoch — Grundlage für alle Performance-Arbeit | Gering | Erst messen, dann optimieren |
-| 2 | 4.1 Heimnetz + 3.7 Zugriffsschutz | Hoch — Gaming-PC als Server nutzbar | Gering | 3.7 muss vor dem Öffnen des Ports stehen |
-| 3 | 5.3 Hebel Antwortzeit (Section Expansion, `num_ctx`) | Hoch — spürbar schnellere Antworten | Gering-Mittel | Mit Messwerten aus 5.1 belegen |
+| 1 | ~~5.1 Stage-Timings~~ | | | ✅ Erledigt |
+| 2 | 5.3 Hebel Antwortzeit (qwen3-Thinking aus, `num_ctx`, Section Expansion) | Hoch — ~7 s weniger pro Antwort, kein abgeschnittener Prompt | Gering | Gemessen, Fix ist klein |
+| 3 | 4.1 Heimnetz + 3.7 Zugriffsschutz | Hoch — Gaming-PC als Server nutzbar | Gering | 3.7 muss vor dem Öffnen des Ports stehen |
 | 4 | 5.2 Performance-Tests | Mittel — Regressionsschutz | Mittel | Deterministische Prüfungen zuerst, zeitbasierte danach |
 | 5 | 3.8 + 3.9 Ingest-Job / Fortschritt | Mittel — Sources-Seite bleibt bedienbar | Gering-Mittel | Zusammen, Teil der UI-Reaktion |
 | 6 | 3.10 Regelwerk-Slot im Retrieval | Mittel — Vault↔Regel-Fragen | Mittel | Mit Abschnittsprüfung messbar |

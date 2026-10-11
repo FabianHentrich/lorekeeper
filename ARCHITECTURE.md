@@ -950,12 +950,14 @@ class SourceReference(BaseModel):
 #          "sources": [...],
 #          "model_used": "...",
 #          "search_query": "...",
+#          "timings": {"retrieval_ms": N, "retrieval_stages_ms": {...}, "first_token_ms": N, "total_ms": N, "chunks": N, "prompt_chars": N},
 #          "usage": {"tokens_in": N, "tokens_out": N, "tokens_thinking": N},
 #          "session_usage": {"tokens_in": N, "tokens_out": N, "tokens_thinking": N}}\n\n
 # Das "done"-Event enthält:
 #   - session_id   → für Folgefragen
 #   - model_used   → Modell, das tatsächlich geantwortet hat (nach Fallback das Fallback-Modell)
 #   - search_query → Frage, mit der gesucht wurde (bei Folgefragen ggf. die umgeschriebene)
+#   - timings      → Dauer je Stufe in ms (condense_ms nur bei Umformulierung; Retrieval-Stufen embed/search/bm25/rerank/expand), Chunk-Anzahl, Prompt-Größe
 #   - usage        → Token-Verbrauch dieser einzelnen Anfrage
 #   - session_usage → kumulierte Session-Totals (für die Header-Metric in der UI)
 # usage wird aus dem Stream extrahiert (Ollama: stream_options.include_usage,
