@@ -212,7 +212,7 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 **Lösung**:
 1. **Erreichbarkeit**: Streamlit lauscht bereits auf allen Interfaces. Windows-Firewall-Regel nur für Port 8501 und nur im Netzwerkprofil „Privat“; feste IP für den Gaming-PC per DHCP-Reservierung im Router. Aufruf vom Laptop: `http://<gaming-pc-ip>:8501`.
 2. **Server-Modus in `start.ps1`**: Schalter (z.B. `-Server`) startet uvicorn ohne `--reload` (Code-Änderungen starten den Server nicht mitten in einer Session neu) und öffnet keinen Browser auf dem PC.
-3. **Autostart**: `start.ps1 -Server` als Aufgabe in der Aufgabenplanung bei Anmeldung; Ollama startet als Windows-Dienst ohnehin mit.
+3. **Autostart**: `start.ps1 -Server` als Aufgabe in der Aufgabenplanung bei Anmeldung; die Ollama-App startet ohnehin mit Windows. Ollama-Umgebungsvariablen auf dem Gaming-PC: `OLLAMA_CONTEXT_LENGTH=16384` (erledigt, siehe 5.3), ggf. `OLLAMA_KEEP_ALIVE`.
 4. **Zugriffsschutz**: 3.7 (Passwort-Gate für Admin-Seiten, API-URL-Feld sperren) — Voraussetzung, sobald der Port offen ist.
 5. **Doku**: Abschnitt „Betrieb im Heimnetz“ in `ARCHITECTURE.md` (Deployment).
 
@@ -262,7 +262,8 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 ### 5.3 Bekannte Hebel (nach der Messung angehen)
 
 - **Antwortzeit — qwen3 denkt trotz `/no_think` (gemessen, größter Hebel)**: Ollama ignoriert das an den Prompt gehängte `/no_think`; qwen3 erzeugt Reasoning-Tokens im separaten Feld `reasoning`, das LoreKeeper weder anzeigt noch zählt (`tokens_thinking` bleibt 0). Kostet ~7 s pro Antwort. Direkter Test gegen Ollama: `reasoning_effort: "none"` (bzw. `reasoning: {effort: "none"}`) schaltet es ab (0 Reasoning-Chunks), `think: false` wird ignoriert. ✅ **Erledigt**: `OllamaProvider` sendet für Qwen3 `extra_body={"reasoning_effort": "none"}` statt `/no_think`; Reasoning-Chunks im `reasoning`-Feld werden als `tokens_thinking` gezählt.
-- **Antwortzeit — Kontextfenster (gemessen)**: `ollama ps` zeigt `CONTEXT 4096` für qwen3:14b. Die Krieger-Frage brauchte 3621 Eingabe- + 919 Ausgabe-Tokens — am bzw. über dem Limit; bei größerer Section Expansion wird der Prompt-Anfang (Systemprompt) still abgeschnitten. Fix: `OLLAMA_CONTEXT_LENGTH` (z.B. 8192–16384, VRAM prüfen) oder `num_ctx` über die native API.
+- **Antwortzeit — Kontextfenster (gemessen)**: `ollama ps` zeigt `CONTEXT 4096` für qwen3:14b. Die Krieger-Frage brauchte 3621 Eingabe- + 919 Ausgabe-Tokens — am bzw. über dem Limit; bei größerer Section Expansion wird der Prompt-Anfang (Systemprompt) still abgeschnitten. ✅ **Erledigt**: `OLLAMA_CONTEXT_LENGTH=16384` als Benutzer-Umgebungsvariable gesetzt (der OpenAI-kompatible Endpoint ignoriert `num_ctx` pro Request, getestet). Danach `CONTEXT 16384`, 11 GB von 16 GB VRAM, weiterhin 100 % GPU, keine messbare Verlangsamung (warm: erster Token 1,1 s / 2,3 s).
+- **Antwortzeit — Modell entladen nach 5 Minuten (gemessen)**: Ollama entlädt das Modell nach 5 min Leerlauf; die erste Frage danach wartet ~16 s aufs Laden (erster Token 18 s statt 1,1 s). Fix: `OLLAMA_KEEP_ALIVE` (z.B. `1h` oder `-1` = nie entladen) — belegt dann dauerhaft ~11 GB VRAM, relevant wenn auf dem Gaming-PC gleichzeitig gespielt wird.
 - **Antwortzeit**: Section Expansion begrenzen (nur Abschnitte mit Top-Treffern, `max_per_source` respektieren); unnötige Condense-Aufrufe sind bereits entfernt (`needs_condense`).
 - **UI-Reaktion**: Chat holt vor jeder Nachricht `/config` (cachen); Sources-Seite blockiert beim Polling (3.8/3.9); Kosten eines Reruns mit langer Chat-Historie und Quellen-Expandern prüfen.
 - **Start**: nur einfache Hebel — Reranker/BM25 erst bei erster Anfrage laden (lazy), `--reload` im Server-Modus aus (4.1).

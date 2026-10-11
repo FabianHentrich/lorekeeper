@@ -175,6 +175,22 @@ provider-specific quirks.
 
 ### Ollama specifics
 
+**Context window:** Ollama's default context (4096 tokens) is too small for
+LoreKeeper's prompts — a section-expanded rule question already needs ~3600
+input tokens plus up to `max_tokens` for the answer, and overflow silently cuts
+off the start of the prompt (the system prompt). The OpenAI-compatible endpoint
+ignores a per-request `num_ctx`, so the size is set on the Ollama side:
+
+```powershell
+setx OLLAMA_CONTEXT_LENGTH 16384   # then quit Ollama in the tray and start it again
+ollama ps                          # CONTEXT column must show 16384
+```
+
+16384 costs ~2.6 GB VRAM on qwen3:14b (11 GB total, fits a 16 GB GPU fully).
+If the LoreKeeper backend auto-starts `ollama serve` itself (Ollama not running
+at backend start), that process inherits the backend's environment — start the
+Ollama app first after changing the variable.
+
 The OpenAI-compatible streaming API only emits a usage block when
 `stream_options={"include_usage": True}` is passed on the request. Without
 that flag the final stream chunk arrives with empty `usage` and
