@@ -228,16 +228,29 @@ class Retriever:
         When >= 2 hits of one file share a parent heading with *different* child
         headings, every chunk under that parent is loaded and inserted in document
         order at the position of the best hit. Sections above ``max_chunks`` stay as is.
+
+        Only sections with a hit among the first ``top_rank`` chunks are expanded —
+        two stray mid-ranking hits in an unrelated section (e.g. the Krieger section
+        for "was ist überschaden?") would otherwise flood the context with ~20 chunks.
         """
+        top_rank = self.config.section_expansion.top_rank
         siblings: dict[tuple[str, str, str], set[str]] = {}
-        for c in chunks:
+        best_rank: dict[tuple[str, str, str], int] = {}
+        for rank, c in enumerate(chunks):
             key = _section_key(c)
             if key is not None:
                 siblings.setdefault(key, set()).add(c.heading)
+                best_rank.setdefault(key, rank)
 
         expanded: dict[tuple[str, str, str], list[RetrievedChunk]] = {}
         for (source_id, source_file, parent), headings in siblings.items():
             if len(headings) < 2:
+                continue
+            if top_rank and best_rank[(source_id, source_file, parent)] >= top_rank:
+                logger.info(
+                    f"Section '{parent}' ({source_file}) not expanded — best hit at rank "
+                    f"{best_rank[(source_id, source_file, parent)] + 1} > {top_rank}"
+                )
                 continue
             items = await run_in_threadpool(self.vectorstore.get_chunks_for_file, source_id, source_file)
             section = [

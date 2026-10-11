@@ -240,6 +240,7 @@ The model is preloaded at server start (`warmup` in `lifespan`), not on the firs
 | `hybrid.bm25_top_k` | `int` | `15` | How many BM25 candidates to fetch before fusion |
 | `section_expansion.enabled` | `bool` | `true` | After reranking: if ≥ 2 hits of one file share a parent heading with *different* sub-headings, the whole parent section is loaded and passed to the LLM in document order (fixes fragmentary answers to "which abilities / what does X contain" questions). Not editable via the UI |
 | `section_expansion.max_chunks` | `int` | `25` | Sections with more chunks are not expanded — protects the LLM context from whole chapters |
+| `section_expansion.top_rank` | `int` | `3` | Only expand a section if one of its hits is among the first N reranked chunks (`0` = no limit). Stops two stray mid-ranking hits from pulling an unrelated section into the context. Golden set: Ø chunks 13.9 → 12.6, 25 questions lose junk expansion, section hit rate unchanged; `2`/`1` started cutting relevant overview chunks |
 
 **Rules of thumb:**
 - `top_k` should be at least twice `top_k_rerank`

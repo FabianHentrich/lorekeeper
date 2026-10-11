@@ -471,6 +471,34 @@ class TestSectionExpansion:
         assert [r.metadata["chunk_index"] for r in results] == [14, 11]
 
     @pytest.mark.asyncio
+    async def test_low_ranked_section_is_not_expanded(self, embed_service):
+        """Verify two sibling hits that only appear below top_rank don't pull in their section."""
+        hits = [_hit("Überschaden", 0, 0.9, source_file="other.pdf"),
+                _hit("Überheilung", 1, 0.85, source_file="other.pdf"),
+                _hit("Schadenstypen", 2, 0.8, source_file="other.pdf"),
+                _hit("Waldläufer > Mehrfachschuss", 14, 0.7), _hit("Waldläufer > Kurzprofil", 11, 0.6)]
+        retriever, vs = self._retriever(embed_service, hits)
+
+        results = await retriever.retrieve("was ist überschaden")
+
+        assert len(results) == 5
+        vs.get_chunks_for_file.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_top_rank_zero_expands_regardless_of_rank(self, embed_service):
+        """Verify top_rank=0 restores the unrestricted behaviour."""
+        hits = [_hit("A", 0, 0.9, source_file="other.pdf"), _hit("B", 1, 0.85, source_file="other.pdf"),
+                _hit("C", 2, 0.8, source_file="other.pdf"),
+                _hit("Waldläufer > Mehrfachschuss", 14, 0.7), _hit("Waldläufer > Kurzprofil", 11, 0.6)]
+        retriever, vs = self._retriever(embed_service, hits)
+        retriever.config.section_expansion.top_rank = 0
+
+        results = await retriever.retrieve("waldläufer")
+
+        assert len(results) == 8
+        vs.get_chunks_for_file.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_disabled_expansion_keeps_hits(self, embed_service):
         """Verify section_expansion.enabled=False leaves retrieval untouched."""
         hits = [_hit("Waldläufer > Mehrfachschuss", 14), _hit("Waldläufer > Kurzprofil", 11)]

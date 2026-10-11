@@ -191,6 +191,12 @@ If the LoreKeeper backend auto-starts `ollama serve` itself (Ollama not running
 at backend start), that process inherits the backend's environment — start the
 Ollama app first after changing the variable.
 
+**Keep-alive:** Ollama unloads a model after 5 minutes idle; the next question
+then waits ~16 s for the reload (measured: first token 18 s instead of 1.1 s).
+`setx OLLAMA_KEEP_ALIVE 1h` keeps it loaded for an hour after the last
+question (`ollama ps` → UNTIL "59 minutes from now"), at the cost of ~11 GB
+VRAM held during that time; `-1` never unloads.
+
 The OpenAI-compatible streaming API only emits a usage block when
 `stream_options={"include_usage": True}` is passed on the request. Without
 that flag the final stream chunk arrives with empty `usage` and

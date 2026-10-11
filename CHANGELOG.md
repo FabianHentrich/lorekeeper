@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - ruff and mypy configuration in `pyproject.toml`, run as part of `pytest` via `tests/test_code_quality.py`
 
 ### Changed
+- Section expansion only fires when one of the section's hits is among the first `section_expansion.top_rank` (default 3) reranked chunks — two stray low-ranked hits no longer pull an unrelated section into the context (golden set: Ø chunks 13.9 → 12.6, section hit rate unchanged)
 - Docs: Ollama needs `OLLAMA_CONTEXT_LENGTH` (16384 recommended) — the default 4096-token context was nearly exhausted by section-expanded rule questions and the OpenAI-compatible endpoint ignores a per-request `num_ctx`
 - Qwen3 thinking is switched off via `reasoning_effort: "none"` instead of the `/no_think` prompt suffix, which current Ollama ignores — the model was silently reasoning for ~7 s before every answer. Reasoning that still arrives in Ollama's `reasoning` field is counted as `tokens_thinking`
 - PDF parser skips table-of-contents sections (dot leaders or an "Inhaltsverzeichnis" heading) — their chapter lists matched almost any question and crowded out the real rule text. Requires a re-index of PDF sources

@@ -144,6 +144,7 @@ class HybridSearchConfig(BaseModel):
 class SectionExpansionConfig(BaseModel):
     enabled: bool = True
     max_chunks: int = 25             # sections larger than this are not expanded (protects the LLM context)
+    top_rank: int = 3                # only expand if a hit is among the first N ranked chunks (0 = no limit)
 
 
 class RetrievalConfig(BaseModel):

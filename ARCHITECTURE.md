@@ -554,7 +554,9 @@ komplett für diesen Request).
    Eltern-Überschrift mit *verschiedenen* Unter-Überschriften (z.B. `5.4.3 Waldläufer > Kampfstil`
    und `> Fesselschuss`), wird die komplette Eltern-Sektion geladen (`get_chunks_for_file`) und in
    Dokument-Reihenfolge an der Position des besten Treffers eingesetzt. Sektionen über `max_chunks`
-   bleiben unverändert. Behebt fragmentarische Antworten auf Aufzählungs-Fragen.
+   bleiben unverändert. Behebt fragmentarische Antworten auf Aufzählungs-Fragen. Expandiert wird nur,
+   wenn ein Treffer der Sektion unter den ersten `top_rank` (Default 3) Chunks liegt — sonst ziehen zwei
+   zufällige, schwache Treffer eine fremde Sektion in den Kontext.
 8. Rückgabe: Chunks + Metadaten + Scores
 
 ---
