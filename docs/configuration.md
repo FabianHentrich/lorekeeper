@@ -261,7 +261,7 @@ The model is preloaded at server start (`warmup` in `lifespan`), not on the firs
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `base_url` | `str` | `http://localhost:11434` | Ollama server URL |
+| `base_url` | `str` | `http://127.0.0.1:11434` | Ollama server URL — use `127.0.0.1`, not `localhost` (on Windows `localhost` resolves to IPv6 first and costs ~2 s per new connection) |
 | `model` | `str` | `qwen3:14b` | Model name (must be available via `ollama pull`) |
 | `temperature` | `float` | `0.3` | Creativity (0 = deterministic, 1 = creative) |
 | `top_p` | `float` | `0.9` | Nucleus sampling |

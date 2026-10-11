@@ -98,7 +98,7 @@ def main():
     """CLI entry point for running the end-to-end evaluation standalone."""
     parser = argparse.ArgumentParser(description="LoreKeeper Evaluation")
     parser.add_argument("--qa-pairs", default="evaluation/qa_pairs.yaml")
-    parser.add_argument("--api-url", default="http://localhost:8000")
+    parser.add_argument("--api-url", default="http://127.0.0.1:8000")
     parser.add_argument("--output", default="evaluation/results/")
     args = parser.parse_args()
 

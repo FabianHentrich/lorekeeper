@@ -13,7 +13,7 @@ import streamlit as st
 
 st.set_page_config(page_title="Settings — LoreKeeper", page_icon="🛠", layout="wide")
 
-API_URL = st.session_state.get("_api_url", "http://localhost:8000")
+API_URL = st.session_state.get("_api_url", "http://127.0.0.1:8000")
 
 st.title("🛠 Settings")
 st.caption(

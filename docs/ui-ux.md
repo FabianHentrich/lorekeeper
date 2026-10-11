@@ -22,7 +22,7 @@ Das Benutzerinterface von LoreKeeper ist vollständig in Streamlit geschrieben. 
 flowchart LR
     subgraph SIDEBAR["📋 Sidebar"]
         direction TB
-        S1["🔌 API URL<br/><i>http://localhost:8000</i>"]
+        S1["🔌 API URL<br/><i>http://127.0.0.1:8000</i>"]
         S2["🔀 LLM Provider<br/>Ollama ↔ Gemini · live switch<br/><i>Active: qwen3:14b</i>"]
         S3["💚 Status<br/>🟢 healthy · ChromaDB ✅ · LLM ✅<br/><i>cached 30s</i>"]
         S4["🎯 Quellen-Filter<br/>☑ 🗺️ Lore<br/>☑ 📖 Abenteuer<br/>☑ 📋 Regelwerk"]
@@ -55,7 +55,7 @@ flowchart LR
 ## Sidebar Elements
 
 ### API URL
-Connection target for the backend. Default: `http://localhost:8000`.
+Connection target for the backend. Default: `http://127.0.0.1:8000` — not `localhost`: on Windows that resolves to IPv6 `::1` first while uvicorn listens on IPv4 only, adding ~2 s to every request.
 Can be changed to a remote server without restarting.
 
 ### LLM Provider

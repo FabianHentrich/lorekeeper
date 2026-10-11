@@ -55,6 +55,8 @@ Key directories:
 - `ui/` — Streamlit frontend
 - `tests/unit/` — Fast unit tests (mocked externals)
 - `tests/integration/` — RAG pipeline + API layer tests
+- `tests/ui/` — Streamlit pages rendered with `AppTest` against a fake backend
+- `tests/perf/` — timing-based performance checks (`pytest -m perf`, see below)
 
 ---
 
@@ -116,6 +118,38 @@ calls in the test suite — ever.**
 a small vault over HTTP and queries it via `/query/stream`, with real parsing,
 embeddings (small MiniLM model) and ChromaDB, and a fake LLM. It loads the
 embedding model, so it takes noticeably longer than the rest.
+
+### Performance checks
+
+Two kinds, so a change that makes LoreKeeper noticeably less efficient shows up
+right away:
+
+- **Deterministic — part of the normal `pytest` run.** They count work, not time,
+  so they are hardware-independent and fail reliably:
+  - `tests/ui/test_backend_calls.py` — backend requests per page render and per
+    rerun (every click reruns the page script, so an uncached request costs its
+    full latency on every click), requests per chat message, and that local
+    service URLs use `127.0.0.1` instead of `localhost` (on Windows `localhost`
+    resolves to IPv6 first and costs ~2 s per new connection). Budgets live in
+    `BUDGETS`; raise one in the same change if an extra request is intended.
+  - `tests/integration/test_api_routes.py::test_llm_calls_per_request` — one LLM
+    call per answer, a second one only for a real follow-up (condense).
+- **Timing-based — `pytest -m perf`, excluded by default.** Compared against
+  `tests/perf/baseline.json` with a tolerance (×1.5 plus a small absolute slack),
+  because absolute times depend on the machine:
+  - `tests/perf/test_ui_render.py` — render time per page (fake backend).
+  - `tests/perf/test_golden_retrieval.py` — runs the golden set through the
+    **running** backend (`127.0.0.1:8000`; skipped if none) and checks p50/p95
+    retrieval latency, chunks per question (avg/max — catches context bloat) and
+    that the section hit rate does not drop. Takes a few minutes.
+
+```bash
+pytest -m perf                          # compare against the baseline
+PERF_UPDATE_BASELINE=1 pytest -m perf   # accept the current values (new hardware, intended trade-off)
+```
+
+LLM answer times are not tested automatically (model- and hardware-dependent);
+use the per-query `timings` (log line `Query timings:` / caption in the chat).
 
 ---
 

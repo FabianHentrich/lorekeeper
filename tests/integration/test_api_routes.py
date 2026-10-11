@@ -421,6 +421,39 @@ def test_query_reports_condense_time_for_follow_ups(client, fake_services):
     assert timings["condense_ms"] >= 0
 
 
+@pytest.mark.parametrize("history, question, expected", [
+    ([], "Was ist eine Marke?", ["stream"]),
+    ([{"role": "user", "content": "Wer ist Arkenfeld?"}], "Was ist eine Marke?", ["stream"]),
+    ([{"role": "user", "content": "Wer ist Arkenfeld?"}], "Wer ist sein Vater?", ["condense", "stream"]),
+])
+def test_llm_calls_per_request(client, fake_services, history, question, expected):
+    """Performance guard (roadmap 5.2): one LLM call per answer, plus one only for a real follow-up.
+
+    Each extra call costs a full LLM round-trip before the first token.
+    """
+    calls: list[str] = []
+    gen = fake_services.generator
+    original_stream = gen.generate_stream
+
+    async def _condense(prompt, provider):
+        calls.append("condense")
+        return "Wer ist der Vater von Arkenfeld?"
+
+    def _stream(*args, **kwargs):
+        calls.append("stream")
+        return original_stream(*args, **kwargs)
+
+    gen.condense_question = _condense
+    gen.generate_stream = _stream
+    cm = fake_services.conversation_manager
+    cm.config.condense_question = True
+    cm.get_history_for_condense = lambda sid: history
+
+    client.post("/query/stream", json={"question": question})
+
+    assert calls == expected
+
+
 def test_query_stream_reports_model_that_answered(client, fake_services):
     """Ensure model_used comes from the stream result (e.g. the fallback), not the primary provider."""
     class FallbackGenerator(FakeGenerator):

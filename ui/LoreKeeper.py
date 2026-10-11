@@ -116,7 +116,7 @@ def _render_sidebar():
     """
     st.header("Einstellungen")
 
-    API_URL = st.text_input("API URL", value="http://localhost:8000")
+    API_URL = st.text_input("API URL", value="http://127.0.0.1:8000")
     st.session_state["_api_url"] = API_URL
 
     try:
@@ -304,7 +304,7 @@ if "session_id" not in st.session_state:
     st.session_state.session_id = None
 
 # Read sidebar outputs from session_state
-API_URL = st.session_state.get("_api_url", "http://localhost:8000")
+API_URL = st.session_state.get("_api_url", "http://127.0.0.1:8000")
 _category_filter = st.session_state.get("_category_filter")
 _content_category_filter = st.session_state.get("_content_category_filter")
 

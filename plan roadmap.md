@@ -236,9 +236,9 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 |---|---|---|
 | Antwortzeit | ✅ große Hebel erledigt (5.1, 5.3) | Erster Token 8,7 s → **1,1 s**, gesamt 13,9 s → **3,7 s** (Überschaden, warm); kein abgeschnittener Prompt mehr; kein 16-s-Kaltstart innerhalb 1 h |
 | Retrieval | ⚠️ offen | 0,6–0,8 s, davon Rerank 0,5–0,75 s — läuft auf der **CPU** (PyTorch-CPU-Build), siehe 5.3 |
-| UI-Reaktion | ❌ nicht gemessen, nichts umgesetzt | Hebel bekannt (5.3), erst mit 5.2 messen |
-| Start | ❌ offen | ~12 s (Embedding-Modell ~7 s, Reranker ~4 s); nur einfache Hebel geplant |
-| Regressionsschutz | ❌ offen (5.2) | Das eigentliche Ziel — derzeit fällt eine Verschlechterung nur auf, wenn man die Timings-Caption liest |
+| UI-Reaktion | ✅ Hauptursache behoben (5.2) | `localhost`-Delay von ~2 s pro Backend-Request beseitigt (Chat −4 s pro Nachricht, Sources-Seite −10 s); UI-Code selbst 0,02–0,04 s pro Rerun; Rest nur noch Millisekunden (5.3) |
+| Start | ❌ offen | ~12 s (Embedding-Modell ~7 s, Reranker ~4 s); nur einfache Hebel geplant; Messung kommt mit dem Server-Modus (4.1) |
+| Regressionsschutz | ✅ erledigt (5.2) | Deterministische Budgets im normalen `pytest`, Zeit-Checks per `pytest -m perf` gegen `tests/perf/baseline.json`; Startup-Messung offen (mit 4.1) |
 
 ### 5.1 Messen: Stage-Timings — ✅ Erledigt
 
@@ -250,7 +250,7 @@ Pro Anfrage loggen und im `done`-Event mitliefern: Condense, Retrieval (Embeddin
 
 **Erste Messung (qwen3:14b, warm, GPU)**: Retrieval 0,6–0,8 s (davon Rerank ~0,5–0,75 s), erster Token nach 8,7–9,9 s, gesamt 14–20 s. → Der große Block vor dem ersten Token ist **nicht** Retrieval, sondern verstecktes Denken (siehe 5.3).
 
-### 5.2 Performance-Tests (Regressionsschutz)
+### 5.2 Performance-Tests (Regressionsschutz) — ✅ Erledigt (Startup-Messung offen)
 
 Zwei Arten von Prüfungen — **deterministische** schlagen zuverlässig an und laufen im normalen `pytest`, **zeitbasierte** sind hardwareabhängig und laufen separat:
 
@@ -267,6 +267,16 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 
 **Aufwand**: Mittel.
 
+**Umgesetzt** (Details in `CONTRIBUTING.md` → „Performance checks“):
+- Deterministisch, im normalen `pytest`: Backend-Requests pro Seiten-Render/Rerun/Chat-Nachricht (`tests/ui/test_backend_calls.py`, `AppTest` + Fake-Backend, Budgets in `BUDGETS`); LLM-Aufrufe pro Anfrage (`test_llm_calls_per_request`); keine `localhost`-URLs für lokale Dienste.
+- Zeitbasiert, `pytest -m perf` gegen `tests/perf/baseline.json` (×1,5 + Slack; `PERF_UPDATE_BASELINE=1` übernimmt neue Werte): Render-Zeit je Seite; Golden Set über das laufende Backend — p50/p95 Retrieval-Latenz, Ø/max Chunks pro Frage, Abschnitt-Trefferquote darf nicht sinken.
+- **Offen**: Startup-Messung — ein zweites Backend kann nicht parallel zum laufenden starten (Port, eingebettete ChromaDB); sinnvoll erst mit dem Server-Modus aus 4.1.
+
+**Befunde aus der ersten Messung**:
+- **`localhost` kostet 2 s pro Verbindung (behoben)**: Unter Windows löst `localhost` zuerst auf IPv6 `::1` auf, uvicorn und Ollama lauschen nur auf IPv4 → jede neue Verbindung wartet ~2 s auf den Fallback (gemessen 2000 ms vs. 3 ms). Betraf jede Chat-Nachricht (~4 s: `/config` + `/query/stream`), jeden Sources-Seiten-Aufbau (~10 s) und neue Verbindungen zu Ollama nach einer Pause. Alle Standard-URLs (UI, Config, Eval) stehen jetzt auf `127.0.0.1`; ein Test verhindert die Rückkehr. **Achtung**: Eine offene Browser-Session mit `localhost` im Sidebar-Feld „API URL“ behält den Delay bis zum Neuladen.
+- **UI-Code selbst ist schnell**: Rerun je Seite 0,02–0,04 s, erster Aufbau < 0,7 s (Fake-Backend) — die gefühlte Trägheit kam aus den Backend-Aufrufen.
+- **Sources-Seite**: `/sources/{id}/folders` wird bei jedem Rerun neu geladen (1× pro Source, ungecacht) — seit dem `127.0.0.1`-Fix nur noch Millisekunden, als Budget im Test festgehalten.
+
 ### 5.3 Bekannte Hebel (nach der Messung angehen)
 
 - **Antwortzeit — qwen3 denkt trotz `/no_think` (gemessen, größter Hebel)**: Ollama ignoriert das an den Prompt gehängte `/no_think`; qwen3 erzeugt Reasoning-Tokens im separaten Feld `reasoning`, das LoreKeeper weder anzeigt noch zählt (`tokens_thinking` bleibt 0). Kostet ~7 s pro Antwort. Direkter Test gegen Ollama: `reasoning_effort: "none"` (bzw. `reasoning: {effort: "none"}`) schaltet es ab (0 Reasoning-Chunks), `think: false` wird ignoriert. ✅ **Erledigt**: `OllamaProvider` sendet für Qwen3 `extra_body={"reasoning_effort": "none"}` statt `/no_think`; Reasoning-Chunks im `reasoning`-Feld werden als `tokens_thinking` gezählt.
@@ -275,7 +285,7 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 - **Präzision/Kontext — Section Expansion begrenzt** ✅ **Erledigt**: `section_expansion.top_rank: 3` — expandiert nur, wenn ein Treffer der Sektion unter den ersten 3 Chunks liegt. Golden Set (0 = altes Verhalten / 3 / 2 / 1): Ø Chunks 13,9 / 12,6 / 11,9 / 10,7; expandierte Fragen 144 / 119 / 102 / 75; Abschnitt-Treffer überall 89,1 %. Bei 3 fallen nur Fehl-Expansionen weg (z.B. Geisterwesen-Statblöcke bei „Eigenheiten Geist und Psyche“); 2 und 1 schneiden bereits relevante Übersichts-Chunks ab (Akademie-Geschichte, Szenenübersicht, Arkenfeld-Steckbrief). Offen: Gesamtbudget über alle expandierten Sektionen (max. 49 Chunks bleiben möglich). Unnötige Condense-Aufrufe sind bereits entfernt (`needs_condense`).
 - **Retrieval — Reranker/Embeddings auf der CPU (gemessen, offen)**: `torch 2.14.1+cpu` ist installiert, `torch.cuda.is_available()` = False. Rerank kostet 0,5–0,75 s pro Frage, Re-Indexierung des Regelwerks ~80 s. Mit CUDA-PyTorch liefen beide auf der GPU (Platz: Modell 11 GB + Reranker/Embedding ~1–2 GB von 16 GB). **Neue Abhängigkeit** (CUDA-Build von torch, ~2–3 GB Download) → vorher entscheiden; danach Timings und VRAM messen.
 - **Kontext — Gesamtbudget für Section Expansion (offen)**: Mehrere expandierte Sektionen können zusammen noch bis zu 49 Chunks ergeben (z.B. „Wie wird die Bonusaktion im Kampf eingesetzt?“). Ein Budget über alle Sektionen (z.B. max. 20 Chunks) begrenzt das; messbar mit der Chunk-Prüfung aus 5.2.
-- **UI-Reaktion (nicht gemessen, offen)**: Chat holt vor jeder Nachricht `/config` (cachen); Sources-Seite blockiert beim Polling (3.8/3.9); Kosten eines Reruns mit langer Chat-Historie und Quellen-Expandern prüfen. Erst mit den `AppTest`-Prüfungen aus 5.2 messen, dann gezielt beheben.
+- **UI-Reaktion (gemessen, Hauptursache behoben)**: Die 2-s-`localhost`-Verzögerung pro Request ist behoben (5.2). Rest, jetzt nur noch Millisekunden pro Request: Chat holt vor jeder Nachricht `/config` (cachen); Sources-Seite lädt `/folders` bei jedem Rerun; Sources-Seite blockiert beim Polling (3.8/3.9). Kosten eines Reruns mit langer Chat-Historie und vielen Quellen-Expandern noch nicht gemessen.
 - **Start (offen)**: nur einfache Hebel — `--reload` im Server-Modus aus (4.1); Reranker wird in `src/main.py` beim Start vorgeladen (~4 s) — lazy laden verschiebt die Zeit nur auf die erste Frage, lohnt also nur mit CUDA (dann deutlich schneller geladen).
 - **Generierung**: Lange Antworten (Krieger: 655 Tokens ≈ 12 s) sind durch die Modellgeschwindigkeit (~50 Token/s) begrenzt — kein Performance-Bug; Stellschraube wäre ein Prompt, der kürzere Antworten verlangt (Produktentscheidung).
 
@@ -294,13 +304,13 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 
 ## Priorisierungsvorschlag
 
-Erledigt: 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
+Erledigt: 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
 
 | Reihenfolge | Punkt | Impact | Aufwand | Begründung |
 |---|---|---|---|---|
-| 1 | 5.2 Performance-Tests (deterministisch zuerst) | Hoch — das eigentliche Ziel: Verschlechterungen sofort sehen | Mittel | Sichert die erreichten Werte ab, bevor weiter umgebaut wird; liefert die UI-Messung |
+| 1 | ~~5.2 Performance-Tests~~ | | | ✅ Erledigt (Startup-Messung mit 4.1) — dabei `localhost`-Delay gefunden und behoben |
 | 2 | 4.1 Heimnetz + 3.7 Zugriffsschutz | Hoch — Gaming-PC als Server nutzbar | Gering | 3.7 muss vor dem Öffnen des Ports stehen |
-| 3 | 5.3 UI-Reaktion + 3.8/3.9 Ingest-Fortschritt | Mittel — Seiten reagieren flüssig | Gering-Mittel | Nach der Messung aus 5.2 gezielt |
+| 3 | 3.8/3.9 Ingest-Fortschritt + 5.3 UI-Reste (`/config` cachen, `/folders` cachen) | Gering-Mittel — Sources-Seite bleibt bedienbar | Gering-Mittel | Hauptursache der UI-Trägheit ist behoben; Rest sind Komfort und Millisekunden |
 | 4 | 5.3 Reranker/Embeddings auf GPU (CUDA-PyTorch) | Mittel — ~0,5 s pro Frage, schnellere Indexierung | Gering (Code) | Neue Abhängigkeit — erst entscheiden |
 | 5 | 6.0 PnP-Simulation zugreifbar machen | offen | offen | Erst Daten ansehen und klären |
 | 6 | 3.10 Regelwerk-Slot im Retrieval | Mittel — Vault↔Regel-Fragen | Mittel | Mit Abschnittsprüfung messbar |

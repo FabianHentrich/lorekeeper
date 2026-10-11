@@ -156,7 +156,7 @@ class RetrievalConfig(BaseModel):
 
 
 class OllamaConfig(BaseModel):
-    base_url: str = "http://localhost:11434"
+    base_url: str = "http://127.0.0.1:11434"
     model: str = "qwen3:14b"
     temperature: float = 0.3
     top_p: float = 0.9
@@ -210,7 +210,7 @@ class LoggingConfig(BaseModel):
 class UIConfig(BaseModel):
     title: str = "LoreKeeper"
     subtitle: str = "Frag deine Welt."
-    api_url: str = "http://localhost:8000"
+    api_url: str = "http://127.0.0.1:8000"
 
 
 class Settings(BaseSettings):

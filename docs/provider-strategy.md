@@ -62,7 +62,7 @@ the model that actually answered. A new provider must set `self.model` in
 llm:
   provider: ollama
   ollama:
-    base_url: "http://localhost:11434"
+    base_url: "http://127.0.0.1:11434"
     model: "qwen3:14b"         # currently recommended (16 GB VRAM)
     temperature: 0.3
     top_p: 0.9

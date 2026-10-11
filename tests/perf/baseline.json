@@ -1,0 +1,21 @@
+{
+  "golden_retrieval": {
+    "avg_chunks": 12.553,
+    "max_chunks": 49,
+    "p50_ms": 783.5,
+    "p95_ms": 1156,
+    "section_hit_rate": 0.891
+  },
+  "ui_render_s": {
+    "chat_first": 0.528,
+    "chat_rerun": 0.041,
+    "evaluation_first": 0.635,
+    "evaluation_rerun": 0.041,
+    "prompts_first": 0.297,
+    "prompts_rerun": 0.022,
+    "settings_first": 0.28,
+    "settings_rerun": 0.019,
+    "sources_first": 0.306,
+    "sources_rerun": 0.036
+  }
+}

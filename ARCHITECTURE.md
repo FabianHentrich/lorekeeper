@@ -626,7 +626,7 @@ class LLMResponse:
 llm:
   provider: ollama                       # ollama | gemini
   ollama:
-    base_url: "http://localhost:11434"
+    base_url: "http://127.0.0.1:11434"
     model: "qwen3:14b"
     temperature: 0.3
     top_p: 0.9
@@ -1100,7 +1100,7 @@ llm:
   fallback_provider: gemini
   fallback_enabled: false
   ollama:
-    base_url: "http://localhost:11434"
+    base_url: "http://127.0.0.1:11434"
     model: "qwen3:14b"
     temperature: 0.3
     top_p: 0.9
@@ -1134,7 +1134,7 @@ api:
 ui:
   title: "LoreKeeper"
   subtitle: "Frag deine Welt."
-  api_url: "http://localhost:8000"
+  api_url: "http://127.0.0.1:8000"
 ```
 
 ### 5.2 prompts.yaml + Varianten
