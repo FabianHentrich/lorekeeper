@@ -322,7 +322,7 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 **Befunde aus der ersten Messung**:
 - **`localhost` kostet 2 s pro Verbindung (behoben)**: Unter Windows löst `localhost` zuerst auf IPv6 `::1` auf, uvicorn und Ollama lauschen nur auf IPv4 → jede neue Verbindung wartet ~2 s auf den Fallback (gemessen 2000 ms vs. 3 ms). Betraf jede Chat-Nachricht (~4 s: `/config` + `/query/stream`), jeden Sources-Seiten-Aufbau (~10 s) und neue Verbindungen zu Ollama nach einer Pause. Alle Standard-URLs (UI, Config, Eval) stehen jetzt auf `127.0.0.1`; ein Test verhindert die Rückkehr. **Achtung**: Eine offene Browser-Session mit `localhost` im Sidebar-Feld „API URL“ behält den Delay bis zum Neuladen.
 - **UI-Code selbst ist schnell**: Rerun je Seite 0,02–0,04 s, erster Aufbau < 0,7 s (Fake-Backend) — die gefühlte Trägheit kam aus den Backend-Aufrufen.
-- **Sources-Seite**: `/sources/{id}/folders` wird bei jedem Rerun neu geladen (1× pro Source, ungecacht) — seit dem `127.0.0.1`-Fix nur noch Millisekunden, als Budget im Test festgehalten.
+- **Sources-Seite**: `/sources/{id}/folders` wird gecacht (60 s, Speichern leert den Cache) — ein Rerun ohne Änderung kostet 0 Requests, als Budget im Test festgehalten.
 
 ### 5.3 Bekannte Hebel (nach der Messung angehen)
 
@@ -330,10 +330,14 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 - **Antwortzeit — Kontextfenster (gemessen)**: `ollama ps` zeigt `CONTEXT 4096` für qwen3:14b. Die Krieger-Frage brauchte 3621 Eingabe- + 919 Ausgabe-Tokens — am bzw. über dem Limit; bei größerer Section Expansion wird der Prompt-Anfang (Systemprompt) still abgeschnitten. ✅ **Erledigt**: `OLLAMA_CONTEXT_LENGTH=16384` als Benutzer-Umgebungsvariable gesetzt (der OpenAI-kompatible Endpoint ignoriert `num_ctx` pro Request, getestet). Danach `CONTEXT 16384`, 11 GB von 16 GB VRAM, weiterhin 100 % GPU, keine messbare Verlangsamung (warm: erster Token 1,1 s / 2,3 s).
 - **Antwortzeit — Modell entladen nach 5 Minuten (gemessen)**: Ollama entlädt das Modell nach 5 min Leerlauf; die erste Frage danach wartet ~16 s aufs Laden (erster Token 18 s statt 1,1 s). ✅ **Erledigt**: `OLLAMA_KEEP_ALIVE=1h` als Benutzer-Umgebungsvariable — das Modell bleibt bis 1 h nach der letzten Frage geladen (`ollama ps`: „59 minutes from now“). Belegt in der Zeit ~11 GB VRAM; `-1` hielte es dauerhaft geladen.
 - **Präzision/Kontext — Section Expansion begrenzt** ✅ **Erledigt**: `section_expansion.top_rank: 3` — expandiert nur, wenn ein Treffer der Sektion unter den ersten 3 Chunks liegt. Golden Set (0 = altes Verhalten / 3 / 2 / 1): Ø Chunks 13,9 / 12,6 / 11,9 / 10,7; expandierte Fragen 144 / 119 / 102 / 75; Abschnitt-Treffer überall 89,1 %. Bei 3 fallen nur Fehl-Expansionen weg (z.B. Geisterwesen-Statblöcke bei „Eigenheiten Geist und Psyche“); 2 und 1 schneiden bereits relevante Übersichts-Chunks ab (Akademie-Geschichte, Szenenübersicht, Arkenfeld-Steckbrief). Offen: Gesamtbudget über alle expandierten Sektionen (max. 49 Chunks bleiben möglich). Unnötige Condense-Aufrufe sind bereits entfernt (`needs_condense`).
-- **Retrieval — Reranker/Embeddings auf der CPU (gemessen, offen)**: `torch 2.14.1+cpu` ist installiert, `torch.cuda.is_available()` = False. Rerank kostet 0,5–0,75 s pro Frage, Re-Indexierung des Regelwerks ~80 s. Mit CUDA-PyTorch liefen beide auf der GPU (Platz: Modell 11 GB + Reranker/Embedding ~1–2 GB von 16 GB). **Neue Abhängigkeit** (CUDA-Build von torch, ~2–3 GB Download) → vorher entscheiden; danach Timings und VRAM messen.
+- **Retrieval — Reranker/Embeddings auf der CPU (gemessen, offen)**: `torch 2.14.1+cpu` ist installiert, `torch.cuda.is_available()` = False. Rerank kostet 0,5–0,75 s pro Frage, Re-Indexierung des Regelwerks ~80 s. Auf der GPU wäre Platz (Modell 11 GB + Reranker/Embedding ~1–2 GB von 16 GB); Ollama nutzt die Karte bereits für das LLM. **Hardware: AMD Radeon RX 9070 XT → kein CUDA** (nur NVIDIA). Optionen unter Windows (Stand 10/2026):
+  - **ONNX Runtime + DirectML** (empfohlen): beide Modelle über sentence-transformers als ONNX exportieren, DirectML läuft auf jeder DX12-Karte. Neue Abhängigkeit (`onnxruntime-directml`), mittlerer Code-Aufwand in `embeddings.py`/Reranker.
+  - **PyTorch mit ROCm für Windows**: nur Preview; offener Bug [ROCm/TheRock #8379](https://github.com/ROCm/TheRock/issues/8379) — PyTorch 2.12 + ROCm 7.14 liefert auf der RX 9070 XT unter Windows **stillschweigend Nullen** → würde den Index unbemerkt zerstören. Erst wieder prüfen, wenn der Bug behoben ist.
+  - `torch-directml`: läuft, aber kaum gepflegt und an alte torch-Versionen gebunden. WSL2 + ROCm passt nicht zu „nur Windows“.
+  - Vorgehen: Abhängigkeit entscheiden, dann Embeddings auf CPU vs. DirectML vergleichen (identische Vektoren bis auf Rundung prüfen!), Rerank-/Index-Zeiten und VRAM messen. CPU-lastig → nicht parallel zur Simulation.
 - **Kontext — Gesamtbudget für Section Expansion (offen)**: Mehrere expandierte Sektionen können zusammen noch bis zu 49 Chunks ergeben (z.B. „Wie wird die Bonusaktion im Kampf eingesetzt?“). Ein Budget über alle Sektionen (z.B. max. 20 Chunks) begrenzt das; messbar mit der Chunk-Prüfung aus 5.2.
-- **UI-Reaktion (gemessen, Hauptursache behoben)**: Die 2-s-`localhost`-Verzögerung pro Request ist behoben (5.2). Rest, jetzt nur noch Millisekunden pro Request: Chat holt vor jeder Nachricht `/config` (cachen); Sources-Seite lädt `/folders` bei jedem Rerun; ~~Sources-Seite blockiert beim Polling~~ (3.8/3.9 erledigt). Kosten eines Reruns mit langer Chat-Historie und vielen Quellen-Expandern noch nicht gemessen.
-- **Start (offen)**: nur einfache Hebel — `--reload` im Server-Modus aus (4.1); Reranker wird in `src/main.py` beim Start vorgeladen (~4 s) — lazy laden verschiebt die Zeit nur auf die erste Frage, lohnt also nur mit CUDA (dann deutlich schneller geladen).
+- **UI-Reaktion (gemessen, Hauptursache behoben)**: Die 2-s-`localhost`-Verzögerung pro Request ist behoben (5.2). ✅ Reste erledigt: Der Chat holt das LLM-Timeout aus dem gecachten `/sidebar-state` statt `/config` vor jeder Nachricht (1 Request pro Nachricht statt 2); Sources-Seite cacht `/folders`; Polling blockiert nicht mehr (3.8/3.9). Kosten eines Reruns mit langer Chat-Historie und vielen Quellen-Expandern noch nicht gemessen.
+- **Start (offen)**: nur einfache Hebel — `--reload` im Server-Modus aus (4.1); Reranker wird in `src/main.py` beim Start vorgeladen (~4 s) — lazy laden verschiebt die Zeit nur auf die erste Frage, lohnt also nur mit GPU-Inferenz (dann deutlich schneller geladen).
 - **Generierung**: Lange Antworten (Krieger: 655 Tokens ≈ 12 s) sind durch die Modellgeschwindigkeit (~50 Token/s) begrenzt — kein Performance-Bug; Stellschraube wäre ein Prompt, der kürzere Antworten verlangt (Produktentscheidung).
 
 **Aufwand**: je Hebel Gering bis Mittel.
@@ -368,6 +372,16 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 
 ---
 
+## 7.0 Testlücken schließen
+
+**Problem**: Einzelne Module sind kaum durch Tests abgedeckt (Stand Coverage-Lauf 10.10.): `src/api/prompt_routes.py` ~54 %, `src/generation/providers/gemini.py` ~42 %, `src/api/eval_routes.py` ~77 %. Fehler dort (Prompt-Varianten speichern/aktivieren, Gemini-Streaming/Token-Usage/Fehlerpfade, Eval-Jobs) fallen erst im Betrieb auf.
+
+**Lösung**: Erst `pytest --cov=src --cov-report=term-missing` laufen lassen und die ungetesteten Zeilen ansehen, dann gezielt Tests ergänzen — Gemini mit gemocktem `google-genai`-Client (Streaming, Usage, Timeout, fehlender Key), Prompt-/Eval-Routes über `TestClient` wie die übrigen Integrationstests. Kein LLM- oder API-Aufruf in Tests.
+
+**Aufwand**: Gering-Mittel; wenig Last (nur Unit-/Integrationstests) → passt, während die Simulation läuft.
+
+---
+
 ## Priorisierungsvorschlag
 
 Erledigt: 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
@@ -378,8 +392,8 @@ Erledigt: 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz
 |---|---|---|---|---|
 | 1 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | Umgesetzt; wartet auf einen sauberen Simulationslauf, dann Re-Index, Eval, Spieler-Messung |
 | 2 | 3.10 Regelwerk-Slot im Retrieval | Mittel — SL-Fragen, die Vault und Regel mischen | Mittel | Mit Abschnittsprüfung messbar (x002–x008) |
-| 3 | 5.3 UI-Reste (`/config`, `/folders` cachen) | Gering | Gering | 3.8/3.9 erledigt; Rest nur Millisekunden |
-| 4 | 5.3 Reranker/Embeddings auf GPU (CUDA-PyTorch) | Mittel — ~0,5 s pro Frage, schnellere Indexierung | Gering (Code) | Neue Abhängigkeit — erst entscheiden |
+| 3 | 7.0 Testlücken (prompt_routes, gemini, eval_routes) | Gering-Mittel — Fehler früher finden | Gering-Mittel | Wenig Last, parallel zur Simulation möglich |
+| 4 | 5.3 Reranker/Embeddings auf GPU (AMD: ONNX Runtime + DirectML) | Mittel — ~0,5 s pro Frage, schnellere Indexierung, CPU frei für die Simulation | Mittel | Kein CUDA (AMD-Karte); neue Abhängigkeit — erst entscheiden; ROCm erst nach Bugfix |
 | 5 | 5.2 Startup-Messung | Gering — Regressionsschutz für den Start | Gering | Jetzt mit dem Server-Modus (4.1) möglich |
 | 6 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | Mit der Chunk-Prüfung aus 5.2 messbar |
 | 7 | 3.6 Chat-Verlauf im Antwort-Prompt | Mittel — bessere Folgefragen | Gering-Mittel | Kontext jetzt 16k; Spieler-Modus beachten (nur eigener Verlauf) |

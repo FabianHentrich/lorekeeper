@@ -57,6 +57,7 @@ PAYLOADS: dict[str, object] = {
         "gemini_status": {"has_key": False, "source": "none"},
         "available_categories": ["misc"],
         "player_source_ids": ["regelbuch"],
+        "llm_timeout": 300,
     },
     "/sources": {"sources": [{
         "id": "vault", "path": "C:/Vault", "group": "lore", "default_category": "misc",

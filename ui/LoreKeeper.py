@@ -426,10 +426,10 @@ if prompt := st.chat_input(_placeholder, disabled=_chat_blocked):
         request_body["hybrid_search"] = True
 
     # Read timeout follows the configured LLM timeout: condense + answer can each
-    # take up to that long before the first token arrives.
+    # take up to that long before the first token arrives. From the cached
+    # /sidebar-state — no extra request per message.
     try:
-        _llm = requests.get(f"{API_URL}/config", timeout=5).json()["llm"]
-        _llm_timeout = _llm[_llm["provider"]]["timeout"]
+        _llm_timeout = _fetch_sidebar_state(API_URL).get("llm_timeout", 300)
     except Exception:
         _llm_timeout = 300
 

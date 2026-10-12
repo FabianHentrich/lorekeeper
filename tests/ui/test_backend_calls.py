@@ -18,8 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # page: (max calls on first render, max calls on a rerun without changes)
 BUDGETS = {
     "chat": (1, 0),         # /sidebar-state, cached afterwards
-    # /sources/{id}/folders is fetched uncached on every rerun, once per source (known, roadmap 5.3)
-    "sources": (3, 1),      # /sources, /stats, 1x /folders
+    "sources": (3, 0),      # /sources, /stats, 1x /folders per source — all cached afterwards
     "evaluation": (2, 0),   # /eval/qa-pairs, /eval/results
     "prompts": (3, 0),      # /prompts/active, /prompts/variants, /prompts/variants/{name}
     "settings": (1, 0),     # /config
@@ -48,8 +47,8 @@ def test_backend_calls_per_render_stay_within_budget(page, fake_backend):
     assert len(fake_backend.calls) <= rerun_max, f"{page} rerun: {fake_backend.calls}"
 
 
-def test_chat_message_costs_at_most_two_requests(fake_backend):
-    """Sending a question: the streamed answer plus one /config lookup for the timeout, nothing else."""
+def test_chat_message_costs_one_request(fake_backend):
+    """Sending a question: only the streamed answer — the LLM timeout comes from the cached /sidebar-state."""
     at = _run("chat")
     fake_backend.calls.clear()
 
@@ -57,7 +56,7 @@ def test_chat_message_costs_at_most_two_requests(fake_backend):
 
     assert not at.exception, [e.message for e in at.exception]
     assert "POST /query/stream" in fake_backend.calls
-    assert len(fake_backend.calls) <= 2, fake_backend.calls
+    assert fake_backend.calls == ["POST /query/stream"], fake_backend.calls
     assert any("Eine Marke ist eine Ressource." in m.value for m in at.markdown)
 
 

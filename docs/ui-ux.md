@@ -356,7 +356,7 @@ Each source gets an expander (`📁 {id} — {path}`) with two sections:
 
 | Backend call | Notes |
 |---|---|
-| `GET /sources/{id}/folders` | Fetches the folder tree for this source and renders a second `st.data_editor` with columns *name, type, category, group*. |
+| `GET /sources/{id}/folders` | Fetches the folder tree for this source (cached 60 s, cleared on save) and renders a second `st.data_editor` with columns *name, type, category, group*. |
 
 The table is pre-populated from the source's current `category_map` — unmapped
 folders fall back to the source-level `default_category` and `group`. The user

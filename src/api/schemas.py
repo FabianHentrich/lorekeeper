@@ -87,6 +87,7 @@ class SidebarState(BaseModel):
     gemini_status: GeminiKeyStatus
     available_categories: list[str]
     player_source_ids: list[str] = []  # sources searchable in the chat's player mode
+    llm_timeout: float = 300  # seconds, active provider — the chat derives its read timeout from it
 
 
 class SwitchProviderRequest(BaseModel):

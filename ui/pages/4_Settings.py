@@ -220,7 +220,7 @@ with tab_llm:
         else:
             try:
                 _put_config({"llm": delta})
-                _fetch_config.clear()
+                st.cache_data.clear()  # also the chat's cached /sidebar-state (LLM timeout)
                 st.success("Gespeichert.")
                 st.rerun()
             except Exception as e:

@@ -209,6 +209,15 @@ def test_sidebar_state_lists_player_sources(client, env, monkeypatch):
     assert body["player_source_ids"] == ["Pen & Paper"]
 
 
+def test_sidebar_state_carries_the_active_providers_timeout(client, env, monkeypatch):
+    """The chat takes its read timeout from here instead of fetching /config per message."""
+    env.config.settings.llm.ollama.timeout = 123
+    env.config.settings.llm.gemini.timeout = 45
+    monkeypatch.setattr(main_module, "provider", SimpleNamespace(provider="gemini", model="gemini-2.5-flash"))
+
+    assert client.get("/sidebar-state").json()["llm_timeout"] == 45
+
+
 def test_put_sources_missing_field_400(client, env):
     assert client.put("/sources", json={}).status_code == 400
 

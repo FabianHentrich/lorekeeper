@@ -33,6 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - ruff and mypy configuration in `pyproject.toml`, run as part of `pytest` via `tests/test_code_quality.py`
 
 ### Changed
+- The chat takes the LLM read timeout from the cached `/sidebar-state` (new field `llm_timeout`) instead of fetching `/config` before every message — one request per message instead of two; the Sources page caches `/sources/{id}/folders` (60 s, cleared on save). Saving LLM settings clears all UI caches
 - The Streamlit UI listens on `127.0.0.1` by default (`.streamlit/config.toml`, `start.ps1`); before, it accepted connections on all network interfaces without any protection. `start.ps1 -Server` opens it to the home network on purpose
 - The "API URL" field in the chat sidebar is gone — the backend URL comes from `LOREKEEPER_API_URL` (default `http://127.0.0.1:8000`), so visitors can no longer point the UI server at arbitrary URLs
 - Default URLs for the backend (UI, e2e eval) and Ollama use `127.0.0.1` instead of `localhost`. On Windows `localhost` resolves to IPv6 `::1` first while uvicorn and Ollama listen on IPv4 only, so every new connection waited ~2 s: measured 2000 ms vs. 3 ms per request — about 4 s on every chat message and ~10 s per Sources page render. A browser session whose sidebar "API URL" still points at `localhost` keeps the delay until changed

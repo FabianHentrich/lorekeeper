@@ -76,6 +76,15 @@ def _raise_for_status(resp: requests.Response):
     raise RuntimeError(f"{resp.status_code}: {detail}")
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def _fetch_folders(api_url: str, sid_url: str) -> dict:
+    """Top-level folders of one source — cached, every rerun used to refetch them once per source.
+    Saving on this page clears all caches (`_refresh`); errors are not cached."""
+    r = requests.get(f"{api_url}/sources/{sid_url}/folders", timeout=5)
+    _raise_for_status(r)
+    return r.json()
+
+
 try:
     sources = _fetch_sources()
 except Exception as e:
@@ -341,9 +350,7 @@ for s in sources:
         # ── Folder mapping ──
         st.markdown("**Ordner-Zuordnung**")
         try:
-            r = requests.get(f"{API_URL}/sources/{sid_url}/folders", timeout=5)
-            _raise_for_status(r)
-            tree = r.json()
+            tree = _fetch_folders(API_URL, sid_url)
             folders = tree.get("folders", [])
             if tree.get("error"):
                 st.warning(tree["error"])
