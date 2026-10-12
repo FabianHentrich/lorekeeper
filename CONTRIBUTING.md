@@ -24,6 +24,9 @@ python -m venv .venv
 source .venv/bin/activate
 
 pip install -r requirements.txt
+# Windows, GPU reranker: swap the plain onnxruntime for the DirectML build (see README → Quickstart)
+pip uninstall -y onnxruntime
+pip install --force-reinstall --no-deps onnxruntime-directml
 cp .env.example .env   # fill in GEMINI_API_KEY if using Gemini
 ```
 

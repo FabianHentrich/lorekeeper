@@ -232,6 +232,49 @@ class TestRerank:
         assert [r.content for r in results] == ["a1", "a2", "b4", "b5"]
 
 
+class TestRerankerBackend:
+    """reranking.backend picks the GPU model; any DirectML failure falls back to torch with a warning."""
+
+    @staticmethod
+    def _retriever(backend):
+        cfg = RetrievalConfig(reranking=RerankingConfig(backend=backend))
+        return Retriever(config=cfg, embedding_service=AsyncMock(), vectorstore=MagicMock())
+
+    def test_directml_backend_uses_gpu_model(self, monkeypatch):
+        import src.retrieval.onnx_reranker as onnx_reranker
+        gpu = MagicMock()
+        monkeypatch.setattr(onnx_reranker, "DirectMLCrossEncoder", lambda model, max_length: gpu)
+        torch_loader = MagicMock()
+        monkeypatch.setattr("sentence_transformers.CrossEncoder", torch_loader)
+
+        assert self._retriever("directml").get_reranker() is gpu
+        torch_loader.assert_not_called()
+
+    def test_directml_failure_falls_back_to_torch(self, monkeypatch, caplog):
+        import src.retrieval.onnx_reranker as onnx_reranker
+
+        def _unavailable(model, max_length):
+            raise onnx_reranker.DirectMLUnavailable("DmlExecutionProvider missing")
+
+        monkeypatch.setattr(onnx_reranker, "DirectMLCrossEncoder", _unavailable)
+        cpu = MagicMock()
+        monkeypatch.setattr("sentence_transformers.CrossEncoder", lambda model, max_length: cpu)
+
+        with caplog.at_level("WARNING"):
+            assert self._retriever("directml").get_reranker() is cpu
+        assert "falling back to the CPU" in caplog.text
+
+    def test_torch_backend_never_tries_directml(self, monkeypatch):
+        import src.retrieval.onnx_reranker as onnx_reranker
+        gpu_loader = MagicMock()
+        monkeypatch.setattr(onnx_reranker, "DirectMLCrossEncoder", gpu_loader)
+        cpu = MagicMock()
+        monkeypatch.setattr("sentence_transformers.CrossEncoder", lambda model, max_length: cpu)
+
+        assert self._retriever("torch").get_reranker() is cpu
+        gpu_loader.assert_not_called()
+
+
 class TestRRFMerge:
     """Test suite validating the Reciprocal Rank Fusion primitive."""
 

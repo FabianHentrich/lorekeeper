@@ -298,7 +298,7 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 | Bereich | Status | Ergebnis |
 |---|---|---|
 | Antwortzeit | ✅ große Hebel erledigt (5.1, 5.3) | Erster Token 8,7 s → **1,1 s**, gesamt 13,9 s → **3,7 s** (Überschaden, warm); kein abgeschnittener Prompt mehr; kein 16-s-Kaltstart innerhalb 1 h |
-| Retrieval | ⚠️ offen | 0,6–0,8 s, davon Rerank 0,5–0,75 s — läuft auf der **CPU** (PyTorch-CPU-Build), siehe 5.3 |
+| Retrieval | ✅ erledigt (5.4) | Rerank auf der GPU via DirectML (5.4): 840 ms → 50 ms, unter CPU-Last 14 s → 70 ms |
 | UI-Reaktion | ✅ erledigt (5.2, 5.3) | `localhost`-Delay von ~2 s pro Backend-Request beseitigt; Chat 1 Request pro Nachricht, Sources-Rerun 0 Requests, Ingest-Fortschritt blockiert nicht mehr (3.9) |
 | Start | ⚠️ Test da | ~12 s (Embedding-Modell ~7 s, Reranker ~4 s); nur einfache Hebel geplant; `tests/perf/test_startup.py` steht, Baseline offen |
 | Regressionsschutz | ✅ erledigt (5.2) | Deterministische Budgets im normalen `pytest`, Zeit-Checks per `pytest -m perf` gegen `tests/perf/baseline.json`; Startup-Test da, Baseline offen |
@@ -355,7 +355,7 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 **Aufwand**: je Hebel Gering bis Mittel.
 
 
-### 5.4 Entscheidungsvorlage: Reranker/Embeddings auf GPU (Stand 12.10.)
+### 5.4 Reranker auf der GPU (DirectML) — ✅ Erledigt
 
 **Warum überhaupt?** Der Cross-Encoder-Rerank ist der teuerste Schritt im Retrieval und läuft auf der CPU (`torch 2.14.1+cpu`). Gemessen (`logs/`, 34 Anfragen): Rerank Median 0,8 s, p90 1,5 s — aber **9,7–9,9 s, während die Simulation lief** (Retrieval gesamt 11,7 s, Embedding 1,7 s statt 0,08 s). Der eigentliche Nutzen ist deshalb nicht die halbe Sekunde im Normalfall, sondern:
 1. **Unabhängig von CPU-Last**: Chat bleibt schnell, auch wenn die Simulation (oder ein Ingest) läuft — heute kostet jede Frage dann ~10 s extra.
@@ -376,9 +376,21 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 
 **Empfehlung**: A zuerst (Config-Schalter `reranking.backend: torch | onnx`, Default `torch`; ONNX-Modell einmal exportieren und lokal speichern). Messen: Rerank-Zeit idle und unter Simulationslast, Golden Set Treffer/Abschnitte gegen heute (261/262, 121/137). Reicht das unter Last nicht, B als zweiter Schritt — mit Provider-Check beim Start. C/D halbjährlich neu prüfen.
 
-**Entscheidung (12.10.): ⏸ zurückgestellt.** Im Leerlauf spart die GPU geschätzt nur ~0,7 s pro Frage (Antwort ~3,7 s → ~3 s, das LLM dominiert) — den Abhängigkeitsärger von DirectML nicht wert. Lohnend wäre es nur, wenn Chat/Evals regelmäßig parallel zur Simulation laufen.
+**Benchmark (12.10., CPU frei, Ryzen 5 5600X / RX 9070 XT)**: 15 Paare in Produktionsgröße, 30 Wiederholungen; „Last“ = 12 Busy-Loop-Prozesse (≈ laufende Simulation).
 
-**Offen — Benchmark bei freier CPU** (~1 min, nichts im Projekt ändern): Reranker CPU (torch, heute) vs. ONNX int8 CPU vs. DirectML, je 15 Paare × ~50 Wiederholungen, plus dieselben Paare unter künstlicher CPU-Last. DirectML/optimum nur in einem **separaten Scratch-venv** installieren, nie in `.venv`. Danach mit echten Zahlen neu entscheiden.
+| Variante | idle | unter Last | Ranking wie heute? |
+|---|---|---|---|
+| torch CPU (heute) | 840 ms | 14,2 s | — |
+| ONNX fp32 CPU | 840 ms | 2,9 s | ✅ identisch |
+| ONNX int8 CPU (`quint8_avx2`) | 710 ms | 2,8 s | ❌ Top-8 weicht ab |
+| **DirectML fp32 (GPU)** | **50 ms** | **68 ms** | ✅ identisch (max. Abweichung 6·10⁻⁶) |
+| DirectML fp16 (`O4`) | — | — | lädt nicht (`invalid unordered_map key`) |
+
+int8 verworfen (kaum schneller, anderes Ranking). Modell-Laden DirectML 1,3 s idle / 10,7 s unter Last (einmalig beim Start).
+
+**Entscheidung (12.10.): B, DirectML.** **Umgesetzt**: `reranking.backend: torch | directml` (Code-Default `torch`, `settings.yaml`: `directml`); `src/retrieval/onnx_reranker.py` lädt das veröffentlichte ONNX-Export des Modells (`onnx/model.onnx`) + `tokenizer.json` aus dem HF-Cache und läuft auf `DmlExecutionProvider` (Session-Lock, eine GPU-Queue). Kein DirectML / kein ONNX-Export / Session landet auf der CPU → **Warnung im Log** und Fallback auf torch (gleiche Scores, nur langsamer) — das ist der Schutz gegen den stillen Rückfall. Installation: nach `pip install -r requirements.txt` einmal `pip uninstall -y onnxruntime` + `pip install --force-reinstall --no-deps onnxruntime-directml` (README → Quickstart). Tests: `tests/unit/retrieval/test_onnx_reranker.py`, `TestRerankerBackend`, `tests/perf/test_reranker_gpu.py` (echtes Modell: gleiches Ranking, GPU < CPU/3).
+
+**Abschluss (12.10.)**: Paket-Tausch in `.venv` erledigt (`onnxruntime-directml 1.24.4`; `pip check` meldet erwartungsgemäß das fehlende `onnxruntime`-Paket für chromadb/pymupdf-layout/rapidocr — das Modul ist da). Volle Testsuite grün (532), RapidOCR-Smoke-Test ok, `tests/perf/test_reranker_gpu.py`: 18 Paare CPU 118 ms → GPU 12 ms, gleiches Ranking. Golden Set mit GPU-Reranker in **1:12 min statt ~12 min**: Dateien 275/278, Abschnitte 132/153 (letzter CPU-Lauf 18:05: 274/278, 131/153). Die 9 Fragen mit anderer Trefferliste als 18:05 liefern im direkten A/B-Vergleich (gleicher Index, torch vs. DirectML) **identische** Ergebnisse (max. Score-Abweichung 3·10⁻⁶) — die Abweichung zu 18:05 kommt nicht vom GPU-Reranker. Offen: Rerank-Timings im laufenden Chat ansehen. Embedding-Modell bleibt auf der CPU (Query-Embedding ~0,08 s; Wechsel würde Re-Index erfordern). Windows ML / ROCm halbjährlich neu prüfen.
 
 ## 6.0 PnP-Simulation zugreifbar machen — 🔄 Umgesetzt, Abschluss nach dem nächsten Simulationslauf
 
@@ -431,7 +443,7 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 
 ## Priorisierungsvorschlag
 
-Erledigt: 3.3 Chunk-Inspector, 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
+Erledigt: 5.4 Reranker auf der GPU (DirectML), 3.3 Chunk-Inspector, 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
 
 **Offen am Gaming-PC (Nutzer)**: alte Autostart-Aufgabe „LoreKeeper Server“ als Admin entfernen (`Unregister-ScheduledTask -TaskName "LoreKeeper Server" -Confirm:$false`); DHCP-Reservierung für `192.168.178.34` im Router.
 
@@ -441,11 +453,10 @@ Erledigt: 3.3 Chunk-Inspector, 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-F
 |---|---|---|---|---|-----------------------------------------------------------------------------------------------------------------------------|
 | 1 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf; dann Re-Index, Eval, Spieler-Messung — dabei 3.8/3.9 im Browser durchklicken     |
 | 2 | 5.2 Startup-Baseline aufnehmen | Gering — Regressionsschutz für den Start | Gering | 🟡 | Test steht; einmal messen bei gestopptem LoreKeeper und ohne Simulation                                                     |
-| 3 | 5.4 Reranker schneller — ⏸ zurückgestellt, erst Benchmark | Gering im Leerlauf (~0,7 s), hoch nur parallel zur Simulation (~10 s) | Gering (Benchmark) | 🔴 | Benchmark CPU vs. ONNX int8 vs. DirectML bei freier CPU, im Scratch-venv; danach entscheiden |
-| 4 | 3.10 Regelwerk-Slot im Retrieval | Mittel — SL-Fragen, die Vault und Regel mischen | Mittel | 🔴 | Mit Abschnittsprüfung messbar (x002–x008)                                                                                   |
-| 5 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🔴 | Mit der Chunk-Prüfung aus 5.2 messbar                                                                                       |
-| 6 | 3.2 Session-History | Mittel | Mittel | 🟢 | Später; Spieler-/SL-Sessions getrennt halten; Fraglich ob überhaupt gebraucht                                               |
-| 7 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | 🔴 | Vision-Modell lokal über Ollama; Bild-Ausschluss im Retriever aufheben                                                      |
-| 8 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | 🟢 | Später; Spieler-Modus im Backend ist erledigt |
-| 9 | 3.5 Wikilink-Expansion | Mittel | Mittel | 🔴 | Experimentell; im Spieler-Modus darf sie keine SL-Quellen nachladen                                                         |
-| 10 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | 🟡 | Später                                                                                                                      |
+| 3 | 3.10 Regelwerk-Slot im Retrieval | Mittel — SL-Fragen, die Vault und Regel mischen | Mittel | 🔴 | Mit Abschnittsprüfung messbar (x002–x008)                                                                                   |
+| 4 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🔴 | Mit der Chunk-Prüfung aus 5.2 messbar                                                                                       |
+| 5 | 3.2 Session-History | Mittel | Mittel | 🟢 | Später; Spieler-/SL-Sessions getrennt halten; Fraglich ob überhaupt gebraucht                                               |
+| 6 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | 🔴 | Vision-Modell lokal über Ollama; Bild-Ausschluss im Retriever aufheben                                                      |
+| 7 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | 🟢 | Später; Spieler-Modus im Backend ist erledigt |
+| 8 | 3.5 Wikilink-Expansion | Mittel | Mittel | 🔴 | Experimentell; im Spieler-Modus darf sie keine SL-Quellen nachladen                                                         |
+| 9 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | 🟡 | Später                                                                                                                      |

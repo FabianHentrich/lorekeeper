@@ -86,12 +86,25 @@ class Retriever:
         self._reranker = None
 
     def get_reranker(self):
-        """Lazy-load and cache the cross-encoder reranking model."""
+        """Lazy-load and cache the cross-encoder reranking model.
+
+        ``reranking.backend: directml`` runs it on the GPU; if DirectML can't run it, a warning
+        is logged and the torch model on the CPU is used — same scores, only slower.
+        """
         if self._reranker is None:
-            from sentence_transformers import CrossEncoder
-            logger.info(f"Loading reranker model: {self.config.reranking.model}")
-            self._reranker = CrossEncoder(self.config.reranking.model, max_length=512)
-            logger.info("Reranker loaded")
+            model = self.config.reranking.model
+            if self.config.reranking.backend == "directml":
+                from src.retrieval.onnx_reranker import DirectMLCrossEncoder
+                try:
+                    self._reranker = DirectMLCrossEncoder(model, max_length=512)
+                    logger.info(f"Reranker loaded on the GPU (DirectML): {model}")
+                except Exception as e:
+                    logger.warning(f"DirectML reranker unavailable ({e}) — falling back to the CPU (torch)")
+            if self._reranker is None:
+                from sentence_transformers import CrossEncoder
+                logger.info(f"Loading reranker model: {model}")
+                self._reranker = CrossEncoder(model, max_length=512)
+                logger.info("Reranker loaded (CPU, torch)")
         return self._reranker
 
     async def retrieve(

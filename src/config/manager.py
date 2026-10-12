@@ -132,6 +132,8 @@ class VectorStoreConfig(BaseModel):
 class RerankingConfig(BaseModel):
     enabled: bool = True
     model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+    # "directml": GPU via onnxruntime-directml (falls back to torch on the CPU if unavailable)
+    backend: Literal["torch", "directml"] = "torch"
     top_k_rerank: int = 8
     max_per_source: int = 3          # cap number of chunks from any single file (0 = unlimited)
 

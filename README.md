@@ -165,7 +165,13 @@ For the exact data flow of queries and ingestion, see [`docs/data-flow.md`](docs
    python -m venv .venv
    .venv\Scripts\activate
    pip install -r requirements.txt
+   # GPU reranker (DirectML): chromadb & co. also pull the plain onnxruntime, which shares the
+   # onnxruntime/ folder and hides DirectML — remove it, then restore the DirectML build:
+   pip uninstall -y onnxruntime
+   pip install --force-reinstall --no-deps onnxruntime-directml
    ```
+   Check: `python -c "import onnxruntime; print(onnxruntime.get_available_providers())"` lists
+   `DmlExecutionProvider`. Repeat the two lines after every `pip install -r requirements.txt`.
 
 2. **Pull the LLM model**
    ```powershell

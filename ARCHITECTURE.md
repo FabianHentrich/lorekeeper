@@ -542,7 +542,9 @@ komplett für diesen Request).
 2. **Lexikalische Suche (BM25)** (nur wenn Hybrid aktiv): Query wird tokenisiert (Lowercase, `\w+`-Wörter — Satzzeichen fallen weg). In-Memory-Index von `rank_bm25`, lazy aus der ChromaDB-Collection gebaut, nach Ingestion invalidiert. Post-hoc Metadaten-Filter (ChromaDB-kompatible `$eq`/`$ne`/`$in`/`$and`-Operatoren).
 3. **Score-Fusion**: Ergebnisse beider Suchen werden über Reciprocal Rank Fusion (RRF) kombiniert (`hybrid.bm25_weight` regelt den Einfluss). BM25-only-Kandidaten werden mit aufgenommen.
 4. Optional: Metadaten-Filter (nur bestimmte Kategorien/Quellen) — wird sowohl an Vektor-Query als auch an BM25 durchgereicht.
-5. Reranking via Cross-Encoder (Score-sortierte Liste).
+5. Reranking via Cross-Encoder (Score-sortierte Liste). `reranking.backend: directml` rechnet auf
+   der GPU (`src/retrieval/onnx_reranker.py`, ONNX Runtime + DirectML, gleiche Scores); ist DirectML
+   nicht verfügbar, Warnung im Log und Fallback auf das torch-Modell auf der CPU.
 6. **Soft per-source cap** (`max_per_source`):
    - Pass 1 (diverse fill): pro Source-File max. N Chunks akzeptieren,
      Cap-Überlauf in Overflow-Liste parken
@@ -1326,6 +1328,10 @@ python -m venv .venv
 
 # 3. Dependencies installieren
 pip install -r requirements.txt
+# GPU reranker (DirectML): chromadb & co. also pull the plain onnxruntime, which shares the
+# onnxruntime/ folder and hides DirectML — remove it, then restore the DirectML build:
+pip uninstall -y onnxruntime
+pip install --force-reinstall --no-deps onnxruntime-directml
 
 # 4. Ollama-Modell herunterladen (Ollama muss laufen)
 ollama pull qwen3:14b

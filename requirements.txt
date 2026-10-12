@@ -15,6 +15,11 @@ python-frontmatter>=1.1.0
 
 # Embeddings & Vector Store
 sentence-transformers>=3.4.0
+# GPU reranker on any DX12 card (AMD incl.). Shares the onnxruntime/ module with the plain
+# onnxruntime that chromadb, rapidocr and pymupdf-layout pull in — after installing, run
+# `pip uninstall -y onnxruntime` + `pip install --force-reinstall --no-deps onnxruntime-directml`
+# (see README → Quickstart). Without it the reranker falls back to the CPU with a warning.
+onnxruntime-directml>=1.24.4
 chromadb>=0.6.0
 rank_bm25>=0.2.2
 

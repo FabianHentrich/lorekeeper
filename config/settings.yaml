@@ -50,6 +50,7 @@ retrieval:
   reranking:
     enabled: true
     model: "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"  # multilingual
+    backend: directml         # torch = CPU | directml = GPU via onnxruntime-directml (CPU fallback with a warning)
     top_k_rerank: 8
     max_per_source: 3         # cap chunks per single file (0 = unlimited) — prevents one dense doc from crowding others
   section_expansion:
