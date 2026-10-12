@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Evaluation page tab **Feedback**: chat ratings via `GET /feedback` (last rating per answer); selected answers become golden-set questions (`f###`, 👍 with its sources, 👎 to fill in)
+- **Player mode enforced in the backend**: `/query`, `/query/stream` and `/eval/preview` accept `role` (`player` / `game_master`, default `game_master`). For players `src/api/access.py` builds the `player_visible` restriction itself and AND-s any filter sent along (it can only narrow); no released source → 403. Backend sessions are bound to their role. The chat sends `role`, its own filter stays as a second guard
 - **Answer feedback** (roadmap 3.4): 👍/👎 under every chat answer for players and game masters; `POST /feedback` appends question, answer, sources, model, role and timings to `logs/feedback.jsonl` (last line per `message_id` counts, `rating: null` = withdrawn)
 - Startup timing check `tests/perf/test_startup.py` (`pytest -m perf`, roadmap 5.2): starts a second backend on a free port and measures the time until `/health` answers; skipped while LoreKeeper runs. Baseline not recorded yet
 - Tests for `providers/gemini.py`, `api/prompt_routes.py` and `api/eval_routes.py` — all three at 100 % coverage (roadmap 7.0)

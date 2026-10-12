@@ -152,7 +152,7 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 
 **Umgesetzt (12.10.)**: 👍/👎 (`st.feedback`) unter jeder Antwort, für Spieler **und** Spielleiter (Entscheidung). `POST /feedback` hängt eine Zeile an `logs/feedback.jsonl` (gitignored, keine neue Abhängigkeit): Zeit, Rolle, Frage, Antwort, Quelldateien, Modell, Suchanfrage, Session, Timings. Ändern/Zurücknehmen = neue Zeile mit derselben `message_id`, die letzte gilt. Tests: `tests/ui/test_feedback.py`, `test_feedback_*` in `tests/integration/test_api_routes.py`. Auswertung siehe `docs/operations.md` → Logs.
 
-**Später**: 👎-Antworten auf der Evaluation-Seite anzeigen und per Klick als Golden-Set-Frage übernehmen.
+✅ **Erledigt**: Tab „Feedback“ auf der Evaluation-Seite zeigt 👎 (optional 👍) und übernimmt ausgewählte Antworten als Golden-Set-Fragen `f###`.
 
 **Aufwand**: Gering (umgesetzt).
 
@@ -278,9 +278,10 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 
 **Offener Punkt**: Der Gaming-PC muss laufen. Wake-on-LAN von unterwegs braucht ein immer laufendes Gerät im Heimnetz (Router-Funktion oder Raspberry Pi); sonst bleibt der PC an.
 
-**Offener Punkt — Spieler-Modus im Backend durchsetzen**: Welche Quellen Spieler sehen, steht zentral in `sources.yaml` (`player_visible`), durchgesetzt wird es aber nur in der Streamlit-UI (`ui/roles.py:query_filters` baut den `source_id`-Filter, das Backend kennt keine Rollen und führt jeden `metadata_filters` aus). Im Heimnetz reicht das, weil das Backend nur auf `127.0.0.1` lauscht und nur Streamlit es erreicht. Sobald die API selbst von außen erreichbar wird (oder ein weiterer Client dazukommt), fehlt der Spieler-Schutz dort → `/query`, `/query/stream` und `/eval/preview` nehmen eine Rolle entgegen und bauen den Spieler-Filter selbst aus `player_visible`; ein mitgeschickter Filter darf ihn nur einschränken, nie erweitern. Die Sicherheitstests aus 3.11 (A/C) dann gegen die API-Seite richten.
+**✅ Erledigt (12.10.) — Spieler-Modus im Backend durchsetzen**: Welche Quellen Spieler sehen, steht zentral in `sources.yaml` (`player_visible`), durchgesetzt wird es aber nur in der Streamlit-UI (`ui/roles.py:query_filters` baut den `source_id`-Filter, das Backend kennt keine Rollen und führt jeden `metadata_filters` aus). Im Heimnetz reicht das, weil das Backend nur auf `127.0.0.1` lauscht und nur Streamlit es erreicht. Sobald die API selbst von außen erreichbar wird (oder ein weiterer Client dazukommt), fehlt der Spieler-Schutz dort → `/query`, `/query/stream` und `/eval/preview` nehmen eine Rolle entgegen und bauen den Spieler-Filter selbst aus `player_visible`; ein mitgeschickter Filter darf ihn nur einschränken, nie erweitern. Die Sicherheitstests aus 3.11 (A/C) dann gegen die API-Seite richten.
+**Umgesetzt**: `role` (`player`/`game_master`, Default `game_master` für CLI/Eval-Tools) auf `/query`, `/query/stream`, `/eval/preview`; `src/api/access.py` baut für Spieler `source_id ∈ player_visible` und AND-et mitgeschickte Filter (können nur einengen), keine freigegebene Quelle → 403. Sessions sind an die Rolle gebunden (Spieler mit SL-`session_id` bekommt eine neue Session). Die UI schickt `role` und weiterhin ihren eigenen Filter als zweite Sicherung. Tests in `tests/integration/test_player_mode_security.py` (mutationsgeprüft: 11 Fehlschläge, wenn der Backend-Filter fehlt), Live-Test schickt nur noch `role`. **Offen, wenn die API je exponiert wird**: Default auf `player` drehen bzw. Authentifizierung — der Default `game_master` vertraut dem Aufrufer.
 
-**Aufwand**: Gering (Einrichtung, kaum Code); Spieler-Modus im Backend Gering-Mittel.
+**Aufwand**: Gering (Einrichtung, kaum Code); Spieler-Modus im Backend erledigt.
 
 ## 5.0 Performance-Optimierung und Performance-Tests
 
@@ -403,23 +404,23 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 
 ## Priorisierungsvorschlag
 
-Erledigt: 3.4 Antwort-Feedback, 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
+Erledigt: 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
 
 **Offen am Gaming-PC (Nutzer)**: alte Autostart-Aufgabe „LoreKeeper Server“ als Admin entfernen (`Unregister-ScheduledTask -TaskName "LoreKeeper Server" -Confirm:$false`); DHCP-Reservierung für `192.168.178.34` im Router.
 
 **Last** = Rechenlast beim Umsetzen/Messen: 🟢 nur Code + Unit-/UI-Tests (geht parallel zur Simulation) · 🟡 braucht laufendes Backend oder LLM · 🔴 Golden-Set-Läufe/Indizierung (CPU, ~10+ min, nicht parallel zur Simulation).
 
-| Reihenfolge | Punkt | Impact | Aufwand | Last | Begründung |
-|---|---|---|---|---|---|
-| 1 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf; dann Re-Index, Eval, Spieler-Messung — dabei 3.8/3.9 im Browser durchklicken |
-| 2 | 5.2 Startup-Baseline aufnehmen | Gering — Regressionsschutz für den Start | Gering | 🟡 | Test steht; einmal messen bei gestopptem LoreKeeper und ohne Simulation |
+| Reihenfolge | Punkt | Impact | Aufwand | Last | Begründung                                                                                                                  |
+|---|---|---|---|---|-----------------------------------------------------------------------------------------------------------------------------|
+| 1 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf; dann Re-Index, Eval, Spieler-Messung — dabei 3.8/3.9 im Browser durchklicken     |
+| 2 | 5.2 Startup-Baseline aufnehmen | Gering — Regressionsschutz für den Start | Gering | 🟡 | Test steht; einmal messen bei gestopptem LoreKeeper und ohne Simulation                                                     |
 | 3 | 5.3 Reranker/Embeddings auf GPU (AMD: ONNX Runtime + DirectML) | Mittel — ~0,5 s pro Frage, schnellere Indexierung und Evals, CPU frei für die Simulation | Mittel | 🔴 | Vor 3.10/Section-Budget: macht deren Golden-Set-Läufe billiger. Neue Abhängigkeit — erst entscheiden; ROCm erst nach Bugfix |
-| 4 | 3.10 Regelwerk-Slot im Retrieval | Mittel — SL-Fragen, die Vault und Regel mischen | Mittel | 🔴 | Mit Abschnittsprüfung messbar (x002–x008) |
-| 5 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🔴 | Mit der Chunk-Prüfung aus 5.2 messbar |
-| 6 | 3.6 Chat-Verlauf im Antwort-Prompt | Mittel — bessere Folgefragen | Gering-Mittel | 🟡 | Code leicht, Wirkung nur mit echten LLM-Antworten prüfbar; Spieler-Modus beachten (nur eigener Verlauf) |
-| 7 | 3.2 Session-History | Mittel | Mittel | 🟢 | Spieler-/SL-Sessions getrennt halten |
-| 8 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | 🔴 | Vision-Modell lokal über Ollama; Bild-Ausschluss im Retriever aufheben |
-| 9 | 4.2 Internet-Zugriff (Tailscale) + Spieler-Modus im Backend | Mittel | Gering | 🟢 | Später; Spieler-Modus ins Backend, sobald die API selbst erreichbar wird |
-| 10 | 3.5 Wikilink-Expansion | Mittel | Mittel | 🔴 | Experimentell; im Spieler-Modus darf sie keine SL-Quellen nachladen |
-| 11 | 3.3 Chunk-Inspector | Gering (Dev-Tool) | Gering-Mittel | 🟢 | Teilweise durch Evaluation → „Frage testen“ abgedeckt |
-| 12 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | 🟡 | Später |
+| 4 | 3.10 Regelwerk-Slot im Retrieval | Mittel — SL-Fragen, die Vault und Regel mischen | Mittel | 🔴 | Mit Abschnittsprüfung messbar (x002–x008)                                                                                   |
+| 5 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🔴 | Mit der Chunk-Prüfung aus 5.2 messbar                                                                                       |
+| 6 | 3.6 Chat-Verlauf im Antwort-Prompt | Mittel — bessere Folgefragen | Gering-Mittel | 🟡 | Code leicht, Wirkung nur mit echten LLM-Antworten prüfbar; Spieler-Modus beachten (nur eigener Verlauf)                     |
+| 7 | 3.2 Session-History | Mittel | Mittel | 🟢 | Später; Spieler-/SL-Sessions getrennt halten; Fraglich ob überhaupt gebraucht                                               |
+| 8 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | 🔴 | Vision-Modell lokal über Ollama; Bild-Ausschluss im Retriever aufheben                                                      |
+| 9 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | 🟢 | Später; Spieler-Modus im Backend ist erledigt |
+| 10 | 3.5 Wikilink-Expansion | Mittel | Mittel | 🔴 | Experimentell; im Spieler-Modus darf sie keine SL-Quellen nachladen                                                         |
+| 11 | 3.3 Chunk-Inspector | Gering (Dev-Tool) | Gering-Mittel | 🟢 | Teilweise durch Evaluation → „Frage testen“ abgedeckt                                                                       |
+| 12 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | 🟡 | Später                                                                                                                      |

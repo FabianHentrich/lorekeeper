@@ -71,8 +71,14 @@ def fake_retriever(monkeypatch):
 
 
 @pytest.fixture
-def client(tmp_eval_dir, fake_retriever):
+def client(tmp_eval_dir, fake_retriever, monkeypatch):
     """A clear-state TestClient for the evaluation router."""
+    from src.config.manager import SourceConfig
+    monkeypatch.setattr(main_module, "config", SimpleNamespace(settings=SimpleNamespace(
+        ingestion=SimpleNamespace(sources=[
+            SourceConfig(id="regelbuch", path="C:/regeln.pdf", group="rules", player_visible=True),
+            SourceConfig(id="vault", path="C:/vault", group="lore"),
+        ]))), raising=False)
     _eval_jobs.clear()
     app = FastAPI()
     app.include_router(eval_router)

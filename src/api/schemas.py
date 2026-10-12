@@ -7,6 +7,8 @@ class QueryRequest(BaseModel):
     """Payload for submitting a question to the RAG pipeline."""
     question: str
     session_id: str | None = None
+    # "player": the backend restricts the search to player_visible sources itself (metadata_filters can only narrow)
+    role: Literal["player", "game_master"] = "game_master"
     metadata_filters: dict | None = None
     top_k: int | None = None
     top_k_rerank: int | None = None

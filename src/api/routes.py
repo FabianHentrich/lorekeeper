@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 
+from src.api.access import NoPlayerSources, effective_filters
 from src.api.schemas import (
     ConfigUpdateRequest,
     FeedbackRequest,
@@ -88,9 +89,16 @@ async def _prepare_query(request: QueryRequest, timings: dict):
     qa_prompt, search_query) — qa_prompt is None when no chunks passed the
     threshold; search_query is the (possibly condensed) question used for retrieval.
     Condense/retrieval durations, chunk count and prompt size are written into ``timings``."""
+    import src.main as main_module
     cm, gen, condense_prov, pm, ret, _vs, _prov = _get_services()
 
-    session = cm.get_or_create_session(request.session_id)
+    try:
+        filters = effective_filters(request.role, main_module.config.settings.ingestion.sources,
+                                    request.metadata_filters)
+    except NoPlayerSources:
+        raise HTTPException(status_code=403, detail="Keine Quelle für Spieler freigegeben") from None
+
+    session = cm.get_or_create_session(request.session_id, access_role=request.role)
     question = request.question
 
     history = cm.get_history_for_condense(session.session_id)
@@ -112,7 +120,7 @@ async def _prepare_query(request: QueryRequest, timings: dict):
     chunks = await ret.retrieve(
         query=question,
         top_k=request.top_k,
-        metadata_filters=request.metadata_filters,
+        metadata_filters=filters,
         top_k_rerank=request.top_k_rerank,
         max_per_source=request.max_per_source,
         hybrid=request.hybrid_search,
@@ -324,6 +332,22 @@ async def feedback(req: FeedbackRequest):
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     logger.info(f"Feedback {req.rating} for message {req.message_id} ({req.role})")
     return {"saved": True}
+
+
+@router.get("/feedback")
+async def list_feedback():
+    """Current rating per answer, newest first — the last line per message_id wins, withdrawn ones are left out."""
+    if not _FEEDBACK_PATH.exists():
+        return []
+    latest: dict[str, dict] = {}
+    for line in _FEEDBACK_PATH.read_text(encoding="utf-8").splitlines():
+        try:
+            entry = json.loads(line)
+            latest[entry["message_id"]] = entry
+        except (ValueError, KeyError, TypeError):
+            continue  # a broken line (e.g. hand-edited) must not hide the others
+    rated = [e for e in latest.values() if e.get("rating")]
+    return sorted(rated, key=lambda e: e.get("ts", ""), reverse=True)
 
 
 @router.get("/ingest/active", response_model=IngestStatusResponse | None)

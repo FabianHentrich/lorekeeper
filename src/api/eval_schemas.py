@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -24,6 +26,7 @@ class RetrievalPreviewRequest(BaseModel):
     max_per_source: int = 3
     hybrid: bool | None = None
     metadata_filters: dict | None = None  # same as /query — e.g. the player-mode source filter
+    role: Literal["player", "game_master"] = "game_master"  # same as /query
 
 
 class RetrievedChunkResponse(BaseModel):

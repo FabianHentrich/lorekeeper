@@ -55,7 +55,7 @@ class FakeConversationManager:
         self._sessions: dict[str, FakeSession] = {}
         self.config = SimpleNamespace(condense_question=False)
 
-    def get_or_create_session(self, session_id: str | None) -> FakeSession:
+    def get_or_create_session(self, session_id: str | None, access_role: str = "game_master") -> FakeSession:
         sid = session_id or "test-session-123"
         if sid not in self._sessions:
             self._sessions[sid] = FakeSession(session_id=sid)
@@ -708,3 +708,28 @@ def test_feedback_rejects_unknown_ratings(client, tmp_path, monkeypatch):
     monkeypatch.setattr(routes_module, "_FEEDBACK_PATH", tmp_path / "feedback.jsonl")
     assert client.post("/feedback", json={"message_id": "m1", "rating": "meh"}).status_code == 422
     assert not (tmp_path / "feedback.jsonl").exists()
+
+
+def test_feedback_list_keeps_the_last_rating_per_answer(client, tmp_path, monkeypatch):
+    """Changed ratings count once, withdrawn ones disappear, broken lines are skipped, newest first."""
+    import src.api.routes as routes_module
+    path = tmp_path / "feedback.jsonl"
+    monkeypatch.setattr(routes_module, "_FEEDBACK_PATH", path)
+    lines = [
+        {"ts": "2026-10-12T10:00:00", "message_id": "a", "rating": "up", "question": "A"},
+        {"ts": "2026-10-12T10:01:00", "message_id": "a", "rating": "down", "question": "A"},   # changed
+        {"ts": "2026-10-12T10:02:00", "message_id": "b", "rating": "up", "question": "B"},
+        {"ts": "2026-10-12T10:03:00", "message_id": "c", "rating": "down", "question": "C"},
+        {"ts": "2026-10-12T10:04:00", "message_id": "c", "rating": None, "question": "C"},     # withdrawn
+    ]
+    path.write_text("\n".join(json.dumps(e) for e in lines) + "\n{kaputt\n", encoding="utf-8")
+
+    listed = client.get("/feedback").json()
+
+    assert [(e["message_id"], e["rating"]) for e in listed] == [("b", "up"), ("a", "down")]
+
+
+def test_feedback_list_without_file_is_empty(client, tmp_path, monkeypatch):
+    import src.api.routes as routes_module
+    monkeypatch.setattr(routes_module, "_FEEDBACK_PATH", tmp_path / "nope.jsonl")
+    assert client.get("/feedback").json() == []

@@ -451,6 +451,7 @@ if prompt := st.chat_input(_placeholder, disabled=_chat_blocked):
     request_body = {
         "question": prompt,
         "session_id": st.session_state.session_id,
+        "role": _ROLE,  # the backend enforces the player restriction itself (the filter below is a second guard)
     }
     _filters = roles.query_filters(_ROLE, _player_source_ids, _category_filter, _content_category_filter)
     if _filters:

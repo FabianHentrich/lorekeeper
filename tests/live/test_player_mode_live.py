@@ -58,7 +58,7 @@ def _player_filter(ids: list[str]) -> dict:
 @pytest.mark.parametrize("qid, question", _vault_questions(), ids=[q[0] for q in _vault_questions()])
 def test_vault_question_retrieves_only_player_sources(player_ids, qid, question, hybrid):
     data = requests.post(f"{API}/eval/preview", timeout=120, json={
-        "question": question, "metadata_filters": _player_filter(player_ids), "hybrid": hybrid,
+        "question": question, "role": "player", "hybrid": hybrid,   # backend builds the restriction
     }).json()
 
     leaked = [(c["source_id"], c["source_file"]) for c in data["chunks"] if c["source_id"] not in player_ids]
@@ -69,7 +69,7 @@ def test_vault_question_retrieves_only_player_sources(player_ids, qid, question,
 def test_secret_stays_out_of_player_answers(player_ids, question, secret_words):
     """Full answer path including the LLM, the way the chat asks in player mode."""
     resp = requests.post(f"{API}/query", timeout=300, json={
-        "question": question, "metadata_filters": _player_filter(player_ids),
+        "question": question, "role": "player", "metadata_filters": _player_filter(player_ids),
     }).json()
 
     answer = resp["answer"].lower()

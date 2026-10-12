@@ -129,6 +129,11 @@ The player mode must never hand game-master content to players. Three levels:
   cross-encoder that ranks game-master text first, cap backfill, section
   expansion without top-rank limit, vector and hybrid search, condense with a
   bait follow-up. Neither chunks, sources nor the LLM prompt may contain a secret.
+  The backend enforcement (`role: "player"`, `src/api/access.py`) is checked on its
+  own: role alone restricts the search, filters sent along can only narrow it
+  (`source_id`, `group`, nested `$and` pointed at game-master sources), a game-master
+  session id gives the player a fresh session, `/eval/preview` is restricted too, and
+  no released source means `403`.
 - **UI and session, deterministic** — `tests/ui/test_player_mode_security.py`:
   tampered/leftover session state, every follow-up filtered, fail closed when
   `/sidebar-state` fails or lacks the list, revoking a source takes effect on the

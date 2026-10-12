@@ -10,6 +10,7 @@ import pandas as pd
 import requests
 import streamlit as st
 from admin_gate import api_url, require_admin
+from feedback import pairs_from_feedback
 
 st.set_page_config(page_title="Evaluation — LoreKeeper", page_icon="🎯", layout="wide")
 
@@ -189,8 +190,8 @@ def _render_retrieval_result(result: dict):
 st.title("🎯 Evaluation")
 st.caption("Golden Set verwalten, Retrieval testen und tunen, Ergebnisse vergleichen.")
 
-tab_gs, tab_test, tab_ret, tab_e2e, tab_results = st.tabs([
-    "Golden Set", "Frage testen", "Retrieval Eval", "End-to-End", "Ergebnisse",
+tab_gs, tab_test, tab_ret, tab_e2e, tab_results, tab_fb = st.tabs([
+    "Golden Set", "Frage testen", "Retrieval Eval", "End-to-End", "Ergebnisse", "Feedback",
 ])
 
 
@@ -681,3 +682,75 @@ with tab_results:
                         st.error(f"Fehler: {e}")
             elif sel_a == sel_b:
                 st.caption("Wähle zwei verschiedene Ergebnisse.")
+
+
+# ═══ Tab 6: Feedback ═════════════════════════════════════════════════
+
+@st.cache_data(ttl=10, show_spinner=False)
+def _fetch_feedback(api_url: str):
+    """Current 👍/👎 per chat answer, newest first."""
+    return requests.get(f"{api_url}/feedback", timeout=5).json()
+
+
+with tab_fb:
+    st.markdown("Bewertungen aus dem Chat (👍/👎, letzte Bewertung je Antwort). "
+                "Ausgewählte Fragen lassen sich ins Golden Set übernehmen.")
+    try:
+        feedback = _fetch_feedback(API_URL)
+    except Exception as e:
+        st.error(f"Feedback konnte nicht geladen werden: {e}")
+        feedback = []
+
+    show_up = st.toggle("Auch 👍 anzeigen", key="fb_show_up")
+    shown = [e for e in feedback if e.get("rating") == "down" or show_up]
+    if not shown:
+        st.caption("Noch keine Bewertungen." if not feedback else "Keine 👎-Bewertungen — 👍 über den Schalter.")
+    else:
+        fb_df = pd.DataFrame([{
+            "add": False,
+            "rating": "👍" if e.get("rating") == "up" else "👎",
+            "ts": e.get("ts", ""),
+            "role": "Spieler" if e.get("role") == "player" else "Spielleiter",
+            "question": e.get("question", ""),
+            "answer": (e.get("answer", "") or "")[:300],
+            "sources": ", ".join(e.get("sources", [])),
+            "model": e.get("model", ""),
+        } for e in shown])
+        fb_edited = st.data_editor(
+            fb_df,
+            column_config={
+                "add": st.column_config.CheckboxColumn("➕", help="Ins Golden Set übernehmen", width="small"),
+                "rating": st.column_config.TextColumn("", width="small"),
+                "ts": st.column_config.TextColumn("Zeit", width="small"),
+                "role": st.column_config.TextColumn("Rolle", width="small"),
+                "question": st.column_config.TextColumn("Frage"),
+                "answer": st.column_config.TextColumn("Antwort (Anfang)"),
+                "sources": st.column_config.TextColumn("Quellen"),
+                "model": st.column_config.TextColumn("Modell", width="small"),
+            },
+            disabled=["rating", "ts", "role", "question", "answer", "sources", "model"],
+            hide_index=True,
+            width="stretch",
+            key="fb_editor",
+        )
+        if st.button("➕ Ausgewählte ins Golden Set übernehmen", key="fb_add"):
+            chosen = [e for e, add in zip(shown, fb_edited["add"], strict=True) if add]
+            if not chosen:
+                st.warning("Keine Zeile ausgewählt.")
+            else:
+                try:
+                    existing = requests.get(f"{API_URL}/eval/qa-pairs", timeout=5).json().get("pairs", [])
+                    new_pairs = pairs_from_feedback(chosen, existing)
+                    if not new_pairs:
+                        st.info("Alle ausgewählten Fragen stehen schon im Golden Set.")
+                    else:
+                        resp = requests.put(f"{API_URL}/eval/qa-pairs",
+                                            json={"pairs": existing + new_pairs}, timeout=10)
+                        resp.raise_for_status()
+                        _fetch_qa_pairs.clear()
+                        down = sum(1 for p in new_pairs if not p["expected_sources"])
+                        st.success(f"{len(new_pairs)} Fragen übernommen ({', '.join(p['id'] for p in new_pairs)})."
+                                   + (f" Bei {down} 👎-Fragen im Tab „Golden Set“ die erwartete Quelle eintragen."
+                                      if down else ""))
+                except Exception as e:
+                    st.error(f"Übernehmen fehlgeschlagen: {e}")

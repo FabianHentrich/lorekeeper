@@ -9,6 +9,7 @@ from pathlib import Path
 import yaml
 from fastapi import APIRouter, HTTPException, Request
 
+from src.api.access import NoPlayerSources, effective_filters
 from src.api.eval_schemas import (
     EvalJobRequest,
     EvalJobResponse,
@@ -86,6 +87,13 @@ async def put_qa_pairs(body: QAPairList):
 @eval_router.post("/preview", response_model=RetrievalPreviewResponse)
 async def retrieval_preview(req: RetrievalPreviewRequest):
     """Run a single question against the retriever and return the raw top chunks without LLM generation."""
+    import src.main as main_module
+
+    try:
+        filters = effective_filters(req.role, main_module.config.settings.ingestion.sources, req.metadata_filters)
+    except NoPlayerSources:
+        raise HTTPException(status_code=403, detail="Keine Quelle für Spieler freigegeben") from None
+
     retriever = _get_retriever()
     start = time.time()
     chunks = await retriever.retrieve(
@@ -94,7 +102,7 @@ async def retrieval_preview(req: RetrievalPreviewRequest):
         top_k_rerank=req.top_k_rerank,
         max_per_source=req.max_per_source,
         hybrid=req.hybrid,
-        metadata_filters=req.metadata_filters,
+        metadata_filters=filters,
     )
     latency_ms = (time.time() - start) * 1000
 

@@ -10,8 +10,10 @@ Before the chat opens, the user picks a role:
 
 This is a convenience mode, not access control — anyone can pick "Spielleiter"
 (admin pages and provider controls stay behind ``LOREKEEPER_ADMIN_PASSWORD``).
-The restriction itself is enforced server-side in the Streamlit process: the
-browser never talks to the backend, so it cannot drop the filter.
+The backend enforces the restriction itself: the chat sends ``role`` and
+``/query/stream`` builds the player filter from ``player_visible``
+(``src/api/access.py``). The filter built here is a second guard; the browser never
+talks to the backend anyway.
 """
 PLAYER = "player"
 GAME_MASTER = "game_master"

@@ -53,3 +53,43 @@ def test_errors_get_no_thumbs(chat, monkeypatch):
     monkeypatch.setattr(conftest, "_STREAM_EVENTS", [{"type": "error", "content": "Ollama down"}])
     at = _ask(roles.GAME_MASTER)
     assert len(at.feedback) == 0
+
+
+# ─── Feedback tab on the Evaluation page ────────────────────────────────────────
+
+import feedback  # noqa: E402  (ui/ is on sys.path via conftest)
+
+UP = {"ts": "2026-10-12T10:00:00", "message_id": "a", "rating": "up", "role": "player",
+      "question": "Was ist Überschaden?", "answer": "…", "sources": ["pnp_regelbuch.pdf", "pnp_regelbuch.pdf"]}
+DOWN = {"ts": "2026-10-12T11:00:00", "message_id": "b", "rating": "down", "role": "game_master",
+        "question": "Wer ist Kalen?", "answer": "…", "sources": ["NPCs/Falscher.md"]}
+
+
+class TestPairsFromFeedback:
+    def test_thumbs_up_keeps_its_sources(self):
+        [pair] = feedback.pairs_from_feedback([UP], [])
+        assert pair["id"] == "f001"
+        assert (pair["expected_sources"], pair["source_type"], pair["category"]) == \
+            (["pnp_regelbuch.pdf"], "pdf", "feedback")
+
+    def test_thumbs_down_leaves_the_source_to_fill_in(self):
+        [pair] = feedback.pairs_from_feedback([DOWN], [])
+        assert pair["expected_sources"] == []
+        assert "erwartete Quelle eintragen" in pair["notes"] and "NPCs/Falscher.md" in pair["notes"]
+
+    def test_ids_continue_and_known_questions_are_skipped(self):
+        existing = [{"id": "f001", "question": "Alt"}, {"id": "m001", "question": "Was ist Überschaden?"}]
+        pairs = feedback.pairs_from_feedback([UP, DOWN, DOWN], existing)
+        assert [(p["id"], p["question"]) for p in pairs] == [("f002", "Wer ist Kalen?")]
+
+
+def test_tab_shows_thumbs_down_and_thumbs_up_on_request(fake_backend, monkeypatch):
+    monkeypatch.setitem(conftest.PAYLOADS, "/feedback", [DOWN, UP])
+    at = open_page("evaluation").run()
+    assert not at.exception, [e.message for e in at.exception]
+
+    table = at.dataframe[-1].value
+    assert list(table["question"]) == ["Wer ist Kalen?"]
+
+    at.toggle(key="fb_show_up").set_value(True).run()
+    assert list(at.dataframe[-1].value["question"]) == ["Wer ist Kalen?", "Was ist Überschaden?"]

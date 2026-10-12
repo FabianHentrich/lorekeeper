@@ -885,7 +885,7 @@ in Env-Variablen übersetzt. Pydantic-Settings liest diese automatisch:
 
 | Method | Endpoint                  | Beschreibung                                        |
 |--------|---------------------------|-----------------------------------------------------|
-| POST   | `/query`                  | Frage stellen, Antwort + Quellen erhalten (synchron)|
+| POST   | `/query`                  | Frage stellen, Antwort + Quellen erhalten (synchron). `role: "player"` → Backend beschränkt selbst auf `player_visible`-Quellen (`src/api/access.py`), mitgeschickte Filter können nur einengen; gilt auch für `/query/stream` und `/eval/preview` |
 | POST   | `/query/stream`           | Wie `/query`, aber Antwort als SSE-Stream (Token-by-Token) |
 | POST   | `/ingest`                 | Ingestion als Background-Job starten (inkrementell; `?full=true` = Voll-Reindex). 409, solange ein Job läuft |
 | GET    | `/ingest/status/{job_id}` | Status eines laufenden Ingestion-Jobs abfragen      |

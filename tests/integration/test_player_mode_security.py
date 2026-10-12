@@ -29,6 +29,7 @@ from fastapi.testclient import TestClient
 
 import src.main as main_module
 from src.api import routes as routes_module
+from src.api.eval_routes import eval_router
 from src.api.routes import router
 from src.config.manager import (
     ConfigManager,
@@ -211,6 +212,7 @@ def env(tmp_path_factory):
 
     app = FastAPI()
     app.include_router(router)
+    app.include_router(eval_router)
     with TestClient(app) as client:
         job_id = client.post("/ingest").json()["job_id"]
         deadline = time.monotonic() + 120
@@ -220,7 +222,7 @@ def env(tmp_path_factory):
                 break
             time.sleep(0.1)
         assert info["status"] == "done" and not info["errors"], info
-        yield SimpleNamespace(client=client, retriever=retriever, llm=llm, rules_dir=rules_dir)
+        yield SimpleNamespace(client=client, retriever=retriever, llm=llm, rules_dir=rules_dir, config=config)
 
     for n, v in originals.items():
         setattr(main_module, n, v)
@@ -281,3 +283,70 @@ def test_condensed_follow_up_cannot_widen_the_search(env):
     for src in follow_up["sources"]:
         assert Path(src["source_path"]).is_relative_to(env.rules_dir), src
     _no_secret(env.llm.prompts[-1])
+
+
+# ─── Enforced in the backend (role, roadmap 4.2) — no UI filter needed ─────────
+
+def _stream_as_player(client, question: str, **extra) -> tuple[int, list[dict]]:
+    resp = client.post("/query/stream", json={"question": question, "role": "player", **extra})
+    events = [json.loads(line[6:]) for line in resp.text.splitlines() if line.startswith("data: ")]
+    return resp.status_code, events
+
+
+@pytest.mark.parametrize("question", QUESTIONS)
+def test_player_role_alone_restricts_the_search(env, question):
+    """role=player without any metadata_filters: the backend builds the restriction itself."""
+    status, events = _stream_as_player(env.client, question)
+
+    assert status == 200
+    done = events[-1]
+    assert done["sources"], "expected rule sources"
+    for src in done["sources"]:
+        assert Path(src["source_path"]).is_relative_to(env.rules_dir), src
+    _no_secret(env.llm.prompts[-1])
+
+
+@pytest.mark.parametrize("sneaky", [
+    {"source_id": {"$in": ["welt"]}},
+    {"source_id": "welt"},
+    {"group": "lore"},
+    {"$and": [{"source_id": {"$in": ["welt", "regeln"]}}, {"group": {"$in": ["lore", "rules"]}}]},
+], ids=["source-in", "source-eq", "group", "nested-and"])
+def test_player_filter_can_only_narrow(env, sneaky):
+    """A filter sent along is AND-ed with the restriction — pointing it at game-master sources finds nothing."""
+    status, events = _stream_as_player(env.client, "Wer ist Sol Invictus wirklich?", metadata_filters=sneaky)
+
+    assert status == 200
+    for e in events:
+        _no_secret(json.dumps(e, ensure_ascii=False))
+    for src in events[-1].get("sources", []):
+        assert Path(src["source_path"]).is_relative_to(env.rules_dir), src
+
+
+def test_player_cannot_continue_a_game_master_session(env):
+    """With a game master's session id the player gets a fresh session — no condense against GM history."""
+    gm = env.client.post("/query/stream", json={"question": "Wer ist Sol Invictus wirklich?"})
+    gm_session = [json.loads(line[6:]) for line in gm.text.splitlines() if line.startswith("data: ")][-1]["session_id"]
+
+    _, events = _stream_as_player(env.client, "Und was steckt dahinter?", session_id=gm_session)
+
+    done = events[-1]
+    assert done["session_id"] != gm_session
+    assert done["search_query"] == "Und was steckt dahinter?"   # no history → no condense with the bait
+    _no_secret(env.llm.prompts[-1])
+
+
+def test_player_preview_is_restricted_too(env):
+    data = env.client.post("/eval/preview", json={
+        "question": "Wer ist Sol Invictus wirklich?", "role": "player",
+        "metadata_filters": {"source_id": {"$in": ["welt"]}},
+    })
+    assert data.status_code == 200
+    assert {c["source_id"] for c in data.json()["chunks"]} <= set(PLAYER_SOURCES)
+
+
+def test_player_without_released_sources_is_refused(env, monkeypatch):
+    for s in env.config.settings.ingestion.sources:
+        monkeypatch.setattr(s, "player_visible", False)
+    assert env.client.post("/query/stream", json={"question": "Was ist Überschaden?", "role": "player"}).status_code == 403
+    assert env.client.post("/eval/preview", json={"question": "x", "role": "player"}).status_code == 403

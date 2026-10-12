@@ -63,11 +63,16 @@ Before the chat opens, `ui/LoreKeeper.py` shows **"Wer fragt?"** with two button
 | **🎲 Spieler** | Only the sources marked **🎲 Spieler** on the Sources page (`player_visible` in `sources.yaml`; default: rulebook + Charakterbogen) — no lore, adventures or game-master material | Role, "🔄 Rolle wechseln", status, hybrid toggle; **no** source/category filters |
 | **📜 Spielleiter** | Everything, with the usual Lore/Abenteuer/Regelwerk and category filters | Full sidebar |
 
-- Every player question is sent with `metadata_filters = {"source_id": {"$in": [<player sources>]}}`
-  (from `/sidebar-state` → `player_source_ids`). The sidebar's group/category filters are
-  ignored for players, so nothing can widen the search.
-- The filter is applied inside the Streamlit process — the browser never talks to the
-  backend (which listens on `127.0.0.1` only), so it cannot drop or change it.
+- Every question carries `role` (`player` / `game_master`). For players the **backend**
+  builds the restriction itself from `player_visible` (`src/api/access.py`) and AND-s it
+  with any filter sent along — a filter can only narrow it, never widen it. No released
+  source → `403`.
+- As a second guard the UI also sends `metadata_filters = {"source_id": {"$in": [<player sources>]}}`
+  (from `/sidebar-state` → `player_source_ids`); the sidebar's group/category filters are
+  ignored for players. The browser never talks to the backend (`127.0.0.1` only).
+- Backend sessions are bound to their role: a player request with a game-master
+  `session_id` gets a fresh session (new id) — no game-master history in a condensed
+  follow-up, even outside the UI.
 - **"🔄 Rolle wechseln"** returns to the picker and starts a **new session** (chat, backend
   session, token counter). Otherwise the chat history of a game-master conversation could
   flow into a player's condensed follow-up question.
@@ -496,7 +501,7 @@ changes, and immediately after in-page edits.
 ## Evaluation Page (`ui/pages/2_Evaluation.py`)
 
 A dedicated Streamlit page for managing the Golden Set, testing retrieval,
-running evaluations, and comparing results. Five tabs:
+running evaluations, and comparing results. Six tabs:
 
 ### Tab 1: Golden Set
 
@@ -556,6 +561,10 @@ Eval tabs. The sliders are bound: `top_k_rerank ≤ top_k` and
 inside a `st.status` widget until done or error.
 
 ---
+
+### Tab 6: Feedback
+
+The current 👍/👎 per chat answer (`GET /feedback`, last rating per `message_id`, withdrawn ones left out). 👎 shown by default, 👍 via toggle. Selected rows go into the golden set as `f###` (`ui/feedback.py`): 👍 keeps the answer's sources as expected sources, 👎 leaves them empty with a note to enter the right source; questions already in the golden set are skipped.
 
 ## Settings Page (`ui/pages/4_Settings.py`)
 

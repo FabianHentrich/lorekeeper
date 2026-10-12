@@ -132,3 +132,26 @@ class TestNeedsCondense:
     def test_follow_ups_need_condense(self, question):
         """Pronouns, back-references, leading connectors and very short questions trigger the rewrite."""
         assert needs_condense(question) is True
+
+
+class TestSessionRoles:
+    """Sessions never cross roles — no game-master history behind a player's follow-up."""
+
+    def test_same_role_reuses_the_session(self, cm):
+        s = cm.get_or_create_session(access_role="player")
+        s.add_message("user", "Was ist Überschaden?")
+        again = cm.get_or_create_session(s.session_id, access_role="player")
+        assert again is s
+
+    def test_other_role_gets_a_fresh_session_with_a_new_id(self, cm):
+        gm = cm.get_or_create_session(access_role="game_master")
+        gm.add_message("user", "Wer ist Sol Invictus wirklich?")
+
+        player = cm.get_or_create_session(gm.session_id, access_role="player")
+
+        assert player.session_id != gm.session_id
+        assert player.messages == [] and player.access_role == "player"
+        assert cm.get_session(gm.session_id) is gm   # the game master's session is left intact
+
+    def test_unknown_id_keeps_the_requested_id(self, cm):
+        assert cm.get_or_create_session("abc", access_role="player").session_id == "abc"

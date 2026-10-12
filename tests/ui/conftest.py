@@ -82,6 +82,7 @@ PAYLOADS: dict[str, object] = {
     "/prompts/variants": [{"name": "Variante", "description": "", "is_active": False}],
     "/prompts/variants/Variante": {"name": "Variante", "description": "", "prompts": _PROMPTS},
     "/eval/results": [],
+    "/feedback": [],
     "/eval/qa-pairs": {"pairs": [{
         "id": "p001", "question": "Was ist eine Marke?", "source_type": "pdf", "category": "mechanic",
         "expected_sources": ["regeln.pdf"], "expected_answer_contains": ["Marke"],
