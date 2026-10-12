@@ -190,8 +190,8 @@ def _render_retrieval_result(result: dict):
 st.title("🎯 Evaluation")
 st.caption("Golden Set verwalten, Retrieval testen und tunen, Ergebnisse vergleichen.")
 
-tab_gs, tab_test, tab_ret, tab_e2e, tab_results, tab_fb = st.tabs([
-    "Golden Set", "Frage testen", "Retrieval Eval", "End-to-End", "Ergebnisse", "Feedback",
+tab_gs, tab_test, tab_ret, tab_e2e, tab_results, tab_fb, tab_chunks = st.tabs([
+    "Golden Set", "Frage testen", "Retrieval Eval", "End-to-End", "Ergebnisse", "Feedback", "Chunks",
 ])
 
 
@@ -754,3 +754,82 @@ with tab_fb:
                                       if down else ""))
                 except Exception as e:
                     st.error(f"Übernehmen fehlgeschlagen: {e}")
+
+
+# ═══ Tab 7: Chunk-Inspector ══════════════════════════════════════════
+
+_SHORT_CHUNK_CHARS = 100  # below this a chunk carries little meaning on its own
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _fetch_sources(api_url: str):
+    return requests.get(f"{api_url}/sources", timeout=5).json().get("sources", [])
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _fetch_chunk_files(api_url: str, source_id: str):
+    return requests.get(f"{api_url}/eval/chunks/files", params={"source_id": source_id},
+                        timeout=10).json().get("files", [])
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _fetch_file_chunks(api_url: str, source_id: str, source_file: str):
+    resp = requests.get(f"{api_url}/eval/chunks", params={"source_id": source_id, "source_file": source_file},
+                        timeout=10)
+    resp.raise_for_status()
+    return resp.json()["chunks"]
+
+
+with tab_chunks:
+    st.markdown("Alle gespeicherten Chunks einer Datei — Text und Metadaten so, wie der Retriever sie sieht.")
+    try:
+        ci_sources = _fetch_sources(API_URL)
+    except Exception as e:
+        st.error(f"Quellen konnten nicht geladen werden: {e}")
+        ci_sources = []
+
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        ci_sid = st.selectbox("Quelle", [s["id"] for s in ci_sources], index=None,
+                              placeholder="Quelle wählen", key="ci_source")
+    ci_files: list[str] = []
+    if ci_sid:
+        try:
+            ci_files = _fetch_chunk_files(API_URL, ci_sid)
+        except Exception as e:
+            st.error(f"Dateien konnten nicht geladen werden: {e}")
+    with c2:
+        # Key per source: a file picked in one source is no valid option in the next
+        ci_file = st.selectbox("Datei", ci_files, index=None, placeholder="Datei wählen",
+                               key=f"ci_file_{ci_sid}", disabled=not ci_files)
+    if ci_sid and not ci_files:
+        st.caption("Keine indizierten Dateien in dieser Quelle.")
+
+    if ci_sid and ci_file:
+        try:
+            ci_chunks = _fetch_file_chunks(API_URL, ci_sid, ci_file)
+        except Exception as e:
+            st.error(f"Chunks konnten nicht geladen werden: {e}")
+            ci_chunks = []
+
+        if ci_chunks:
+            sizes = [c["chars"] for c in ci_chunks]
+            short = sum(1 for n in sizes if n < _SHORT_CHUNK_CHARS)
+            st.caption(f"{len(ci_chunks)} Chunks · Zeichen min {min(sizes)} / Ø {sum(sizes) // len(sizes)} / "
+                       f"max {max(sizes)}"
+                       + (f" · ⚠️ {short} unter {_SHORT_CHUNK_CHARS} Zeichen" if short else ""))
+            st.dataframe(pd.DataFrame([{
+                "#": c["chunk_index"],
+                "Überschrift": c["heading"],
+                "Zeichen": c["chars"],
+                "Anfang": c["content"][:120],
+            } for c in ci_chunks]), hide_index=True, width="stretch")
+
+            ci_pick = st.selectbox(
+                "Chunk anzeigen", range(len(ci_chunks)), key=f"ci_chunk_{ci_sid}_{ci_file}",
+                format_func=lambda i: f"#{ci_chunks[i]['chunk_index']} — "
+                                      f"{ci_chunks[i]['heading'] or '(ohne Überschrift)'}",
+            )
+            st.code(ci_chunks[ci_pick]["content"], language=None, wrap_lines=True)
+            with st.expander("Metadaten"):
+                st.json(ci_chunks[ci_pick]["metadata"])

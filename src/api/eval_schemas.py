@@ -43,6 +43,21 @@ class RetrievalPreviewResponse(BaseModel):
     latency_ms: float
 
 
+class InspectedChunk(BaseModel):
+    id: str
+    chunk_index: int
+    heading: str
+    chars: int
+    content: str
+    metadata: dict
+
+
+class ChunkListResponse(BaseModel):
+    source_id: str
+    source_file: str
+    chunks: list[InspectedChunk]
+
+
 class EvalJobRequest(BaseModel):
     top_k: int = 15
     top_k_rerank: int = 8

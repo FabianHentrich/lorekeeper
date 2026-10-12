@@ -394,3 +394,46 @@ def test_get_missing_result_is_404(client):
 def test_list_results_without_results_dir(client, tmp_eval_dir):
     tmp_eval_dir.results_dir.rmdir()
     assert client.get("/eval/results").json() == []
+
+
+# ─── Chunk inspector ────────────────────────────────────────────────────────────
+
+class FakeVectorStore:
+    """Two files in source 'vault'; chunks come back in arbitrary store order."""
+    def get_content_hashes_for_source(self, source_id):
+        return {"b.md": "h2", "a.md": "h1"} if source_id == "vault" else {}
+
+    def get_chunks_for_file(self, source_id, source_file):
+        if (source_id, source_file) != ("vault", "a.md"):
+            return []
+        return [
+            {"id": "x1", "content": "Zweiter Abschnitt", "metadata": {"chunk_index": 1, "heading_hierarchy": "A > B"}},
+            {"id": "x0", "content": "Erster", "metadata": {"chunk_index": 0, "heading_hierarchy": "A"}},
+        ]
+
+
+@pytest.fixture
+def fake_vectorstore(monkeypatch):
+    monkeypatch.setattr(main_module, "vectorstore", FakeVectorStore(), raising=False)
+
+
+def test_chunk_files_sorted(client, fake_vectorstore):
+    """The inspector lists a source's indexed files alphabetically; unknown source → empty."""
+    assert client.get("/eval/chunks/files", params={"source_id": "vault"}).json() == {"files": ["a.md", "b.md"]}
+    assert client.get("/eval/chunks/files", params={"source_id": "nope"}).json() == {"files": []}
+
+
+def test_file_chunks_in_document_order(client, fake_vectorstore):
+    """Chunks come sorted by chunk_index with heading, length, full text and metadata."""
+    resp = client.get("/eval/chunks", params={"source_id": "vault", "source_file": "a.md"})
+    assert resp.status_code == 200
+    chunks = resp.json()["chunks"]
+    assert [c["chunk_index"] for c in chunks] == [0, 1]
+    assert chunks[1] == {"id": "x1", "chunk_index": 1, "heading": "A > B", "chars": 17,
+                         "content": "Zweiter Abschnitt",
+                         "metadata": {"chunk_index": 1, "heading_hierarchy": "A > B"}}
+
+
+def test_file_chunks_unknown_file_404(client, fake_vectorstore):
+    resp = client.get("/eval/chunks", params={"source_id": "vault", "source_file": "fehlt.md"})
+    assert resp.status_code == 404

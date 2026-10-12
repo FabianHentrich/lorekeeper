@@ -83,6 +83,13 @@ PAYLOADS: dict[str, object] = {
     "/prompts/variants/Variante": {"name": "Variante", "description": "", "prompts": _PROMPTS},
     "/eval/results": [],
     "/feedback": [],
+    "/eval/chunks/files": {"files": ["Arkenfeld.md", "Regeln.md"]},
+    "/eval/chunks": {"source_id": "vault", "source_file": "Arkenfeld.md", "chunks": [
+        {"id": "c0", "chunk_index": 0, "heading": "Arkenfeld", "chars": 29,
+         "content": "Arkenfeld ist ein Zeitmagier.", "metadata": {"source_id": "vault", "chunk_index": 0}},
+        {"id": "c1", "chunk_index": 1, "heading": "Arkenfeld > Familie", "chars": 300,
+         "content": "Seine Schwester lebt in der Akademie.", "metadata": {"source_id": "vault", "chunk_index": 1}},
+    ]},
     "/eval/qa-pairs": {"pairs": [{
         "id": "p001", "question": "Was ist eine Marke?", "source_type": "pdf", "category": "mechanic",
         "expected_sources": ["regeln.pdf"], "expected_answer_contains": ["Marke"],

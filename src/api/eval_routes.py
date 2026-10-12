@@ -8,13 +8,16 @@ from pathlib import Path
 
 import yaml
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 
 from src.api.access import NoPlayerSources, effective_filters
 from src.api.eval_schemas import (
+    ChunkListResponse,
     EvalJobRequest,
     EvalJobResponse,
     EvalJobStatus,
     EvalResultSummary,
+    InspectedChunk,
     QAPair,
     QAPairList,
     RetrievalPreviewRequest,
@@ -121,6 +124,45 @@ async def retrieval_preview(req: RetrievalPreviewRequest):
             for c in chunks
         ],
         latency_ms=round(latency_ms, 1),
+    )
+
+
+# ─── Chunk inspector ─────────────────────────────────────────────────
+
+def _get_vectorstore():
+    """Retrieve the global vector store instance."""
+    from src.main import vectorstore
+    return vectorstore
+
+
+@eval_router.get("/chunks/files")
+async def chunk_files(source_id: str):
+    """Indexed files of one source, sorted — the file list of the chunk inspector."""
+    hashes = await run_in_threadpool(_get_vectorstore().get_content_hashes_for_source, source_id)
+    return {"files": sorted(hashes)}
+
+
+@eval_router.get("/chunks", response_model=ChunkListResponse)
+async def file_chunks(source_id: str, source_file: str):
+    """Every stored chunk of one file in document order, with full text and metadata."""
+    items = await run_in_threadpool(_get_vectorstore().get_chunks_for_file, source_id, source_file)
+    if not items:
+        raise HTTPException(status_code=404, detail=f"Keine Chunks für {source_id}/{source_file}")
+    items.sort(key=lambda i: (i["metadata"].get("chunk_index", 0), i["id"]))
+    return ChunkListResponse(
+        source_id=source_id,
+        source_file=source_file,
+        chunks=[
+            InspectedChunk(
+                id=i["id"],
+                chunk_index=i["metadata"].get("chunk_index", 0),
+                heading=i["metadata"].get("heading_hierarchy", ""),
+                chars=len(i["content"]),
+                content=i["content"],
+                metadata=i["metadata"],
+            )
+            for i in items
+        ],
     )
 
 

@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Chunk inspector** (roadmap 3.3): Evaluation tab **Chunks** shows every stored chunk of a file (document order, heading path, length, full text, metadata; chunks under 100 characters flagged) via `GET /eval/chunks/files` and `GET /eval/chunks`
 - **Chat history in the answer prompt** (roadmap 3.6): the QA prompt gets the last question/answer pair (`conversation.answer_history_pairs: 1`, earlier answer cut at `answer_history_max_chars: 1500`), placed before the sources and marked as no source — follow-ups like "fass das kürzer zusammen" now work
 - Evaluation page tab **Feedback**: chat ratings via `GET /feedback` (last rating per answer); selected answers become golden-set questions (`f###`, 👍 with its sources, 👎 to fill in)
 - **Player mode enforced in the backend**: `/query`, `/query/stream` and `/eval/preview` accept `role` (`player` / `game_master`, default `game_master`). For players `src/api/access.py` builds the `player_visible` restriction itself and AND-s any filter sent along (it can only narrow); no released source → 403. Backend sessions are bound to their role. The chat sends `role`, its own filter stays as a second guard

@@ -501,7 +501,7 @@ changes, and immediately after in-page edits.
 ## Evaluation Page (`ui/pages/2_Evaluation.py`)
 
 A dedicated Streamlit page for managing the Golden Set, testing retrieval,
-running evaluations, and comparing results. Six tabs:
+running evaluations, and comparing results. Seven tabs:
 
 ### Tab 1: Golden Set
 
@@ -565,6 +565,15 @@ inside a `st.status` widget until done or error.
 ### Tab 6: Feedback
 
 The current 👍/👎 per chat answer (`GET /feedback`, last rating per `message_id`, withdrawn ones left out). 👎 shown by default, 👍 via toggle. Selected rows go into the golden set as `f###` (`ui/feedback.py`): 👍 keeps the answer's sources as expected sources, 👎 leaves them empty with a note to enter the right source; questions already in the golden set are skipped.
+
+### Tab 7: Chunks (chunk inspector)
+
+Every stored chunk of one file, as the retriever sees it. Pick a source (`GET /sources`, cached 60 s), then a
+file (`GET /eval/chunks/files?source_id=…` — the indexed files), then `GET /eval/chunks?source_id=…&source_file=…`
+returns the chunks in document order. Shown: count and min/avg/max length (chunks under 100 characters are
+flagged), a table (index, heading path, length, start of the text), and the full text plus metadata of one
+selected chunk. Files and chunks are only fetched after a pick. Which chunks a *question* finds stays in
+Tab 2 "Frage testen".
 
 ## Settings Page (`ui/pages/4_Settings.py`)
 

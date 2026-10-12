@@ -206,7 +206,7 @@ lorekeeper/
 │       ├── schemas.py              # Pydantic Request/Response Models
 │       ├── prompt_routes.py        # Endpoints: /prompts/* (active, variants, preview)
 │       ├── prompt_schemas.py       # Pydantic Models für Prompt-Endpoints
-│       └── eval_routes.py          # Endpoints: /eval/*
+│       └── eval_routes.py          # Endpoints: /eval/* (Golden Set, Preview, Eval-Jobs, Chunk-Inspector)
 │
 ├── ui/
 │   ├── LoreKeeper.py              # Streamlit Chat-Oberfläche
