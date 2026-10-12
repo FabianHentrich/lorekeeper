@@ -1,6 +1,6 @@
 # LoreKeeper — Roadmap & Bearbeitungsliste
 
-Stand: 2026-10-12
+Stand: 2026-10-13
 
 ---
 
@@ -134,6 +134,8 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 
 **Aufwand**: Mittel.
 
+**⏸ Zurückgestellt (12.10.)**: Fraglich, ob gespeicherte Sessions bei einem Wissenstool überhaupt Nutzen haben — erst entscheiden, dann ggf. umsetzen.
+
 ### 3.3 Chunk-Inspector / Debug-Ansicht — ✅ Erledigt
 
 **Problem**: Wenn der Retriever falsche Chunks liefert, ist unklar warum. Man muss in ChromaDB schauen.
@@ -231,7 +233,7 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 **Problem**: Im Heimnetz nutzen auch Spieler LoreKeeper (z.B. am Handy). Der Vault enthält Spielleiter-Wissen (Plot, NPC-Geheimnisse wie Sol Invictus = Rhaz'Muell), das Spieler nicht sehen sollen; für sie ist nur das Regelwerk relevant.
 
 **Lösung (umgesetzt)**: Vor dem Chat die Auswahl „🎲 Spieler“ / „📜 Spielleiter“ (`ui/roles.py`, `ui/LoreKeeper.py`), ohne Passwort (Entscheidung: Spoiler-Schutz, keine Zugangskontrolle).
-- Spieler durchsuchen nur Quellen mit `player_visible` (neues Source-Feld, Spalte „🎲 Spieler“ auf der Sources-Seite; freigegeben: `pnp_regelbuch`, `charakterbogen`). Filter `{"source_id": {"$in": [...]}}`, gesetzt im Streamlit-Prozess; Sidebar-Filter für Spieler ausgeblendet und ignoriert.
+- Spieler durchsuchen nur Quellen mit `player_visible` (neues Source-Feld, Spalte „🎲 Spieler“ auf der Sources-Seite; freigegeben: `pnp_regelbuch`, `charakterbogen`). Filter `{"source_id": {"$in": [...]}}`, gesetzt im Streamlit-Prozess und seit 12.10. zusätzlich vom Backend selbst erzwungen (`role`, siehe 4.2); Sidebar-Filter für Spieler ausgeblendet und ignoriert.
 - „🔄 Rolle wechseln“ startet eine neue Session (kein Spielleiter-Verlauf im Spieler-Kontext).
 - Ohne freigegebene Quelle ist der Spieler-Chat gesperrt.
 - Live geprüft: „Wer ist Sol Invictus wirklich?“ / „Was ist mit Isolde Vaer los?“ im Spieler-Modus finden nur Regelbuch/Charakterbogen, Antwort „keine Informationen“.
@@ -299,7 +301,7 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 
 **Ziel**: Bei Weiterentwicklungen sofort sehen, wenn etwas deutlich ineffizienter wird — vor allem bei der Antwortzeit und der UI-Reaktion, beim Start nur einfache Hebel.
 
-**Stand (2026-10-12)**:
+**Stand (2026-10-13)**:
 
 | Bereich | Status | Ergebnis |
 |---|---|---|
@@ -307,6 +309,7 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 | Retrieval | ✅ erledigt (5.4) | Rerank auf der GPU via DirectML (5.4): 840 ms → 50 ms, unter CPU-Last 14 s → 70 ms |
 | UI-Reaktion | ✅ erledigt (5.2, 5.3) | `localhost`-Delay von ~2 s pro Backend-Request beseitigt; Chat 1 Request pro Nachricht, Sources-Rerun 0 Requests, Ingest-Fortschritt blockiert nicht mehr (3.9) |
 | Start | ✅ Baseline (5.2) | **17,7 s** bis `/health`: ~9,6 s Python-Imports (davon `sentence-transformers`/torch ~8 s), ~6,7 s Lifespan (vorher 12,2 s — Reranker auf der GPU lädt in 1,6 s statt 4,3 s), Rest uvicorn |
+| Reproduzierbarkeit | ⚠️ offen (5.5) | Vektorsuche liefert nach Neustart für ~9 von 278 Golden-Fragen andere Kandidaten → Eval-Läufe schwanken ±2 Abschnitte |
 | Regressionsschutz | ✅ erledigt (5.2) | Deterministische Budgets im normalen `pytest`, Zeit-Checks per `pytest -m perf` gegen `tests/perf/baseline.json`, inkl. Startup |
 
 ### 5.1 Messen: Stage-Timings — ✅ Erledigt
@@ -352,7 +355,7 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 - **Antwortzeit — Kontextfenster (gemessen)**: `ollama ps` zeigt `CONTEXT 4096` für qwen3:14b. Die Krieger-Frage brauchte 3621 Eingabe- + 919 Ausgabe-Tokens — am bzw. über dem Limit; bei größerer Section Expansion wird der Prompt-Anfang (Systemprompt) still abgeschnitten. ✅ **Erledigt**: `OLLAMA_CONTEXT_LENGTH=16384` als Benutzer-Umgebungsvariable gesetzt (der OpenAI-kompatible Endpoint ignoriert `num_ctx` pro Request, getestet). Danach `CONTEXT 16384`, 11 GB von 16 GB VRAM, weiterhin 100 % GPU, keine messbare Verlangsamung (warm: erster Token 1,1 s / 2,3 s).
 - **Antwortzeit — Modell entladen nach 5 Minuten (gemessen)**: Ollama entlädt das Modell nach 5 min Leerlauf; die erste Frage danach wartet ~16 s aufs Laden (erster Token 18 s statt 1,1 s). ✅ **Erledigt**: `OLLAMA_KEEP_ALIVE=1h` als Benutzer-Umgebungsvariable — das Modell bleibt bis 1 h nach der letzten Frage geladen (`ollama ps`: „59 minutes from now“). Belegt in der Zeit ~11 GB VRAM; `-1` hielte es dauerhaft geladen.
 - **Präzision/Kontext — Section Expansion begrenzt** ✅ **Erledigt**: `section_expansion.top_rank: 3` — expandiert nur, wenn ein Treffer der Sektion unter den ersten 3 Chunks liegt. Golden Set (0 = altes Verhalten / 3 / 2 / 1): Ø Chunks 13,9 / 12,6 / 11,9 / 10,7; expandierte Fragen 144 / 119 / 102 / 75; Abschnitt-Treffer überall 89,1 %. Bei 3 fallen nur Fehl-Expansionen weg (z.B. Geisterwesen-Statblöcke bei „Eigenheiten Geist und Psyche“); 2 und 1 schneiden bereits relevante Übersichts-Chunks ab (Akademie-Geschichte, Szenenübersicht, Arkenfeld-Steckbrief). Offen: Gesamtbudget über alle expandierten Sektionen (max. 49 Chunks bleiben möglich). Unnötige Condense-Aufrufe sind bereits entfernt (`needs_condense`).
-- **Retrieval — Reranker/Embeddings auf der CPU (gemessen, offen)** → Entscheidungsvorlage unten (5.4).
+- **Retrieval — Reranker auf der CPU** ✅ **Erledigt** über 5.4 (DirectML): Rerank 840 ms → 50 ms. Embedding-Modell bleibt bewusst auf der CPU.
 - **Kontext — Gesamtbudget für Section Expansion (offen)**: Mehrere expandierte Sektionen können zusammen noch bis zu 49 Chunks ergeben (z.B. „Wie wird die Bonusaktion im Kampf eingesetzt?“). Ein Budget über alle Sektionen (z.B. max. 20 Chunks) begrenzt das; messbar mit der Chunk-Prüfung aus 5.2.
 - **UI-Reaktion (gemessen, Hauptursache behoben)**: Die 2-s-`localhost`-Verzögerung pro Request ist behoben (5.2). ✅ Reste erledigt: Der Chat holt das LLM-Timeout aus dem gecachten `/sidebar-state` statt `/config` vor jeder Nachricht (1 Request pro Nachricht statt 2); Sources-Seite cacht `/folders`; Polling blockiert nicht mehr (3.8/3.9). Kosten eines Reruns mit langer Chat-Historie und vielen Quellen-Expandern noch nicht gemessen.
 - **Start (kein Handlungsbedarf)**: `--reload` im Server-Modus aus (4.1); Reranker lädt seit 5.4 auf der GPU in 1,6 s — lazy laden lohnt nicht mehr. Größter Block sind jetzt die Python-Imports (~9,6 s, `sentence-transformers`/torch); die ließen sich nur durch einen Verzicht auf torch fürs Embedding-Modell senken (Re-Index-Risiko, siehe 5.4) — für einen manuell gestarteten Dienst nicht lohnend.
@@ -380,7 +383,7 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 
 **Nur den Reranker umstellen, nicht das Embedding-Modell**: Query-Embedding kostet normal ~0,08 s; ein anderes Backend ändert die Vektoren minimal → Index und Golden Set müssten neu verglichen bzw. neu indiziert werden. Der Reranker wirkt nur zur Abfragezeit, ein Wechsel ist jederzeit rückgängig zu machen.
 
-**Empfehlung**: A zuerst (Config-Schalter `reranking.backend: torch | onnx`, Default `torch`; ONNX-Modell einmal exportieren und lokal speichern). Messen: Rerank-Zeit idle und unter Simulationslast, Golden Set Treffer/Abschnitte gegen heute (261/262, 121/137). Reicht das unter Last nicht, B als zweiter Schritt — mit Provider-Check beim Start. C/D halbjährlich neu prüfen.
+**Empfehlung vor dem Benchmark (überholt, siehe Entscheidung unten)**: A zuerst (Config-Schalter `reranking.backend: torch | onnx`, Default `torch`; ONNX-Modell einmal exportieren und lokal speichern). Messen: Rerank-Zeit idle und unter Simulationslast, Golden Set Treffer/Abschnitte gegen heute (261/262, 121/137). Reicht das unter Last nicht, B als zweiter Schritt — mit Provider-Check beim Start. C/D halbjährlich neu prüfen.
 
 **Benchmark (12.10., CPU frei, Ryzen 5 5600X / RX 9070 XT)**: 15 Paare in Produktionsgröße, 30 Wiederholungen; „Last“ = 12 Busy-Loop-Prozesse (≈ laufende Simulation).
 
@@ -466,10 +469,11 @@ Erledigt: 3.10 Regelwerk-Slot, 5.4 Reranker auf der GPU (DirectML), 5.2 Startup-
 | Reihenfolge | Punkt | Impact | Aufwand | Last | Begründung                                                                                                                  |
 |---|---|---|---|---|-----------------------------------------------------------------------------------------------------------------------------|
 | 1 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf; dann Re-Index, Eval, Spieler-Messung — dabei 3.8/3.9 im Browser durchklicken     |
-| 2 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Mit der Chunk-Prüfung aus 5.2 messbar; Golden Set ~1 min |
-| 3 | 5.5 Vektorsuche reproduzierbar machen | Gering-Mittel — stabile Ergebnisse nach Neustart, verlässliche Eval-Vergleiche | Gering-Mittel | 🟡 | ±2 Abschnitte Schwankung zwischen Prozessen; `ef_search` erhöhen oder exakt suchen |
-| 4 | 3.2 Session-History | Mittel | Mittel | 🟢 | Später; Spieler-/SL-Sessions getrennt halten; Fraglich ob überhaupt gebraucht                                               |
-| 5 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | 🔴 | Vision-Modell lokal über Ollama; Bild-Ausschluss im Retriever aufheben                                                      |
-| 6 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | 🟢 | Später; Spieler-Modus im Backend ist erledigt |
-| 7 | 3.5 Wikilink-Expansion | Mittel | Mittel | 🔴 | Experimentell; im Spieler-Modus darf sie keine SL-Quellen nachladen                                                         |
-| 8 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | 🟡 | Später                                                                                                                      |
+| 2 | Offene Prüfungen im laufenden Betrieb | Mittel — bestätigt, dass die Neuerungen im echten Chat wirken | Gering | 🟡 | Mit gestartetem LoreKeeper: 3.6 Folgefragen („fass das kürzer zusammen“), 👍/👎 + Tabs „Feedback“/„Chunks“, Rerank-Timings in der Chat-Caption (5.4), Regelwerk-Slot an x002/x005 im Chat (3.10), `pytest -m live` (Spieler-Modus, schickt nur noch `role`) |
+| 3 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Mit der Chunk-Prüfung aus 5.2 messbar; Golden Set ~1 min |
+| 4 | 5.5 Vektorsuche reproduzierbar machen | Gering-Mittel — stabile Ergebnisse nach Neustart, verlässliche Eval-Vergleiche | Gering-Mittel | 🟡 | ±2 Abschnitte Schwankung zwischen Prozessen; `ef_search` erhöhen oder exakt suchen |
+| 5 | 3.2 Session-History — ⏸ zurückgestellt | Unklar | Mittel | 🟢 | Erst entscheiden, ob gespeicherte Sessions bei einem Wissenstool Nutzen haben |
+| 6 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | 🔴 | Vision-Modell lokal über Ollama; Bild-Ausschluss im Retriever aufheben                                                      |
+| 7 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | 🟢 | Später; Spieler-Modus im Backend ist erledigt |
+| 8 | 3.5 Wikilink-Expansion | Mittel | Mittel | 🔴 | Experimentell; im Spieler-Modus darf sie keine SL-Quellen nachladen                                                         |
+| 9 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | 🟡 | Später                                                                                                                      |
