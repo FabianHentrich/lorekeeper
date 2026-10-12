@@ -57,6 +57,10 @@ retrieval:
     enabled: true             # ≥2 hits under one parent heading → hand the LLM the whole section
     max_chunks: 25            # larger sections are not expanded (protects the LLM context)
     top_rank: 3               # only expand if a hit is among the first N ranked chunks (0 = no limit)
+  rules_slot:                 # entity + rule term ("Was bewirkt Ritterlichkeit bei Escanor?") → 1 rulebook chunk
+    enabled: true
+    candidates: 5             # separate vector search inside group "rules" (same filters as the request)
+    min_score: -4.0           # best rules chunk takes the last place if no rules chunk made it and it scores ≥ this
 
 # LLM
 llm:

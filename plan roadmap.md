@@ -210,13 +210,19 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 
 **Aufwand**: Gering-Mittel (umgesetzt).
 
-### 3.10 Regelwerk-Slot im Retrieval (Vault ↔ Regelwerk)
+### 3.10 Regelwerk-Slot im Retrieval (Vault ↔ Regelwerk) — ✅ Erledigt
 
 **Problem**: Fragen, die eine Vault-Entität *und* einen Regelbegriff nennen („Was bewirkt Ritterlichkeit bei Escanor?“, „Was kann Thalions Phönixfeder?“), liefern nur Chunks aus der NPC-Datei. Die Regeldefinition im PDF erreicht die Top-8 nicht — die NPC-Datei belegt alle Plätze bis zum `max_per_source`-Cap, der Rest geht an andere Vault-Dateien. Messbar im Golden Set: x002–x008 sind Abschnitt-Misses (`expected_section`), obwohl der Datei-Hit stimmt.
 
 **Lösung**: Nach dem Rerank mindestens einen Platz für die Gruppe `rules` reservieren, wenn ein Regel-Chunk unter den Kandidaten ist und einen Mindest-Rerank-Score erreicht (analog zum bestehenden Backfill im Soft-Cap). Optional nur auslösen, wenn die Frage einen Begriff enthält, der als Abschnittsüberschrift im Regelwerk existiert (Eigenheit, Zauber, Artefakt). Danach Golden Set mit Abschnittsprüfung laufen lassen; Ziel: x002–x008 treffen, ohne die übrigen Abschnitt-Treffer zu verschlechtern (Stand 12.10. mit Simulationsquellen: 121/137). Der Slot gilt nur für `rules`, nicht für `simulation` — sonst verdrängen die Simulationstabellen das Regelbuch noch stärker.
 
 **Aufwand**: Mittel. Mehrere Golden-Set-Läufe — seit dem GPU-Reranker (5.4) je ~1 min statt ~12 min.
+
+**Befund (13.10.)**: Ein Slot *nach* dem Rerank reicht nicht — bei x002–x007 ist **kein einziger** Regel-Chunk unter den 15 Vektor-Kandidaten (die NPC-Datei füllt sie). Eine Vektorsuche nur in `rules` findet dagegen x001–x007 unter den ersten 8.
+
+**Umgesetzt**: `retrieval.rules_slot` — zweite Vektorsuche in Gruppe `rules` (5 Kandidaten, AND mit dem Anfrage-Filter → Spieler-Modus bleibt dicht), mit gereranked, aber getrennt vom Haupt-Pool; fehlt in den Top-8 ein `rules`-Chunk, ersetzt der beste mit Rerank-Score ≥ −4 den schwächsten (max. einer). Erste Variante (Extra-Kandidaten in den Haupt-Pool gemischt) brachte 138/153, aber Regel-Chunks in 121 von 138 reinen Lore-Fragen → verworfen.
+
+**Messung (Golden Set, alle Varianten im selben Prozess)**: aus 132/153 Abschnitte, x 1/8, Lore-Fragen mit Regel-Chunk 24/138 · −3: 133, 2/8, 48 · **−4: 136, 5/8, 67 (5 Kandidaten: 64)** · −5/−6/−8: 136, 5/8, 91/119/136. Dateien unverändert 0,986. Offen: x003 (richtiger Chunk −7,5 < falscher −5,5), x004 (Tabellen-Chunk ohne Überschrift), x008 (Heimkehrpfennig findet die Regel-Suche nicht).
 
 **Restliche Abschnitt-Misses (separat ansehen)**: Wortähnlichkeit zieht falsche Dateien („Armbrust“ → Bargrun der Armdrücker, „Verbände“ → Balancing-Notiz) und Nachbarabschnitte gewinnen (Erlernen → 5.3 statt 5.1, Vorteil/Nachteil → 1.1 statt 1.4).
 
@@ -392,6 +398,14 @@ int8 verworfen (kaum schneller, anderes Ranking). Modell-Laden DirectML 1,3 s id
 
 **Abschluss (12.10.)**: Paket-Tausch in `.venv` erledigt (`onnxruntime-directml 1.24.4`; `pip check` meldet erwartungsgemäß das fehlende `onnxruntime`-Paket für chromadb/pymupdf-layout/rapidocr — das Modul ist da). Volle Testsuite grün (532), RapidOCR-Smoke-Test ok, `tests/perf/test_reranker_gpu.py`: 18 Paare CPU 118 ms → GPU 12 ms, gleiches Ranking. Golden Set mit GPU-Reranker in **1:12 min statt ~12 min**: Dateien 275/278, Abschnitte 132/153 (letzter CPU-Lauf 18:05: 274/278, 131/153). Die 9 Fragen mit anderer Trefferliste als 18:05 liefern im direkten A/B-Vergleich (gleicher Index, torch vs. DirectML) **identische** Ergebnisse (max. Score-Abweichung 3·10⁻⁶) — die Abweichung zu 18:05 kommt nicht vom GPU-Reranker. Offen: Rerank-Timings im laufenden Chat ansehen. Embedding-Modell bleibt auf der CPU (Query-Embedding ~0,08 s; Wechsel würde Re-Index erfordern). Windows ML / ROCm halbjährlich neu prüfen.
 
+### 5.5 Vektorsuche nicht reproduzierbar (gefunden 13.10.)
+
+**Problem**: Dieselbe Frage liefert nach einem Neustart für ~9 von 278 Golden-Fragen andere Vektor-Kandidaten (innerhalb eines Prozesses stabil; Query-Embeddings bitgleich). ChromaDBs HNSW-Suche ist approximativ — teils fehlt sogar ein besserer Treffer (p087: 0,796 in einem Lauf gefunden, im anderen nicht). Folge: Eval-Läufe in getrennten Prozessen schwanken um ±2 Abschnitte; Varianten nur im selben Prozess vergleichen.
+
+**Lösung (zu prüfen)**: `ef_search` der Collection erhöhen (ChromaDB-HNSW-Konfiguration) oder bei der kleinen Collection (~20 k Chunks) exakt suchen; vorher messen, ob die Abweichung verschwindet und was es an Latenz kostet. Ändert die Collection-Konfiguration → nur bei gestopptem Backend.
+
+**Aufwand**: Gering-Mittel. Last 🟡.
+
 ## 6.0 PnP-Simulation zugreifbar machen — 🔄 Umgesetzt, Abschluss nach dem nächsten Simulationslauf
 
 **Entscheidung (12.10.)**: Minimaler Input — fünf Dateien aus `PnP_Simulation` als Einzeldatei-Sources in der neuen Gruppe **`simulation`** (Sidebar „📊 Simulation“, im Spielleiter-Modus abwählbar für reine Regelfragen). HTML, JSON, CSV, Cache, README und die übrigen `docs/` bleiben draußen (Entwickler-Doku, Duplikate des Vaults/Regelwerks oder veraltete Protokolle). Gegnerwerte und Kampagnen-Kämpfe stehen bereits über die `sim:start`-/`sim:kampf`-Blöcke im Vault.
@@ -443,7 +457,7 @@ int8 verworfen (kaum schneller, anderes Ranking). Modell-Laden DirectML 1,3 s id
 
 ## Priorisierungsvorschlag
 
-Erledigt: 5.4 Reranker auf der GPU (DirectML), 5.2 Startup-Baseline, 3.3 Chunk-Inspector, 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
+Erledigt: 3.10 Regelwerk-Slot, 5.4 Reranker auf der GPU (DirectML), 5.2 Startup-Baseline, 3.3 Chunk-Inspector, 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
 
 **Offen am Gaming-PC (Nutzer)**: alte Autostart-Aufgabe „LoreKeeper Server“ als Admin entfernen (`Unregister-ScheduledTask -TaskName "LoreKeeper Server" -Confirm:$false`); DHCP-Reservierung für `192.168.178.34` im Router.
 
@@ -452,8 +466,8 @@ Erledigt: 5.4 Reranker auf der GPU (DirectML), 5.2 Startup-Baseline, 3.3 Chunk-I
 | Reihenfolge | Punkt | Impact | Aufwand | Last | Begründung                                                                                                                  |
 |---|---|---|---|---|-----------------------------------------------------------------------------------------------------------------------------|
 | 1 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf; dann Re-Index, Eval, Spieler-Messung — dabei 3.8/3.9 im Browser durchklicken     |
-| 2 | 3.10 Regelwerk-Slot im Retrieval | Mittel — SL-Fragen, die Vault und Regel mischen | Mittel | 🟡 | Golden-Set-Läufe jetzt ~1 min (5.4); mit Abschnittsprüfung messbar (x002–x008) |
-| 3 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Mit der Chunk-Prüfung aus 5.2 messbar; Golden Set ~1 min |
+| 2 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Mit der Chunk-Prüfung aus 5.2 messbar; Golden Set ~1 min |
+| 3 | 5.5 Vektorsuche reproduzierbar machen | Gering-Mittel — stabile Ergebnisse nach Neustart, verlässliche Eval-Vergleiche | Gering-Mittel | 🟡 | ±2 Abschnitte Schwankung zwischen Prozessen; `ef_search` erhöhen oder exakt suchen |
 | 4 | 3.2 Session-History | Mittel | Mittel | 🟢 | Später; Spieler-/SL-Sessions getrennt halten; Fraglich ob überhaupt gebraucht                                               |
 | 5 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | 🔴 | Vision-Modell lokal über Ollama; Bild-Ausschluss im Retriever aufheben                                                      |
 | 6 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | 🟢 | Später; Spieler-Modus im Backend ist erledigt |

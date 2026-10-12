@@ -12,6 +12,20 @@ from src.retrieval.vectorstore import VectorStoreService
 
 logger = logging.getLogger(__name__)
 
+RULES_GROUP = "rules"
+
+
+def _to_chunk(item: dict[str, Any]) -> "RetrievedChunk":
+    """Vector/BM25 hit dict → RetrievedChunk."""
+    return RetrievedChunk(
+        content=item["content"],
+        source_file=item["metadata"].get("source_file", ""),
+        document_type=item["metadata"].get("document_type", ""),
+        heading=item["metadata"].get("heading_hierarchy", ""),
+        score=item["score"],
+        metadata=item["metadata"],
+    )
+
 
 def _rrf_merge(
     vector_results: list[dict[str, Any]],
@@ -178,6 +192,20 @@ class Retriever:
             if r["score"] >= self.config.score_threshold
         ]
 
+        # 1b. Rules slot candidates: a separate search inside the rulebook, same filters (player mode
+        # included). Kept apart from the main pool — at most one of them enters the result (see _rerank).
+        slot = self.config.rules_slot
+        rules_extra: list[dict[str, Any]] = []
+        if slot.enabled and slot.candidates and self.config.reranking.enabled:
+            rules_hits = await run_in_threadpool(
+                self.vectorstore.query,
+                query_embedding=query_embedding,
+                top_k=slot.candidates,
+                where={"$and": [where, {"group": RULES_GROUP}]},
+            )
+            known = {r["id"] for r in vector_results}
+            rules_extra = [r for r in rules_hits if r["id"] not in known and r["score"] >= self.config.score_threshold]
+
         # 2. BM25 search + RRF fusion (if hybrid enabled)
         if use_hybrid:
             t0 = time.perf_counter()
@@ -208,21 +236,12 @@ class Retriever:
         else:
             results = vector_results
 
-        chunks = [
-            RetrievedChunk(
-                content=item["content"],
-                source_file=item["metadata"].get("source_file", ""),
-                document_type=item["metadata"].get("document_type", ""),
-                heading=item["metadata"].get("heading_hierarchy", ""),
-                score=item["score"],
-                metadata=item["metadata"],
-            )
-            for item in results
-        ]
+        chunks = [_to_chunk(item) for item in results]
 
         if self.config.reranking.enabled and chunks:
             t0 = time.perf_counter()
-            chunks = await self._rerank(query, chunks, top_k_rerank=top_k_rerank, max_per_source=max_per_source)
+            chunks = await self._rerank(query, chunks, top_k_rerank=top_k_rerank, max_per_source=max_per_source,
+                                        rules_candidates=[_to_chunk(item) for item in rules_extra])
             stage_ms["rerank"] = (time.perf_counter() - t0) * 1000
 
         if self.config.section_expansion.enabled and chunks:
@@ -312,6 +331,7 @@ class Retriever:
         chunks: list[RetrievedChunk],
         top_k_rerank: int | None = None,
         max_per_source: int | None = None,
+        rules_candidates: list[RetrievedChunk] | None = None,
     ) -> list[RetrievedChunk]:
         """Apply a cross-encoder model to re-score and re-order the retrieved chunks.
 
@@ -324,9 +344,11 @@ class Retriever:
         requested.
         """
         reranker = self.get_reranker()
-        pairs = [[query, c.content] for c in chunks]
+        extra = rules_candidates or []
+        pairs = [[query, c.content] for c in chunks + extra]
 
-        scores = await run_in_threadpool(reranker.predict, pairs)
+        all_scores = list(await run_in_threadpool(reranker.predict, pairs))
+        scores, extra_scores = all_scores[:len(chunks)], all_scores[len(chunks):]
 
         ranked = sorted(zip(scores, chunks, strict=True), key=lambda x: x[0], reverse=True)
         top_k = top_k_rerank or self.config.reranking.top_k_rerank
@@ -371,6 +393,22 @@ class Retriever:
                 selected.append(entry)
                 backfilled += 1
 
+        # Rules slot: no rulebook chunk made it — the best one (main pool or the separate rules
+        # search) takes the last place if it scores ≥ min_score. Never more than this one chunk.
+        slot = self.config.rules_slot
+        slot_used = False
+        if slot.enabled and not any(c.metadata.get("group") == RULES_GROUP for _, c in selected):
+            chosen = {id(c) for _, c in selected}
+            pool = [(s, c) for s, c in ranked if c.metadata.get("group") == RULES_GROUP and id(c) not in chosen]
+            pool += list(zip(extra_scores, extra, strict=True))
+            best_rule = max(pool, key=lambda x: x[0], default=None)
+            if best_rule and best_rule[0] >= slot.min_score:
+                if len(selected) >= top_k:
+                    selected.sort(key=lambda x: x[0], reverse=True)
+                    selected.pop()
+                selected.append(best_rule)
+                slot_used = True
+
         # Re-sort after backfill so the LLM still sees the most relevant chunks first.
         selected.sort(key=lambda x: x[0], reverse=True)
 
@@ -390,7 +428,7 @@ class Retriever:
 
         logger.info(
             f"Reranked {len(chunks)} → {len(reranked)} chunks "
-            f"(cap-overflow={len(overflow)}, backfilled={backfilled}); "
+            f"(cap-overflow={len(overflow)}, backfilled={backfilled}{', rules slot' if slot_used else ''}); "
             f"top score: {ranked[0][0]:.3f} ({ranked[0][1].source_file})"
         )
         return reranked

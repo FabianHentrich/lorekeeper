@@ -39,7 +39,7 @@ reset to `settings.yaml`.
 
 | Section | Editable via UI | Live effect |
 |---|---|---|
-| `retrieval.*` (incl. `hybrid.*`, `reranking.*`) | ✅ all fields except `section_expansion.*` (YAML only) | next query |
+| `retrieval.*` (incl. `hybrid.*`, `reranking.*`) | ✅ all fields except `section_expansion.*`, `rules_slot.*` and `reranking.backend` (YAML only) | next query |
 | `llm.ollama.{temperature,top_p,max_tokens,timeout}` | ✅ | next query |
 | `llm.gemini.{temperature,top_p,max_tokens,timeout}` | ✅ | next query |
 | `llm.fallback_enabled` | ✅ | next query |
@@ -242,6 +242,9 @@ The model is preloaded at server start (`warmup` in `lifespan`), not on the firs
 | `hybrid.bm25_top_k` | `int` | `15` | How many BM25 candidates to fetch before fusion |
 | `section_expansion.enabled` | `bool` | `true` | After reranking: if ≥ 2 hits of one file share a parent heading with *different* sub-headings, the whole parent section is loaded and passed to the LLM in document order (fixes fragmentary answers to "which abilities / what does X contain" questions). Not editable via the UI |
 | `section_expansion.max_chunks` | `int` | `25` | Sections with more chunks are not expanded — protects the LLM context from whole chapters |
+| `rules_slot.enabled` | `bool` | `false` (`settings.yaml`: `true`) | Questions naming a vault entity *and* a rule term ("Was bewirkt Ritterlichkeit bei Escanor?") fill all vector candidates with the entity's file — the rulebook never reaches the reranker. With the slot, a separate vector search inside group `rules` (AND-ed with the request filter, so player mode holds) yields extra candidates; they are reranked but kept apart from the main pool. If no `rules` chunk made the final `top_k_rerank`, the best one scoring ≥ `min_score` replaces the weakest — never more than one. Not editable via the UI |
+| `rules_slot.candidates` | `int` | `5` | Size of the separate rules search |
+| `rules_slot.min_score` | `float` | `-4.0` | Minimum rerank score (raw logit) for the slot. Golden set (same process): off 132/153 sections, x001–x008 1/8 · `-3` 133, 2/8 · **`-4` 136, 5/8** · `-5`/`-6`/`-8` 136, 5/8 with more rules chunks in pure lore questions (64 → 91 → 119 → 136 of 138) |
 | `section_expansion.top_rank` | `int` | `3` | Only expand a section if one of its hits is among the first N reranked chunks (`0` = no limit). Stops two stray mid-ranking hits from pulling an unrelated section into the context. Golden set: Ø chunks 13.9 → 12.6, 25 questions lose junk expansion, section hit rate unchanged; `2`/`1` started cutting relevant overview chunks |
 
 **Rules of thumb:**

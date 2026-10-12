@@ -150,12 +150,21 @@ class SectionExpansionConfig(BaseModel):
     top_rank: int = 3                # only expand if a hit is among the first N ranked chunks (0 = no limit)
 
 
+class RulesSlotConfig(BaseModel):
+    # Questions naming a vault entity *and* a rule term ("Was bewirkt Ritterlichkeit bei Escanor?"):
+    # the entity's file fills every vector candidate, the rulebook never reaches the reranker.
+    enabled: bool = False
+    candidates: int = 8              # extra vector candidates from the "rules" group, reranked with the rest
+    min_score: float = -5.0          # reserve one top_k_rerank slot for the best rules chunk if it scores ≥ this
+
+
 class RetrievalConfig(BaseModel):
     top_k: int = 15
     score_threshold: float = 0.5
     reranking: RerankingConfig = RerankingConfig()
     hybrid: HybridSearchConfig = HybridSearchConfig()
     section_expansion: SectionExpansionConfig = SectionExpansionConfig()
+    rules_slot: RulesSlotConfig = RulesSlotConfig()
 
 
 class OllamaConfig(BaseModel):

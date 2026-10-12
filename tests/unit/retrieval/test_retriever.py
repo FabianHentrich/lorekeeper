@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.config.manager import HybridSearchConfig, RerankingConfig, RetrievalConfig
+from src.config.manager import HybridSearchConfig, RerankingConfig, RetrievalConfig, RulesSlotConfig
 from src.retrieval.bm25_index import BM25Index
 from src.retrieval.retriever import Retriever, _rrf_merge
 
@@ -230,6 +230,67 @@ class TestRerank:
 
         results = await retriever.retrieve("query")
         assert [r.content for r in results] == ["a1", "a2", "b4", "b5"]
+
+
+def _slot_hit(id_, group, file, score=0.8):
+    return {"id": id_, "content": f"text {id_}", "score": score,
+            "metadata": {"source_file": file, "document_type": "markdown", "heading_hierarchy": id_, "group": group}}
+
+
+class TestRulesSlot:
+    """3.10: an entity file fills the candidates — one rulebook chunk gets in via a separate rules search."""
+
+    MAIN = [_slot_hit(f"n{i}", "lore", "npc.md", 0.9 - i / 100) for i in range(4)]
+    RULES = [_slot_hit("r1", "rules", "regeln.pdf"), _slot_hit("r2", "rules", "regeln.pdf")]
+
+    def _retriever(self, embed_service, vectorstore, scores, **slot):
+        cfg = RetrievalConfig(top_k=4, score_threshold=0.5,
+                              reranking=RerankingConfig(top_k_rerank=3, max_per_source=0),
+                              rules_slot=RulesSlotConfig(**{"enabled": True, "candidates": 2, "min_score": -4, **slot}))
+        vectorstore.query.side_effect = lambda query_embedding, top_k, where: (
+            self.RULES if "group" in str(where) else self.MAIN)
+        ret = Retriever(config=cfg, embedding_service=embed_service, vectorstore=vectorstore)
+        ret._reranker = MagicMock()
+        ret._reranker.predict.side_effect = lambda pairs: scores[:len(pairs)]
+        return ret
+
+    @pytest.mark.asyncio
+    async def test_best_rules_chunk_replaces_the_weakest(self, embed_service, vectorstore):
+        # main n0..n3, then extra r1, r2
+        ret = self._retriever(embed_service, vectorstore, [2.0, 1.0, 0.5, 0.1, -3.0, -1.0])
+        results = await ret.retrieve("Was bewirkt Ritterlichkeit bei Escanor?")
+        assert [r.heading for r in results] == ["n0", "n1", "r2"]  # r2 (-1.0) beats r1, replaces n2
+
+    @pytest.mark.asyncio
+    async def test_below_min_score_no_slot(self, embed_service, vectorstore):
+        ret = self._retriever(embed_service, vectorstore, [2.0, 1.0, 0.5, 0.1, -6.0, -5.0])
+        results = await ret.retrieve("Wer ist Arkenfeld?")
+        assert [r.heading for r in results] == ["n0", "n1", "n2"]
+
+    @pytest.mark.asyncio
+    async def test_no_slot_when_a_rules_chunk_already_made_it(self, embed_service, vectorstore):
+        self.MAIN = self.MAIN[:3] + [_slot_hit("rx", "rules", "regeln.pdf", 0.85)]
+        ret = self._retriever(embed_service, vectorstore, [2.0, 1.0, 0.5, 3.0, -1.0, -1.0])
+        results = await ret.retrieve("q")
+        assert sum(r.metadata["group"] == "rules" for r in results) == 1
+        assert results[0].heading == "rx"
+
+    @pytest.mark.asyncio
+    async def test_rules_search_keeps_the_request_filter(self, embed_service, vectorstore):
+        """Player mode: the extra search is AND-ed with the caller's filter — it can't reach other sources."""
+        ret = self._retriever(embed_service, vectorstore, [2.0, 1.0, 0.5, 0.1, -1.0, -1.0])
+        await ret.retrieve("q", metadata_filters={"source_id": {"$in": ["regelbuch"]}})
+        rules_where = [c.kwargs["where"] for c in vectorstore.query.call_args_list if "group" in str(c.kwargs["where"])]
+        assert len(rules_where) == 1
+        assert {"group": "rules"} in rules_where[0]["$and"]
+        assert "{'source_id': {'$in': ['regelbuch']}}" in str(rules_where[0])
+
+    @pytest.mark.asyncio
+    async def test_disabled_makes_no_extra_search(self, embed_service, vectorstore):
+        ret = self._retriever(embed_service, vectorstore, [2.0, 1.0, 0.5, 0.1], enabled=False)
+        results = await ret.retrieve("q")
+        assert vectorstore.query.call_count == 1
+        assert [r.heading for r in results] == ["n0", "n1", "n2"]
 
 
 class TestRerankerBackend:

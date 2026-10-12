@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Rulebook slot in retrieval** (roadmap 3.10): `retrieval.rules_slot` runs a second vector search inside group `rules` (same filters as the request); if no rules chunk made the top `top_k_rerank`, the best one scoring ≥ `min_score` (-4) replaces the weakest — at most one. Golden set: sections 132 → 136/153, entity + rule questions (x001–x008) 1 → 5/8
 - **Reranker on the GPU** (roadmap 5.4): `retrieval.reranking.backend: directml` runs the cross-encoder via ONNX Runtime + DirectML on any DX12 card (AMD included) — same scores, ~50 ms instead of ~840 ms per rerank and ~70 ms instead of ~14 s while the CPU is busy. Falls back to the CPU (torch) with a warning if DirectML is unavailable. New dependency `onnxruntime-directml` (install steps in the README)
 - **Chunk inspector** (roadmap 3.3): Evaluation tab **Chunks** shows every stored chunk of a file (document order, heading path, length, full text, metadata; chunks under 100 characters flagged) via `GET /eval/chunks/files` and `GET /eval/chunks`
 - **Chat history in the answer prompt** (roadmap 3.6): the QA prompt gets the last question/answer pair (`conversation.answer_history_pairs: 1`, earlier answer cut at `answer_history_max_chars: 1500`), placed before the sources and marked as no source — follow-ups like "fass das kürzer zusammen" now work

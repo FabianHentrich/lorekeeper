@@ -545,6 +545,10 @@ komplett für diesen Request).
 5. Reranking via Cross-Encoder (Score-sortierte Liste). `reranking.backend: directml` rechnet auf
    der GPU (`src/retrieval/onnx_reranker.py`, ONNX Runtime + DirectML, gleiche Scores); ist DirectML
    nicht verfügbar, Warnung im Log und Fallback auf das torch-Modell auf der CPU.
+   **Regelwerk-Slot** (`rules_slot`, 3.10): eine zweite Vektorsuche nur in Gruppe `rules` (gleicher
+   Filter wie die Anfrage) liefert Extra-Kandidaten, die mit gereranked, aber nicht in den Haupt-Pool
+   gemischt werden. Hat es kein `rules`-Chunk in die Top-`top_k_rerank` geschafft, ersetzt der beste
+   mit Score ≥ `min_score` den schwächsten — höchstens einer.
 6. **Soft per-source cap** (`max_per_source`):
    - Pass 1 (diverse fill): pro Source-File max. N Chunks akzeptieren,
      Cap-Überlauf in Overflow-Liste parken
