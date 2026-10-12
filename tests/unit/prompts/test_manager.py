@@ -60,3 +60,31 @@ class TestPromptManager:
         result = pm.render_qa(chunks=chunks, question="Test")
         assert "[a.md] Eins" in result
         assert "[b.md] Zwei" in result
+
+    def test_render_qa_ignores_history_without_block(self, pm):
+        """Templates without a history block (older prompt variants) still render."""
+        result = pm.render_qa(chunks=[], question="Test", history=[{"role": "user", "content": "Alt"}])
+        assert "Alt" not in result
+
+
+class TestActiveQaTemplate:
+    """The shipped config/prompts.yaml renders the chat block only when there is history."""
+
+    @pytest.fixture
+    def real_pm(self):
+        from pathlib import Path
+        return PromptManager(prompts_path=Path("config/prompts.yaml"))
+
+    def test_no_history_no_block(self, real_pm):
+        result = real_pm.render_qa(chunks=[{"source_file": "a.md", "heading": "H", "content": "X"}], question="Q?")
+        assert "Bisheriger Chat" not in result
+
+    def test_history_marked_as_no_source(self, real_pm):
+        result = real_pm.render_qa(
+            chunks=[{"source_file": "a.md", "heading": "H", "content": "X"}],
+            question="Und kürzer?",
+            history=[{"role": "user", "content": "Wer ist A?"}, {"role": "assistant", "content": "A ist B."}],
+        )
+        assert "Bisheriger Chat (keine Quelle)" in result
+        assert "Nutzer: Wer ist A?" in result and "LoreKeeper: A ist B." in result
+        assert result.index("Bisheriger Chat") < result.index("### Quellen") < result.index("Und kürzer?")

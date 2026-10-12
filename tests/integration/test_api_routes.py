@@ -70,6 +70,9 @@ class FakeConversationManager:
     def get_history_for_condense(self, session_id: str) -> list:
         return []
 
+    def get_answer_history(self, session_id: str) -> list:
+        return []
+
 
 class FakeLLMResponse:
     def __init__(self, content: str, model: str = "fake-model") -> None:
@@ -97,8 +100,9 @@ class FakePromptManager:
     def get_system_prompt(self) -> str:
         return "Du bist ein hilfreicher Assistent."
 
-    def render_qa(self, chunks, question: str) -> str:
+    def render_qa(self, chunks, question: str, history=None) -> str:
         self.last_qa_question = question
+        self.last_qa_history = history
         return f"Frage: {question}"
 
     def render_condense(self, history, question: str) -> str:
@@ -733,3 +737,34 @@ def test_feedback_list_without_file_is_empty(client, tmp_path, monkeypatch):
     import src.api.routes as routes_module
     monkeypatch.setattr(routes_module, "_FEEDBACK_PATH", tmp_path / "nope.jsonl")
     assert client.get("/feedback").json() == []
+
+
+def test_answer_prompt_sees_only_the_last_pair(client, fake_services):
+    """The QA prompt carries the last question/answer (real template), not older turns and not on the first question."""
+    from pathlib import Path
+
+    from src.config.manager import ConversationConfig
+    from src.conversation.manager import ConversationManager
+    from src.prompts.manager import PromptManager
+
+    main_module.conversation_manager = ConversationManager(ConversationConfig(condense_question=False))
+    main_module.prompt_manager = PromptManager(prompts_path=Path("config/prompts.yaml"))
+    prompts: list[str] = []
+    answers = iter(["Antwort eins.", "Antwort zwei.", "Antwort drei."])
+
+    async def _generate(system_prompt, qa_prompt):
+        prompts.append(qa_prompt)
+        return FakeLLMResponse(content=next(answers))
+
+    fake_services.generator.generate = _generate
+
+    sid = client.post("/query", json={"question": "Frage eins?"}).json()["session_id"]
+    client.post("/query", json={"question": "Frage zwei?", "session_id": sid})
+    client.post("/query", json={"question": "Und kürzer?", "session_id": sid})
+
+    assert "Bisheriger Chat" not in prompts[0]
+    assert "Nutzer: Frage eins?" in prompts[1] and "LoreKeeper: Antwort eins." in prompts[1]
+    assert "Nutzer: Frage zwei?" in prompts[2] and "LoreKeeper: Antwort zwei." in prompts[2]
+    assert "Frage eins?" not in prompts[2]
+    # Chat first, then sources, the question last
+    assert prompts[2].index("Bisheriger Chat") < prompts[2].index("### Quellen") < prompts[2].index("### Frage")

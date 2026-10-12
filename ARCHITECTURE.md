@@ -726,6 +726,8 @@ generieren.
 conversation:
   window_size: 8                        # Anzahl Nachrichten-Paare (User + Assistant)
   max_context_tokens: 4096              # Hard Limit für History-Tokens
+  answer_history_pairs: 1               # QA-Paare im Antwort-Prompt (0 = aus)
+  answer_history_max_chars: 1500        # frühere Antworten dort gekürzt
   condense_question: true               # History + Frage → Standalone-Frage via LLM
   condense_model: null                  # null = selbes Modell wie llm.provider.
                                         # Optional: schnelleres Modell nur für Condense,
@@ -746,6 +748,12 @@ conversation:
   relevante Informationen in der Mitte des Kontexts werden schlechter verarbeitet.
   8 Paare halten den Gesamtkontext (History + Retrieved Chunks + Prompt) im
   effektiven Bereich.
+
+**Verlauf im Antwort-Prompt:** Das Sliding Window speist nur den Condense-Schritt. Der
+QA-Prompt bekommt zusätzlich nur das **letzte** Frage/Antwort-Paar (`answer_history_pairs`,
+Antwort auf `answer_history_max_chars` gekürzt), vor den Quellen und als „keine Quelle“
+markiert — genug für „fass das kürzer zusammen“, ohne dass ältere (evtl. halluzinierte)
+Antworten die Quellen verwässern. Sessions sind rollengebunden, Spieler sehen nur ihren Verlauf.
 
 **Condense Question (Question Rewriting):**
 

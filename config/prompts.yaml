@@ -40,6 +40,15 @@ system: |
 
 qa: |
   Beantworte die folgende Frage basierend auf den bereitgestellten Quellen.
+  {% if history %}
+
+  ### Bisheriger Chat (keine Quelle):
+  Nur um Bezüge wie „das“, „er“ oder „kürzer“ zu verstehen. Fakten kommen
+  ausschließlich aus den Quellen unten — was nur im Chat steht, gilt nicht als belegt.
+  {% for msg in history %}
+  {{ "Nutzer" if msg.role == "user" else "LoreKeeper" }}: {{ msg.content }}
+  {% endfor %}
+  {% endif %}
 
   ### Quellen:
   {% for chunk in chunks %}

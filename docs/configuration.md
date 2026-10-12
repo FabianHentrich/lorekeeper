@@ -316,6 +316,8 @@ This makes "start program → enter key in UI → use Gemini" possible without t
 |-----|------|---------|-------------|
 | `window_size` | `int` | `8` | Maximum number of messages in the context window (user + assistant) |
 | `max_context_tokens` | `int` | `4096` | Maximum tokens in conversation context |
+| `answer_history_pairs` | `int` | `1` | QA pairs the **answer** prompt sees, marked as "no source" (0 = off). Kept small on purpose — more history dilutes the sources and invites hallucination |
+| `answer_history_max_chars` | `int` | `1500` | Earlier answers in the answer prompt are cut here (`[…]`) |
 | `condense_question` | `bool` | `true` | Reformulate follow-up questions into standalone questions |
 | `condense_model` | `str\|null` | `null` | Separate Ollama model for condensing (null = use primary) |
 | `session_timeout_minutes` | `int` | `60` | Delete inactive sessions after N minutes |

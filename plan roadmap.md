@@ -165,13 +165,17 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 **Aufwand**: Mittel. Wikilink→Chunk-Mapping beim Ingest bauen, Retriever erweitern.
 
 
-### 3.6 Chat-Verlauf im Antwort-Prompt
+### 3.6 Chat-Verlauf im Antwort-Prompt — ✅ Erledigt
 
 **Problem**: Das LLM sieht bei der Antwort nur die kondensierte Frage, nicht den bisherigen Verlauf. Folgefragen, die sich auf die *vorherige Antwort* beziehen ("fass das kürzer zusammen", "was hast du eben über seine Schwester gesagt?"), funktionieren deshalb nicht — der Condense-Schritt löst nur Referenzen für das Retrieval auf.
 
 **Lösung**: Die letzten 1–2 Frage/Antwort-Paare (begrenzt durch `conversation.max_context_tokens`) zusätzlich in den QA-Prompt geben. `qa`-Template in `prompts.yaml` um einen optionalen `history`-Block erweitern, `render_qa()` reicht ihn durch.
 
-**Aufwand**: Gering-Mittel. Achtung auf Kontextlänge bei kleinen Modellen ("Lost in the Middle").
+**Umgesetzt (12.10.)**: Nur das **letzte** Frage/Antwort-Paar (`conversation.answer_history_pairs: 1`, 0 = aus), frühere Antwort auf 1500 Zeichen gekürzt (`answer_history_max_chars`). Steht vor den Quellen und ist als „keine Quelle“ markiert: Fakten nur aus den Quellen. Begründung: mehr Verlauf verwässert die Quellen und gibt früheren (evtl. halluzinierten) Antworten Gewicht; das Sliding Window (8 Paare) bleibt nur für den Condense-Schritt. Sessions sind rollengebunden → Spieler sehen nur ihren eigenen Verlauf. Prompt-Varianten ohne `history`-Block ignorieren ihn.
+
+**Offen**: Wirkung mit echten LLM-Antworten prüfen (Folgefragen wie „fass das kürzer zusammen“, „was hast du eben über X gesagt?“) — braucht freie CPU/GPU.
+
+**Aufwand**: Gering-Mittel (umgesetzt).
 
 ### 3.7 Zugriffsschutz für die UI — ✅ Erledigt
 
@@ -404,7 +408,7 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 
 ## Priorisierungsvorschlag
 
-Erledigt: 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
+Erledigt: 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
 
 **Offen am Gaming-PC (Nutzer)**: alte Autostart-Aufgabe „LoreKeeper Server“ als Admin entfernen (`Unregister-ScheduledTask -TaskName "LoreKeeper Server" -Confirm:$false`); DHCP-Reservierung für `192.168.178.34` im Router.
 
@@ -417,10 +421,9 @@ Erledigt: 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Inge
 | 3 | 5.3 Reranker/Embeddings auf GPU (AMD: ONNX Runtime + DirectML) | Mittel — ~0,5 s pro Frage, schnellere Indexierung und Evals, CPU frei für die Simulation | Mittel | 🔴 | Vor 3.10/Section-Budget: macht deren Golden-Set-Läufe billiger. Neue Abhängigkeit — erst entscheiden; ROCm erst nach Bugfix |
 | 4 | 3.10 Regelwerk-Slot im Retrieval | Mittel — SL-Fragen, die Vault und Regel mischen | Mittel | 🔴 | Mit Abschnittsprüfung messbar (x002–x008)                                                                                   |
 | 5 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🔴 | Mit der Chunk-Prüfung aus 5.2 messbar                                                                                       |
-| 6 | 3.6 Chat-Verlauf im Antwort-Prompt | Mittel — bessere Folgefragen | Gering-Mittel | 🟡 | Code leicht, Wirkung nur mit echten LLM-Antworten prüfbar; Spieler-Modus beachten (nur eigener Verlauf)                     |
-| 7 | 3.2 Session-History | Mittel | Mittel | 🟢 | Später; Spieler-/SL-Sessions getrennt halten; Fraglich ob überhaupt gebraucht                                               |
-| 8 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | 🔴 | Vision-Modell lokal über Ollama; Bild-Ausschluss im Retriever aufheben                                                      |
-| 9 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | 🟢 | Später; Spieler-Modus im Backend ist erledigt |
-| 10 | 3.5 Wikilink-Expansion | Mittel | Mittel | 🔴 | Experimentell; im Spieler-Modus darf sie keine SL-Quellen nachladen                                                         |
-| 11 | 3.3 Chunk-Inspector | Gering (Dev-Tool) | Gering-Mittel | 🟢 | Teilweise durch Evaluation → „Frage testen“ abgedeckt                                                                       |
-| 12 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | 🟡 | Später                                                                                                                      |
+| 6 | 3.2 Session-History | Mittel | Mittel | 🟢 | Später; Spieler-/SL-Sessions getrennt halten; Fraglich ob überhaupt gebraucht                                               |
+| 7 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | 🔴 | Vision-Modell lokal über Ollama; Bild-Ausschluss im Retriever aufheben                                                      |
+| 8 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | 🟢 | Später; Spieler-Modus im Backend ist erledigt |
+| 9 | 3.5 Wikilink-Expansion | Mittel | Mittel | 🔴 | Experimentell; im Spieler-Modus darf sie keine SL-Quellen nachladen                                                         |
+| 10 | 3.3 Chunk-Inspector | Gering (Dev-Tool) | Gering-Mittel | 🟢 | Teilweise durch Evaluation → „Frage testen“ abgedeckt                                                                       |
+| 11 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | 🟡 | Später                                                                                                                      |

@@ -81,6 +81,8 @@ llm:
 conversation:
   window_size: 8
   max_context_tokens: 4096
+  answer_history_pairs: 1         # QA pairs the answer prompt sees (0 = off) — more dilutes the sources
+  answer_history_max_chars: 1500  # earlier answers are cut here
   condense_question: true
   condense_model: null
   session_timeout_minutes: 60

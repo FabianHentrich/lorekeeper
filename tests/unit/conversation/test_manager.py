@@ -87,6 +87,41 @@ class TestConversationManager:
             {"role": "assistant", "content": "Reply"},
         ]
 
+    def test_answer_history_is_the_last_pair(self, cm):
+        """The answer prompt gets only the newest QA pair, independent of window_size."""
+        session = cm.get_or_create_session()
+        for i in range(3):
+            session.add_message("user", f"Frage {i}")
+            session.add_message("assistant", f"Antwort {i}")
+
+        assert cm.get_answer_history(session.session_id) == [
+            {"role": "user", "content": "Frage 2"},
+            {"role": "assistant", "content": "Antwort 2"},
+        ]
+
+    def test_answer_history_cuts_long_answers_only(self):
+        """Long answers are cut with a marker; the question stays whole."""
+        cm = ConversationManager(ConversationConfig(answer_history_pairs=2, answer_history_max_chars=10))
+        session = cm.get_or_create_session()
+        for i in range(2):
+            session.add_message("user", f"Frage {i}".ljust(30, "?"))
+            session.add_message("assistant", "A" * 30)
+
+        history = cm.get_answer_history(session.session_id)
+        assert len(history) == 4
+        assert history[0]["content"] == "Frage 0".ljust(30, "?")
+        assert history[1]["content"] == "A" * 10 + " […]"
+
+    def test_answer_history_off_or_unknown(self):
+        """0 pairs switches it off; unknown sessions have no history."""
+        cm = ConversationManager(ConversationConfig(answer_history_pairs=0))
+        session = cm.get_or_create_session()
+        session.add_message("user", "Frage")
+        session.add_message("assistant", "Antwort")
+
+        assert cm.get_answer_history(session.session_id) == []
+        assert cm.get_answer_history("nonexistent") == []
+
     def test_delete_session(self, cm):
         """
         Verify that sessions can be successfully deleted, and deleting a non-existent

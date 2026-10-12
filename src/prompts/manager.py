@@ -30,9 +30,10 @@ class PromptManager:
         """Return the raw ``system`` template, or an empty string if none is configured."""
         return self.templates.get("system", "")
 
-    def render_qa(self, chunks: list[dict], question: str) -> str:
-        """Render the ``qa`` template with retrieved chunks and the user question."""
-        return self.render("qa", chunks=chunks, question=question)
+    def render_qa(self, chunks: list[dict], question: str, history: list[dict] | None = None) -> str:
+        """Render the ``qa`` template with retrieved chunks, the user question and the recent chat
+        (``history``; templates without a history block simply ignore it)."""
+        return self.render("qa", chunks=chunks, question=question, history=history or [])
 
     def render_condense(self, history: list[dict], question: str) -> str:
         """Render the ``condense`` template that rewrites a follow-up into a standalone query."""

@@ -136,8 +136,10 @@ async def _prepare_query(request: QueryRequest, timings: dict):
             for c in chunks
         ]
         system_prompt = pm.get_system_prompt()
-        # Condensed question: resolves follow-up references ("sein Vater") — the QA prompt has no chat history
-        qa_prompt = pm.render_qa(chunks=chunk_dicts, question=question)
+        # Condensed question for the sources; the last QA pair resolves references to the previous answer.
+        # Sessions are role-bound, so a player only ever sees their own history here.
+        qa_prompt = pm.render_qa(chunks=chunk_dicts, question=question,
+                                 history=cm.get_answer_history(session.session_id))
     else:
         chunk_dicts = []
         system_prompt = ""

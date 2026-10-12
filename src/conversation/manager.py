@@ -126,6 +126,23 @@ class ConversationManager:
         messages = self.get_history(session_id)
         return [{"role": m.role, "content": m.content} for m in messages]
 
+    def get_answer_history(self, session_id: str) -> list[dict[str, str]]:
+        """The last ``answer_history_pairs`` QA pairs for the answer prompt, answers cut at
+        ``answer_history_max_chars``. Kept short on purpose: it only resolves references to the
+        previous answer ("fass das kürzer zusammen") — the sources stay the only facts."""
+        session = self._sessions.get(session_id)
+        pairs = self.config.answer_history_pairs
+        if not session or pairs <= 0:
+            return []
+        limit = self.config.answer_history_max_chars
+        history = []
+        for m in session.messages[-2 * pairs:]:
+            content = m.content
+            if m.role == "assistant" and len(content) > limit:
+                content = content[:limit].rstrip() + " […]"
+            history.append({"role": m.role, "content": content})
+        return history
+
     async def start_gc(self):
         """Long-lived task that evicts idle sessions every ``session_gc_interval_seconds``."""
         logger.info("Session GC started")

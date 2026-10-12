@@ -185,6 +185,9 @@ class LLMConfig(BaseModel):
 class ConversationConfig(BaseModel):
     window_size: int = 8
     max_context_tokens: int = 4096
+    # Answer prompt: last N QA pairs (0 = off); older answers cut at max_chars — more dilutes the sources
+    answer_history_pairs: int = 1
+    answer_history_max_chars: int = 1500
     condense_question: bool = True
     condense_model: str | None = None
     session_timeout_minutes: int = 60
