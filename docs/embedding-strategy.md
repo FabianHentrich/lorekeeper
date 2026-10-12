@@ -71,7 +71,9 @@ der Cross-Encoder bringt sie in die richtige Reihenfolge.
 DX12-Karte, auch AMD), mit dem veröffentlichten ONNX-Export des Modells — identische Scores, ~50 ms
 für 15 Paare statt ~840 ms auf der CPU und unabhängig von CPU-Last (~70 ms statt ~14 s, während
 eine Simulation alle Kerne belegt). Ist DirectML nicht verfügbar, schreibt der Retriever eine
-Warnung ins Log und nimmt das torch-Modell auf der CPU. Der Bi-Encoder bleibt bewusst auf der
+Warnung ins Log und nimmt das torch-Modell auf der CPU; fällt die GPU erst im Betrieb aus
+(Treiber-Reset, VRAM voll), wechselt er ebenso mit Warnung auf die CPU — für den Rest der Laufzeit,
+statt jede weitere Frage scheitern zu lassen. Der Bi-Encoder bleibt bewusst auf der
 CPU: ein Query-Embedding kostet ~0,08 s, und eine andere Rechenbibliothek würde die Vektoren
 gegenüber dem bestehenden Index leicht verschieben. Hintergrund und Benchmark: Roadmap 5.4.
 
@@ -137,7 +139,9 @@ nie; kein Deckel und keine Umsortierung hilft dann.
 (5 Kandidaten, mit demselben Filter wie die Anfrage — der Spieler-Modus bleibt dicht). Diese
 Kandidaten bewertet der Cross-Encoder mit, sie bleiben aber **außerhalb des Haupt-Pools**. Nur
 wenn kein `rules`-Chunk in die finalen Top-`top_k_rerank` gekommen ist, ersetzt der beste davon
-den schwächsten Chunk — wenn sein Score ≥ `min_score` (−4) ist, und nie mehr als einer.
+den schwächsten Chunk — wenn sein Score ≥ `min_score` (−4) ist, nie mehr als einer und erst ab 3
+finalen Chunks (bei `top_k_rerank` 1–2 würde ein schwacher Regel-Chunk den Großteil des Kontexts
+verdrängen).
 
 Die Extra-Kandidaten in den Haupt-Pool zu mischen wurde gemessen und verworfen: etwas mehr
 Abschnitt-Treffer (138 statt 136 von 153), aber Regelwerk-Chunks in 121 von 138 reinen

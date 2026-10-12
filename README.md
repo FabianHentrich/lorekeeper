@@ -230,7 +230,7 @@ Weiter: Bedienung → [docs/ui-ux.md](docs/ui-ux.md) · Betrieb und Fehlersuche 
 | [docs/ui-ux.md](docs/ui-ux.md) | Alle Seiten der Oberfläche im Detail |
 | [docs/evaluation.md](docs/evaluation.md) | Golden Set, Eval-Skripte, Kennzahlen, Vorgehen |
 | [docs/operations.md](docs/operations.md) | Indizieren, Heimnetz-Betrieb, Fehlersuche, Logs |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Entwicklung, Tests, Sicherheits- und Performance-Prüfungen |
+| [docs/testing.md](docs/testing.md) | Testsuite, Sicherheits- und Performance-Prüfungen |
 | [plan roadmap.md](plan%20roadmap.md) | Geplante und erledigte Arbeit (ersetzt ein Changelog; Details in `git log`) |
 
 ---

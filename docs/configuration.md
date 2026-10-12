@@ -213,7 +213,7 @@ Ablauf und Begründungen: [embedding-strategy.md](embedding-strategy.md).
 | `score_threshold` | `float` | `0.5` | Mindest-Cosine. 0,5 ≈ „ähnlich“; 0,3 liefert fast orthogonales Rauschen — nicht senken |
 | `reranking.enabled` | `bool` | `true` | Cross-Encoder-Reranking |
 | `reranking.model` | `str` | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` | Reranker (mehrsprachig) |
-| `reranking.backend` | `str` | `torch` (`settings.yaml`: `directml`) | `torch` = CPU. `directml` = GPU über `onnxruntime-directml` (jede DX12-Karte, auch AMD) mit dem veröffentlichten ONNX-Export des Modells (`onnx/model.onnx`) — gleiche Scores, 15 Paare in ~50 ms statt ~840 ms, unabhängig von CPU-Last (~70 ms statt ~14 s). Fehlt DirectML oder der ONNX-Export, **Warnung im Log** und CPU-Modell |
+| `reranking.backend` | `str` | `torch` (`settings.yaml`: `directml`) | `torch` = CPU. `directml` = GPU über `onnxruntime-directml` (jede DX12-Karte, auch AMD) mit dem veröffentlichten ONNX-Export des Modells (`onnx/model.onnx`) — gleiche Scores, 15 Paare in ~50 ms statt ~840 ms, unabhängig von CPU-Last (~70 ms statt ~14 s). Fehlt DirectML oder der ONNX-Export, **Warnung im Log** und CPU-Modell; fällt die GPU im Betrieb aus (Treiber-Reset, VRAM voll), wechselt der Reranker mit Warnung für den Rest der Laufzeit auf die CPU |
 | `reranking.top_k_rerank` | `int` | `8` | Chunks nach dem Reranking → LLM-Kontext |
 | `reranking.max_per_source` | `int` | `3` | Weicher Deckel je Datei (0 = keiner). Zwei Durchgänge: erst divers füllen, dann aus dem Überlauf nachfüllen — es kommen nie weniger als `top_k_rerank` Chunks zurück, solange Kandidaten da sind |
 | `hybrid.enabled` | `bool` | `false` | Vektor + BM25 parallel, Fusion per Reciprocal Rank Fusion. Pro Anfrage über `hybrid_search` |
@@ -222,9 +222,17 @@ Ablauf und Begründungen: [embedding-strategy.md](embedding-strategy.md).
 | `section_expansion.enabled` | `bool` | `true` | Teilen sich ≥ 2 Treffer einer Datei eine Eltern-Überschrift mit verschiedenen Unter-Überschriften, wird die ganze Sektion in Dokumentreihenfolge übergeben (vollständige Antworten auf „welche Fähigkeiten …“) |
 | `section_expansion.max_chunks` | `int` | `25` | Größere Sektionen werden nicht expandiert |
 | `section_expansion.top_rank` | `int` | `3` | Nur expandieren, wenn ein Treffer der Sektion unter den ersten N liegt (0 = egal). Golden Set: Ø Chunks 13,9 → 12,6, Abschnitt-Treffer unverändert; 2/1 schnitten schon relevante Übersichten ab |
-| `rules_slot.enabled` | `bool` | `false` (`settings.yaml`: `true`) | Fragen mit Vault-Entität *und* Regelbegriff („Was bewirkt Ritterlichkeit bei Escanor?“) füllen alle Kandidaten mit der Datei der Entität. Der Slot sucht zusätzlich nur in Gruppe `rules` (mit demselben Filter wie die Anfrage, der Spieler-Modus bleibt dicht); diese Kandidaten werden mit gereranked, aber nicht in den Haupt-Pool gemischt. Fehlt in den Top-`top_k_rerank` ein `rules`-Chunk, ersetzt der beste mit Score ≥ `min_score` den schwächsten — höchstens einer |
+| `rules_slot.enabled` | `bool` | `false` (`settings.yaml`: `true`) | Fragen mit Vault-Entität *und* Regelbegriff („Was bewirkt Ritterlichkeit bei Escanor?“) füllen alle Kandidaten mit der Datei der Entität. Der Slot sucht zusätzlich nur in Gruppe `rules` (mit demselben Filter wie die Anfrage, der Spieler-Modus bleibt dicht); diese Kandidaten werden mit gereranked, aber nicht in den Haupt-Pool gemischt. Fehlt in den Top-`top_k_rerank` ein `rules`-Chunk, ersetzt der beste mit Score ≥ `min_score` den schwächsten — höchstens einer, und nur ab 3 finalen Chunks (bei 1–2 würde er den Großteil des Kontexts verdrängen) |
 | `rules_slot.candidates` | `int` | `5` | Größe der Regelwerk-Suche |
 | `rules_slot.min_score` | `float` | `-4.0` | Mindest-Rerank-Score (roher Logit). Golden Set im selben Prozess: aus 132/153 Abschnitte, x001–x008 1/8 · −3: 133, 2/8 · **−4: 136, 5/8** · −5/−6/−8: 136, 5/8, aber mehr Regel-Chunks in reinen Lore-Fragen (64 → 91 → 119 → 136 von 138) |
+
+**`metadata_filters`** (pro Anfrage) werden vor der Suche geprüft. Erlaubt ist nur, was ChromaDB
+**und** die BM25-Suche gleich auswerten: Gleichheit (`"group": "rules"`), `$eq`/`$ne` mit einem
+Wert, `$in` mit einer nicht-leeren Liste eines Typs, `$and` mit mindestens zwei Bedingungen aus je
+genau einem Schlüssel (oben dürfen mehrere Schlüssel stehen — jeder wird eine eigene Bedingung).
+`$or`, `$nin`, `$gt`/`$gte`/`$lt`/`$lte` und alles andere beantwortet die API mit **422** — BM25
+würde sie sonst still ignorieren bzw. bei `$or` alle Treffer verwerfen. Die App sendet nur
+Erlaubtes; `tests/integration/test_filter_contract.py` prüft, dass beide Suchwege dasselbe liefern.
 
 **Faustregeln:**
 - `top_k` mindestens doppelt so groß wie `top_k_rerank`.

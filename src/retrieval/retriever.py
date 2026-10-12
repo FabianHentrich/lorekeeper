@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ from src.retrieval.vectorstore import VectorStoreService
 logger = logging.getLogger(__name__)
 
 RULES_GROUP = "rules"
+_SLOT_MIN_PLACES = 3  # with fewer final chunks one rules chunk would push out most of the answer's context
 
 
 def _to_chunk(item: dict[str, Any]) -> "RetrievedChunk":
@@ -97,7 +99,9 @@ class Retriever:
         self.embedding_service = embedding_service
         self.vectorstore = vectorstore
         self.bm25_index = bm25_index or BM25Index()
-        self._reranker = None
+        self._reranker: Any = None  # CrossEncoder (CPU) or DirectMLCrossEncoder (GPU), loaded lazily
+        self._reranker_on_gpu = False
+        self._fallback_lock = asyncio.Lock()  # one GPU→CPU switch even if several queries fail at once
 
     def get_reranker(self):
         """Lazy-load and cache the cross-encoder reranking model.
@@ -111,15 +115,45 @@ class Retriever:
                 from src.retrieval.onnx_reranker import DirectMLCrossEncoder
                 try:
                     self._reranker = DirectMLCrossEncoder(model, max_length=512)
+                    self._reranker_on_gpu = True
                     logger.info(f"Reranker loaded on the GPU (DirectML): {model}")
                 except Exception as e:
                     logger.warning(f"DirectML reranker unavailable ({e}) — falling back to the CPU (torch)")
             if self._reranker is None:
-                from sentence_transformers import CrossEncoder
-                logger.info(f"Loading reranker model: {model}")
-                self._reranker = CrossEncoder(model, max_length=512)
-                logger.info("Reranker loaded (CPU, torch)")
+                self._reranker = self._load_cpu_reranker()
         return self._reranker
+
+    def _load_cpu_reranker(self):
+        """The torch cross-encoder on the CPU — default backend and the fallback for DirectML."""
+        from sentence_transformers import CrossEncoder
+        model = self.config.reranking.model
+        logger.info(f"Loading reranker model: {model}")
+        reranker = CrossEncoder(model, max_length=512)
+        logger.info("Reranker loaded (CPU, torch)")
+        return reranker
+
+    async def _predict(self, pairs: list[list[str]]) -> list[float]:
+        """Score the pairs; if the GPU fails at runtime (driver reset, out of VRAM), switch to the CPU
+        model for the rest of the run instead of failing every query until a restart.
+
+        Whether to fall back is decided by the model *this* call used, not the shared flag: a second
+        query still running on the GPU when the first one already switched retries on the CPU too.
+        The lock makes concurrent failures load the CPU model once.
+        """
+        reranker = await run_in_threadpool(self.get_reranker)  # first load may take seconds — not on the event loop
+        used_gpu = self._reranker_on_gpu and reranker is self._reranker
+        try:
+            return list(await run_in_threadpool(reranker.predict, pairs))
+        except Exception as e:
+            if not used_gpu:
+                raise
+            async with self._fallback_lock:
+                if self._reranker is reranker:   # nobody switched yet
+                    logger.warning(f"DirectML reranker failed ({e}) — switching to the CPU (torch) for this run")
+                    self._reranker = await run_in_threadpool(self._load_cpu_reranker)
+                    self._reranker_on_gpu = False
+                cpu = self._reranker
+            return list(await run_in_threadpool(cpu.predict, pairs))
 
     async def retrieve(
         self,
@@ -196,7 +230,8 @@ class Retriever:
         # included). Kept apart from the main pool — at most one of them enters the result (see _rerank).
         slot = self.config.rules_slot
         rules_extra: list[dict[str, Any]] = []
-        if slot.enabled and slot.candidates and self.config.reranking.enabled:
+        final_k = top_k_rerank or self.config.reranking.top_k_rerank
+        if slot.enabled and slot.candidates and self.config.reranking.enabled and final_k >= _SLOT_MIN_PLACES:
             rules_hits = await run_in_threadpool(
                 self.vectorstore.query,
                 query_embedding=query_embedding,
@@ -343,11 +378,10 @@ class Retriever:
         is small, it will optionally backfill from cap-overflow candidates rather than return fewer chunks than
         requested.
         """
-        reranker = self.get_reranker()
         extra = rules_candidates or []
         pairs = [[query, c.content] for c in chunks + extra]
 
-        all_scores = list(await run_in_threadpool(reranker.predict, pairs))
+        all_scores = await self._predict(pairs)
         scores, extra_scores = all_scores[:len(chunks)], all_scores[len(chunks):]
 
         ranked = sorted(zip(scores, chunks, strict=True), key=lambda x: x[0], reverse=True)
@@ -397,7 +431,8 @@ class Retriever:
         # search) takes the last place if it scores ≥ min_score. Never more than this one chunk.
         slot = self.config.rules_slot
         slot_used = False
-        if slot.enabled and not any(c.metadata.get("group") == RULES_GROUP for _, c in selected):
+        if (slot.enabled and top_k >= _SLOT_MIN_PLACES
+                and not any(c.metadata.get("group") == RULES_GROUP for _, c in selected)):
             chosen = {id(c) for _, c in selected}
             pool = [(s, c) for s, c in ranked if c.metadata.get("group") == RULES_GROUP and id(c) not in chosen]
             pool += list(zip(extra_scores, extra, strict=True))

@@ -768,3 +768,14 @@ def test_answer_prompt_sees_only_the_last_pair(client, fake_services):
     assert "Frage eins?" not in prompts[2]
     # Chat first, then sources, the question last
     assert prompts[2].index("Bisheriger Chat") < prompts[2].index("### Quellen") < prompts[2].index("### Frage")
+
+
+@pytest.mark.parametrize("bad", [{"$and": []}, {"source_id": None}, {"source_id": ["a"]}])
+def test_query_rejects_malformed_filters_with_422(client, fake_services, bad):
+    """ChromaDB would raise a ValueError (→ 500) — the API answers 422 with the reason instead."""
+    fake_services.config = main_module.config
+    from src.config.manager import SourceConfig
+    main_module.config.settings.ingestion.sources = [SourceConfig(id="r", path="x", group="rules", player_visible=True)]
+    for path in ("/query", "/query/stream"):
+        resp = client.post(path, json={"question": "x", "metadata_filters": bad})
+        assert resp.status_code == 422, (path, resp.text)

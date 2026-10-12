@@ -4,6 +4,7 @@ Golden Set management, single-question retrieval preview, retrieval eval,
 end-to-end eval, and result comparison — all from the UI.
 """
 
+import hashlib
 import time
 
 import pandas as pd
@@ -731,7 +732,9 @@ with tab_fb:
             disabled=["rating", "ts", "role", "question", "answer", "sources", "model"],
             hide_index=True,
             width="stretch",
-            key="fb_editor",
+            # Ticks are kept by row position — a different list (👍 toggle, new ratings) must not
+            # carry them over to other answers, so the editor gets a fresh key per shown list
+            key="fb_editor_" + hashlib.sha1("|".join(e.get("message_id", "") for e in shown).encode()).hexdigest()[:12],
         )
         if st.button("➕ Ausgewählte ins Golden Set übernehmen", key="fb_add"):
             chosen = [e for e, add in zip(shown, fb_edited["add"], strict=True) if add]
@@ -768,8 +771,9 @@ def _fetch_sources(api_url: str):
 
 @st.cache_data(ttl=30, show_spinner=False)
 def _fetch_chunk_files(api_url: str, source_id: str):
-    return requests.get(f"{api_url}/eval/chunks/files", params={"source_id": source_id},
-                        timeout=10).json().get("files", [])
+    resp = requests.get(f"{api_url}/eval/chunks/files", params={"source_id": source_id}, timeout=10)
+    resp.raise_for_status()
+    return resp.json().get("files", [])
 
 
 @st.cache_data(ttl=30, show_spinner=False)
@@ -793,16 +797,18 @@ with tab_chunks:
         ci_sid = st.selectbox("Quelle", [s["id"] for s in ci_sources], index=None,
                               placeholder="Quelle wählen", key="ci_source")
     ci_files: list[str] = []
+    ci_failed = False
     if ci_sid:
         try:
             ci_files = _fetch_chunk_files(API_URL, ci_sid)
         except Exception as e:
+            ci_failed = True   # an error is not "no files" — don't show both
             st.error(f"Dateien konnten nicht geladen werden: {e}")
     with c2:
         # Key per source: a file picked in one source is no valid option in the next
         ci_file = st.selectbox("Datei", ci_files, index=None, placeholder="Datei wählen",
                                key=f"ci_file_{ci_sid}", disabled=not ci_files)
-    if ci_sid and not ci_files:
+    if ci_sid and not ci_files and not ci_failed:
         st.caption("Keine indizierten Dateien in dieser Quelle.")
 
     if ci_sid and ci_file:

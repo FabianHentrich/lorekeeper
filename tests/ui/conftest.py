@@ -121,7 +121,8 @@ class _Response:
         return self._data
 
     def raise_for_status(self):
-        pass
+        if not self.ok:   # like requests: error codes raise, so pages show their error path
+            raise requests.HTTPError(f"{self.status_code} Error: {self._data}")
 
     def iter_lines(self, decode_unicode=False):
         for event in self._stream_events:

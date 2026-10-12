@@ -194,6 +194,11 @@ pip install --force-reinstall --no-deps onnxruntime-directml
 `pip check` meldet danach, dass chromadb, pymupdf-layout und rapidocr `onnxruntime` vermissen — das
 ist erwartet, das Modul ist da. Bei Erfolg steht im Log `Reranker loaded on the GPU (DirectML)`.
 
+Steht stattdessen `DirectML reranker failed (…) — switching to the CPU (torch) for this run`, ist
+die GPU **im Betrieb** ausgefallen (Treiber-Reset, VRAM voll — z.B. ein Spiel neben Ollama). Die
+Antworten laufen auf der CPU weiter; nach einem Neustart des Backends ist der Reranker wieder auf
+der GPU.
+
 ### PDF-OCR funktioniert nicht
 
 - Installiert? `pip show rapidocr_onnxruntime`

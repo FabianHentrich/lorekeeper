@@ -400,8 +400,10 @@ def test_list_results_without_results_dir(client, tmp_eval_dir):
 
 class FakeVectorStore:
     """Two files in source 'vault'; chunks come back in arbitrary store order."""
-    def get_content_hashes_for_source(self, source_id):
-        return {"b.md": "h2", "a.md": "h1"} if source_id == "vault" else {}
+    def list_files(self, source_id):
+        if source_id == "broken":
+            raise RuntimeError("database is locked")
+        return ["a.md", "b.md"] if source_id == "vault" else []
 
     def get_chunks_for_file(self, source_id, source_file):
         if (source_id, source_file) != ("vault", "a.md"):
@@ -437,3 +439,17 @@ def test_file_chunks_in_document_order(client, fake_vectorstore):
 def test_file_chunks_unknown_file_404(client, fake_vectorstore):
     resp = client.get("/eval/chunks", params={"source_id": "vault", "source_file": "fehlt.md"})
     assert resp.status_code == 404
+
+
+def test_chunk_files_reports_a_database_error(client, fake_vectorstore):
+    """A ChromaDB failure is an error the UI shows — not an empty file list."""
+    resp = client.get("/eval/chunks/files", params={"source_id": "broken"})
+    assert resp.status_code == 503
+    assert "database is locked" in resp.json()["detail"]
+
+
+@pytest.mark.parametrize("bad", [{"$and": []}, {"source_id": None}, {"source_id": {"$foo": 1}}])
+def test_preview_rejects_malformed_filters_with_422(client, bad):
+    resp = client.post("/eval/preview", json={"question": "x", "metadata_filters": bad})
+    assert resp.status_code == 422
+    assert "metadata_filters" in resp.json()["detail"]

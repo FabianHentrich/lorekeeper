@@ -10,7 +10,7 @@ import yaml
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 
-from src.api.access import NoPlayerSources, effective_filters
+from src.api.access import InvalidFilter, NoPlayerSources, effective_filters
 from src.api.eval_schemas import (
     ChunkListResponse,
     EvalJobRequest,
@@ -96,6 +96,8 @@ async def retrieval_preview(req: RetrievalPreviewRequest):
         filters = effective_filters(req.role, main_module.config.settings.ingestion.sources, req.metadata_filters)
     except NoPlayerSources:
         raise HTTPException(status_code=403, detail="Keine Quelle für Spieler freigegeben") from None
+    except InvalidFilter as e:
+        raise HTTPException(status_code=422, detail=f"Ungültiger metadata_filters: {e}") from None
 
     retriever = _get_retriever()
     start = time.time()
@@ -138,8 +140,12 @@ def _get_vectorstore():
 @eval_router.get("/chunks/files")
 async def chunk_files(source_id: str):
     """Indexed files of one source, sorted — the file list of the chunk inspector."""
-    hashes = await run_in_threadpool(_get_vectorstore().get_content_hashes_for_source, source_id)
-    return {"files": sorted(hashes)}
+    try:
+        files = await run_in_threadpool(_get_vectorstore().list_files, source_id)
+    except Exception as e:
+        logger.error("Chunk inspector: listing files of %r failed: %s", source_id, e)
+        raise HTTPException(status_code=503, detail=f"ChromaDB-Abfrage fehlgeschlagen: {e}") from e
+    return {"files": files}
 
 
 @eval_router.get("/chunks", response_model=ChunkListResponse)

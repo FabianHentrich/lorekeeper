@@ -176,7 +176,7 @@ Zusätzlich gemessen wird `answer_contains`: wie oft die Antwort die Teilstrings
 
 Die Ziel-Trefferquote liegt bewusst unter 1,0 — die Strukturtests prüfen Randfälle, sie alle zu
 treffen ist ein Ziel, keine Grundlinie. Unter 0,85 → etwas ist kaputt. Dass die
-Abschnitt-Trefferquote nicht sinkt, prüft auch `pytest -m perf` (CONTRIBUTING.md).
+Abschnitt-Trefferquote nicht sinkt, prüft auch `pytest -m perf` ([testing.md](testing.md#performance-prüfungen)).
 
 ---
 
@@ -227,5 +227,6 @@ lassen. Dabei:
 6. **Nach dem Hinzufügen laufen lassen.** Eine neue Frage, die schon jetzt verfehlt, ist ein
    Verbesserungswunsch, kein Regressionstest — in `notes` vermerken.
 7. **Feedback-Fragen prüfen:** Aus 👎 übernommene Fragen haben leere `expected_sources` — die
-   richtige Quelle eintragen. Folgefragen („Und wer ist sein Vater?“) als eigenständige Frage
-   umformulieren, sonst sind sie ohne Verlauf sinnlos.
+   richtige Quelle eintragen. Umgeschriebene Folgefragen werden automatisch in ihrer eigenständigen
+   Form übernommen (die Chat-Frage steht in `notes`); hat die Heuristik eine Folgefrage nicht
+   erkannt („Und wer ist sein Vater?“ ohne Umschreiben), von Hand eigenständig formulieren.

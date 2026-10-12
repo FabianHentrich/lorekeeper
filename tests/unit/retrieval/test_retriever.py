@@ -286,6 +286,14 @@ class TestRulesSlot:
         assert "{'source_id': {'$in': ['regelbuch']}}" in str(rules_where[0])
 
     @pytest.mark.asyncio
+    async def test_no_slot_with_fewer_than_three_places(self, embed_service, vectorstore):
+        """With top_k_rerank=1 a weak rules chunk would replace the only (strong) hit — no slot then."""
+        ret = self._retriever(embed_service, vectorstore, [9.0, 8.0, 0.5, 0.1, -3.9, -3.9])
+        results = await ret.retrieve("q", top_k_rerank=1)
+        assert [r.heading for r in results] == ["n0"]
+        assert vectorstore.query.call_count == 1   # the slot can't be used — no rules search either
+
+    @pytest.mark.asyncio
     async def test_disabled_makes_no_extra_search(self, embed_service, vectorstore):
         ret = self._retriever(embed_service, vectorstore, [2.0, 1.0, 0.5, 0.1], enabled=False)
         results = await ret.retrieve("q")
@@ -324,6 +332,85 @@ class TestRerankerBackend:
         with caplog.at_level("WARNING"):
             assert self._retriever("directml").get_reranker() is cpu
         assert "falling back to the CPU" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_gpu_failure_at_runtime_switches_to_the_cpu(self, monkeypatch, caplog):
+        """A DirectML error during a query (driver reset, out of VRAM) must not fail every query until a
+        restart: warn, load the CPU model, score again — and stay on the CPU."""
+        import src.retrieval.onnx_reranker as onnx_reranker
+        gpu = MagicMock()
+        gpu.predict.side_effect = RuntimeError("DXGI_ERROR_DEVICE_REMOVED")
+        monkeypatch.setattr(onnx_reranker, "DirectMLCrossEncoder", lambda model, max_length: gpu)
+        cpu = MagicMock()
+        cpu.predict.side_effect = lambda pairs: [float(len(pairs) - i) for i in range(len(pairs))]
+        monkeypatch.setattr("sentence_transformers.CrossEncoder", lambda model, max_length: cpu)
+        vs = MagicMock()
+        vs.query.return_value = [
+            {"id": str(i), "content": f"c{i}", "score": 0.9,
+             "metadata": {"source_file": f"{i}.md", "document_type": "markdown", "heading_hierarchy": str(i)}}
+            for i in range(3)
+        ]
+        ret = Retriever(config=RetrievalConfig(reranking=RerankingConfig(backend="directml")),
+                        embedding_service=AsyncMock(), vectorstore=vs)
+
+        with caplog.at_level("WARNING"):
+            first = await ret.retrieve("q")
+            second = await ret.retrieve("q")
+
+        assert [r.heading for r in first] == ["0", "1", "2"] == [r.heading for r in second]
+        assert "switching to the CPU" in caplog.text
+        assert gpu.predict.call_count == 1 and cpu.predict.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_concurrent_gpu_failures_load_the_cpu_model_once(self, monkeypatch):
+        """Two queries fail on the GPU at the same time: both still get an answer, the CPU model
+        is loaded once, and the query that noticed second reuses it instead of re-raising."""
+        import asyncio
+        import threading
+
+        import src.retrieval.onnx_reranker as onnx_reranker
+        both_inside = threading.Barrier(2, timeout=10)
+
+        def _gpu_predict(pairs):
+            both_inside.wait()            # both queries are running on the GPU before it fails
+            raise RuntimeError("DXGI_ERROR_DEVICE_REMOVED")
+
+        gpu = MagicMock()
+        gpu.predict.side_effect = _gpu_predict
+        monkeypatch.setattr(onnx_reranker, "DirectMLCrossEncoder", lambda model, max_length: gpu)
+        cpu_loads = []
+
+        def _load_cpu(model, max_length):
+            cpu_loads.append(model)
+            cpu = MagicMock()
+            cpu.predict.side_effect = lambda pairs: [float(len(pairs) - i) for i in range(len(pairs))]
+            return cpu
+
+        monkeypatch.setattr("sentence_transformers.CrossEncoder", _load_cpu)
+        vs = MagicMock()
+        vs.query.return_value = [
+            {"id": str(i), "content": f"c{i}", "score": 0.9,
+             "metadata": {"source_file": f"{i}.md", "document_type": "markdown", "heading_hierarchy": str(i)}}
+            for i in range(3)
+        ]
+        ret = Retriever(config=RetrievalConfig(reranking=RerankingConfig(backend="directml")),
+                        embedding_service=AsyncMock(), vectorstore=vs)
+        ret.get_reranker()   # preloaded at startup, like src/main.py does
+
+        first, second = await asyncio.gather(ret.retrieve("q1"), ret.retrieve("q2"))
+
+        assert [r.heading for r in first] == ["0", "1", "2"] == [r.heading for r in second]
+        assert len(cpu_loads) == 1
+
+    @pytest.mark.asyncio
+    async def test_cpu_reranker_errors_are_not_swallowed(self, embed_service, vectorstore):
+        """Only the GPU gets a fallback — a failing CPU model is a real error."""
+        ret = Retriever(config=RetrievalConfig(reranking=RerankingConfig(backend="torch")),
+                        embedding_service=embed_service, vectorstore=vectorstore)
+        ret._reranker = MagicMock()
+        ret._reranker.predict.side_effect = RuntimeError("boom")
+        with pytest.raises(RuntimeError, match="boom"):
+            await ret.retrieve("where is arkenfeld")
 
     def test_torch_backend_never_tries_directml(self, monkeypatch):
         import src.retrieval.onnx_reranker as onnx_reranker

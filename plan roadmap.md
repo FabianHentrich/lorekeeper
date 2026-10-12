@@ -160,6 +160,8 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 
 **Aufwand**: Gering (umgesetzt).
 
+**Zusatz**: Bewertungen mit Daumen um kurzen kommentar möglichkeit erweitern - OFFEN
+
 ### 3.5 Wikilink-Auflösung im Retrieval
 
 **Problem**: Obsidian-Wikilinks (`[[Arkenfeld]]`) werden als Metadaten gespeichert, aber nicht für Retrieval genutzt. Wenn ein Chunk auf `[[Malek]]` verweist, könnte der Retriever automatisch den Malek-Chunk mitliefern.
@@ -239,7 +241,7 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 - Live geprüft: „Wer ist Sol Invictus wirklich?“ / „Was ist mit Isolde Vaer los?“ im Spieler-Modus finden nur Regelbuch/Charakterbogen, Antwort „keine Informationen“.
 - Doku: `docs/ui-ux.md` (Role selection), `docs/configuration.md` (`player_visible`), `docs/operations.md`.
 
-**Sicherheitstests — ✅ Erledigt** (Details `CONTRIBUTING.md` → „Security checks“):
+**Sicherheitstests — ✅ Erledigt** (Details `docs/testing.md` → „Sicherheitsprüfungen“):
 - A, deterministisch: Retrieval-Pfade mit Köder-Inhalten (Vektor, BM25/Hybrid, Rerank-Backfill, Section Expansion ohne Top-Rank-Limit, Condense) — `tests/integration/test_player_mode_security.py`.
 - B, deterministisch: UI/Session (manipulierter/übriggebliebener Session-State, Folgefragen, Fail-closed bei Backend-Fehler, Freigabe-Entzug) und Login-Bruteforce — `tests/ui/test_player_mode_security.py`.
 - C, live (`pytest -m live`): alle Vault-Fragen des Golden Sets im Spieler-Modus (Vektor + Hybrid) und fünf SL-Geheimnisse über den vollen Antwortpfad — `tests/live/test_player_mode_live.py`.
@@ -339,7 +341,7 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 
 **Aufwand**: Mittel.
 
-**Umgesetzt** (Details in `CONTRIBUTING.md` → „Performance checks“):
+**Umgesetzt** (Details in `docs/testing.md` → „Performance-Prüfungen“):
 - Deterministisch, im normalen `pytest`: Backend-Requests pro Seiten-Render/Rerun/Chat-Nachricht (`tests/ui/test_backend_calls.py`, `AppTest` + Fake-Backend, Budgets in `BUDGETS`); LLM-Aufrufe pro Anfrage (`test_llm_calls_per_request`); keine `localhost`-URLs für lokale Dienste.
 - Zeitbasiert, `pytest -m perf` gegen `tests/perf/baseline.json` (×1,5 + Slack; `PERF_UPDATE_BASELINE=1` übernimmt neue Werte): Render-Zeit je Seite; Golden Set über das laufende Backend — p50/p95 Retrieval-Latenz, Ø/max Chunks pro Frage, Abschnitt-Trefferquote darf nicht sinken.
 - **Startup-Messung** (`tests/perf/test_startup.py`, 12.10.): startet ein zweites Backend auf freiem Port gegen echte Config und `chroma_data/`, misst bis zur ersten `/health`-Antwort (die Lifespan lädt Ollama-Autostart, Embedding-Warm-up, ChromaDB, Reranker vorher). Wird übersprungen, solange LoreKeeper läuft (eingebettete ChromaDB nicht doppelt öffnenbar). ✅ **Baseline (12.10.)**: 17,7 s (zweiter Lauf 18,4 s Testdauer, bestanden; Grenze ×1,5 + 3 s). Aufgenommen bei gestopptem LoreKeeper, ohne Simulation, GPU-Reranker aktiv.
@@ -456,13 +458,72 @@ int8 verworfen (kaum schneller, anderes Ranking). Modell-Laden DirectML 1,3 s id
 
 **Aufwand**: Gering (umgesetzt).
 
+## 7.2 Code-Review der Änderungen vom 12./13.10. — ✅ Erledigt (inkl. Nachbesserung)
+
+**Ergebnis**: Kein Weg am Spieler-Filter vorbei (Filter-Verknüpfung, BM25, Section Expansion, Regelwerk-Slot, Preview, Sessions geprüft). Bewusste Grenze: das Backend vertraut der Rolle des Clients (Default `game_master`), `/sessions`, `/feedback`, `/eval/chunks` ohne Login — reicht, solange nur Streamlit `127.0.0.1:8000` erreicht; vor 4.2 angehen.
+
+**Behoben (13.10.)**:
+- Regelwerk-Slot konnte bei `top_k_rerank` 1–2 fast den ganzen Kontext ersetzen (über Settings-Regler erreichbar) → Slot erst ab 3 Plätzen.
+- GPU-Ausfall im Betrieb (Treiber-Reset, VRAM voll) ließ jede Frage bis zum Neustart scheitern → Reranker wechselt mit Warnung dauerhaft auf die CPU.
+- Reranker-Laden beim ersten Rerank lief auf dem Event-Loop (wenn Reranking erst zur Laufzeit eingeschaltet wird) → Threadpool.
+- Feedback → Golden Set übernahm Folgefragen ohne Kontext → umgeschriebene Frage (`search_query`), Chat-Frage in `notes`.
+- Antwort-Prompt kürzte nur frühere Antworten, nicht lange (eingefügte) Fragen → beide gekürzt.
+- Feedback-Tab: Häkchen konnten nach 👍-Schalter auf andere Antworten rutschen → Tabelle neu je angezeigter Liste.
+- Ungültige `metadata_filters` gaben 500 → Prüfung an der API, 422 (`validate_filters` in `src/api/access.py`).
+- Chunk-Inspector zeigte bei ChromaDB-Fehlern „keine Dateien“ → eigene Abfrage `list_files`, Fehler 503 und Meldung in der UI.
+- Testlücken: Sicherheitstests jetzt mit Regelwerk-Slot (ohne Mindest-Score) und einer Spielleiter-Regel-Quelle als Köder, rollenbasierte Tests auch mit Hybrid-Suche; mutationsgeprüft (Slot-Suche ohne Anfrage-Filter → beide Varianten schlagen fehl).
+
+**Kein Fehler**: „Regelwerk-Kandidaten gehen verloren, wenn die Hauptsuche leer ist“ — die Regelwerk-Suche ist die Hauptsuche plus Filter; erreicht dort kein Treffer 0,5, kann es kein Regel-Chunk.
+
+**Zweites Review (13.10., über die noch nicht committeten Fixes)**: Kein Spieler-Leck; 422 greift vor jedem Seiteneffekt; die App-eigenen Filter (Gruppenfilter der UI, Spieler-Filter, Live-Tests) bestehen die neue Prüfung; der neue Slot-Sicherheitstest schlägt bei entferntem Filter fehl. Gefunden:
+
+| # | Befund | Schwere | Geprüft |
+|---|--------|---------|---------|
+| N1 | `validate_filters` ist lockerer als ChromaDB: mehrere Schlüssel in einer `$and`-Bedingung, `$gt`/`$lt` mit Text, `$in` mit gemischten Typen gehen durch → weiter 500. Umgekehrt lehnt sie `$contains` ab (sendet die App nie) | Mittel | Skript gegen ChromaDB 1.5.9 |
+| N2 | BM25 (`_matches_filter`) kennt nur `$eq`/`$ne`/`$in`/`$and`: `$nin`/`$gt`/… werden ignoriert (Bedingung wirkungslos), `$or` verwirft alle Treffer. Die Doku nennt sie als erlaubt | Niedrig (Spieler nicht betroffen — ihre Einschränkung ist `$in`) | Code + Skript |
+| N3 | GPU→CPU-Wechsel entscheidet über das geteilte Flag statt über das Modell des Aufrufs: eine zweite, noch auf der GPU laufende Frage scheitert trotzdem; zwei gleichzeitige Ausfälle laden das CPU-Modell doppelt | Niedrig-Mittel | Skript (beide Fälle nachgestellt) |
+| N4 | Chunk-Inspector zeigt bei 503 Fehler **und** „Keine indizierten Dateien“ | Niedrig | Code |
+| N5 | Regelwerk-Suche läuft auch bei `top_k_rerank` < 3, obwohl der Slot dann nicht greift (verschenkte Abfrage) | Sehr niedrig | Code |
+| N6 | Testlücke: der Slot-Sicherheitstest ist rein negativ — kein Test zeigt, dass der Slot für Spieler innerhalb einer freigegebenen Regel-Quelle auch feuert | Niedrig | Mutation |
+| N7 | Kommentar in `config/settings.yaml` („earlier answers are cut here“) — jetzt werden auch Fragen gekürzt | Kosmetik | Code |
+
+**Korrekturplan**:
+1. **N1 + N2 zusammen**: `validate_filters` auf die Schnittmenge beschränken, die ChromaDB **und** BM25 verstehen — `$eq`, `$ne`, `$in` (nicht-leere Liste, ein Typ), `$and` (≥ 2 Bedingungen, je **genau ein** Schlüssel). `$or`, `$nin`, `$gt`/`$gte`/`$lt`/`$lte`, `$contains` → 422. Die App sendet nichts davon. Tests: neue Fälle in `TestValidateFilters`, je ein Fall pro Lücke gegen eine echte `EphemeralClient`-Collection, dass alles, was die Prüfung durchlässt, ChromaDB auch annimmt. Doku: Filterabschnitt in `configuration.md`.
+2. **N3**: in `_predict` vor dem Aufruf festhalten, ob dieses Modell das GPU-Modell ist; beim Fehler unter einem `asyncio.Lock` nur dann das CPU-Modell laden, wenn noch niemand gewechselt hat, sonst das bereits geladene nutzen. Test: zwei gleichzeitige Fragen bei ausfallender GPU → beide beantwortet, CPU-Modell genau einmal geladen.
+3. **N4**: Fehler-Flag im Chunk-Tab, Hinweis „Keine indizierten Dateien“ nur ohne Fehler. UI-Test mit 503 aus dem Fake-Backend (dessen `raise_for_status` muss dafür bei Fehlercodes werfen).
+4. **N5**: Regelwerk-Suche in `retrieve` nur, wenn `top_k_rerank` (Anfrage oder Config) ≥ 3. Test: keine zweite Vektorabfrage bei `top_k_rerank=1`.
+5. **N6**: Positiver Sicherheitstest — Spieler mit Zugriff auf `regeln` + `bogen`, Frage, bei der der Charakterbogen die Top-Plätze belegt, `top_k_rerank` klein genug → der Slot holt einen Chunk aus `regeln`, nie aus `sl-regeln`.
+6. **N7**: Kommentar anpassen.
+7. Danach komplette Suite, erneuter Mutationscheck des Slots, Roadmap 7.2 auf ✅, dann Commit (zusammen mit der gelöschten `CONTRIBUTING.md` und `docs/testing.md`).
+
+**Nachbesserung umgesetzt (13.10.)**:
+- N1/N2: `validate_filters` lässt nur noch `$eq`, `$ne`, `$in` (ein Typ), `$and` (≥ 2 Bedingungen mit je einem Schlüssel) durch; `$or`, `$nin`, `$gt`/… → 422. Neuer Vertragstest `tests/integration/test_filter_contract.py`: jeder erlaubte Filter liefert in ChromaDB (`EphemeralClient`) und BM25 dieselben Chunks.
+- N3: `_predict` merkt sich, ob *dieser* Aufruf das GPU-Modell nutzte, und wechselt unter einem `asyncio.Lock` nur einmal; spätere Fehlschläge nutzen das schon geladene CPU-Modell. Test mit zwei gleichzeitigen Fragen (Barrier) — mutationsgeprüft.
+- N4: Chunk-Inspector zeigt bei Fehler nur die Fehlermeldung; das Fake-Backend der UI-Tests wirft jetzt bei Fehlercodes wie `requests` — mutationsgeprüft.
+- N5: Regelwerk-Suche erst ab 3 finalen Chunks.
+- N6: Positiver Sicherheitstest — der Slot holt für Spieler einen Chunk aus der freigegebenen Regel-Quelle, nie aus der Spielleiter-Regel-Quelle. Mutation (Slot-Suche ohne Anfrage-Filter) → 5 Sicherheitstests schlagen fehl.
+- N7: Kommentar in `settings.yaml`.
+- Komplette Suite grün.
+
+**Aufwand**: Gering (umgesetzt).
+
+## 7.3 Inline-Doku (Docstrings) vervollständigen
+
+**Problem**: Die Code-Doku ist uneinheitlich. Stand 13.10.: 27 Module ohne Modul-Docstring — darunter Kernmodule wie `src/retrieval/retriever.py`, `vectorstore.py`, `embeddings.py`, `src/api/routes.py`, `src/ingestion/orchestrator.py`, `chunking.py`, die Parser, `src/config/manager.py`, `src/conversation/manager.py`, `src/generation/*` und `ui/LoreKeeper.py`. 43 von 358 Funktionen/Klassen ohne Docstring, vor allem die Config-Modelle in `src/config/manager.py` (17), `src/api/eval_schemas.py` (11) und `prompt_schemas.py` (5). Viele Config-Felder haben keinen Kommentar zu Bedeutung, Einheit und Wirkungszeitpunkt.
+
+**Lösung** (Regeln in `CLAUDE.md` → „Inline docs“): je Modul ein Docstring mit Aufgabe, Platz in der Pipeline, wichtigen Entscheidungen und Stolperfallen; Docstrings für die fehlenden Klassen/Funktionen; kurze Kommentare an den Config-Feldern; Kommentare an sicherheitsrelevanten Stellen (Spieler-Filter) und an gemessenen Zahlen mit Quelle (Roadmap-Punkt). Nur Doku, kein Verhalten ändern; Englisch wie der übrige Code. Danach prüfen, dass `ruff`/`mypy`/Tests unverändert grün sind.
+
+**Aufwand**: Gering-Mittel (reine Doku, mehrere Dateien). Last 🟢.
+
 ## 8.0 Was passiert wenn man an den Server mehrere Anfragen gleichzeitig bzw. nahe zu glecihzeitig schickt?
 - Relevant wenn ich einen Abend mache und sowohl ich als auch meine spieler Lorekeeper nutzen wollen.
+
+
 ---
 
 ## Priorisierungsvorschlag
 
-Erledigt: 3.10 Regelwerk-Slot, 5.4 Reranker auf der GPU (DirectML), 5.2 Startup-Baseline, 3.3 Chunk-Inspector, 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
+Erledigt: 7.2 Code-Review + Nachbesserung, 3.10 Regelwerk-Slot, 5.4 Reranker auf der GPU (DirectML), 5.2 Startup-Baseline, 3.3 Chunk-Inspector, 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
 
 **Offen am Gaming-PC (Nutzer)**: alte Autostart-Aufgabe „LoreKeeper Server“ als Admin entfernen (`Unregister-ScheduledTask -TaskName "LoreKeeper Server" -Confirm:$false`); DHCP-Reservierung für `192.168.178.34` im Router.
 
@@ -472,10 +533,11 @@ Erledigt: 3.10 Regelwerk-Slot, 5.4 Reranker auf der GPU (DirectML), 5.2 Startup-
 |---|---|---|---|---|-----------------------------------------------------------------------------------------------------------------------------|
 | 1 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf; dann Re-Index, Eval, Spieler-Messung — dabei 3.8/3.9 im Browser durchklicken     |
 | 2 | Offene Prüfungen im laufenden Betrieb | Mittel — bestätigt, dass die Neuerungen im echten Chat wirken | Gering | 🟡 | Mit gestartetem LoreKeeper: 3.6 Folgefragen („fass das kürzer zusammen“), 👍/👎 + Tabs „Feedback“/„Chunks“, Rerank-Timings in der Chat-Caption (5.4), Regelwerk-Slot an x002/x005 im Chat (3.10), `pytest -m live` (Spieler-Modus, schickt nur noch `role`) |
-| 3 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Mit der Chunk-Prüfung aus 5.2 messbar; Golden Set ~1 min |
-| 4 | 5.5 Vektorsuche reproduzierbar machen | Gering-Mittel — stabile Ergebnisse nach Neustart, verlässliche Eval-Vergleiche | Gering-Mittel | 🟡 | ±2 Abschnitte Schwankung zwischen Prozessen; `ef_search` erhöhen oder exakt suchen |
-| 5 | 3.2 Session-History — ⏸ zurückgestellt | Unklar | Mittel | 🟢 | Erst entscheiden, ob gespeicherte Sessions bei einem Wissenstool Nutzen haben |
-| 6 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | 🔴 | Vision-Modell lokal über Ollama; Bild-Ausschluss im Retriever aufheben                                                      |
-| 7 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | 🟢 | Später; Spieler-Modus im Backend ist erledigt |
-| 8 | 3.5 Wikilink-Expansion | Mittel | Mittel | 🔴 | Experimentell; im Spieler-Modus darf sie keine SL-Quellen nachladen                                                         |
-| 9 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | 🟡 | Später                                                                                                                      |
+| 3 | 7.3 Inline-Doku (Docstrings) | Mittel — Code verständlich ohne Kontext, Regeln aus CLAUDE.md umgesetzt | Gering-Mittel | 🟢 | 27 Module ohne Modul-Docstring, Config-Felder ohne Kommentar; reine Doku |
+| 4 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Mit der Chunk-Prüfung aus 5.2 messbar; Golden Set ~1 min |
+| 5 | 5.5 Vektorsuche reproduzierbar machen | Gering-Mittel — stabile Ergebnisse nach Neustart, verlässliche Eval-Vergleiche | Gering-Mittel | 🟡 | ±2 Abschnitte Schwankung zwischen Prozessen; `ef_search` erhöhen oder exakt suchen |
+| 6 | 3.2 Session-History — ⏸ zurückgestellt | Unklar | Mittel | 🟢 | Erst entscheiden, ob gespeicherte Sessions bei einem Wissenstool Nutzen haben |
+| 7 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | 🔴 | Vision-Modell lokal über Ollama; Bild-Ausschluss im Retriever aufheben                                                      |
+| 8 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | 🟢 | Später; Spieler-Modus im Backend ist erledigt |
+| 9 | 3.5 Wikilink-Expansion | Mittel | Mittel | 🔴 | Experimentell; im Spieler-Modus darf sie keine SL-Quellen nachladen                                                         |
+| 10 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | 🟡 | Später                                                                                                                      |

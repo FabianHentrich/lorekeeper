@@ -19,7 +19,7 @@ Stand: 2026-10-13
 > | Streamlit-Oberfläche, Seiten, Session-State | [docs/ui-ux.md](docs/ui-ux.md) |
 > | Golden Set und Evaluation | [docs/evaluation.md](docs/evaluation.md) |
 > | Betrieb, Heimnetz, Fehlersuche, Logs | [docs/operations.md](docs/operations.md) |
-> | Mitarbeit, Tests, Sicherheits- und Performance-Prüfungen | [CONTRIBUTING.md](CONTRIBUTING.md) |
+> | Tests, Sicherheits- und Performance-Prüfungen | [docs/testing.md](docs/testing.md) |
 > | Geplante Arbeit | [plan roadmap.md](plan%20roadmap.md) |
 
 ---
@@ -320,11 +320,14 @@ Ablauf in `Retriever.retrieve()` — alle Parameter in [docs/configuration.md](d
    Kandidaten, derselbe Filter) für Fragen wie „Was bewirkt Ritterlichkeit bei Escanor?“, bei denen
    die NPC-Datei alle 15 Kandidaten belegt.
 5. **Reranking** mit dem Cross-Encoder `mmarco-mMiniLMv2-L12-H384-v1` — auf der GPU über ONNX
-   Runtime + DirectML (`reranking.backend: directml`, ~50 ms), sonst mit Warnung auf der CPU.
+   Runtime + DirectML (`reranking.backend: directml`, ~50 ms), sonst mit Warnung auf der CPU. Fällt
+   die GPU im Betrieb aus, wechselt der Retriever mit Warnung dauerhaft auf die CPU. Das Laden des
+   Modells läuft im Threadpool, nie auf dem Event-Loop.
 6. **Soft-Cap je Datei** (`max_per_source`, 3): erst divers füllen, dann aus dem Überlauf
    nachfüllen, damit nie weniger als `top_k_rerank` (8) Chunks zurückkommen.
 7. **Slot einlösen:** Hat es kein `rules`-Chunk in die Top-8 geschafft, ersetzt der beste
-   Regelwerk-Kandidat mit Score ≥ `min_score` (−4) den schwächsten — höchstens einer.
+   Regelwerk-Kandidat mit Score ≥ `min_score` (−4) den schwächsten — höchstens einer, erst ab 3
+   finalen Chunks.
 8. **Section Expansion:** Teilen sich ≥ 2 Treffer einer Datei eine Eltern-Überschrift mit
    verschiedenen Unter-Überschriften und liegt einer davon unter den ersten `top_rank` (3), wird die
    ganze Sektion (bis `max_chunks`, 25) in Dokumentreihenfolge eingesetzt.
@@ -432,7 +435,8 @@ Spieler nutzen LoreKeeper am Tisch (z.B. am Handy) und dürfen keine Spielleiter
 - **Im Backend erzwungen** (`src/api/access.py`): `/query`, `/query/stream` und `/eval/preview`
   nehmen `role` entgegen. Für `player` baut das Backend selbst den Filter
   `source_id ∈ player_visible` und verknüpft mitgeschickte Filter per `$and` — sie können nur
-  einengen, nie erweitern. Ohne freigegebene Quelle → 403. Default ist `game_master` (CLI,
+  einengen, nie erweitern. Ohne freigegebene Quelle → 403; nicht unterstützte Filter (alles außer
+  `$eq`/`$ne`/`$in`/`$and`) → 422, für beide Rollen. Default ist `game_master` (CLI,
   Eval-Tools); wird die API je außerhalb von `127.0.0.1` erreichbar, muss der Default auf
   `player` oder eine Authentifizierung her.
 - **Die UI** schickt `role` und zusätzlich ihren eigenen Filter als zweite Sicherung; Sessions sind
@@ -440,7 +444,7 @@ Spieler nutzen LoreKeeper am Tisch (z.B. am Handy) und dürfen keine Spielleiter
 - Es ist ein Spoiler-Schutz, keine Zugangskontrolle: die Rolle wählt jeder selbst. Die Admin-Seiten
   schützt ein Passwort (`LOREKEEPER_ADMIN_PASSWORD`, `ui/admin_gate.py`).
 
-Sicherheitstests: [CONTRIBUTING.md](CONTRIBUTING.md) → „Sicherheitsprüfungen“.
+Sicherheitstests: [docs/testing.md](docs/testing.md#sicherheitsprüfungen-spieler-modus-admin-login).
 
 ---
 

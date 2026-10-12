@@ -77,6 +77,13 @@ class TestPairsFromFeedback:
         assert pair["expected_sources"] == []
         assert "erwartete Quelle eintragen" in pair["notes"] and "NPCs/Falscher.md" in pair["notes"]
 
+    def test_condensed_follow_up_is_taken_standalone(self):
+        """'Und wer ist sein Vater?' is useless without the chat — the condensed question goes in."""
+        follow_up = {**UP, "question": "Und wer ist sein Vater?", "search_query": "Wer ist der Vater von Kalen?"}
+        [pair] = feedback.pairs_from_feedback([follow_up], [])
+        assert pair["question"] == "Wer ist der Vater von Kalen?"
+        assert "Und wer ist sein Vater?" in pair["notes"]
+
     def test_ids_continue_and_known_questions_are_skipped(self):
         existing = [{"id": "f001", "question": "Alt"}, {"id": "m001", "question": "Was ist Überschaden?"}]
         pairs = feedback.pairs_from_feedback([UP, DOWN, DOWN], existing)

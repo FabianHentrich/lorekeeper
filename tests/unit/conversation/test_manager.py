@@ -99,8 +99,8 @@ class TestConversationManager:
             {"role": "assistant", "content": "Antwort 2"},
         ]
 
-    def test_answer_history_cuts_long_answers_only(self):
-        """Long answers are cut with a marker; the question stays whole."""
+    def test_answer_history_cuts_long_messages(self):
+        """Long answers and long (pasted) questions are both cut with a marker."""
         cm = ConversationManager(ConversationConfig(answer_history_pairs=2, answer_history_max_chars=10))
         session = cm.get_or_create_session()
         for i in range(2):
@@ -109,7 +109,7 @@ class TestConversationManager:
 
         history = cm.get_answer_history(session.session_id)
         assert len(history) == 4
-        assert history[0]["content"] == "Frage 0".ljust(30, "?")
+        assert history[0]["content"] == "Frage 0???" + " […]"
         assert history[1]["content"] == "A" * 10 + " […]"
 
     def test_answer_history_off_or_unknown(self):

@@ -307,3 +307,20 @@ class TestHealthCheck:
         """Verify connection exceptions flag the system gracefully as unreachable."""
         service._client.heartbeat.side_effect = Exception("timeout")
         assert service.health_check() is False
+
+
+class TestListFiles:
+    """Chunk inspector: indexed files of one source."""
+
+    def test_sorted_unique_files_of_the_source(self, service, mock_collection):
+        mock_collection.get.return_value = {"metadatas": [
+            {"source_file": "b.md"}, {"source_file": "a.md"}, {"source_file": "b.md"}, {},
+        ]}
+        assert service.list_files("vault") == ["a.md", "b.md"]
+        assert mock_collection.get.call_args[1]["where"] == {"source_id": "vault"}
+
+    def test_database_error_is_raised(self, service, mock_collection):
+        """Unlike get_content_hashes_for_source, an error must not look like an empty source."""
+        mock_collection.get.side_effect = RuntimeError("locked")
+        with pytest.raises(RuntimeError):
+            service.list_files("vault")

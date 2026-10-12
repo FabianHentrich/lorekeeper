@@ -127,7 +127,7 @@ class ConversationManager:
         return [{"role": m.role, "content": m.content} for m in messages]
 
     def get_answer_history(self, session_id: str) -> list[dict[str, str]]:
-        """The last ``answer_history_pairs`` QA pairs for the answer prompt, answers cut at
+        """The last ``answer_history_pairs`` QA pairs for the answer prompt, each message cut at
         ``answer_history_max_chars``. Kept short on purpose: it only resolves references to the
         previous answer ("fass das kürzer zusammen") — the sources stay the only facts."""
         session = self._sessions.get(session_id)
@@ -138,7 +138,7 @@ class ConversationManager:
         history = []
         for m in session.messages[-2 * pairs:]:
             content = m.content
-            if m.role == "assistant" and len(content) > limit:
+            if len(content) > limit:  # a pasted wall of text must not crowd out the sources either
                 content = content[:limit].rstrip() + " […]"
             history.append({"role": m.role, "content": content})
         return history

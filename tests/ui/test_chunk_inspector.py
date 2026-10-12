@@ -30,3 +30,14 @@ def test_picking_source_and_file_shows_chunks(fake_backend):
 
     at.selectbox(key="ci_chunk_vault_Arkenfeld.md").set_value(1).run()
     assert at.code[-1].value == "Seine Schwester lebt in der Akademie."
+
+
+def test_database_error_is_shown_as_error_not_as_empty_source(fake_backend):
+    """A 503 from the backend (ChromaDB failed) shows the error — not also "no indexed files"."""
+    fake_backend.errors["GET /eval/chunks/files"] = (503, {"detail": "ChromaDB-Abfrage fehlgeschlagen: locked"})
+    at = _open(fake_backend)
+    at.selectbox(key="ci_source").set_value("vault").run()
+
+    assert not at.exception, [e.message for e in at.exception]
+    assert any("Dateien konnten nicht geladen werden" in e.value for e in at.error)
+    assert not any("Keine indizierten Dateien" in c.value for c in at.caption)

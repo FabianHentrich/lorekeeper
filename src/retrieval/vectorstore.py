@@ -215,6 +215,12 @@ class VectorStoreService:
                     hashes[src] = h
         return hashes
 
+    def list_files(self, source_id: str) -> list[str]:
+        """Sorted indexed files of one source. Unlike ``get_content_hashes_for_source`` a database
+        error is raised, not turned into an empty list."""
+        data = self._get_collection().get(where={"source_id": source_id}, include=["metadatas"])
+        return sorted({m.get("source_file", "") for m in (data.get("metadatas") or []) if m.get("source_file")})
+
     def get_chunks_for_file(self, source_id: str, source_file: str) -> list[dict[str, Any]]:
         """Return every chunk of one file as ``{id, content, metadata}`` (used for section expansion)."""
         collection = self._get_collection()

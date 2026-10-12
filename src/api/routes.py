@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 
-from src.api.access import NoPlayerSources, effective_filters
+from src.api.access import InvalidFilter, NoPlayerSources, effective_filters
 from src.api.schemas import (
     ConfigUpdateRequest,
     FeedbackRequest,
@@ -97,6 +97,8 @@ async def _prepare_query(request: QueryRequest, timings: dict):
                                     request.metadata_filters)
     except NoPlayerSources:
         raise HTTPException(status_code=403, detail="Keine Quelle für Spieler freigegeben") from None
+    except InvalidFilter as e:
+        raise HTTPException(status_code=422, detail=f"Ungültiger metadata_filters: {e}") from None
 
     session = cm.get_or_create_session(request.session_id, access_role=request.role)
     question = request.question

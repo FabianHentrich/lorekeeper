@@ -1,16 +1,19 @@
 """Security tests for the player mode (roadmap 3.11): no game-master content for players.
 
-Real pipeline except the LLM: two sources are ingested over HTTP into an in-memory
-ChromaDB — "regeln" (released for players) and "welt" (game master only). Every
+Real pipeline except the LLM: four sources are ingested over HTTP into an in-memory
+ChromaDB — "regeln" (rules) and "bogen" (lore, a character sheet) released for players,
+"welt" (lore) and "sl-regeln" (rules) for the game master only. Every
 game-master text carries a secret sentence and is phrased to match rule questions,
 so a leak would show up. The retrieval is configured as permissively as possible:
 
 - a fake cross-encoder that rates game-master chunks highest (worst case for rerank
   and the cap backfill, ``max_per_source=1``),
 - section expansion without the top-rank limit,
+- the rulebook slot with no score minimum — its separate search inside group ``rules``
+  would find the game-master rules source if it dropped the request filter,
 - vector-only and hybrid (BM25) search.
 
-A player question carries ``metadata_filters={"source_id": {"$in": ["regeln"]}}``
+A player question carries ``metadata_filters={"source_id": {"$in": ["regeln", "bogen"]}}``
 (what ui/roles.py sends). Neither the retrieved chunks, the sources in the done
 event nor the prompt handed to the LLM may contain game-master material.
 """
@@ -36,6 +39,7 @@ from src.config.manager import (
     EmbeddingsConfig,
     RerankingConfig,
     RetrievalConfig,
+    RulesSlotConfig,
     SectionExpansionConfig,
     SourceConfig,
     VectorStoreConfig,
@@ -50,7 +54,7 @@ from src.retrieval.vectorstore import VectorStoreService
 
 _REPO = Path(__file__).resolve().parents[2]
 
-PLAYER_SOURCES = ["regeln"]
+PLAYER_SOURCES = ["regeln", "bogen"]
 PLAYER_FILTER = {"source_id": {"$in": PLAYER_SOURCES}}
 
 # Every game-master text contains one of these — none may reach a player
@@ -59,6 +63,7 @@ SECRETS = [
     "Malek tötet die Helden absichtlich mit Überschaden",
     "Isolde Vaer ist von Nahlith besessen",
     "Die Sterbeprobe wird für Malek heimlich manipuliert",
+    "Die Spielleitung würfelt Überschaden verdeckt doppelt",
 ]
 
 _RULES = {
@@ -74,6 +79,27 @@ _RULES = {
         "## 4.11 Kampfende\n\n"
         "### Überheilung\n\n"
         "Überheilung verfällt am Ende des Kampfes.\n"
+    ),
+}
+_SHEET = {
+    "Charakterbogen.md": (
+        "# Charakterbogen\n\n"
+        "## Kampfwerte\n\n"
+        "Hier trägst du Lebenspunkte, Überschaden und Todeszähler ein. Die Sterbeprobe "
+        "kreuzt du pro Runde an.\n\n"
+        "## Ausrüstung\n\n"
+        "Waffen, Rüstung und Tränke mit ihren Werten; Überschaden durch Waffen notierst du hier.\n\n"
+        "## Notizen\n\n"
+        "Platz für Sterbeproben, Todeszähler und Überschaden aus vergangenen Kämpfen.\n"
+    ),
+}
+_GM_RULES = {
+    # Rules group, but game master only — the rulebook slot's own search must never reach it
+    "Spielleiter-Regeln.md": (
+        "# Spielleiter-Regeln\n\n"
+        "## Überschaden und Sterbeprobe\n\n"
+        "Die Spielleitung würfelt Überschaden verdeckt doppelt. Kampfregeln, Todeszähler "
+        "und Sterbeprobe gelten wie im Regelbuch.\n"
     ),
 }
 _WORLD = {
@@ -159,8 +185,11 @@ def env(tmp_path_factory):
     """Ingest both sources once; yield client, retriever and the recording LLM."""
     tmp = tmp_path_factory.mktemp("player_security")
     rules_dir, world_dir = tmp / "regeln", tmp / "welt"
+    sheet_dir, gm_rules_dir = tmp / "bogen", tmp / "sl-regeln"
     _write(rules_dir, _RULES)
     _write(world_dir, _WORLD)
+    _write(sheet_dir, _SHEET)
+    _write(gm_rules_dir, _GM_RULES)
 
     settings_path = tmp / "settings.yaml"
     settings_path.write_text("", encoding="utf-8")
@@ -169,6 +198,8 @@ def env(tmp_path_factory):
     config.settings.ingestion.sources = [
         SourceConfig(id="regeln", path=str(rules_dir), group="rules", player_visible=True),
         SourceConfig(id="welt", path=str(world_dir), group="lore"),
+        SourceConfig(id="bogen", path=str(sheet_dir), group="lore", player_visible=True),
+        SourceConfig(id="sl-regeln", path=str(gm_rules_dir), group="rules"),
     ]
 
     embed = EmbeddingService(EmbeddingsConfig(
@@ -186,6 +217,7 @@ def env(tmp_path_factory):
             top_k=15, score_threshold=0.0,
             reranking=RerankingConfig(enabled=True, top_k_rerank=8, max_per_source=1),
             section_expansion=SectionExpansionConfig(enabled=True, top_rank=0, max_chunks=50),
+            rules_slot=RulesSlotConfig(enabled=True, candidates=5, min_score=-100.0),
         ),
         embed, vectorstore, bm25,
     )
@@ -222,11 +254,16 @@ def env(tmp_path_factory):
                 break
             time.sleep(0.1)
         assert info["status"] == "done" and not info["errors"], info
-        yield SimpleNamespace(client=client, retriever=retriever, llm=llm, rules_dir=rules_dir, config=config)
+        yield SimpleNamespace(client=client, retriever=retriever, llm=llm, config=config,
+                              player_dirs=(rules_dir, sheet_dir))
 
     for n, v in originals.items():
         setattr(main_module, n, v)
     routes_module._ingest_jobs.clear()
+
+
+def _is_player_file(env, source_path: str) -> bool:
+    return any(Path(source_path).is_relative_to(d) for d in env.player_dirs)
 
 
 def _no_secret(text: str) -> None:
@@ -269,7 +306,7 @@ def test_player_answer_path_is_clean(env, question):
 
     assert done["sources"], "expected rule sources"
     for src in done["sources"]:
-        assert Path(src["source_path"]).is_relative_to(env.rules_dir), src
+        assert _is_player_file(env, src["source_path"]), src
         _no_secret(src["chunk_preview"])
     _no_secret(env.llm.prompts[-1])
 
@@ -281,28 +318,30 @@ def test_condensed_follow_up_cannot_widen_the_search(env):
 
     assert follow_up["search_query"].startswith("Rhaz'Muell")   # condense really ran with the bait
     for src in follow_up["sources"]:
-        assert Path(src["source_path"]).is_relative_to(env.rules_dir), src
+        assert _is_player_file(env, src["source_path"]), src
     _no_secret(env.llm.prompts[-1])
 
 
 # ─── Enforced in the backend (role, roadmap 4.2) — no UI filter needed ─────────
 
 def _stream_as_player(client, question: str, **extra) -> tuple[int, list[dict]]:
+    extra.setdefault("hybrid_search", False)
     resp = client.post("/query/stream", json={"question": question, "role": "player", **extra})
     events = [json.loads(line[6:]) for line in resp.text.splitlines() if line.startswith("data: ")]
     return resp.status_code, events
 
 
+@pytest.mark.parametrize("hybrid", [False, True], ids=["vector", "hybrid"])
 @pytest.mark.parametrize("question", QUESTIONS)
-def test_player_role_alone_restricts_the_search(env, question):
+def test_player_role_alone_restricts_the_search(env, question, hybrid):
     """role=player without any metadata_filters: the backend builds the restriction itself."""
-    status, events = _stream_as_player(env.client, question)
+    status, events = _stream_as_player(env.client, question, hybrid_search=hybrid)
 
     assert status == 200
     done = events[-1]
     assert done["sources"], "expected rule sources"
     for src in done["sources"]:
-        assert Path(src["source_path"]).is_relative_to(env.rules_dir), src
+        assert _is_player_file(env, src["source_path"]), src
     _no_secret(env.llm.prompts[-1])
 
 
@@ -311,16 +350,19 @@ def test_player_role_alone_restricts_the_search(env, question):
     {"source_id": "welt"},
     {"group": "lore"},
     {"$and": [{"source_id": {"$in": ["welt", "regeln"]}}, {"group": {"$in": ["lore", "rules"]}}]},
-], ids=["source-in", "source-eq", "group", "nested-and"])
-def test_player_filter_can_only_narrow(env, sneaky):
+    {"source_id": "sl-regeln"},
+], ids=["source-in", "source-eq", "group", "nested-and", "gm-rules"])
+@pytest.mark.parametrize("hybrid", [False, True], ids=["vector", "hybrid"])
+def test_player_filter_can_only_narrow(env, sneaky, hybrid):
     """A filter sent along is AND-ed with the restriction — pointing it at game-master sources finds nothing."""
-    status, events = _stream_as_player(env.client, "Wer ist Sol Invictus wirklich?", metadata_filters=sneaky)
+    status, events = _stream_as_player(env.client, "Wer ist Sol Invictus wirklich?", metadata_filters=sneaky,
+                                       hybrid_search=hybrid)
 
     assert status == 200
     for e in events:
         _no_secret(json.dumps(e, ensure_ascii=False))
     for src in events[-1].get("sources", []):
-        assert Path(src["source_path"]).is_relative_to(env.rules_dir), src
+        assert _is_player_file(env, src["source_path"]), src
 
 
 def test_player_cannot_continue_a_game_master_session(env):
@@ -350,3 +392,44 @@ def test_player_without_released_sources_is_refused(env, monkeypatch):
         monkeypatch.setattr(s, "player_visible", False)
     assert env.client.post("/query/stream", json={"question": "Was ist Überschaden?", "role": "player"}).status_code == 403
     assert env.client.post("/eval/preview", json={"question": "x", "role": "player"}).status_code == 403
+
+
+@pytest.mark.parametrize("hybrid", [False, True], ids=["vector", "hybrid"])
+def test_player_rules_slot_stays_inside_released_sources(env, hybrid):
+    """A player narrowed to the character sheet has no rules chunk, so the rulebook slot searches group
+    "rules" — the game-master rules source is the best rules hit there and must stay out."""
+    status, events = _stream_as_player(env.client, "Wie funktionieren Überschaden und Sterbeprobe?",
+                                       metadata_filters={"source_id": "bogen"}, hybrid_search=hybrid)
+
+    assert status == 200
+    done = events[-1]
+    assert done["sources"], "expected the character sheet"
+    assert {Path(s["source_path"]).parent.name for s in done["sources"]} == {"bogen"}
+    for e in events:
+        _no_secret(json.dumps(e, ensure_ascii=False))
+    _no_secret(env.llm.prompts[-1])
+
+
+class SheetFirstReranker:
+    """Game-master text highest (bait), then the character sheet, the released rulebook last —
+    so a player's top places are all character-sheet chunks and the rulebook slot has to act."""
+
+    def predict(self, pairs):
+        return [10.0 if any(s in text for s in SECRETS) else 5.0 if "Charakterbogen" in text else -3.0
+                for _, text in pairs]
+
+
+async def test_player_rules_slot_brings_the_released_rulebook_not_the_game_master_rules(env, monkeypatch):
+    """Positive case: the slot does fire for a player — and picks the released rulebook ("regeln"),
+    never the game-master rules source ("sl-regeln") that the bait reranker rates highest."""
+    monkeypatch.setattr(env.retriever, "_reranker", SheetFirstReranker())
+
+    chunks = await env.retriever.retrieve("Wie funktionieren Überschaden und Sterbeprobe?",
+                                          metadata_filters=PLAYER_FILTER, top_k_rerank=3, max_per_source=0)
+
+    rules = [c for c in chunks if c.metadata.get("group") == "rules"]
+    assert len(rules) == 1, [c.metadata.get("source_id") for c in chunks]   # the slot placed exactly one
+    assert rules[0].metadata.get("source_id") == "regeln"
+    assert {c.metadata.get("source_id") for c in chunks} <= set(PLAYER_SOURCES)
+    for c in chunks:
+        _no_secret(c.content)
