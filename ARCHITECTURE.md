@@ -890,6 +890,7 @@ in Env-Variablen übersetzt. Pydantic-Settings liest diese automatisch:
 | POST   | `/ingest`                 | Ingestion als Background-Job starten (inkrementell; `?full=true` = Voll-Reindex). 409, solange ein Job läuft |
 | GET    | `/ingest/status/{job_id}` | Status eines laufenden Ingestion-Jobs abfragen      |
 | GET    | `/ingest/active`          | Laufender/wartender Ingestion-Job oder `null` (UI hängt sich nach 409 daran) |
+| POST   | `/feedback`               | 👍/👎 zu einer Chat-Antwort → eine Zeile in `logs/feedback.jsonl` (letzte Zeile je `message_id` gilt) |
 | GET    | `/sources`                | Konfigurierte Sources                               |
 | PUT    | `/sources`                | Source-Liste ersetzen → `config/sources.yaml`       |
 | POST   | `/sources/scan`           | Beliebigen Pfad scannen (Ordner/Dateien für „Source hinzufügen") |

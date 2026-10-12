@@ -13,6 +13,7 @@ Usage:
 import argparse
 import json
 import logging
+import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -223,6 +224,8 @@ def main():
     """CLI entry-point. Parses command line arguments to conduct a pure retrieval evaluation.
     Outputs a consolidated JSON report and a console summary detailing Hit Rate@K.
     """
+    # Headings can contain emoji — the Windows console (cp1252) would crash on printing them
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
     parser = argparse.ArgumentParser(description="LoreKeeper Retrieval Evaluation")
     parser.add_argument("--qa-pairs", default="evaluation/qa_pairs.yaml")
     parser.add_argument("--output", default="evaluation/results/")

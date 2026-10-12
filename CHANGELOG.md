@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Answer feedback** (roadmap 3.4): 👍/👎 under every chat answer for players and game masters; `POST /feedback` appends question, answer, sources, model, role and timings to `logs/feedback.jsonl` (last line per `message_id` counts, `rating: null` = withdrawn)
 - Startup timing check `tests/perf/test_startup.py` (`pytest -m perf`, roadmap 5.2): starts a second backend on a free port and measures the time until `/health` answers; skipped while LoreKeeper runs. Baseline not recorded yet
 - Tests for `providers/gemini.py`, `api/prompt_routes.py` and `api/eval_routes.py` — all three at 100 % coverage (roadmap 7.0)
 - Non-blocking ingest progress on the Sources page (roadmap 3.8/3.9): the job id lives in session state, an `st.fragment` polls `/ingest/status` while the rest of the page stays usable; ingest/Reindex buttons are disabled meanwhile. New `GET /ingest/active` — a `409` now attaches to the running job instead of only warning
@@ -60,6 +61,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `BaseLLMProvider.model` no longer defaults to `"unknown"` — provider implementations must set `self.model` in `__init__`
 
 ### Fixed
+- `python -m evaluation.evaluate_retrieval` crashed on the Windows console (cp1252) while printing misses whose headings contain emoji — output is now UTF-8
 - Prompts page never marked an activated variant as active — `is_active` compared file hashes, but variant files carry `_meta` and the active `prompts.yaml` never does; now the four templates are compared
 - Reranker `max_per_source` counted chunks per file name only — equally named files in two sources (both simulation `llm_report.md`) shared one cap; now per (`source_id`, file)
 - Admin login had no limit on password attempts — now 1 s delay per wrong attempt and a 5-minute lock after 5 wrong attempts (server-wide, both login forms; logged-in sessions unaffected)

@@ -682,3 +682,29 @@ def test_put_config_filters_disallowed_inner_keys(config_client):
 
     reloaded = _yaml.safe_load(settings_path.read_text(encoding="utf-8"))
     assert "some_secret" not in reloaded.get("retrieval", {})
+
+
+# ─── Answer feedback (roadmap 3.4) ──────────────────────────────────────────────
+
+def test_feedback_is_appended_as_json_lines(client, tmp_path, monkeypatch):
+    """Each rating is one line; a changed or withdrawn rating is a new line for the same message_id."""
+    import src.api.routes as routes_module
+    path = tmp_path / "logs" / "feedback.jsonl"
+    monkeypatch.setattr(routes_module, "_FEEDBACK_PATH", path)
+    body = {"message_id": "m1", "rating": "down", "role": "player", "question": "Was ist Überschaden?",
+            "answer": "…", "sources": ["pnp_regelbuch.pdf"], "model": "qwen3:14b"}
+
+    assert client.post("/feedback", json=body).json() == {"saved": True}
+    client.post("/feedback", json={**body, "rating": None})
+
+    lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert [(e["message_id"], e["rating"]) for e in lines] == [("m1", "down"), ("m1", None)]
+    assert lines[0]["question"] == "Was ist Überschaden?" and lines[0]["role"] == "player"
+    assert lines[0]["ts"]
+
+
+def test_feedback_rejects_unknown_ratings(client, tmp_path, monkeypatch):
+    import src.api.routes as routes_module
+    monkeypatch.setattr(routes_module, "_FEEDBACK_PATH", tmp_path / "feedback.jsonl")
+    assert client.post("/feedback", json={"message_id": "m1", "rating": "meh"}).status_code == 422
+    assert not (tmp_path / "feedback.jsonl").exists()

@@ -144,15 +144,17 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 
 **Teilweise abgedeckt**: Evaluation → „Frage testen“ zeigt bereits, welche Chunks (mit Score, Überschrift, `source_id`) eine Frage liefert. Offen bleibt nur die Sicht „alle Chunks einer Datei“.
 
-### 3.4 Antwort-Feedback (Thumbs Up/Down)
+### 3.4 Antwort-Feedback (Thumbs Up/Down) — ✅ Erledigt
 
 **Problem**: Keine Möglichkeit, Antwortqualität systematisch zu tracken.
 
 **Lösung**: Thumbs-up/down unter jeder Antwort, gespeichert mit Frage + Antwort + Quellen. Basis für späteres Prompt-Tuning und Evaluation.
 
-**Vorschlag**: JSONL-Datei (keine neue Abhängigkeit) mit Zeit, Rolle, Frage, Antwort, Quellen, Modell, Timings; schlechte Antworten später als Golden-Set-Fragen übernehmen. Offen: auch Spieler oder nur SL?
+**Umgesetzt (12.10.)**: 👍/👎 (`st.feedback`) unter jeder Antwort, für Spieler **und** Spielleiter (Entscheidung). `POST /feedback` hängt eine Zeile an `logs/feedback.jsonl` (gitignored, keine neue Abhängigkeit): Zeit, Rolle, Frage, Antwort, Quelldateien, Modell, Suchanfrage, Session, Timings. Ändern/Zurücknehmen = neue Zeile mit derselben `message_id`, die letzte gilt. Tests: `tests/ui/test_feedback.py`, `test_feedback_*` in `tests/integration/test_api_routes.py`. Auswertung siehe `docs/operations.md` → Logs.
 
-**Aufwand**: Gering. Wenig Last (UI + kleiner Endpoint, Tests mit Fake-Backend).
+**Später**: 👎-Antworten auf der Evaluation-Seite anzeigen und per Klick als Golden-Set-Frage übernehmen.
+
+**Aufwand**: Gering (umgesetzt).
 
 ### 3.5 Wikilink-Auflösung im Retrieval
 
@@ -391,17 +393,17 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 
 **Aufwand**: Gering-Mittel (umgesetzt).
 
-### 7.1 Kleine Fixes (gefunden 12.10.)
+### 7.1 Kleine Fixes (gefunden 12.10.) — ✅ Erledigt
 
-- **Eval-CLI bricht in der Windows-Konsole ab**: `python -m evaluation.evaluate_retrieval` stürzt beim Ausgeben der Misses mit `UnicodeEncodeError` (cp1252) ab, sobald eine Überschrift ein Emoji enthält (z.B. 🎭). Der JSON-Report ist dann schon geschrieben, die Zusammenfassung fehlt. Fix: Ausgabe auf UTF-8 umstellen (`sys.stdout.reconfigure(encoding="utf-8", errors="replace")`). Workaround: `PYTHONIOENCODING=utf-8`.
+- **Eval-CLI bricht in der Windows-Konsole ab**: `python -m evaluation.evaluate_retrieval` stürzt beim Ausgeben der Misses mit `UnicodeEncodeError` (cp1252) ab, sobald eine Überschrift ein Emoji enthält (z.B. 🎭). Der JSON-Report ist dann schon geschrieben, die Zusammenfassung fehlt. Fix: Ausgabe auf UTF-8 umstellen (`sys.stdout.reconfigure(encoding="utf-8", errors="replace")`). Workaround: `PYTHONIOENCODING=utf-8`. ✅ Behoben, Test `test_cli_summary_survives_a_cp1252_console`.
 
-**Aufwand**: Gering, wenig Last.
+**Aufwand**: Gering (umgesetzt).
 
 ---
 
 ## Priorisierungsvorschlag
 
-Erledigt: 3.8/3.9 Ingest-Fortschritt, 7.0 Testlücken, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
+Erledigt: 3.4 Antwort-Feedback, 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
 
 **Offen am Gaming-PC (Nutzer)**: alte Autostart-Aufgabe „LoreKeeper Server“ als Admin entfernen (`Unregister-ScheduledTask -TaskName "LoreKeeper Server" -Confirm:$false`); DHCP-Reservierung für `192.168.178.34` im Router.
 
@@ -410,16 +412,14 @@ Erledigt: 3.8/3.9 Ingest-Fortschritt, 7.0 Testlücken, 5.3 UI-Reste (`/config`, 
 | Reihenfolge | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
 | 1 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf; dann Re-Index, Eval, Spieler-Messung — dabei 3.8/3.9 im Browser durchklicken |
-| 2 | 7.1 Kleine Fixes (Eval-CLI-Encoding) | Gering | Gering | 🟢 | Fix, schnell |
-| 3 | 3.4 Antwort-Feedback | Gering-Mittel — schlechte Antworten sammeln, Golden Set wächst aus echter Nutzung | Gering | 🟢 | Quick Win |
-| 4 | 5.2 Startup-Baseline aufnehmen | Gering — Regressionsschutz für den Start | Gering | 🟡 | Test steht; einmal messen bei gestopptem LoreKeeper und ohne Simulation |
-| 5 | 5.3 Reranker/Embeddings auf GPU (AMD: ONNX Runtime + DirectML) | Mittel — ~0,5 s pro Frage, schnellere Indexierung und Evals, CPU frei für die Simulation | Mittel | 🔴 | Vor 3.10/Section-Budget: macht deren Golden-Set-Läufe billiger. Neue Abhängigkeit — erst entscheiden; ROCm erst nach Bugfix |
-| 6 | 3.10 Regelwerk-Slot im Retrieval | Mittel — SL-Fragen, die Vault und Regel mischen | Mittel | 🔴 | Mit Abschnittsprüfung messbar (x002–x008) |
-| 7 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🔴 | Mit der Chunk-Prüfung aus 5.2 messbar |
-| 8 | 3.6 Chat-Verlauf im Antwort-Prompt | Mittel — bessere Folgefragen | Gering-Mittel | 🟡 | Code leicht, Wirkung nur mit echten LLM-Antworten prüfbar; Spieler-Modus beachten (nur eigener Verlauf) |
-| 9 | 3.2 Session-History | Mittel | Mittel | 🟢 | Spieler-/SL-Sessions getrennt halten |
-| 10 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | 🔴 | Vision-Modell lokal über Ollama; Bild-Ausschluss im Retriever aufheben |
-| 11 | 4.2 Internet-Zugriff (Tailscale) + Spieler-Modus im Backend | Mittel | Gering | 🟢 | Später; Spieler-Modus ins Backend, sobald die API selbst erreichbar wird |
-| 12 | 3.5 Wikilink-Expansion | Mittel | Mittel | 🔴 | Experimentell; im Spieler-Modus darf sie keine SL-Quellen nachladen |
-| 13 | 3.3 Chunk-Inspector | Gering (Dev-Tool) | Gering-Mittel | 🟢 | Teilweise durch Evaluation → „Frage testen“ abgedeckt |
-| 14 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | 🟡 | Später |
+| 2 | 5.2 Startup-Baseline aufnehmen | Gering — Regressionsschutz für den Start | Gering | 🟡 | Test steht; einmal messen bei gestopptem LoreKeeper und ohne Simulation |
+| 3 | 5.3 Reranker/Embeddings auf GPU (AMD: ONNX Runtime + DirectML) | Mittel — ~0,5 s pro Frage, schnellere Indexierung und Evals, CPU frei für die Simulation | Mittel | 🔴 | Vor 3.10/Section-Budget: macht deren Golden-Set-Läufe billiger. Neue Abhängigkeit — erst entscheiden; ROCm erst nach Bugfix |
+| 4 | 3.10 Regelwerk-Slot im Retrieval | Mittel — SL-Fragen, die Vault und Regel mischen | Mittel | 🔴 | Mit Abschnittsprüfung messbar (x002–x008) |
+| 5 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🔴 | Mit der Chunk-Prüfung aus 5.2 messbar |
+| 6 | 3.6 Chat-Verlauf im Antwort-Prompt | Mittel — bessere Folgefragen | Gering-Mittel | 🟡 | Code leicht, Wirkung nur mit echten LLM-Antworten prüfbar; Spieler-Modus beachten (nur eigener Verlauf) |
+| 7 | 3.2 Session-History | Mittel | Mittel | 🟢 | Spieler-/SL-Sessions getrennt halten |
+| 8 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | 🔴 | Vision-Modell lokal über Ollama; Bild-Ausschluss im Retriever aufheben |
+| 9 | 4.2 Internet-Zugriff (Tailscale) + Spieler-Modus im Backend | Mittel | Gering | 🟢 | Später; Spieler-Modus ins Backend, sobald die API selbst erreichbar wird |
+| 10 | 3.5 Wikilink-Expansion | Mittel | Mittel | 🔴 | Experimentell; im Spieler-Modus darf sie keine SL-Quellen nachladen |
+| 11 | 3.3 Chunk-Inspector | Gering (Dev-Tool) | Gering-Mittel | 🟢 | Teilweise durch Evaluation → „Frage testen“ abgedeckt |
+| 12 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | 🟡 | Später |

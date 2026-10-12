@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 
 from src.api.schemas import (
     ConfigUpdateRequest,
+    FeedbackRequest,
     GeminiKeyStatus,
     HealthResponse,
     IngestJobResponse,
@@ -33,6 +34,9 @@ router = APIRouter()
 
 # Ingestion job storage (in-memory)
 _ingest_jobs: dict[str, IngestStatusResponse] = {}
+
+# Answer ratings from the chat, one JSON object per line (gitignored like the logs)
+_FEEDBACK_PATH = Path("logs/feedback.jsonl")
 
 # Keep strong refs to background tasks so the GC can't cancel them mid-run.
 _background_tasks: set[asyncio.Task] = set()
@@ -309,6 +313,17 @@ async def ingest(full: bool = False):
         )
 
     return IngestJobResponse(job_id=_start_ingest_job(_run), status="queued")
+
+
+@router.post("/feedback")
+async def feedback(req: FeedbackRequest):
+    """Append a thumbs up/down (or its withdrawal) for one chat answer to logs/feedback.jsonl."""
+    entry = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), **req.model_dump()}
+    _FEEDBACK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with _FEEDBACK_PATH.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    logger.info(f"Feedback {req.rating} for message {req.message_id} ({req.role})")
+    return {"saved": True}
 
 
 @router.get("/ingest/active", response_model=IngestStatusResponse | None)

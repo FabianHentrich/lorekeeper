@@ -223,6 +223,11 @@ reset by the **🗑️ Neue Session** sidebar button.
   appears if non-zero)
 - Sources are displayed as a collapsible `st.expander("📎 Quellen")` and
   **grouped by file** (see below)
+- Below every answer: 👍/👎 (`st.feedback("thumbs")`), for players and game
+  masters alike. A click posts `POST /feedback` with question, answer, source
+  files, model, role, session and timings; withdrawing the rating is sent as
+  `rating: null`. Error messages and the hidden older messages get no thumbs.
+  Rendering costs no backend request — only the click does.
 
 ### Streaming
 

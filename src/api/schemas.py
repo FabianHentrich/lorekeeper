@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -32,6 +34,21 @@ class QueryResponse(BaseModel):
     latency_ms: float
     search_query: str = ""  # question used for retrieval — differs from the input when a follow-up was condensed
     timings: dict = {}  # condense/retrieval/total ms, retrieval stages, chunk count, prompt size
+
+
+class FeedbackRequest(BaseModel):
+    """Thumbs up/down on one chat answer. A changed or withdrawn rating is a new entry with the same
+    message_id — the last entry per message_id counts."""
+    message_id: str
+    rating: Literal["up", "down"] | None  # None = rating withdrawn
+    role: str = ""  # "player" | "game_master"
+    question: str = ""
+    answer: str = ""
+    sources: list[str] = []  # file names shown under the answer
+    model: str = ""
+    search_query: str = ""
+    session_id: str | None = None
+    timings: dict = {}
 
 
 class IngestJobResponse(BaseModel):

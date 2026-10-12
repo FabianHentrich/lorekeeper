@@ -1,4 +1,5 @@
 import json
+import uuid
 from pathlib import Path
 from urllib.parse import quote
 
@@ -377,6 +378,36 @@ if _ROLE == roles.PLAYER:
         st.warning("Für Spieler ist noch keine Quelle freigegeben. Die Spielleitung kann das auf der "
                    "Sources-Seite in der Spalte „🎲 Spieler“ einstellen.")
 
+# ─── Answer feedback (thumbs up/down, both roles) ─────────
+def _send_feedback(msg: dict):
+    """Post the rating of one answer; withdrawing it is sent as rating None (the last entry counts)."""
+    rating = {1: "up", 0: "down"}.get(st.session_state.get(f"fb_{msg['id']}"))
+    try:
+        r = requests.post(f"{API_URL}/feedback", json={
+            "message_id": msg["id"],
+            "rating": rating,
+            "role": _ROLE,
+            "question": msg.get("question", ""),
+            "answer": msg["content"],
+            "sources": [src.get("file", "") for src in msg.get("sources", [])],
+            "model": msg.get("model", ""),
+            "search_query": msg.get("search_query", ""),
+            "session_id": st.session_state.get("session_id"),
+            "timings": msg.get("timings", {}),
+        }, timeout=5)
+        r.raise_for_status()
+        if rating:
+            st.toast("Danke für die Bewertung!")
+    except Exception as e:
+        st.toast(f"Bewertung nicht gespeichert: {e}", icon="⚠️")
+
+
+def _render_feedback(msg: dict):
+    """Thumbs under an answer — only answers with an id (not errors, not older messages)."""
+    if msg.get("id"):
+        st.feedback("thumbs", key=f"fb_{msg['id']}", on_change=_send_feedback, args=(msg,))
+
+
 # ─── Chat History ─────────────────────────────────────────
 _MAX_VISIBLE_MESSAGES = 50
 _all_messages = st.session_state.messages
@@ -402,6 +433,8 @@ for msg in _visible:
         if msg.get("sources"):
             with st.expander("📎 Quellen"):
                 _render_sources(msg["sources"])
+        if msg["role"] == "assistant":
+            _render_feedback(msg)
 
 # ─── Chat Input ───────────────────────────────────────────
 _placeholder = "Frag nach den Regeln..." if _ROLE == roles.PLAYER else "Stelle eine Frage über deine Welt..."
@@ -449,6 +482,7 @@ if prompt := st.chat_input(_placeholder, disabled=_chat_blocked):
             usage = {}
             timings = {}
             search_query = ""
+            model_used = ""
             error_message = None
             placeholder = st.empty()
 
@@ -469,6 +503,7 @@ if prompt := st.chat_input(_placeholder, disabled=_chat_blocked):
                 elif data["type"] == "done":
                     st.session_state.session_id = data.get("session_id")
                     sources = data.get("sources", [])
+                    model_used = data.get("model_used", "")
                     usage = data.get("usage", {}) or {}
                     timings = data.get("timings", {}) or {}
                     # Only shown when a follow-up was rewritten before retrieval
@@ -502,14 +537,19 @@ if prompt := st.chat_input(_placeholder, disabled=_chat_blocked):
                     with st.expander("📎 Quellen"):
                         _render_sources(sources)
 
-                st.session_state.messages.append({
+                answer = {
                     "role": "assistant",
+                    "id": uuid.uuid4().hex,
+                    "question": prompt,
+                    "model": model_used,
                     "content": full_response,
                     "sources": sources,
                     "usage": usage,
                     "timings": timings,
                     "search_query": search_query,
-                })
+                }
+                st.session_state.messages.append(answer)
+                _render_feedback(answer)
 
         except requests.exceptions.ConnectionError:
             st.error("Verbindung zum Backend fehlgeschlagen. Läuft der Server?")

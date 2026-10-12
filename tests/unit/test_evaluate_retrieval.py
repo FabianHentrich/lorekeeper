@@ -67,3 +67,28 @@ class TestExpectedSourceIds:
         assert not _hit(pair, [_chunk("llm_report.md", "sim-faehigkeiten-bericht")])
         assert _hit(pair, [_chunk("llm_report.md", "sim-faehigkeiten-bericht"),
                            _chunk("llm_report.md", "sim-begegnungen-bericht")])
+
+
+def test_cli_summary_survives_a_cp1252_console(monkeypatch, tmp_path):
+    """Emoji in retrieved headings crashed the miss list on the Windows console (cp1252)."""
+    import io
+    import sys
+
+    import evaluation.evaluate_retrieval as ev
+
+    miss = {"id": "m1", "question": "Wer ist Kalen?", "expected_sources": ["a.md"],
+            "retrieved_files": ["b.md"], "expected_section": "1.1", "retrieved_headings": ["🎭 Maskenball"]}
+    report = {"hit_rate": 0.0, "total_questions": 1, "details": [{"hit": False}],
+              "breakdown_by_source_type": {}, "section_total": 1, "section_hit_rate": 0.0,
+              "misses": [miss], "section_misses": [miss]}
+    monkeypatch.setattr(ev, "load_qa_pairs", lambda path: [{}])
+    monkeypatch.setattr(ev, "run_evaluation", lambda *a, **kw: report)
+    monkeypatch.setattr(sys, "argv", ["evaluate_retrieval", "--output", str(tmp_path), "--top-k", "5",
+                                      "--top-k-rerank", "3"])
+    console = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+    monkeypatch.setattr(sys, "stdout", console)
+
+    ev.main()
+
+    console.flush()
+    assert "🎭 Maskenball" in console.buffer.getvalue().decode("utf-8")

@@ -245,6 +245,15 @@ Afterwards it is cached at `~/.cache/huggingface/`.
 Get-Content logs\lorekeeper.log -Tail 50
 ```
 
+Answer ratings (👍/👎 in the chat) land in `logs/feedback.jsonl`, one JSON object
+per line. A changed or withdrawn rating is a new line with the same `message_id` —
+the last line per `message_id` counts (`rating: null` = withdrawn):
+
+```powershell
+Get-Content logs\feedback.jsonl | ConvertFrom-Json | Where-Object rating -eq 'down' |
+  Select-Object ts, role, question, sources
+```
+
 Log level in `settings.yaml`:
 ```yaml
 logging:
