@@ -265,6 +265,20 @@ class TestRunIncremental:
         assert result.documents_skipped == 0
         assert not [c for c in vs.calls if c[0] == "delete"]
 
+    def test_failed_hash_lookup_stops_the_run_before_writing(self, tmp_path, monkeypatch):
+        """A DB error in the hash lookup must end the job with an error — not treat every file as
+        new and leave the old chunks of changed files behind."""
+        orch, _ = self._setup(tmp_path, monkeypatch)
+        vs = FakeVectorStore()
+
+        def _locked(source_id):
+            raise RuntimeError("database is locked")
+
+        monkeypatch.setattr(vs, "get_content_hashes_for_source", _locked)
+        with pytest.raises(RuntimeError, match="locked"):
+            orch.run(vectorstore=vs)
+        assert vs.calls == [] and vs.upserted == []
+
     def test_unchanged_file_is_skipped(self, tmp_path, monkeypatch):
         """Verify a file whose hash matches the store is neither parsed nor re-embedded."""
         orch, f = self._setup(tmp_path, monkeypatch)

@@ -1,27 +1,23 @@
 """
 LoreKeeper Evaluation Script
 
+End to end through the running backend's ``/query`` (LLM included): file hit rate, how often the
+answer contains the expected keywords, latency.
+
 Usage:
     python -m evaluation.evaluate \
         --qa-pairs evaluation/qa_pairs.yaml \
-        --settings config/settings.yaml \
+        --api-url http://127.0.0.1:8000 \
         --output evaluation/results/
 """
 
 import argparse
-import json
 import time
 from datetime import UTC, datetime
-from pathlib import Path
 
 import requests
-import yaml
 
-
-def load_qa_pairs(path: str) -> list[dict]:
-    """Load the evaluation questions and expected answers from a YAML file."""
-    data = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
-    return data.get("pairs", [])
+from evaluation.evaluate_retrieval import load_qa_pairs, save_report, source_hit
 
 
 def evaluate(api_url: str, qa_pairs: list[dict]) -> dict:
@@ -60,11 +56,7 @@ def evaluate(api_url: str, qa_pairs: list[dict]) -> dict:
         answer = data.get("answer", "")
         sources = [s["file"].replace("\\", "/") for s in data.get("sources", [])]
 
-        # Hit Rate: expected source filename in retrieved sources (path-separator agnostic)
-        hit = any(
-            any(exp.split("/")[-1] in src for src in sources)
-            for exp in expected_sources
-        )
+        hit = source_hit(expected_sources, sources)   # /query returns no source ids
         if hit:
             hits += 1
 
@@ -107,11 +99,7 @@ def main():
 
     report = evaluate(args.api_url, qa_pairs)
 
-    output_dir = Path(args.output)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    report_path = output_dir / f"eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-    report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    report_path = save_report(report, args.output, "e2e")   # e2e_* — the API lists and cleans up by prefix
 
     print(f"\n{'='*40}")
     print(f"Hit Rate@K:       {report['hit_rate']:.2%}")

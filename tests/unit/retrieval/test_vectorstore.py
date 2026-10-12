@@ -272,11 +272,11 @@ class TestGetContentHashesForSource:
         result = service.get_content_hashes_for_source("src1")
         assert result == {}
 
-    def test_returns_empty_on_exception(self, service, mock_collection):
-        """Verify total database failure during index synchronization cleanly assumes 'everything is new/modified' caching failure states."""
+    def test_database_error_is_raised(self, service, mock_collection):
+        """An empty result would make ingestion treat every file as new and leave stale chunks — raise."""
         mock_collection.get.side_effect = Exception("chroma down")
-        result = service.get_content_hashes_for_source("src1")
-        assert result == {}
+        with pytest.raises(Exception, match="chroma down"):
+            service.get_content_hashes_for_source("src1")
 
 
 class TestDeleteBySourceFile:
@@ -314,13 +314,27 @@ class TestListFiles:
 
     def test_sorted_unique_files_of_the_source(self, service, mock_collection):
         mock_collection.get.return_value = {"metadatas": [
-            {"source_file": "b.md"}, {"source_file": "a.md"}, {"source_file": "b.md"}, {},
+            {"source_file": "b.md", "content_hash": "h2"}, {"source_file": "a.md", "content_hash": "h1"},
+            {"source_file": "b.md", "content_hash": "h2"}, {},
         ]}
         assert service.list_files("vault") == ["a.md", "b.md"]
         assert mock_collection.get.call_args[1]["where"] == {"source_id": "vault"}
 
     def test_database_error_is_raised(self, service, mock_collection):
-        """Unlike get_content_hashes_for_source, an error must not look like an empty source."""
+        """An error must not look like an empty source."""
         mock_collection.get.side_effect = RuntimeError("locked")
         with pytest.raises(RuntimeError):
             service.list_files("vault")
+
+
+class TestWipeCollection:
+    def test_missing_collection_is_fine(self, service):
+        from chromadb.errors import NotFoundError
+        service._client.delete_collection.side_effect = NotFoundError("Collection does not exist")
+        service.wipe_collection()   # no error: nothing to wipe
+
+    def test_other_errors_reach_the_caller(self, service):
+        service._client.delete_collection.side_effect = RuntimeError("database is locked")
+        with pytest.raises(RuntimeError, match="locked"):
+            service.wipe_collection()
+

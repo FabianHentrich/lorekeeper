@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _log = logging.getLogger(__name__)
@@ -107,9 +107,18 @@ class IngestionConfig(BaseModel):
 
 class ChunkingConfig(BaseModel):
     strategy: str = "heading_aware"
-    max_chunk_size: int = 256
-    chunk_overlap: int = 30
-    min_chunk_size: int = 20
+    max_chunk_size: int = 256        # estimated tokens (len/3.5) per prose chunk; tables stay whole
+    chunk_overlap: int = 30          # must stay below max_chunk_size — the split loops advance by the difference
+    min_chunk_size: int = 20         # smaller chunks are merged into the previous one (same heading only)
+
+    @model_validator(mode="after")
+    def _overlap_below_size(self):
+        """An overlap ≥ the chunk size would make the word-split loops stand still (ingest hangs)."""
+        if self.chunk_overlap >= self.max_chunk_size:
+            raise ValueError(
+                f"chunk_overlap ({self.chunk_overlap}) muss kleiner als max_chunk_size ({self.max_chunk_size}) sein"
+            )
+        return self
 
 
 class EmbeddingsConfig(BaseModel):

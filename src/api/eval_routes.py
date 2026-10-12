@@ -3,13 +3,13 @@ import json
 import logging
 import time
 import uuid
-from datetime import datetime
 from pathlib import Path
 
 import yaml
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 
+from evaluation.evaluate_retrieval import load_qa_pairs, save_report
 from src.api.access import InvalidFilter, NoPlayerSources, effective_filters
 from src.api.eval_schemas import (
     ChunkListResponse,
@@ -64,12 +64,7 @@ def _get_retriever():
 @eval_router.get("/qa-pairs", response_model=QAPairList)
 async def get_qa_pairs():
     """Load the current list of QA pairs from the golden set file."""
-    if not _QA_PATH.exists():
-        return QAPairList(pairs=[])
-    data = yaml.safe_load(_QA_PATH.read_text(encoding="utf-8")) or {}
-    raw = data.get("pairs", [])
-    pairs = [QAPair(**p) for p in raw]
-    return QAPairList(pairs=pairs)
+    return QAPairList(pairs=[QAPair(**p) for p in load_qa_pairs(_QA_PATH)])
 
 
 @eval_router.put("/qa-pairs", response_model=QAPairList)
@@ -181,8 +176,7 @@ def _has_running_job() -> bool:
 
 def _cleanup_results(eval_type: str):
     """Keep only the last _MAX_RESULTS files per eval_type."""
-    prefix = "retrieval_" if eval_type == "retrieval" else "e2e_"
-    files = sorted(_RESULTS_DIR.glob(f"{prefix}*.json"), reverse=True)
+    files = sorted(_RESULTS_DIR.glob(f"{eval_type}_*.json"), reverse=True)
     for old in files[_MAX_RESULTS:]:
         old.unlink(missing_ok=True)
         logger.info(f"Deleted old eval result: {old.name}")
@@ -194,8 +188,7 @@ async def start_eval(req: EvalJobRequest, request: Request):
     if not _QA_PATH.exists():
         raise HTTPException(status_code=404, detail="No qa_pairs.yaml found")
 
-    data = yaml.safe_load(_QA_PATH.read_text(encoding="utf-8")) or {}
-    qa_pairs = data.get("pairs", [])
+    qa_pairs = load_qa_pairs(_QA_PATH)
     if not qa_pairs:
         raise HTTPException(status_code=400, detail="Golden Set is empty")
 
@@ -247,10 +240,7 @@ async def _run_retrieval_eval(job: EvalJobStatus, qa_pairs: list[dict], req: Eva
             progress_callback=_progress,
         )
 
-        _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-        filename = f"retrieval_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        path = _RESULTS_DIR / filename
-        path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+        filename = save_report(report, _RESULTS_DIR, "retrieval").name
         _cleanup_results("retrieval")
 
         job.result_file = filename
@@ -276,10 +266,7 @@ async def _run_e2e_eval(job: EvalJobStatus, qa_pairs: list[dict], api_url: str):
     try:
         report = await asyncio.get_event_loop().run_in_executor(None, _run_sync)
 
-        _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-        filename = f"e2e_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        path = _RESULTS_DIR / filename
-        path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+        filename = save_report(report, _RESULTS_DIR, "e2e").name
         _cleanup_results("e2e")
 
         job.result_file = filename

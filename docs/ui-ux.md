@@ -330,7 +330,7 @@ Hintergrund und Kennzahlen: [evaluation.md](evaluation.md).
 | Tab | Inhalt |
 |---|---|
 | **1 Golden Set** | Bearbeitbare Tabelle aller Fragen aus `evaluation/qa_pairs.yaml` (ID, Frage, Typ, Kategorie, erwartete Quellen, Antwort-Stichwörter, Notizen); **💾 Golden Set speichern** über `PUT /eval/qa-pairs`, Zeilen ohne ID oder Frage werden übersprungen |
-| **2 Frage testen** | Eine Frage gegen den Retriever (`POST /eval/preview`, ohne LLM) mit einstellbaren Parametern; Tabelle der Chunks (Score, Quelle, Überschrift, Vorschau) + Latenz; die Frage lässt sich direkt ins Golden Set übernehmen (erwartete Quellen vorbelegt) |
+| **2 Frage testen** | Eine Frage gegen den Retriever (`POST /eval/preview`, ohne LLM) mit einstellbaren Parametern; Tabelle der Chunks (Score, Quelle, Überschrift, Vorschau) + Latenz. Das Ergebnis bleibt im Session-State stehen, sodass sich die Frage danach ins Golden Set übernehmen lässt (erwartete Quellen vorbelegt, eine schon vergebene ID wird abgelehnt) |
 | **3 Retrieval Eval** | Ganzes Golden Set ohne LLM als Hintergrund-Job (`POST /eval/run`, `GET /eval/status/{id}`); Trefferquote, Abschnitt-Trefferquote, Aufschlüsselung nach Typ, Details je Frage (⚠️ = richtige Datei, falscher Abschnitt); **⚖ A/B starten (Vektor vs. Hybrid)** |
 | **4 End-to-End** | Golden Set mit LLM: Trefferquote, Answer-Contains-Quote, mittlere Latenz, Antworten je Frage. Langsam |
 | **5 Ergebnisse** | Gespeicherte Läufe (max. 3 je Typ) mit Kennzahlen und Config, löschen; zwei Läufe vergleichen (Differenz + Fragen, deren Treffer sich geändert hat) |
@@ -340,7 +340,7 @@ Hintergrund und Kennzahlen: [evaluation.md](evaluation.md).
 **Gemeinsame Bausteine:** `_render_tuning_sliders(prefix)` — drei gekoppelte Regler (Kandidaten,
 Finale Chunks, Max pro Quelle; `top_k_rerank ≤ top_k`, `max_per_source ≤ top_k_rerank`) für „Frage
 testen“ und „Retrieval Eval“, dazu die Auswahl Config / nur Vektor / Hybrid.
-`_poll_eval_job(job_id)` fragt `GET /eval/status/{id}` jede Sekunde in einem `st.status` ab.
+`_poll_eval_job(job_id)` fragt `GET /eval/status/{id}` jede Sekunde in einem `st.status` ab und gibt nach ~45 s ohne erreichbares Backend mit Hinweis auf; die Evaluation läuft im Backend ggf. weiter und erscheint dann unter „Ergebnisse“.
 
 ---
 
@@ -375,8 +375,12 @@ kein Neustart. Welche Schlüssel änderbar sind: [configuration.md](configuratio
 
 Intern werden die verschachtelten Pydantic-Objekte **an Ort und Stelle** geändert — Dienste mit
 Referenzen darauf (Retriever, ConversationManager, Provider) sehen die neuen Werte beim nächsten
-Aufruf, eine laufende Anfrage bricht nicht ab. Jeder Speichern-Knopf schickt nur die Differenz;
-ohne Änderung erscheint **Keine Änderungen** und es gibt keinen Aufruf.
+Aufruf, eine laufende Anfrage bricht nicht ab. Alle Tabs speichern über dasselbe `_save(...)`: nur
+die Differenz wird geschickt (ohne Änderung erscheint **Keine Änderungen** und es gibt keinen
+Aufruf), danach lädt die Seite neu und zeigt **„Gespeichert.“** über `_flash` (ein `st.success`
+direkt vor dem Neuladen wäre sofort wieder weg). Lehnt das Backend einen Wert ab (422, z.B.
+Overlap ≥ Chunk-Größe), steht die Begründung in der Fehlermeldung. LLM-Änderungen leeren alle
+Caches, weil der Chat das LLM-Timeout aus dem gecachten `/sidebar-state` liest.
 
 ---
 

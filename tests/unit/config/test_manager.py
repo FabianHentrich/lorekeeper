@@ -129,6 +129,17 @@ class TestSaveSettings:
         assert reloaded["retrieval"]["top_k"] == 22
         assert reloaded["retrieval"]["score_threshold"] == 0.66
 
+    def test_overlap_not_below_chunk_size_is_rejected_and_not_written(self, tmp_path):
+        """overlap >= max_chunk_size would make the word-split loops hang during ingest."""
+        from pydantic import ValidationError
+
+        cm, local_path = self._make_cm(tmp_path)
+        with pytest.raises(ValidationError, match="chunk_overlap"):
+            cm.save_settings({"chunking": {"max_chunk_size": 50, "chunk_overlap": 60}})
+
+        assert cm.settings.chunking.chunk_overlap == 30   # live settings untouched
+        assert not local_path.exists()                    # nothing persisted
+
     def test_nested_update_mutates_nested_model_in_place(self, tmp_path):
         """Nested updates (reranking, hybrid) must mutate the nested model in place."""
         cm, _ = self._make_cm(tmp_path)

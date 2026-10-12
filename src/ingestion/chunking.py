@@ -89,11 +89,12 @@ def _fixed_size_chunking(documents: list[ParsedDocument], config: ChunkingConfig
         words = text.split()
         size = config.max_chunk_size
         overlap = config.chunk_overlap
+        step = max(1, size - overlap)  # config validation forbids overlap >= size; never loop in place anyway
         i = 0
         while i < len(words):
             chunk_words = words[i:i + size]
             chunks.append(_doc_to_chunk(doc, " ".join(chunk_words)))
-            i += size - overlap
+            i += step
 
     chunks = _merge_small_chunks(chunks, config.min_chunk_size)
     _set_indices(chunks)
@@ -178,10 +179,11 @@ def _split_with_separators(text: str, max_size: int, overlap: int, separators: l
         # Hard split by words as last resort
         words = text.split()
         parts = []
+        step = max(1, max_size - overlap)  # see fixed_size: never loop in place
         i = 0
         while i < len(words):
             parts.append(" ".join(words[i:i + max_size]))
-            i += max_size - overlap
+            i += step
         return parts
 
     sep = separators[0]

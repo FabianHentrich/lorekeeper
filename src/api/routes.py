@@ -662,7 +662,7 @@ async def get_config():
 
 @router.put("/config")
 async def update_config(request: ConfigUpdateRequest):
-    """Apply a partial settings update, persist to settings.yaml, and mutate
+    """Apply a partial settings update, persist to the settings.local.yaml sidecar, and mutate
     the live config in place so running services pick up the new values on
     the next call.
 

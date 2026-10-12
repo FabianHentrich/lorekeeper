@@ -163,6 +163,11 @@ python -m evaluation.evaluate --qa-pairs evaluation/qa_pairs.yaml --output evalu
 Zusätzlich gemessen wird `answer_contains`: wie oft die Antwort die Teilstrings aus
 `expected_answer_contains` enthält. Als Abnahme, nachdem die Suche stabil ist.
 
+Beide Skripte und die Evaluation-Seite teilen sich die Treffer-Regel (`source_hit`), das Laden des
+Golden Sets und das Speichern der Berichte (`evaluation/evaluate_retrieval.py`). Berichte heißen
+`retrieval_<zeit>.json` bzw. `e2e_<zeit>.json`; die Evaluation-Seite behält je Typ die letzten 3.
+Der End-to-End-Lauf kann `expected_source_ids` nicht prüfen — `/query` liefert keine Quellen-IDs.
+
 ---
 
 ## Kennzahlen und Ziele

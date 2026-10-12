@@ -1,7 +1,16 @@
 import asyncio
+import json
 from types import SimpleNamespace
 
-from evaluation.evaluate_retrieval import run_evaluation_with_retriever, section_hit
+import pytest
+
+from evaluation.evaluate_retrieval import (
+    load_qa_pairs,
+    run_evaluation_with_retriever,
+    save_report,
+    section_hit,
+    source_hit,
+)
 
 
 class TestSectionHit:
@@ -92,3 +101,34 @@ def test_cli_summary_survives_a_cp1252_console(monkeypatch, tmp_path):
 
     console.flush()
     assert "🎭 Maskenball" in console.buffer.getvalue().decode("utf-8")
+
+
+class TestSharedHelpers:
+    """One hit rule and one report naming for CLI, end-to-end script and /eval API (roadmap 7.4 A6)."""
+
+    @pytest.mark.parametrize("files, expected", [
+        ([r"Orte\Arkenfeld.md"], True),        # Windows separator
+        (["Arkenfeld.md"], True),               # no folder
+        (["Orte/Arkenfeldt.md"], False),
+        ([], False),
+    ])
+    def test_source_hit_by_file_name(self, files, expected):
+        assert source_hit(["Orte/Arkenfeld.md"], files) is expected
+
+    def test_source_hit_honours_expected_source_ids(self):
+        files, ids = ["llm_report.md", "llm_report.md"], ["sim-faehigkeiten", "sim-begegnungen"]
+        assert source_hit(["llm_report.md"], files[1:], ids[1:], ["sim-faehigkeiten"]) is False
+        assert source_hit(["llm_report.md"], files, ids, ["sim-faehigkeiten"]) is True
+
+    def test_load_qa_pairs_missing_or_empty_file(self, tmp_path):
+        assert load_qa_pairs(tmp_path / "missing.yaml") == []
+        empty = tmp_path / "empty.yaml"
+        empty.write_text("", encoding="utf-8")
+        assert load_qa_pairs(empty) == []
+
+    @pytest.mark.parametrize("eval_type", ["retrieval", "e2e"])
+    def test_save_report_uses_the_prefix_the_api_cleans_up(self, tmp_path, eval_type):
+        path = save_report({"hit_rate": 1.0, "frage": "Überschaden"}, tmp_path / "results", eval_type)
+        assert path.name.startswith(f"{eval_type}_") and path.suffix == ".json"
+        assert json.loads(path.read_text(encoding="utf-8"))["frage"] == "Überschaden"
+

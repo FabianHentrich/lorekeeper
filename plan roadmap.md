@@ -515,10 +515,72 @@ int8 verworfen (kaum schneller, anderes Ranking). Modell-Laden DirectML 1,3 s id
 
 **Aufwand**: Gering-Mittel (reine Doku, mehrere Dateien). Last 🟢.
 
+## 7.4 Code-Qualität: Dead Code, Vereinfachung, Clean Code (Review 13.10.) — 🔄 Paket A erledigt
+
+**Ergebnis des Reviews** (Agent, nur lesend; Suite grün, ruff/mypy sauber): Alle Funktionen in `src/`, `ui/`, `evaluation/` haben Aufrufer — toter Code steckt in Config-Feldern, Datenfeldern, Parametern, Zweigen und Altlasten. Komplexeste Stellen laut ruff: `ui/LoreKeeper.py:_render_sidebar` (Komplexität 29), `orchestrator.run` (19), `OllamaProvider.generate_stream` (14), `_rerank` (13), `validate_filters` (13). Geschätzt ~400–450 Zeilen weniger, wenn alle risikoarmen Punkte umgesetzt werden.
+
+**Beim Review gefundene Fehler** (selbst nachgeprüft):
+- **Chunking hängt** bei `chunk_overlap ≥ max_chunk_size`: die Wortschleifen (`fixed_size` und der Notfall-Split in `_split_with_separators`) kommen nicht voran — über die Settings-Seite einstellbar.
+- **„Zum Golden Set hinzufügen“ in „Frage testen“ funktioniert nie**: der Knopf steckt im `if st.button("🔍 Testen")`-Block; sein Klick lädt die Seite neu, der äußere Block ist dann falsch (`2_Evaluation.py:358-402`).
+- **„Gespeichert.“ auf der Settings-Seite ist unsichtbar**: `st.success()` direkt vor `st.rerun()` (4×; die Sources-Seite löst das mit `_flash`).
+- **Datenbankfehler beim Hash-Abgleich wird verschluckt** (`get_content_hashes_for_source` → `{}`): die Ingestion hält dann alle Dateien für neu, alte Chunks geänderter Dateien und verwaiste Chunks bleiben liegen. `wipe_collection` meldet „Wiped“ auch bei Fehlern.
+- **Eval-Polling** (`_poll_eval_job`) läuft bei totem Backend endlos (Sources-Seite hat eine Fehlergrenze).
+- **End-to-End-CLI** schreibt `eval_*.json` — die Aufräumlogik löscht nur `e2e_*`; die Treffer-Logik von `evaluate.py` ignoriert `expected_source_ids` (abgedriftet von `evaluate_retrieval.py`).
+- **Doku/Hilfetexte falsch**: u.a. „persistiert nach settings.yaml“ (ist `settings.local.yaml`), „TTL = 30s“ (Schleife 60 s), `evaluate.py`-Usage mit nicht existierendem `--settings`, `logging.suppress` „auf WARNING“ (setzt ERROR), Hilfe zu `window_size` („auch für den LLM-Prompt“ — nein), `qa`-Hilfe ohne `history`, `distance_metric: l2|ip` dokumentiert, aber nur Cosine rechnet richtig.
+
+**Korrekturplan** (vier Pakete, je eigener Commit):
+
+*Paket A — Fehler* (zuerst):
+1. `ChunkingConfig`: Validator `chunk_overlap < max_chunk_size` (422 über `/config`, Fehlermeldung in der UI); Wortschleifen zusätzlich mit `max(1, size - overlap)` absichern. Test.
+2. „Zum Golden Set hinzufügen“ in „Frage testen“: Vorschau-Ergebnis in `st.session_state` halten, damit der Knopf wirkt (oder Block entfernen — **Entscheidung**). UI-Test.
+3. Settings-Seite: ein lokales `_save(...)` statt 4 Kopien (Diff → PUT → Cache leeren → Flash → Rerun), „Gespeichert.“ über `_flash` sichtbar; Strategieliste als Konstante.
+4. `get_content_hashes_for_source` wirft bei DB-Fehlern (Job endet mit Fehler statt still falsch); `list_files` daraus ableiten; `wipe_collection` nur „nicht gefunden“ abfangen. Tests.
+5. `_poll_eval_job` mit Fehlergrenze wie die Sources-Seite.
+6. Evaluation: ein `load_qa_pairs`, ein `source_hit` (mit `expected_source_ids`), ein `_save_report`; E2E-CLI schreibt `e2e_*.json`.
+
+**Paket A umgesetzt (13.10.)** — Entscheidung A2: reparieren:
+1. `ChunkingConfig` lehnt `chunk_overlap ≥ max_chunk_size` ab (Speichern → 422 mit Begründung, nichts geschrieben); beide Wortschleifen rücken zusätzlich mindestens ein Wort vor. Tests: Validator, `save_settings`, Schleifen mit ungültiger Config (`model_construct`).
+2. „Frage testen“ hält das Ergebnis im Session-State; „➕ Hinzufügen“ wirkt jetzt, doppelte IDs werden abgelehnt. UI-Test (`tests/ui/test_question_preview.py`).
+3. Settings-Seite: ein `_save(...)` statt vier Kopien, „Gespeichert.“ über `_flash` sichtbar, Backend-Begründung bei 422 in der Fehlermeldung; Hilfetexte zu `window_size` und Min-Chunk-Size korrigiert. UI-Tests (`tests/ui/test_settings.py`, mutationsgeprüft).
+4. `get_content_hashes_for_source` wirft bei DB-Fehlern (Ingest-Job endet mit Fehler, nichts geschrieben); `list_files` daraus abgeleitet; `wipe_collection` fängt nur `NotFoundError`. Tests.
+5. `_poll_eval_job` gibt nach 45 Fehlversuchen in Folge mit Hinweis auf. UI-Test.
+6. `load_qa_pairs`, `source_hit`, `save_report` einmal in `evaluation/evaluate_retrieval.py`, genutzt von CLI, E2E-Skript und `/eval`-API; E2E-CLI schreibt `e2e_*.json`; Usage von `evaluate.py` korrigiert. Tests.
+
+Suite: 620 grün (vorher 599).
+
+*Paket B — Toter Code* (Verhalten unverändert, außer markiert):
+1. Ungelesene Config: `ingestion.watch_for_changes`, `api.*`, `ui.*`, `vectorstore.provider` samt YAML-Blöcken und Doku.
+2. Client-Modus von ChromaDB (`HttpClient`, `chroma_host`/`chroma_port`) — nie genutzt.
+3. Migrations-Shim `ingestion.document_paths` — **Entscheidung** (alte Installationen ohne `sources.yaml` starten dann ohne Quellen statt migriert).
+4. Tote Felder/Parameter: `LLMResponse.raw_response` (Ollama kopiert pro Aufruf die ganze Antwort), `latency_ms`-Buchhaltung, `Message.timestamp`, `_health_cache["ts"]`, ungenutztes `source_path`, `CALLOUT_CONTINUATION`, nie genutzte `**kwargs`-Overrides in den Providern, `if pairs or True`.
+5. Altlast in `recategorize._match_source` (+ `source_collection`) — erst bei gestopptem Backend prüfen, ob noch Chunks ohne `source_id` im Index sind.
+6. Endpoints ohne Aufrufer: `GET /provider/gemini/status` (Daten stecken in `/sidebar-state`), `GET /provider` (nur Tests) — **Entscheidung** (öffentliche API behalten oder entfernen).
+7. **Bildpfad** (Bild-Chunks erreichen nie eine Antwort, PDF-Bilder zeigen auf gelöschte Temp-Dateien): nicht entfernen — Roadmap 2 baut darauf auf. Jetzt nur falsche Docstrings/Kommentare korrigieren und den Temp-Pfad in Roadmap 2 vermerken.
+
+*Paket C — Vereinfachungen* (gleiches Verhalten, je Testabdeckung prüfen):
+1. `ConfigManager.editable_snapshot` aus `_EDITABLE_KEYS` ableiten statt zweiter Handbaum (−50 Zeilen, Sync-Gefahr weg).
+2. `_get_services()`-7-Tupel, `_get_retriever()`, `_get_vectorstore()` → überall `main_module.<dienst>` (−25).
+3. Chat-Seite: „Neue Session“ nutzt `_reset_chat()`, ein `_render_extras(msg)` für Verlauf und neue Antwort, ein Gemini-Key-Block (**Entscheidung**: leere Eingabe löscht den Laufzeit-Key oder wird abgelehnt), ein Sidebar-State-Helfer — senkt die Komplexität von `_render_sidebar`.
+4. Evaluation-Seite: ein Fehler-Handler statt 3, ein `_flipped(...)` statt 2, `_csv(...)`; Sources-Seite: Spaltenkonfiguration und `category_map`-Umwandlung je einmal (die beiden Kopien sind abgedriftet), „Recategorize (alle)“ einmal statt pro Quelle.
+5. `_spawn_eval_task` = `_spawn_background` wiederverwenden; Prompt-Routen mit `_templates()`/`_variant_from_raw()`; Chunking mit einer Strategie-Tabelle und gemeinsamem Wort-Split; Retriever-Kleinigkeiten (`_to_chunk` in der Expansion, Backfill per Slice); `IngestionResult` als Dataclass; Provider-Doppelungen (Ollama-Nachrichten, Gemini-Key-Auflösung); `asyncio.get_event_loop().run_in_executor` → `run_in_threadpool`.
+6. Tests: `tests/integration/conftest.py` mit einem session-weiten Embedding-Service (Modell nur einmal laden) und einem `parse_sse()`-Helfer.
+
+*Paket D — Clean Code*:
+1. Falsche Docstrings, Kommentare, Hilfetexte (Liste oben) — zusammen mit 7.3.
+2. Nutzer sichtbare `detail`-Meldungen der API einheitlich deutsch (heute gemischt), Logs bleiben englisch.
+3. Ein Begriff, eine Stelle: `access.Role` statt mehrfach `Literal[...]`/`str`; `player_source_ids()` statt Inline-Kopie in `/sidebar-state`; `/sidebar-state` nutzt `health()`; `_raise_for_status` (zeigt `detail` des Backends) für alle Seiten statt nur Sources; Variantennamen URL-kodieren; Lösch-Aufrufe prüfen den Status.
+4. Benannte Konstanten: 3,5 Zeichen/Token (2×), Chroma-Batch 5000 (2×), `max_length=512` (2×), Health-Intervall, Vorschau-Längen. Eval-Defaults 15/8/3 hart kodiert an 4 Stellen → `None` = Config-Wert (**Entscheidung**: ändert Verhalten, wenn `settings.yaml` abweicht).
+5. Kein Griff in private Attribute anderer Module: `VectorStoreService.get_all()`, `ConfigManager.prompts_path`, `_source_base` als Modulfunktion.
+6. `Literal` statt Handprüfung für `provider`/`eval_type` — **Entscheidung** (Statuscode 400 → 422).
+
+**Offene Entscheidungen**: A2 (reparieren oder entfernen), B3 (`document_paths`-Shim), B6 (zwei Endpoints), C3 (Gemini-Key leer), D4 (Eval-Defaults), D6 (400 → 422).
+
+**Aufwand**: Paket A gering-mittel, B gering, C mittel, D gering. Last 🟢 (nur Code + Tests).
+
 ## 8.0 Was passiert wenn man an den Server mehrere Anfragen gleichzeitig bzw. nahe zu glecihzeitig schickt?
 - Relevant wenn ich einen Abend mache und sowohl ich als auch meine spieler Lorekeeper nutzen wollen.
 
-
+## 9.0 Testabdeckung prüfen
 ---
 
 ## Priorisierungsvorschlag
@@ -534,10 +596,11 @@ Erledigt: 7.2 Code-Review + Nachbesserung, 3.10 Regelwerk-Slot, 5.4 Reranker auf
 | 1 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf; dann Re-Index, Eval, Spieler-Messung — dabei 3.8/3.9 im Browser durchklicken     |
 | 2 | Offene Prüfungen im laufenden Betrieb | Mittel — bestätigt, dass die Neuerungen im echten Chat wirken | Gering | 🟡 | Mit gestartetem LoreKeeper: 3.6 Folgefragen („fass das kürzer zusammen“), 👍/👎 + Tabs „Feedback“/„Chunks“, Rerank-Timings in der Chat-Caption (5.4), Regelwerk-Slot an x002/x005 im Chat (3.10), `pytest -m live` (Spieler-Modus, schickt nur noch `role`) |
 | 3 | 7.3 Inline-Doku (Docstrings) | Mittel — Code verständlich ohne Kontext, Regeln aus CLAUDE.md umgesetzt | Gering-Mittel | 🟢 | 27 Module ohne Modul-Docstring, Config-Felder ohne Kommentar; reine Doku |
-| 4 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Mit der Chunk-Prüfung aus 5.2 messbar; Golden Set ~1 min |
-| 5 | 5.5 Vektorsuche reproduzierbar machen | Gering-Mittel — stabile Ergebnisse nach Neustart, verlässliche Eval-Vergleiche | Gering-Mittel | 🟡 | ±2 Abschnitte Schwankung zwischen Prozessen; `ef_search` erhöhen oder exakt suchen |
-| 6 | 3.2 Session-History — ⏸ zurückgestellt | Unklar | Mittel | 🟢 | Erst entscheiden, ob gespeicherte Sessions bei einem Wissenstool Nutzen haben |
-| 7 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | 🔴 | Vision-Modell lokal über Ollama; Bild-Ausschluss im Retriever aufheben                                                      |
-| 8 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | 🟢 | Später; Spieler-Modus im Backend ist erledigt |
-| 9 | 3.5 Wikilink-Expansion | Mittel | Mittel | 🔴 | Experimentell; im Spieler-Modus darf sie keine SL-Quellen nachladen                                                         |
-| 10 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | 🟡 | Später                                                                                                                      |
+| 4 | 7.4 Pakete B–D — toter Code, Vereinfachung, Clean Code | Mittel — ~400 Zeilen weniger, weniger Sync-Gefahren | Mittel | 🟢 | Offene Entscheidungen zuerst klären; Paket D1 zusammen mit 7.3 |
+| 5 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Mit der Chunk-Prüfung aus 5.2 messbar; Golden Set ~1 min |
+| 6 | 5.5 Vektorsuche reproduzierbar machen | Gering-Mittel — stabile Ergebnisse nach Neustart, verlässliche Eval-Vergleiche | Gering-Mittel | 🟡 | ±2 Abschnitte Schwankung zwischen Prozessen; `ef_search` erhöhen oder exakt suchen |
+| 7 | 3.2 Session-History — ⏸ zurückgestellt | Unklar | Mittel | 🟢 | Erst entscheiden, ob gespeicherte Sessions bei einem Wissenstool Nutzen haben |
+| 8 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | 🔴 | Vision-Modell lokal über Ollama; Bild-Ausschluss im Retriever aufheben                                                      |
+| 9 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | 🟢 | Später; Spieler-Modus im Backend ist erledigt |
+| 10 | 3.5 Wikilink-Expansion | Mittel | Mittel | 🔴 | Experimentell; im Spieler-Modus darf sie keine SL-Quellen nachladen                                                         |
+| 11 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | 🟡 | Später                                                                                                                      |

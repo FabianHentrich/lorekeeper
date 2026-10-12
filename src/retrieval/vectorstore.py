@@ -3,6 +3,7 @@ import logging
 from typing import Any
 
 import chromadb
+from chromadb.errors import NotFoundError
 
 from src.config.manager import VectorStoreConfig
 from src.ingestion.chunking import Chunk
@@ -199,12 +200,12 @@ class VectorStoreService:
         return items
 
     def get_content_hashes_for_source(self, source_id: str) -> dict[str, str]:
-        """Return ``{source_file: content_hash}`` for one source, used by ingestion to skip unchanged files."""
-        collection = self._get_collection()
-        try:
-            data = collection.get(where={"source_id": source_id}, include=["metadatas"])
-        except Exception:
-            return {}
+        """Return ``{source_file: content_hash}`` for one source, used by ingestion to skip unchanged files.
+
+        A database error is raised, not turned into ``{}``: an empty result would make the ingestion treat
+        every file as new — old chunks of changed files and orphaned chunks would silently stay.
+        """
+        data = self._get_collection().get(where={"source_id": source_id}, include=["metadatas"])
 
         hashes: dict[str, str] = {}
         if data and data["metadatas"]:
@@ -216,10 +217,9 @@ class VectorStoreService:
         return hashes
 
     def list_files(self, source_id: str) -> list[str]:
-        """Sorted indexed files of one source. Unlike ``get_content_hashes_for_source`` a database
-        error is raised, not turned into an empty list."""
-        data = self._get_collection().get(where={"source_id": source_id}, include=["metadatas"])
-        return sorted({m.get("source_file", "") for m in (data.get("metadatas") or []) if m.get("source_file")})
+        """Sorted indexed files of one source (chunk inspector). Every ingested chunk carries a
+        ``content_hash``, so the hash lookup lists them all; database errors are raised."""
+        return sorted(self.get_content_hashes_for_source(source_id))
 
     def get_chunks_for_file(self, source_id: str, source_file: str) -> list[dict[str, Any]]:
         """Return every chunk of one file as ``{id, content, metadata}`` (used for section expansion)."""
@@ -275,8 +275,8 @@ class VectorStoreService:
         client = self._get_client()
         try:
             client.delete_collection(name=self.config.collection_name)
-        except Exception:
-            pass
+        except NotFoundError:
+            pass  # nothing to wipe — any other error must reach the caller, not end in "Wiped"
         self._collection = None
         logger.warning(f"Wiped collection: {self.config.collection_name}")
 

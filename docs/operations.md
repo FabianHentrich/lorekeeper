@@ -163,7 +163,8 @@ ollama ps               # geladenes Modell, Kontextlänge, GPU-Anteil
 
 Entsteht, wenn Backend und Ingestion-CLI gleichzeitig laufen (embedded): Backend stoppen,
 `python -m src.ingestion.orchestrator`, Backend wieder starten — oder gleich über die UI
-indizieren.
+indizieren. Scheitert der Abgleich der Datei-Hashes an der Datenbank, endet der Indizier-Job mit
+Fehler, statt still alle Dateien für neu zu halten und alte Chunks liegen zu lassen.
 
 ### Gemini 429 (Rate-Limit)
 

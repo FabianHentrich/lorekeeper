@@ -2,7 +2,11 @@
 LoreKeeper Retrieval Evaluation
 
 Evaluates retrieval quality directly against ChromaDB — no LLM call needed.
-Measures Hit Rate@K per source_type and category.
+Measures the file hit rate (per source_type) and the section hit rate.
+
+Also home of the helpers both eval paths share (CLI, end-to-end script, /eval API):
+``load_qa_pairs``, ``source_hit`` and ``save_report`` — one hit rule and one report naming,
+so the two paths can't drift apart again.
 
 Usage:
     python -m evaluation.evaluate_retrieval
@@ -40,10 +44,40 @@ def section_hit(expected_section: str, headings: list[str]) -> bool:
     return False
 
 
-def load_qa_pairs(path: str) -> list[dict]:
-    """Parse the configured YAML file returning a list of dicts with questions and expected formats."""
-    data = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+def load_qa_pairs(path: str | Path) -> list[dict]:
+    """The golden-set pairs from a qa_pairs.yaml; a missing or empty file gives ``[]``."""
+    path = Path(path)
+    if not path.exists():
+        return []
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     return data.get("pairs", [])
+
+
+def source_hit(expected_sources: list[str], retrieved_files: list[str],
+               retrieved_source_ids: list[str] | None = None,
+               expected_source_ids: list[str] | None = None) -> bool:
+    """True if any expected file name appears among the retrieved files.
+
+    Matching uses the bare file name, so path prefixes and separators don't matter
+    (``Orte/Arkenfeld.md`` matches ``Orte\\Arkenfeld.md``). With ``expected_source_ids`` the file
+    must also come from one of those sources — equally named files in different sources (e.g.
+    two simulation ``llm_report.md``) only count from the right one. Callers without source ids
+    (the end-to-end path: ``/query`` doesn't return them) pass ``None``.
+    """
+    ids = retrieved_source_ids or [""] * len(retrieved_files)
+    allowed = [f.replace("\\", "/") for f, sid in zip(retrieved_files, ids, strict=True)
+               if not expected_source_ids or sid in expected_source_ids]
+    return any(exp.split("/")[-1] in f for exp in expected_sources for f in allowed)
+
+
+def save_report(report: dict, output_dir: str | Path, eval_type: str) -> Path:
+    """Write a report as ``<eval_type>_<timestamp>.json`` — ``retrieval`` or ``e2e``; the /eval API
+    lists and cleans up results by exactly these prefixes."""
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / f"{eval_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    return path
 
 
 async def run_evaluation_with_retriever(
@@ -101,14 +135,7 @@ async def run_evaluation_with_retriever(
         retrieved_headings = [c.heading for c in chunks]
         retrieved_source_ids = [c.metadata.get("source_id", "") for c in chunks]
 
-        # Hit: any expected source filename appears in retrieved source_files.
-        # expected_source_ids additionally pins the source — for equally named files
-        # in different sources (e.g. two simulation llm_report.md).
-        hit = any(
-            any(exp.split("/")[-1] in rf for rf, sid in zip(retrieved_files, retrieved_source_ids, strict=True)
-                if not expected_source_ids or sid in expected_source_ids)
-            for exp in expected_sources
-        )
+        hit = source_hit(expected_sources, retrieved_files, retrieved_source_ids, expected_source_ids)
         if hit:
             hits += 1
 
@@ -251,10 +278,7 @@ def main():
 
     report = run_evaluation(qa_pairs, top_k, top_k_rerank, hybrid=args.hybrid)
 
-    output_dir = Path(args.output)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    report_path = output_dir / f"retrieval_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-    report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    report_path = save_report(report, args.output, "retrieval")
 
     print(f"\n{'='*45}")
     hits = sum(r['hit'] for r in report['details'])

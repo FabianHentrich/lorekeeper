@@ -164,3 +164,21 @@ class TestEstimateTokens:
     def test_empty(self):
         """Verify empty strings safely evaluate to 1 estimated token minimally."""
         assert _estimate_tokens("") >= 1
+
+
+class TestOverlapGuard:
+    """overlap >= size is rejected by the config; the split loops must still never stand still."""
+
+    def test_config_rejects_overlap_not_below_size(self):
+        with pytest.raises(ValueError, match="chunk_overlap"):
+            ChunkingConfig(max_chunk_size=50, chunk_overlap=50)
+
+    @pytest.mark.parametrize("strategy", ["fixed_size", "recursive"])
+    def test_split_terminates_even_with_an_invalid_config(self, strategy):
+        # model_construct skips validation — e.g. an old settings.local.yaml from before the check
+        config = ChunkingConfig.model_construct(strategy=strategy, max_chunk_size=5, chunk_overlap=7,
+                                                min_chunk_size=1)
+        text = " ".join(f"wort{i}" for i in range(40))
+        chunks = chunk_documents([_make_doc(text)], config)
+        assert chunks   # returned at all — before the fix this looped forever
+

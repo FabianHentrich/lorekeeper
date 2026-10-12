@@ -74,18 +74,31 @@ def _hybrid_label(value) -> str:
     return "default"
 
 
+_POLL_MAX_FAILURES = 45  # ~45 s of unreachable backend before giving up (like the Sources page)
+
+
 def _poll_eval_job(job_id: str, label: str = "Evaluation"):
     """
     Poll an active background evaluation job.
     Monitors progress percentage out of the total question pool and blocks
-    the UI until the final results artifact is ready.
+    the UI until the final results artifact is ready. Gives up after
+    ``_POLL_MAX_FAILURES`` failed status requests in a row instead of spinning forever.
     """
     with st.status(f"{label} läuft...", expanded=True) as status:
         progress_line = st.empty()
+        failures = 0
         while True:
             try:
                 info = requests.get(f"{API_URL}/eval/status/{job_id}", timeout=5).json()
-            except Exception:
+                failures = 0
+            except Exception as e:
+                failures += 1
+                if failures >= _POLL_MAX_FAILURES:
+                    progress_line.empty()
+                    status.update(label=f"{label}: Backend nicht erreichbar", state="error", expanded=True)
+                    st.error(f"Status konnte nicht abgefragt werden ({e}). Läuft das Backend noch, "
+                             "erscheint das Ergebnis später unter „Ergebnisse“.")
+                    return None
                 time.sleep(1)
                 continue
 
@@ -324,6 +337,8 @@ with tab_test:
         t_top_k, t_top_k_rerank, t_max_per_source = _render_tuning_sliders("test")
         t_hybrid = _render_hybrid_selector("test")
 
+    # The preview lives in session_state: the "➕ Hinzufügen" click below reruns the page, and a
+    # result shown only inside `if st.button("🔍 Testen")` would be gone by then (the add never ran).
     if st.button("🔍 Testen", key="test_run", disabled=not test_question.strip()):
         try:
             resp = requests.post(
@@ -338,73 +353,73 @@ with tab_test:
                 timeout=30,
             )
             resp.raise_for_status()
-            result = resp.json()
-            chunks = result.get("chunks", [])
-            latency = result.get("latency_ms", 0)
+            st.session_state["_preview"] = {
+                "question": test_question.strip(),
+                "result": resp.json(),
+                "run": st.session_state.get("_preview", {}).get("run", 0) + 1,  # fresh form per test
+            }
+        except Exception as e:
+            st.session_state.pop("_preview", None)
+            st.error(f"Fehler: {e}")
 
-            st.caption(f"{len(chunks)} Chunks in {latency:.0f} ms")
+    if preview := st.session_state.get("_preview"):
+        chunks = preview["result"].get("chunks", [])
+        latency = preview["result"].get("latency_ms", 0)
+        st.caption(f"„{preview['question']}“ — {len(chunks)} Chunks in {latency:.0f} ms")
 
-            if chunks:
-                chunk_rows = []
-                for c in chunks:
-                    chunk_rows.append({
-                        "Score": round(c["score"], 4),
-                        "Source": c["source_file"],
-                        "Heading": c.get("heading") or "",
-                        "Preview": c["content_preview"][:100],
-                    })
-                st.dataframe(pd.DataFrame(chunk_rows), hide_index=True, width="stretch")
+        if chunks:
+            st.dataframe(pd.DataFrame([{
+                "Score": round(c["score"], 4),
+                "Source": c["source_file"],
+                "Heading": c.get("heading") or "",
+                "Preview": c["content_preview"][:100],
+            } for c in chunks]), hide_index=True, width="stretch")
 
-                # Convenience: add to Golden Set
-                st.divider()
-                st.markdown("**Zum Golden Set hinzufügen:**")
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    add_id = st.text_input("ID", key="test_add_id", placeholder="m099")
-                with c2:
-                    add_type = st.selectbox("Source Type", ["markdown", "pdf", "image", "simulation"],
-                                            key="test_add_type")
-                with c3:
-                    add_cat = st.text_input("Kategorie", key="test_add_cat")
+            # Convenience: add the tested question to the Golden Set
+            st.divider()
+            st.markdown("**Zum Golden Set hinzufügen:**")
+            run = preview["run"]
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                add_id = st.text_input("ID", key=f"test_add_id_{run}", placeholder="m099")
+            with c2:
+                add_type = st.selectbox("Source Type", ["markdown", "pdf", "image", "simulation"],
+                                        key=f"test_add_type_{run}")
+            with c3:
+                add_cat = st.text_input("Kategorie", key=f"test_add_cat_{run}")
 
-                add_sources = st.text_input(
-                    "Expected Sources (komma-getrennt)", key="test_add_sources",
-                    value=", ".join(c["source_file"] for c in chunks[:3]),
-                )
+            add_sources = st.text_input(
+                "Expected Sources (komma-getrennt)", key=f"test_add_sources_{run}",
+                value=", ".join(dict.fromkeys(c["source_file"] for c in chunks[:3])),
+            )
 
-                if st.button("➕ Hinzufügen", key="test_add_btn"):
-                    if not add_id.strip():
-                        st.error("ID ist Pflichtfeld.")
-                    else:
-                        try:
-                            existing = requests.get(f"{API_URL}/eval/qa-pairs", timeout=5).json()
-                            existing_pairs = existing.get("pairs", [])
+            if st.button("➕ Hinzufügen", key=f"test_add_btn_{run}"):
+                if not add_id.strip():
+                    st.error("ID ist Pflichtfeld.")
+                else:
+                    try:
+                        existing_pairs = requests.get(f"{API_URL}/eval/qa-pairs", timeout=5).json().get("pairs", [])
+                        if any(p.get("id") == add_id.strip() for p in existing_pairs):
+                            st.error(f"ID '{add_id.strip()}' gibt es im Golden Set schon.")
+                        else:
                             existing_pairs.append({
                                 "id": add_id.strip(),
-                                "question": test_question.strip(),
+                                "question": preview["question"],
                                 "source_type": add_type,
                                 "category": (add_cat or "").strip(),
-                                "expected_sources": [
-                                    s.strip() for s in add_sources.split(",") if s.strip()
-                                ],
+                                "expected_sources": [s.strip() for s in add_sources.split(",") if s.strip()],
                                 "expected_answer_contains": [],
                                 "notes": "",
                             })
-                            resp = requests.put(
-                                f"{API_URL}/eval/qa-pairs",
-                                json={"pairs": existing_pairs},
-                                timeout=10,
-                            )
+                            resp = requests.put(f"{API_URL}/eval/qa-pairs",
+                                                json={"pairs": existing_pairs}, timeout=10)
                             resp.raise_for_status()
                             _fetch_qa_pairs.clear()
-                            st.success(f"'{add_id}' zum Golden Set hinzugefügt.")
-                        except Exception as e:
-                            st.error(f"Fehler: {e}")
-            else:
-                st.info("Keine Chunks gefunden.")
-
-        except Exception as e:
-            st.error(f"Fehler: {e}")
+                            st.success(f"'{add_id.strip()}' zum Golden Set hinzugefügt.")
+                    except Exception as e:
+                        st.error(f"Fehler: {e}")
+        else:
+            st.info("Keine Chunks gefunden.")
 
 
 # ═══ Tab 3: Retrieval Evaluation ═════════════════════════════════════
