@@ -49,6 +49,7 @@ class Message:
 class Session:
     """Represents an active or cached chat session with history and token usage tracking."""
     session_id: str
+    access_role: str = "game_master"  # sessions never cross roles — no game-master history in player context
     messages: list[Message] = field(default_factory=list)
     last_active: datetime = field(default_factory=lambda: datetime.now(UTC))
     usage_totals: dict = field(default_factory=lambda: {
@@ -73,19 +74,21 @@ class ConversationManager:
         self.config = config
         self._sessions: dict[str, Session] = {}
 
-    def get_or_create_session(self, session_id: str | None = None) -> Session:
+    def get_or_create_session(self, session_id: str | None = None, access_role: str = "game_master") -> Session:
         """Find an existing session by ID or create a new one.
 
         If a session ID is not provided, a new random UUID is generated.
         When an existing session is fetched, its last active timestamp is reset to now.
+        A session of another role is never reused: the request gets a fresh session with a
+        new id, so e.g. a player can't condense follow-ups against a game-master history.
         """
-        if session_id and session_id in self._sessions:
-            session = self._sessions[session_id]
-            session.last_active = datetime.now(UTC)
-            return session
+        existing = self._sessions.get(session_id) if session_id else None
+        if existing and existing.access_role == access_role:
+            existing.last_active = datetime.now(UTC)
+            return existing
 
-        new_id = session_id or str(uuid.uuid4())
-        session = Session(session_id=new_id)
+        new_id = session_id if session_id and not existing else str(uuid.uuid4())
+        session = Session(session_id=new_id, access_role=access_role)
         self._sessions[new_id] = session
         return session
 
