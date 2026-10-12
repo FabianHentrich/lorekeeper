@@ -6,6 +6,9 @@
     "p95_ms": 1156,
     "section_hit_rate": 0.891
   },
+  "startup_s": {
+    "until_health": 17.683
+  },
   "ui_render_s": {
     "chat_first": 0.528,
     "chat_rerun": 0.041,

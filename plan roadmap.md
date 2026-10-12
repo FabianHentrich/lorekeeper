@@ -216,7 +216,7 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 
 **Lösung**: Nach dem Rerank mindestens einen Platz für die Gruppe `rules` reservieren, wenn ein Regel-Chunk unter den Kandidaten ist und einen Mindest-Rerank-Score erreicht (analog zum bestehenden Backfill im Soft-Cap). Optional nur auslösen, wenn die Frage einen Begriff enthält, der als Abschnittsüberschrift im Regelwerk existiert (Eigenheit, Zauber, Artefakt). Danach Golden Set mit Abschnittsprüfung laufen lassen; Ziel: x002–x008 treffen, ohne die übrigen Abschnitt-Treffer zu verschlechtern (Stand 12.10. mit Simulationsquellen: 121/137). Der Slot gilt nur für `rules`, nicht für `simulation` — sonst verdrängen die Simulationstabellen das Regelbuch noch stärker.
 
-**Aufwand**: Mittel. CPU-lastig (mehrere Golden-Set-Läufe à ~12 min) — profitiert stark von 5.3 GPU.
+**Aufwand**: Mittel. Mehrere Golden-Set-Läufe — seit dem GPU-Reranker (5.4) je ~1 min statt ~12 min.
 
 **Restliche Abschnitt-Misses (separat ansehen)**: Wortähnlichkeit zieht falsche Dateien („Armbrust“ → Bargrun der Armdrücker, „Verbände“ → Balancing-Notiz) und Nachbarabschnitte gewinnen (Erlernen → 5.3 statt 5.1, Vorteil/Nachteil → 1.1 statt 1.4).
 
@@ -274,7 +274,7 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 3. ✅ `scripts\setup-lan.ps1` als Administrator ausgeführt; Server-Modus läuft (`0.0.0.0:8501`, Backend `127.0.0.1:8000`).
 4. Autostart-Aufgabe der ersten Skript-Version entfernen (braucht Admin): `Unregister-ScheduledTask -TaskName "LoreKeeper Server" -Confirm:$false`
 5. DHCP-Reservierung im Router (offen); ✅ Zugriff vom Handy im Heimnetz funktioniert.
-6. Danach: Startup-Messung (5.2) — Test steht (`tests/perf/test_startup.py`), Baseline offen.
+6. ✅ Startup-Messung (5.2): Baseline 17,7 s aufgenommen (12.10.).
 
 **Befund**: Es existieren Inbound-Allow-Regeln für `python.exe` im Profil „Öffentlich“ (alle Ports) — für andere Python-Installationen (alte LoreKeeper-Kopie unter OneDrive, PortraitForge, globales Python 3.12), nicht für LoreKeeper. Nicht angefasst; ggf. selbst aufräumen.
 
@@ -300,8 +300,8 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 | Antwortzeit | ✅ große Hebel erledigt (5.1, 5.3) | Erster Token 8,7 s → **1,1 s**, gesamt 13,9 s → **3,7 s** (Überschaden, warm); kein abgeschnittener Prompt mehr; kein 16-s-Kaltstart innerhalb 1 h |
 | Retrieval | ✅ erledigt (5.4) | Rerank auf der GPU via DirectML (5.4): 840 ms → 50 ms, unter CPU-Last 14 s → 70 ms |
 | UI-Reaktion | ✅ erledigt (5.2, 5.3) | `localhost`-Delay von ~2 s pro Backend-Request beseitigt; Chat 1 Request pro Nachricht, Sources-Rerun 0 Requests, Ingest-Fortschritt blockiert nicht mehr (3.9) |
-| Start | ⚠️ Test da | ~12 s (Embedding-Modell ~7 s, Reranker ~4 s); nur einfache Hebel geplant; `tests/perf/test_startup.py` steht, Baseline offen |
-| Regressionsschutz | ✅ erledigt (5.2) | Deterministische Budgets im normalen `pytest`, Zeit-Checks per `pytest -m perf` gegen `tests/perf/baseline.json`; Startup-Test da, Baseline offen |
+| Start | ✅ Baseline (5.2) | **17,7 s** bis `/health`: ~9,6 s Python-Imports (davon `sentence-transformers`/torch ~8 s), ~6,7 s Lifespan (vorher 12,2 s — Reranker auf der GPU lädt in 1,6 s statt 4,3 s), Rest uvicorn |
+| Regressionsschutz | ✅ erledigt (5.2) | Deterministische Budgets im normalen `pytest`, Zeit-Checks per `pytest -m perf` gegen `tests/perf/baseline.json`, inkl. Startup |
 
 ### 5.1 Messen: Stage-Timings — ✅ Erledigt
 
@@ -313,7 +313,7 @@ Pro Anfrage loggen und im `done`-Event mitliefern: Condense, Retrieval (Embeddin
 
 **Erste Messung (qwen3:14b, warm, GPU)**: Retrieval 0,6–0,8 s (davon Rerank ~0,5–0,75 s), erster Token nach 8,7–9,9 s, gesamt 14–20 s. → Der große Block vor dem ersten Token ist **nicht** Retrieval, sondern verstecktes Denken (siehe 5.3).
 
-### 5.2 Performance-Tests (Regressionsschutz) — ✅ Erledigt (Startup-Baseline offen)
+### 5.2 Performance-Tests (Regressionsschutz) — ✅ Erledigt
 
 Zwei Arten von Prüfungen — **deterministische** schlagen zuverlässig an und laufen im normalen `pytest`, **zeitbasierte** sind hardwareabhängig und laufen separat:
 
@@ -333,7 +333,7 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 **Umgesetzt** (Details in `CONTRIBUTING.md` → „Performance checks“):
 - Deterministisch, im normalen `pytest`: Backend-Requests pro Seiten-Render/Rerun/Chat-Nachricht (`tests/ui/test_backend_calls.py`, `AppTest` + Fake-Backend, Budgets in `BUDGETS`); LLM-Aufrufe pro Anfrage (`test_llm_calls_per_request`); keine `localhost`-URLs für lokale Dienste.
 - Zeitbasiert, `pytest -m perf` gegen `tests/perf/baseline.json` (×1,5 + Slack; `PERF_UPDATE_BASELINE=1` übernimmt neue Werte): Render-Zeit je Seite; Golden Set über das laufende Backend — p50/p95 Retrieval-Latenz, Ø/max Chunks pro Frage, Abschnitt-Trefferquote darf nicht sinken.
-- **Startup-Messung** (`tests/perf/test_startup.py`, 12.10.): startet ein zweites Backend auf freiem Port gegen echte Config und `chroma_data/`, misst bis zur ersten `/health`-Antwort (die Lifespan lädt Ollama-Autostart, Embedding-Warm-up, ChromaDB, Reranker vorher). Wird übersprungen, solange LoreKeeper läuft (eingebettete ChromaDB nicht doppelt öffnenbar). **Offen**: Baseline aufnehmen — bei gestopptem LoreKeeper und ohne laufende Simulation: `pytest -m perf tests/perf/test_startup.py`.
+- **Startup-Messung** (`tests/perf/test_startup.py`, 12.10.): startet ein zweites Backend auf freiem Port gegen echte Config und `chroma_data/`, misst bis zur ersten `/health`-Antwort (die Lifespan lädt Ollama-Autostart, Embedding-Warm-up, ChromaDB, Reranker vorher). Wird übersprungen, solange LoreKeeper läuft (eingebettete ChromaDB nicht doppelt öffnenbar). ✅ **Baseline (12.10.)**: 17,7 s (zweiter Lauf 18,4 s Testdauer, bestanden; Grenze ×1,5 + 3 s). Aufgenommen bei gestopptem LoreKeeper, ohne Simulation, GPU-Reranker aktiv.
 
 **Befunde aus der ersten Messung**:
 - **`localhost` kostet 2 s pro Verbindung (behoben)**: Unter Windows löst `localhost` zuerst auf IPv6 `::1` auf, uvicorn und Ollama lauschen nur auf IPv4 → jede neue Verbindung wartet ~2 s auf den Fallback (gemessen 2000 ms vs. 3 ms). Betraf jede Chat-Nachricht (~4 s: `/config` + `/query/stream`), jeden Sources-Seiten-Aufbau (~10 s) und neue Verbindungen zu Ollama nach einer Pause. Alle Standard-URLs (UI, Config, Eval) stehen jetzt auf `127.0.0.1`; ein Test verhindert die Rückkehr. **Achtung**: Eine offene Browser-Session mit `localhost` im Sidebar-Feld „API URL“ behält den Delay bis zum Neuladen.
@@ -349,7 +349,7 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 - **Retrieval — Reranker/Embeddings auf der CPU (gemessen, offen)** → Entscheidungsvorlage unten (5.4).
 - **Kontext — Gesamtbudget für Section Expansion (offen)**: Mehrere expandierte Sektionen können zusammen noch bis zu 49 Chunks ergeben (z.B. „Wie wird die Bonusaktion im Kampf eingesetzt?“). Ein Budget über alle Sektionen (z.B. max. 20 Chunks) begrenzt das; messbar mit der Chunk-Prüfung aus 5.2.
 - **UI-Reaktion (gemessen, Hauptursache behoben)**: Die 2-s-`localhost`-Verzögerung pro Request ist behoben (5.2). ✅ Reste erledigt: Der Chat holt das LLM-Timeout aus dem gecachten `/sidebar-state` statt `/config` vor jeder Nachricht (1 Request pro Nachricht statt 2); Sources-Seite cacht `/folders`; Polling blockiert nicht mehr (3.8/3.9). Kosten eines Reruns mit langer Chat-Historie und vielen Quellen-Expandern noch nicht gemessen.
-- **Start (offen)**: nur einfache Hebel — `--reload` im Server-Modus aus (4.1); Reranker wird in `src/main.py` beim Start vorgeladen (~4 s) — lazy laden verschiebt die Zeit nur auf die erste Frage, lohnt also nur mit GPU-Inferenz (dann deutlich schneller geladen).
+- **Start (kein Handlungsbedarf)**: `--reload` im Server-Modus aus (4.1); Reranker lädt seit 5.4 auf der GPU in 1,6 s — lazy laden lohnt nicht mehr. Größter Block sind jetzt die Python-Imports (~9,6 s, `sentence-transformers`/torch); die ließen sich nur durch einen Verzicht auf torch fürs Embedding-Modell senken (Re-Index-Risiko, siehe 5.4) — für einen manuell gestarteten Dienst nicht lohnend.
 - **Generierung**: Lange Antworten (Krieger: 655 Tokens ≈ 12 s) sind durch die Modellgeschwindigkeit (~50 Token/s) begrenzt — kein Performance-Bug; Stellschraube wäre ein Prompt, der kürzere Antworten verlangt (Produktentscheidung).
 
 **Aufwand**: je Hebel Gering bis Mittel.
@@ -443,20 +443,19 @@ int8 verworfen (kaum schneller, anderes Ranking). Modell-Laden DirectML 1,3 s id
 
 ## Priorisierungsvorschlag
 
-Erledigt: 5.4 Reranker auf der GPU (DirectML), 3.3 Chunk-Inspector, 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
+Erledigt: 5.4 Reranker auf der GPU (DirectML), 5.2 Startup-Baseline, 3.3 Chunk-Inspector, 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
 
 **Offen am Gaming-PC (Nutzer)**: alte Autostart-Aufgabe „LoreKeeper Server“ als Admin entfernen (`Unregister-ScheduledTask -TaskName "LoreKeeper Server" -Confirm:$false`); DHCP-Reservierung für `192.168.178.34` im Router.
 
-**Last** = Rechenlast beim Umsetzen/Messen: 🟢 nur Code + Unit-/UI-Tests (geht parallel zur Simulation) · 🟡 braucht laufendes Backend oder LLM · 🔴 Golden-Set-Läufe/Indizierung (CPU, ~10+ min, nicht parallel zur Simulation).
+**Last** = Rechenlast beim Umsetzen/Messen: 🟢 nur Code + Unit-/UI-Tests (geht parallel zur Simulation) · 🟡 braucht laufendes Backend oder LLM · 🔴 Indizierung oder Vision-Modell (CPU/GPU, mehrere Minuten, nicht parallel zur Simulation). Golden-Set-Läufe sind seit dem GPU-Reranker (5.4) ~1 min und belasten die CPU nur noch mit dem Query-Embedding → 🟡.
 
 | Reihenfolge | Punkt | Impact | Aufwand | Last | Begründung                                                                                                                  |
 |---|---|---|---|---|-----------------------------------------------------------------------------------------------------------------------------|
 | 1 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf; dann Re-Index, Eval, Spieler-Messung — dabei 3.8/3.9 im Browser durchklicken     |
-| 2 | 5.2 Startup-Baseline aufnehmen | Gering — Regressionsschutz für den Start | Gering | 🟡 | Test steht; einmal messen bei gestopptem LoreKeeper und ohne Simulation                                                     |
-| 3 | 3.10 Regelwerk-Slot im Retrieval | Mittel — SL-Fragen, die Vault und Regel mischen | Mittel | 🔴 | Mit Abschnittsprüfung messbar (x002–x008)                                                                                   |
-| 4 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🔴 | Mit der Chunk-Prüfung aus 5.2 messbar                                                                                       |
-| 5 | 3.2 Session-History | Mittel | Mittel | 🟢 | Später; Spieler-/SL-Sessions getrennt halten; Fraglich ob überhaupt gebraucht                                               |
-| 6 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | 🔴 | Vision-Modell lokal über Ollama; Bild-Ausschluss im Retriever aufheben                                                      |
-| 7 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | 🟢 | Später; Spieler-Modus im Backend ist erledigt |
-| 8 | 3.5 Wikilink-Expansion | Mittel | Mittel | 🔴 | Experimentell; im Spieler-Modus darf sie keine SL-Quellen nachladen                                                         |
-| 9 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | 🟡 | Später                                                                                                                      |
+| 2 | 3.10 Regelwerk-Slot im Retrieval | Mittel — SL-Fragen, die Vault und Regel mischen | Mittel | 🟡 | Golden-Set-Läufe jetzt ~1 min (5.4); mit Abschnittsprüfung messbar (x002–x008) |
+| 3 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Mit der Chunk-Prüfung aus 5.2 messbar; Golden Set ~1 min |
+| 4 | 3.2 Session-History | Mittel | Mittel | 🟢 | Später; Spieler-/SL-Sessions getrennt halten; Fraglich ob überhaupt gebraucht                                               |
+| 5 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | 🔴 | Vision-Modell lokal über Ollama; Bild-Ausschluss im Retriever aufheben                                                      |
+| 6 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | 🟢 | Später; Spieler-Modus im Backend ist erledigt |
+| 7 | 3.5 Wikilink-Expansion | Mittel | Mittel | 🔴 | Experimentell; im Spieler-Modus darf sie keine SL-Quellen nachladen                                                         |
+| 8 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | 🟡 | Später                                                                                                                      |
