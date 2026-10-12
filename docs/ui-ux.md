@@ -315,14 +315,19 @@ The incremental button's tooltip explains when the full run (chunking changed)
 or Recategorize (`category_map` / group changed) is the right tool instead.
 Both moved here from the chat sidebar so all indexing concerns live on one page.
 
-All ingest operations (global and per-source) use **live progress polling**:
-`_poll_ingest_job()` polls `GET /ingest/status/{job_id}` every 1.5 seconds and
-displays the current state inside a `st.status` widget. The final line reads
+All ingest operations (global and per-source) show **non-blocking live progress**:
+the started job's id is kept in `st.session_state["_ingest_job"]`, and the
+fragment `_ingest_progress()` (`st.fragment(run_every=1.5)`) polls
+`GET /ingest/status/{job_id}` and shows the state in a `st.status` widget below the
+ingest buttons. The rest of the page stays rendered and usable; clicks and page
+changes don't lose the job. While a job is tracked, the ingest and Reindex buttons are
+disabled. When it ends, a full rerun shows the result once —
 "X Dokumente indiziert · Y unverändert übersprungen · Ns" plus chunks
-created / updated / deleted. Errors from the ingest job are shown as
-`st.warning` items. If the backend is unreachable for ~30 s in a row, polling
-stops with "Backend nicht erreichbar" instead of spinning forever (the job keeps
-running in the backend). A `409` (another job running) is shown as a warning.
+created / updated / deleted, errors as `st.warning` items — and refreshes the chunk
+count. If the backend is unreachable for ~45 s in a row, tracking stops with
+"Backend nicht erreichbar" (the job keeps running in the backend). A `409` (another
+job running, e.g. started from a different browser session) attaches to that job
+via `GET /ingest/active` and shows its progress.
 
 #### 2. Konfigurierte Quellen
 
@@ -343,7 +348,7 @@ Each source gets an expander (`📁 {id} — {path}`) with two sections:
 
 | Button | Backend call | Notes |
 |---|---|---|
-| 🔄 **Reindex** | `POST /sources/{id}/reindex` | Deletes + re-ingests one source. Shows live progress via `_poll_ingest_job()`. Required when content or path changed. |
+| 🔄 **Reindex** | `POST /sources/{id}/reindex` | Deletes + re-ingests one source. Shows live progress via `_ingest_progress()`. Required when content or path changed. |
 | 🏷 **Recategorize (alle)** | `POST /sources/recategorize` | Rewrites only `group` / `content_category` / `source_id` metadata of existing chunks (seconds, no embedding). Applies to **all** sources, not just the current one. |
 | 🗑 **Source entfernen** | `DELETE /sources/{id}` | Drops the source from the config **and** deletes its chunks. Gated behind a confirmation checkbox ("Wirklich löschen"). Shows deleted chunk count on success. |
 

@@ -101,11 +101,11 @@ _STREAM_EVENTS = [
 class _Response:
     """Minimal stand-in for ``requests.Response`` (JSON body or an SSE stream)."""
 
-    def __init__(self, data, stream_events=None):
+    def __init__(self, data, stream_events=None, status_code=200):
         self._data = data
         self._stream_events = stream_events or []
-        self.status_code = 200
-        self.ok = True
+        self.status_code = status_code
+        self.ok = status_code < 400
         self.text = json.dumps(data)
 
     def json(self):
@@ -127,6 +127,7 @@ class FakeBackend:
         self.unknown: list[str] = []
         self.bodies: dict[str, list] = {}   # "METHOD /path" -> JSON bodies sent, in order
         self.fail_paths: set[str] = set()   # paths that raise ConnectionError (backend down)
+        self.errors: dict[str, tuple[int, object]] = {}  # "METHOD /path" -> (status code, JSON body)
 
     def _handler(self, method: str):
         def handle(url, *args, **kwargs):
@@ -135,6 +136,9 @@ class FakeBackend:
             self.bodies.setdefault(f"{method} {path}", []).append(kwargs.get("json"))
             if path in self.fail_paths:
                 raise requests.ConnectionError(f"fake backend down: {path}")
+            if f"{method} {path}" in self.errors:
+                code, body = self.errors[f"{method} {path}"]
+                return _Response(body, status_code=code)
             if path == "/query/stream":
                 return _Response({}, stream_events=_STREAM_EVENTS)
             if path not in PAYLOADS:

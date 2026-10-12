@@ -84,6 +84,9 @@ curl -X POST "http://localhost:8000/ingest?full=true"  # full re-ingest
 # → {"job_id": "abc123", "status": "queued"}
 # → 409 if another ingest/reindex job is still running
 
+curl http://localhost:8000/ingest/active
+# → the queued/running job (same fields as /ingest/status), or null
+
 curl http://localhost:8000/ingest/status/abc123
 # → {"status": "done", "documents_processed": 42, "documents_total": 42,
 #    "documents_skipped": 39, "chunks_created": 5, "chunks_updated": 12, "chunks_deleted": 3, ...}

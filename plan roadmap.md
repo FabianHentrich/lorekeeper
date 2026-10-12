@@ -177,7 +177,7 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 
 **Umgesetzt** (`ui/admin_gate.py`): `LOREKEEPER_ADMIN_PASSWORD` in `.env` schützt Sources, Evaluation, Prompts, Settings sowie Provider-Wechsel und Gemini-Key in der Chat-Sidebar; der Chat bleibt offen (Entscheidung: nur Admin-Seiten schützen). Login gilt pro Browser-Session. Ohne Passwort alles offen wie bisher. „API URL“-Feld entfernt, Backend-URL aus `LOREKEEPER_API_URL`. Tests: `tests/ui/test_admin_gate.py`.
 
-### 3.8 Laufenden Ingest-Job wieder aufnehmen
+### 3.8 Laufenden Ingest-Job wieder aufnehmen — ✅ Erledigt
 
 **Problem**: Startet man eine Indizierung, während schon eine läuft, antwortet das Backend mit 409 („Eine Indexierung läuft bereits") — die UI zeigt nur diese Warnung. Den Fortschritt des laufenden Jobs sieht man nicht mehr, z.B. nachdem ein Widget-Klick den Poll-Loop abgebrochen hat.
 
@@ -185,13 +185,15 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 
 **Aufwand**: Gering.
 
-### 3.9 Nicht-blockierender Ingest-Fortschritt in der UI
+### 3.9 Nicht-blockierender Ingest-Fortschritt in der UI — ✅ Erledigt
 
 **Problem**: `_poll_ingest_job` pollt synchron in einer `while`-Schleife. Solange ein Job läuft (Minuten), rendert der Rest der Sources-Seite nicht (bei Reindex pro Source fehlen alle Elemente unterhalb des Expanders), und jede Interaktion bricht die Fortschrittsanzeige ab — der Job läuft im Backend weiter.
 
 **Lösung**: `job_id` in `st.session_state` halten und den Fortschritt in einem `st.fragment(run_every=...)` aktualisieren. Kombiniert mit 3.8 überlebt die Anzeige auch Seitenwechsel.
 
-**Aufwand**: Gering-Mittel.
+**Umgesetzt (3.8 + 3.9)**: `GET /ingest/active` liefert den laufenden Job (oder `null`); die Sources-Seite hält die Job-ID in `st.session_state` und zeigt den Fortschritt in einem `st.fragment(run_every=1.5)` unter den Ingest-Buttons. Die Seite bleibt vollständig gerendert und bedienbar, Klicks und Seitenwechsel verlieren den Job nicht, Ingest-/Reindex-Buttons sind währenddessen gesperrt. Bei 409 (Job aus einer anderen Browser-Session) hängt sich die Seite über `/ingest/active` an. Tests: `tests/ui/test_sources_ingest.py`, `test_ingest_active_reports_the_running_job`. Noch nicht im laufenden Browser durchgeklickt.
+
+**Aufwand**: Gering-Mittel (umgesetzt).
 
 ### 3.10 Regelwerk-Slot im Retrieval (Vault ↔ Regelwerk)
 
@@ -330,7 +332,7 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 - **Präzision/Kontext — Section Expansion begrenzt** ✅ **Erledigt**: `section_expansion.top_rank: 3` — expandiert nur, wenn ein Treffer der Sektion unter den ersten 3 Chunks liegt. Golden Set (0 = altes Verhalten / 3 / 2 / 1): Ø Chunks 13,9 / 12,6 / 11,9 / 10,7; expandierte Fragen 144 / 119 / 102 / 75; Abschnitt-Treffer überall 89,1 %. Bei 3 fallen nur Fehl-Expansionen weg (z.B. Geisterwesen-Statblöcke bei „Eigenheiten Geist und Psyche“); 2 und 1 schneiden bereits relevante Übersichts-Chunks ab (Akademie-Geschichte, Szenenübersicht, Arkenfeld-Steckbrief). Offen: Gesamtbudget über alle expandierten Sektionen (max. 49 Chunks bleiben möglich). Unnötige Condense-Aufrufe sind bereits entfernt (`needs_condense`).
 - **Retrieval — Reranker/Embeddings auf der CPU (gemessen, offen)**: `torch 2.14.1+cpu` ist installiert, `torch.cuda.is_available()` = False. Rerank kostet 0,5–0,75 s pro Frage, Re-Indexierung des Regelwerks ~80 s. Mit CUDA-PyTorch liefen beide auf der GPU (Platz: Modell 11 GB + Reranker/Embedding ~1–2 GB von 16 GB). **Neue Abhängigkeit** (CUDA-Build von torch, ~2–3 GB Download) → vorher entscheiden; danach Timings und VRAM messen.
 - **Kontext — Gesamtbudget für Section Expansion (offen)**: Mehrere expandierte Sektionen können zusammen noch bis zu 49 Chunks ergeben (z.B. „Wie wird die Bonusaktion im Kampf eingesetzt?“). Ein Budget über alle Sektionen (z.B. max. 20 Chunks) begrenzt das; messbar mit der Chunk-Prüfung aus 5.2.
-- **UI-Reaktion (gemessen, Hauptursache behoben)**: Die 2-s-`localhost`-Verzögerung pro Request ist behoben (5.2). Rest, jetzt nur noch Millisekunden pro Request: Chat holt vor jeder Nachricht `/config` (cachen); Sources-Seite lädt `/folders` bei jedem Rerun; Sources-Seite blockiert beim Polling (3.8/3.9). Kosten eines Reruns mit langer Chat-Historie und vielen Quellen-Expandern noch nicht gemessen.
+- **UI-Reaktion (gemessen, Hauptursache behoben)**: Die 2-s-`localhost`-Verzögerung pro Request ist behoben (5.2). Rest, jetzt nur noch Millisekunden pro Request: Chat holt vor jeder Nachricht `/config` (cachen); Sources-Seite lädt `/folders` bei jedem Rerun; ~~Sources-Seite blockiert beim Polling~~ (3.8/3.9 erledigt). Kosten eines Reruns mit langer Chat-Historie und vielen Quellen-Expandern noch nicht gemessen.
 - **Start (offen)**: nur einfache Hebel — `--reload` im Server-Modus aus (4.1); Reranker wird in `src/main.py` beim Start vorgeladen (~4 s) — lazy laden verschiebt die Zeit nur auf die erste Frage, lohnt also nur mit CUDA (dann deutlich schneller geladen).
 - **Generierung**: Lange Antworten (Krieger: 655 Tokens ≈ 12 s) sind durch die Modellgeschwindigkeit (~50 Token/s) begrenzt — kein Performance-Bug; Stellschraube wäre ein Prompt, der kürzere Antworten verlangt (Produktentscheidung).
 
@@ -376,7 +378,7 @@ Erledigt: 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz
 |---|---|---|---|---|
 | 1 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | Umgesetzt; wartet auf einen sauberen Simulationslauf, dann Re-Index, Eval, Spieler-Messung |
 | 2 | 3.10 Regelwerk-Slot im Retrieval | Mittel — SL-Fragen, die Vault und Regel mischen | Mittel | Mit Abschnittsprüfung messbar (x002–x008) |
-| 3 | 3.8/3.9 Ingest-Fortschritt + 5.3 UI-Reste (`/config`, `/folders` cachen) | Gering-Mittel — Sources-Seite bleibt bedienbar | Gering-Mittel | Komfort; UI-Trägheit selbst ist behoben |
+| 3 | 5.3 UI-Reste (`/config`, `/folders` cachen) | Gering | Gering | 3.8/3.9 erledigt; Rest nur Millisekunden |
 | 4 | 5.3 Reranker/Embeddings auf GPU (CUDA-PyTorch) | Mittel — ~0,5 s pro Frage, schnellere Indexierung | Gering (Code) | Neue Abhängigkeit — erst entscheiden |
 | 5 | 5.2 Startup-Messung | Gering — Regressionsschutz für den Start | Gering | Jetzt mit dem Server-Modus (4.1) möglich |
 | 6 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | Mit der Chunk-Prüfung aus 5.2 messbar |

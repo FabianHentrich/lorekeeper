@@ -311,6 +311,12 @@ async def ingest(full: bool = False):
     return IngestJobResponse(job_id=_start_ingest_job(_run), status="queued")
 
 
+@router.get("/ingest/active", response_model=IngestStatusResponse | None)
+async def ingest_active():
+    """The queued or running ingest job, or null — lets a client attach to it after a 409."""
+    return next((j for j in _ingest_jobs.values() if j.status in ("queued", "running")), None)
+
+
 @router.get("/ingest/status/{job_id}", response_model=IngestStatusResponse)
 async def ingest_status(job_id: str):
     """Get the current progress and status of an ingestion job."""

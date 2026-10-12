@@ -384,6 +384,29 @@ def test_ingest_progress_visible_while_running(client, env, monkeypatch):
     assert _wait_for_job(client, job_id)["status"] == "done"
 
 
+def test_ingest_active_reports_the_running_job(client, env, monkeypatch):
+    """/ingest/active names the job that blocks a second start (409), and null once it is done."""
+    import threading
+    release = threading.Event()
+
+    def slow_run(self, vectorstore=None, only_source_id=None, progress_callback=None, full=False):
+        release.wait(5)
+        return _fake_result()
+
+    assert client.get("/ingest/active").json() is None
+    monkeypatch.setattr(IngestionOrchestrator, "run", slow_run)
+    job_id = client.post("/ingest").json()["job_id"]
+
+    assert client.post("/ingest").status_code == 409
+    active = client.get("/ingest/active").json()
+    assert active["job_id"] == job_id
+    assert active["status"] in ("queued", "running")
+
+    release.set()
+    _wait_for_job(client, job_id)
+    assert client.get("/ingest/active").json() is None
+
+
 def test_reindex_source_deletes_then_ingests_only_that_source(client, env, monkeypatch):
     seen = {}
 

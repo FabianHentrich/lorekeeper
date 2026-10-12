@@ -889,6 +889,7 @@ in Env-Variablen übersetzt. Pydantic-Settings liest diese automatisch:
 | POST   | `/query/stream`           | Wie `/query`, aber Antwort als SSE-Stream (Token-by-Token) |
 | POST   | `/ingest`                 | Ingestion als Background-Job starten (inkrementell; `?full=true` = Voll-Reindex). 409, solange ein Job läuft |
 | GET    | `/ingest/status/{job_id}` | Status eines laufenden Ingestion-Jobs abfragen      |
+| GET    | `/ingest/active`          | Laufender/wartender Ingestion-Job oder `null` (UI hängt sich nach 409 daran) |
 | GET    | `/sources`                | Konfigurierte Sources                               |
 | PUT    | `/sources`                | Source-Liste ersetzen → `config/sources.yaml`       |
 | POST   | `/sources/scan`           | Beliebigen Pfad scannen (Ordner/Dateien für „Source hinzufügen") |
@@ -1006,8 +1007,9 @@ class IngestStatusResponse(BaseModel):
   - Hybrid-Search-Toggle (Per-Session-Override über Settings-Default)
 - **⚙ Sources** Seite (`ui/pages/1_Sources.py`):
   - Chunk-Gesamtzahl + zwei Ingest-Buttons: **⚡ Nur Änderungen indizieren** (inkrementell)
-    und **🔄 Alle Dokumente neu indizieren** (`full=true`); Fortschritt per Polling von
-    `/ingest/status`, Ergebnis „X indiziert · Y unverändert übersprungen"
+    und **🔄 Alle Dokumente neu indizieren** (`full=true`); Fortschritt nicht-blockierend
+    (`st.fragment` pollt `/ingest/status`, Job-ID im Session-State; bei 409 über
+    `/ingest/active` an den laufenden Job angehängt), Ergebnis „X indiziert · Y unverändert übersprungen"
   - Sources bearbeiten (Tabelle), hinzufügen (Pfad scannen → ID/Group/Ordner-Mapping),
     pro Source Reindex / Recategorize / Entfernen, Ordner-Zuordnung, Danger-Zone-Wipe
   - Fehlertexte des Backends (`detail`) werden angezeigt; nach 30 s ohne Backend bricht

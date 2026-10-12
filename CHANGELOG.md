@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Non-blocking ingest progress on the Sources page (roadmap 3.8/3.9): the job id lives in session state, an `st.fragment` polls `/ingest/status` while the rest of the page stays usable; ingest/Reindex buttons are disabled meanwhile. New `GET /ingest/active` — a `409` now attaches to the running job instead of only warning
 - Source group `simulation` (📊 Simulation in the game-master sidebar filter, selectable on the Sources page) for balance-simulation reports, so rules questions can exclude them
 - Golden set: questions z001–z016 for the simulation sources; evaluation supports `expected_source_ids` (equally named files in different sources) and unnumbered heading names in `expected_section`
 - Security checks for the player mode: deterministic retrieval tests with game-master bait (`tests/integration/test_player_mode_security.py`), UI/session and login tests (`tests/ui/test_player_mode_security.py`), and live checks against the running backend via `pytest -m live` (`tests/live/`); mutation-checked. `/eval/preview` accepts `metadata_filters` and returns `source_id` per chunk

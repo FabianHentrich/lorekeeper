@@ -6,7 +6,6 @@ without touching config/sources.yaml manually. Also exposes the danger-zone
 """
 
 import re
-import time
 from pathlib import Path
 from urllib.parse import quote
 
@@ -15,73 +14,10 @@ import requests
 import streamlit as st
 from admin_gate import api_url, require_admin
 
-
-def _poll_ingest_job(api_url: str, job_id: str, label: str = "Indizierung"):
-    """
-    Poll an active ingest job endpoint until terminal state is reached.
-    Renders live progress updates showing chunks processed versus total files.
-    """
-    with st.status(f"{label} läuft...", expanded=True) as status:
-        progress_line = st.empty()
-        failures = 0
-        while True:
-            try:
-                info = requests.get(f"{api_url}/ingest/status/{job_id}", timeout=5).json()
-                failures = 0
-            except Exception as e:
-                failures += 1
-                if failures >= _POLL_MAX_FAILURES:
-                    progress_line.empty()
-                    status.update(label=f"{label}: Backend nicht erreichbar", state="error", expanded=True)
-                    st.write(f"Status konnte nicht abgefragt werden: {e}")
-                    break
-                time.sleep(1)
-                continue
-
-            state = info.get("status", "unknown")
-            phase = info.get("phase", "starting")
-            docs = info.get("documents_processed", 0)
-            total = info.get("documents_total", 0)
-            skipped = info.get("documents_skipped", 0)
-            created = info.get("chunks_created", 0)
-            updated = info.get("chunks_updated", 0)
-            deleted = info.get("chunks_deleted", 0)
-            errors = info.get("errors", [])
-            duration = info.get("duration_seconds", 0)
-
-            if state in ("queued", "running"):
-                phase_labels = {
-                    "starting": "Vorbereitung …",
-                    "parsing": f"Parsing & Chunking: **{docs}** / {total} Dokumente",
-                    "embedding": f"Embedding & Speichern … (**{docs}** / {total} Dokumente)",
-                }
-                progress_line.markdown(phase_labels.get(phase, phase))
-                time.sleep(1.5)
-                continue
-
-            # Terminal state
-            progress_line.empty()
-            if state == "done":
-                status.update(label=f"{label} abgeschlossen", state="complete", expanded=True)
-                st.write(
-                    f"**{docs - skipped}** Dokumente indiziert · **{skipped}** unverändert "
-                    f"übersprungen · **{duration:.1f}s**  \n"
-                    f"Chunks: **{created}** neu · **{updated}** aktualisiert · **{deleted}** gelöscht"
-                )
-            else:
-                status.update(label=f"{label} fehlgeschlagen", state="error", expanded=True)
-                st.write(f"Status: {state}")
-
-            if errors:
-                for err in errors:
-                    st.warning(err)
-            break
-
-    _fetch_stats.clear()
-    _render_chunk_metric()
-
-
-_POLL_MAX_FAILURES = 30  # ~30 s of unreachable backend before giving up
+_POLL_MAX_FAILURES = 30  # ~45 s of unreachable backend before giving up
+_POLL_INTERVAL_S = 1.5
+_JOB_KEY = "_ingest_job"        # {id, label, failures} of the ingest job tracked by this session
+_RESULT_KEY = "_ingest_result"  # final status of the last tracked job, shown once
 _GROUPS = ["lore", "adventure", "rules", "simulation"]
 
 st.set_page_config(page_title="Sources — LoreKeeper", page_icon="⚙", layout="wide")
@@ -157,18 +93,86 @@ def _render_chunk_metric():
 
 
 def _start_ingest(endpoint: str, label: str, params: dict | None = None):
-    """Start an ingest job at `endpoint` and poll it; 409 = another job is running."""
+    """Start an ingest job at `endpoint` and track it; on 409 attach to the job already running."""
     try:
         r = requests.post(f"{API_URL}{endpoint}", params=params, timeout=10)
         if r.status_code == 409:
-            st.warning(r.json()["detail"])
-            return
-        _raise_for_status(r)
-        job_id = r.json()["job_id"]
+            active = requests.get(f"{API_URL}/ingest/active", timeout=5).json()
+            if not active:  # finished in between
+                st.warning(r.json()["detail"])
+                return
+            job_id, label = active["job_id"], "Bereits laufende Indizierung"
+        else:
+            _raise_for_status(r)
+            job_id = r.json()["job_id"]
     except Exception as e:
         st.error(f"Start fehlgeschlagen: {e}")
         return
-    _poll_ingest_job(API_URL, job_id, label=label)
+    st.session_state[_JOB_KEY] = {"id": job_id, "label": label, "failures": 0}
+    st.rerun()
+
+
+@st.fragment(run_every=_POLL_INTERVAL_S)
+def _ingest_progress():
+    """Live progress of the tracked ingest job.
+
+    Reruns on its own, so the rest of the page stays rendered and usable while the job
+    runs; the job id lives in session state and survives clicks and page changes.
+    """
+    job = st.session_state.get(_JOB_KEY)
+    if not job:
+        return
+    try:
+        info = requests.get(f"{API_URL}/ingest/status/{job['id']}", timeout=5).json()
+        job["failures"] = 0
+    except Exception as e:
+        job["failures"] += 1
+        if job["failures"] < _POLL_MAX_FAILURES:
+            st.info(f"{job['label']}: Status wird abgefragt …")
+            return
+        info = {"status": "Backend nicht erreichbar", "errors": [f"Status konnte nicht abgefragt werden: {e}"]}
+
+    if info.get("status") in ("queued", "running"):
+        docs, total = info.get("documents_processed", 0), info.get("documents_total", 0)
+        phase = info.get("phase", "starting")
+        phase_labels = {
+            "starting": "Vorbereitung …",
+            "parsing": f"Parsing & Chunking: **{docs}** / {total} Dokumente",
+            "embedding": f"Embedding & Speichern … (**{docs}** / {total} Dokumente)",
+        }
+        with st.status(f"{job['label']} läuft...", expanded=True):
+            st.markdown(phase_labels.get(phase, phase))
+        return
+
+    # Terminal: stop polling and show the result with the new chunk count on a full rerun
+    st.session_state[_RESULT_KEY] = {"label": job["label"], **info}
+    del st.session_state[_JOB_KEY]
+    _fetch_stats.clear()
+    st.rerun()
+
+
+def _render_ingest_result():
+    """Show the final status of the last tracked job once."""
+    res = st.session_state.pop(_RESULT_KEY, None)
+    if not res:
+        return
+    state = res.get("status", "unknown")
+    if state == "done":
+        docs, skipped = res.get("documents_processed", 0), res.get("documents_skipped", 0)
+        with st.status(f"{res['label']} abgeschlossen", state="complete", expanded=True):
+            st.write(
+                f"**{docs - skipped}** Dokumente indiziert · **{skipped}** unverändert "
+                f"übersprungen · **{res.get('duration_seconds', 0):.1f}s**  \n"
+                f"Chunks: **{res.get('chunks_created', 0)}** neu · **{res.get('chunks_updated', 0)}** "
+                f"aktualisiert · **{res.get('chunks_deleted', 0)}** gelöscht"
+            )
+            for err in res.get("errors", []):
+                st.warning(err)
+    else:
+        with st.status(f"{res['label']} fehlgeschlagen", state="error", expanded=True):
+            st.write(f"Status: {state}")
+            for err in res.get("errors", []):
+                st.warning(err)
 
 
 # ─── Global stats + incremental / full reindex ───────────────────────
@@ -179,13 +183,14 @@ with col_stat:
 with col_reindex:
     st.caption("Nur geänderte/neue Dateien einlesen, oder alle Sources komplett neu:")
     col_incr, col_full = st.columns(2)
+    _job_running = _JOB_KEY in st.session_state
     incr_clicked = col_incr.button(
-        "⚡ Nur Änderungen indizieren",
+        "⚡ Nur Änderungen indizieren", disabled=_job_running,
         help="Überspringt Dateien mit unverändertem Inhalt (Content-Hash). "
              "Nach geänderten Chunking-Einstellungen → 'Alle Dokumente neu "
              "indizieren'; nach geänderter category_map/group → 'Recategorize'.",
     )
-    full_clicked = col_full.button("🔄 Alle Dokumente neu indizieren")
+    full_clicked = col_full.button("🔄 Alle Dokumente neu indizieren", disabled=_job_running)
     if incr_clicked:
         _start_ingest("/ingest", "Inkrementelle Indizierung")
     elif full_clicked:
@@ -194,6 +199,10 @@ with col_reindex:
         "⏱ Dauer hängt stark von Anzahl und Größe der Dokumente ab "
         "(Richtwert: ~220 Markdown-Dateien ≈ 5 Minuten; PDFs mit OCR deutlich länger)."
     )
+
+_render_ingest_result()
+if _job_running:  # a fragment that isn't called stops its run_every timer
+    _ingest_progress()
 
 st.divider()
 
@@ -303,7 +312,7 @@ for s in sources:
         # ── Action buttons ──
         col_a, col_b, col_c = st.columns(3)
         with col_a:
-            if st.button("🔄 Reindex", key=f"reindex_{s['id']}",
+            if st.button("🔄 Reindex", key=f"reindex_{s['id']}", disabled=_job_running,
                          help="Löscht alle Chunks dieser Source und liest sie neu ein. "
                               "Pflicht, wenn sich Inhalte oder der Pfad geändert haben."):
                 _start_ingest(f"/sources/{sid_url}/reindex", f"Reindex '{s['id']}'")
