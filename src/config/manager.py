@@ -9,7 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _log = logging.getLogger(__name__)
 
 # Allowed source groups. Starr gehalten — Erweiterung erfordert Code-Änderung.
-SourceGroup = Literal["lore", "adventure", "rules"]
+SourceGroup = Literal["lore", "adventure", "rules", "simulation"]
 
 
 # Allow-list of keys that the Settings UI is permitted to edit via
@@ -73,7 +73,7 @@ class SourceConfig(BaseModel):
     @classmethod
     def _validate_category_map(cls, v: dict) -> dict:
         """Reject malformed category_map entries — each value must be a string or a dict with 'category'."""
-        valid_groups = {"lore", "adventure", "rules"}
+        valid_groups = {"lore", "adventure", "rules", "simulation"}
         for folder, entry in v.items():
             if isinstance(entry, str):
                 continue

@@ -82,6 +82,7 @@ def _poll_ingest_job(api_url: str, job_id: str, label: str = "Indizierung"):
 
 
 _POLL_MAX_FAILURES = 30  # ~30 s of unreachable backend before giving up
+_GROUPS = ["lore", "adventure", "rules", "simulation"]
 
 st.set_page_config(page_title="Sources — LoreKeeper", page_icon="⚙", layout="wide")
 
@@ -227,7 +228,7 @@ if sources:
             "path": st.column_config.TextColumn("Pfad", disabled=True),
             "type": st.column_config.TextColumn("Typ", disabled=True, width="small"),
             "group": st.column_config.SelectboxColumn(
-                "Group", options=["lore", "adventure", "rules"], required=True, width="small",
+                "Group", options=_GROUPS, required=True, width="small",
             ),
             "default_category": st.column_config.TextColumn("Default-Kategorie", width="small"),
             "category_map": st.column_config.TextColumn(
@@ -295,7 +296,6 @@ else:
 # ─── Per-source actions ────────────────────────────────────────────────
 st.subheader("Aktionen pro Quelle")
 
-_GROUPS = ["lore", "adventure", "rules"]
 
 for s in sources:
     sid_url = quote(s["id"], safe="")  # ids are free text — encode for URL paths

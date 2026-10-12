@@ -26,7 +26,7 @@ flowchart LR
         S1["🔒 Admin-Login<br/><i>nur mit LOREKEEPER_ADMIN_PASSWORD</i>"]
         S2["🔀 LLM Provider<br/>Ollama ↔ Gemini · live switch<br/><i>Active: qwen3:14b</i>"]
         S3["💚 Status<br/>🟢 healthy · ChromaDB ✅ · LLM ✅<br/><i>cached 30s</i>"]
-        S4["🎯 Quellen-Filter<br/>☑ 🗺️ Lore<br/>☑ 📖 Abenteuer<br/>☑ 📋 Regelwerk"]
+        S4["🎯 Quellen-Filter<br/>☑ 🗺️ Lore<br/>☑ 📖 Abenteuer<br/>☑ 📋 Regelwerk<br/>☑ 📊 Simulation"]
         S5["🔍 Hybrid Search<br/><i>BM25 + Vektor · Per-Session-Override</i>"]
         S6["→ 🛠 Settings<br/><i>Retrieval · LLM · Conv · Chunking</i>"]
         S7["🗑️ Neue Session"]
@@ -144,8 +144,8 @@ here but moved to two dedicated places:
 The sidebar intentionally stays minimal — provider, source filter, hybrid
 toggle, session reset. Everything else is one click away on the Settings page.
 
-### Source Filter (Lore / Adventure / Rules)
-Three checkboxes that restrict the vector search by the `group` metadata field
+### Source Filter (Lore / Adventure / Rules / Simulation)
+Four checkboxes that restrict the vector search by the `group` metadata field
 attached to every chunk during ingestion. The mapping is **direct** (no
 hardcoded category lists in the UI):
 
@@ -154,6 +154,7 @@ hardcoded category lists in the UI):
 | 🗺️ **Lore** | `lore` |
 | 📖 **Abenteuer** | `adventure` |
 | 📋 **Regelwerk** | `rules` |
+| 📊 **Simulation** | `simulation` (balance-simulation reports — untick for pure rules questions) |
 
 A chunk's `group` is determined by which **source** it was ingested from
 (see `config/sources.yaml`, documented in [docs/configuration.md](configuration.md)).

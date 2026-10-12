@@ -38,8 +38,8 @@ LoreKeeper is built from the ground up for this workflow:
   and layout-aware code block suppression. Configurable per
   `ingestion.pdf` in `settings.yaml`.
 - **Semantic source filtering** — every chunk inherits a `group` tag (`lore` /
-  `adventure` / `rules`) from the source it was ingested from. The three UI
-  toggles (🗺️ Lore, 📖 Adventure, 📋 Rules) restrict retrieval at the
+  `adventure` / `rules` / `simulation`) from the source it was ingested from. The four UI
+  toggles (🗺️ Lore, 📖 Adventure, 📋 Rules, 📊 Simulation) restrict retrieval at the
   vectorstore level. Ask "What can the time mage do?" and limit to Rules, and
   you won't get the NPC named *Arkenfeld the Time Mage* polluting the context.
 - **Self-service source management** — sources are defined in

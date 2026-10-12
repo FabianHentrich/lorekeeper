@@ -69,14 +69,14 @@ Controls which files are read.
 ### Sources sidecar — `config/sources.yaml`
 
 Sources are configured in a separate sidecar file (gitignored, user-specific).
-A source is either a folder or a single file and belongs to one of the three
-filter groups `lore`, `adventure`, `rules`.
+A source is either a folder or a single file and belongs to one of the four
+filter groups `lore`, `adventure`, `rules`, `simulation`.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `id` | `str` | yes | Stable identifier (used to scope reindex/delete and as `source_id` metadata on every chunk). Free text — spaces, `&`, `#`, `/` etc. are fine. New IDs must not be empty, `.`/`..` or have leading/trailing whitespace (checked by `PUT /sources`). Renaming = new source (see below). |
 | `path` | `str` | yes | Absolute or relative path. May point at a folder OR a single file. |
-| `group` | `lore`\|`adventure`\|`rules` | yes | Default filter group for the three sidebar buttons. Can be overridden per folder in `category_map`. |
+| `group` | `lore`\|`adventure`\|`rules`\|`simulation` | yes | Default filter group for the four sidebar buttons. Can be overridden per folder in `category_map`. |
 | `default_category` | `str` | no (yes for file sources) | Fallback `content_category` when no entry of `category_map` matches. |
 | `category_map` | `dict[str, str\|dict]` | no | Top-level folder name → category (and optionally group). Values can be a plain string (`npc`) or a dict (`{category: story, group: adventure}`). String values inherit the source-level `group`. Case-insensitive lookup. Folder sources only. |
 | `exclude_patterns` | `list[str]` | no | Additive to global `ingestion.exclude_patterns`. |

@@ -206,6 +206,31 @@ class TestRerank:
         assert "b.md" in sources
         assert "c.md" in sources
 
+    @pytest.mark.asyncio
+    async def test_max_per_source_counts_equally_named_files_per_source(
+        self, config, embed_service, vectorstore,
+    ):
+        """Two sources with the same file name (e.g. llm_report.md) each get their own cap."""
+        config.reranking = RerankingConfig(
+            enabled=True, top_k_rerank=4, max_per_source=2,
+        )
+
+        def _chunk(i, sid):
+            return {"id": str(i), "content": f"{sid}{i}", "score": 0.9,
+                    "metadata": {"source_file": "llm_report.md", "source_id": sid,
+                                 "document_type": "markdown", "heading_hierarchy": f"h{i}"}}
+
+        vectorstore.query.return_value = [_chunk(1, "a"), _chunk(2, "a"), _chunk(3, "a"),
+                                          _chunk(4, "b"), _chunk(5, "b"), _chunk(6, "c.md")]
+        vectorstore.query.return_value[-1]["metadata"]["source_file"] = "c.md"
+        retriever = Retriever(config=config, embedding_service=embed_service, vectorstore=vectorstore)
+        mock_reranker = MagicMock()
+        mock_reranker.predict.return_value = [0.95, 0.9, 0.85, 0.8, 0.75, 0.7]
+        retriever._reranker = mock_reranker
+
+        results = await retriever.retrieve("query")
+        assert [r.content for r in results] == ["a1", "a2", "b4", "b5"]
+
 
 class TestRRFMerge:
     """Test suite validating the Reciprocal Rank Fusion primitive."""

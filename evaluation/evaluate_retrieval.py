@@ -23,16 +23,18 @@ logger = logging.getLogger(__name__)
 
 
 def section_hit(expected_section: str, headings: list[str]) -> bool:
-    """True if any retrieved heading lies in the expected numbered section.
+    """True if any retrieved heading lies in the expected section.
 
     Headings look like "**4.10 Kampfunfähigkeit und Tod** > **Kampfunfähigkeit**";
     "4.10" matches that and sub-sections ("5.4" matches "5.4.1 Krieger") but not
-    "4.1 Der Ablauf eines Kampfes" for "4.10".
+    "4.1 Der Ablauf eines Kampfes" for "4.10". Unnumbered headings match by name:
+    "Gesamtwertung" matches "Gesamtwertung (R3 vs Median aus 6 Profilen)".
     """
     for heading in headings:
         for part in heading.replace("*", "").split(" > "):
             part = part.strip()
-            if part.startswith(expected_section + " ") or part.startswith(expected_section + "."):
+            if (part == expected_section or part.startswith(expected_section + " ")
+                    or part.startswith(expected_section + ".")):
                 return True
     return False
 
@@ -66,6 +68,7 @@ async def run_evaluation_with_retriever(
     for idx, pair in enumerate(qa_pairs):
         question = pair["question"]
         expected_sources = pair.get("expected_sources", [])
+        expected_source_ids = pair.get("expected_source_ids", [])
         source_type = pair.get("source_type", "unknown")
         category = pair.get("category", "unknown")
 
@@ -95,10 +98,14 @@ async def run_evaluation_with_retriever(
         latency_ms = (time.time() - start) * 1000
         retrieved_files = [c.source_file for c in chunks]
         retrieved_headings = [c.heading for c in chunks]
+        retrieved_source_ids = [c.metadata.get("source_id", "") for c in chunks]
 
-        # Hit: any expected source filename appears in retrieved source_files
+        # Hit: any expected source filename appears in retrieved source_files.
+        # expected_source_ids additionally pins the source — for equally named files
+        # in different sources (e.g. two simulation llm_report.md).
         hit = any(
-            any(exp.split("/")[-1] in rf for rf in retrieved_files)
+            any(exp.split("/")[-1] in rf for rf, sid in zip(retrieved_files, retrieved_source_ids, strict=True)
+                if not expected_source_ids or sid in expected_source_ids)
             for exp in expected_sources
         )
         if hit:
@@ -126,7 +133,9 @@ async def run_evaluation_with_retriever(
             "source_type": source_type,
             "category": category,
             "expected_sources": expected_sources,
+            "expected_source_ids": expected_source_ids,
             "retrieved_files": retrieved_files,
+            "retrieved_source_ids": retrieved_source_ids,
             "retrieved_headings": retrieved_headings,
             "hit": hit,
             "expected_section": expected_section,

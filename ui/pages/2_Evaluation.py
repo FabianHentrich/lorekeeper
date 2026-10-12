@@ -165,10 +165,13 @@ def _render_retrieval_result(result: dict):
                     st.markdown("**Erwartet:**")
                     for s in d.get("expected_sources", []):
                         st.code(s, language=None)
+                    if d.get("expected_source_ids"):
+                        st.caption("aus: " + ", ".join(d["expected_source_ids"]))
                 with col_ret:
                     st.markdown("**Gefunden:**")
-                    for s in d.get("retrieved_files", [])[:5]:
-                        st.code(s, language=None)
+                    sids = d.get("retrieved_source_ids") or [""] * len(d.get("retrieved_files", []))
+                    for s, sid in list(zip(d.get("retrieved_files", []), sids, strict=False))[:5]:
+                        st.code(f"{s}  ({sid})" if sid else s, language=None)
                 if d.get("expected_section"):
                     sec_icon = "✅" if d.get("section_hit") else "❌"
                     st.markdown(f"**Abschnitt {d['expected_section']}:** {sec_icon}")
@@ -224,12 +227,14 @@ with tab_gs:
                 "expected_sources": ", ".join(p.get("expected_sources", [])),
                 "expected_answer_contains": ", ".join(p.get("expected_answer_contains", [])),
                 "expected_section": p.get("expected_section", ""),
+                "expected_source_ids": ", ".join(p.get("expected_source_ids", [])),
                 "notes": p.get("notes", ""),
             })
 
         df = pd.DataFrame(rows) if rows else pd.DataFrame(
             columns=["id", "question", "source_type", "category",
-                     "expected_sources", "expected_answer_contains", "expected_section", "notes"]
+                     "expected_sources", "expected_answer_contains", "expected_section",
+                     "expected_source_ids", "notes"]
         )
 
         edited = st.data_editor(
@@ -239,7 +244,7 @@ with tab_gs:
                 "id": st.column_config.TextColumn("ID", width="small"),
                 "question": st.column_config.TextColumn("Frage"),
                 "source_type": st.column_config.SelectboxColumn(
-                    "Source Type", options=["markdown", "pdf", "image", "mixed"], width="small",
+                    "Source Type", options=["markdown", "pdf", "image", "mixed", "simulation"], width="small",
                 ),
                 "category": st.column_config.TextColumn("Kategorie", width="small"),
                 "expected_sources": st.column_config.TextColumn(
@@ -252,7 +257,13 @@ with tab_gs:
                 ),
                 "expected_section": st.column_config.TextColumn(
                     "Abschnitt",
-                    help="Nummerierter Abschnitt, in dem ein Treffer liegen muss, z.B.: 4.10",
+                    help="Abschnitt, in dem ein Treffer liegen muss: Nummer (z.B. 4.10) oder Überschrift",
+                    width="small",
+                ),
+                "expected_source_ids": st.column_config.TextColumn(
+                    "Source-IDs",
+                    help="Optional, komma-getrennt: die erwartete Datei muss aus einer dieser Quellen kommen "
+                         "(für gleichnamige Dateien, z.B. zwei llm_report.md)",
                     width="small",
                 ),
                 "notes": st.column_config.TextColumn("Notizen"),
@@ -281,6 +292,9 @@ with tab_gs:
                         s.strip() for s in (row.get("expected_answer_contains") or "").split(",") if s.strip()
                     ],
                     "expected_section": (row.get("expected_section") or "").strip(),
+                    "expected_source_ids": [
+                        s.strip() for s in (row.get("expected_source_ids") or "").split(",") if s.strip()
+                    ],
                     "notes": (row.get("notes") or "").strip(),
                 })
             try:
@@ -346,7 +360,7 @@ with tab_test:
                 with c1:
                     add_id = st.text_input("ID", key="test_add_id", placeholder="m099")
                 with c2:
-                    add_type = st.selectbox("Source Type", ["markdown", "pdf", "image"],
+                    add_type = st.selectbox("Source Type", ["markdown", "pdf", "image", "simulation"],
                                             key="test_add_type")
                 with c3:
                     add_cat = st.text_input("Kategorie", key="test_add_cat")

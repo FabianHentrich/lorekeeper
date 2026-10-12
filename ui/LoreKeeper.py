@@ -291,6 +291,7 @@ def _render_sidebar():
             "🗺️ Lore": ("lore", "Welt-Lore: NPCs, Orte, Items, Organisationen, …"),
             "📖 Abenteuer": ("adventure", "Abenteuer- und Story-Dokumente"),
             "📋 Regelwerk": ("rules", "Regelbuch, Klassen, Mechaniken, Tools"),
+            "📊 Simulation": ("simulation", "Balance-Simulation: Begegnungs- und Fähigkeitswertung"),
         }
         selected_groups = []
         selected_labels = []

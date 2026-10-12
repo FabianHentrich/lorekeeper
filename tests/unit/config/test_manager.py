@@ -2,7 +2,7 @@
 import pytest
 import yaml
 
-from src.config.manager import ConfigManager, Settings
+from src.config.manager import ConfigManager, Settings, SourceConfig
 
 
 class TestConfigManager:
@@ -240,3 +240,19 @@ class TestSettings:
         monkeypatch.setenv("VECTORSTORE__MODE", "client")
         s = Settings()
         assert s.vectorstore.mode == "client"
+
+
+class TestSourceConfig:
+    """Source groups: the four UI filter groups are accepted, anything else is rejected."""
+
+    def test_simulation_group_is_accepted(self):
+        src = SourceConfig(id="sim", path="C:/sim.md", group="simulation",
+                           category_map={"Daten": {"category": "misc", "group": "simulation"}})
+        assert src.group == "simulation"
+
+    def test_unknown_group_is_rejected(self):
+        with pytest.raises(ValueError):
+            SourceConfig(id="sim", path="C:/sim.md", group="daten")
+        with pytest.raises(ValueError, match="group must be one of"):
+            SourceConfig(id="sim", path="C:/sim", group="lore",
+                         category_map={"Daten": {"category": "misc", "group": "daten"}})

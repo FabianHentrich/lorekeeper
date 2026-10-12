@@ -1,4 +1,7 @@
-from evaluation.evaluate_retrieval import section_hit
+import asyncio
+from types import SimpleNamespace
+
+from evaluation.evaluate_retrieval import run_evaluation_with_retriever, section_hit
 
 
 class TestSectionHit:
@@ -24,3 +27,43 @@ class TestSectionHit:
     def test_empty_headings(self):
         """No chunks → no hit."""
         assert not section_hit("2.5", [])
+
+    def test_unnumbered_heading_matches_by_name(self):
+        """Simulation reports have named headings: exact name or name plus suffix."""
+        headings = ["PnP Begegnungsbericht (für LLM) > Begegnungsbaukasten"]
+        assert section_hit("Begegnungsbaukasten", headings)
+        assert section_hit("Gesamtwertung", ["Bericht > Gesamtwertung (R3 vs Median aus 6 Profilen)"])
+        assert not section_hit("Begegnungsbau", headings)
+
+
+class _FakeRetriever:
+    def __init__(self, chunks):
+        self.chunks = chunks
+
+    async def retrieve(self, **kwargs):
+        return self.chunks
+
+
+def _chunk(source_file, source_id, heading=""):
+    return SimpleNamespace(source_file=source_file, heading=heading, score=0.9,
+                           metadata={"source_id": source_id})
+
+
+def _hit(pair, chunks) -> bool:
+    report = asyncio.run(run_evaluation_with_retriever([pair], _FakeRetriever(chunks), 15, 8))
+    return report["details"][0]["hit"]
+
+
+class TestExpectedSourceIds:
+    """Equally named files (two simulation llm_report.md) are told apart by source id."""
+
+    PAIR = {"id": "s1", "question": "?", "expected_sources": ["llm_report.md"]}
+
+    def test_file_name_alone_matches_any_source(self):
+        assert _hit(self.PAIR, [_chunk("llm_report.md", "sim-faehigkeiten-bericht")])
+
+    def test_source_id_pins_the_file(self):
+        pair = {**self.PAIR, "expected_source_ids": ["sim-begegnungen-bericht"]}
+        assert not _hit(pair, [_chunk("llm_report.md", "sim-faehigkeiten-bericht")])
+        assert _hit(pair, [_chunk("llm_report.md", "sim-faehigkeiten-bericht"),
+                           _chunk("llm_report.md", "sim-begegnungen-bericht")])

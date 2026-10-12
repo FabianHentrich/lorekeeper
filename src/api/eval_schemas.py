@@ -8,7 +8,8 @@ class QAPair(BaseModel):
     category: str = ""
     expected_sources: list[str] = []
     expected_answer_contains: list[str] = []
-    expected_section: str = ""  # numbered heading prefix (e.g. "4.10") a retrieved chunk must lie in
+    expected_section: str = ""  # numbered heading prefix (e.g. "4.10") or heading name a retrieved chunk must lie in
+    expected_source_ids: list[str] = []  # optional: the expected file must come from one of these sources
     notes: str = ""
 
 

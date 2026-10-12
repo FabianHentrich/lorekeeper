@@ -335,17 +335,19 @@ class Retriever:
         # and there are no other above-threshold candidates to take their place.
         if max_per_source is None:
             max_per_source = self.config.reranking.max_per_source
-        per_source_count: dict[str, int] = {}
+        # Keyed by (source_id, file): equally named files in two sources get their own cap
+        per_source_count: dict[tuple[str, str], int] = {}
         selected: list[tuple[float, RetrievedChunk]] = []
         overflow: list[tuple[float, RetrievedChunk]] = []
 
         for score, chunk in ranked:
             if len(selected) >= top_k:
                 break
-            if max_per_source and per_source_count.get(chunk.source_file, 0) >= max_per_source:
+            key = (chunk.metadata.get("source_id", ""), chunk.source_file)
+            if max_per_source and per_source_count.get(key, 0) >= max_per_source:
                 overflow.append((score, chunk))
                 continue
-            per_source_count[chunk.source_file] = per_source_count.get(chunk.source_file, 0) + 1
+            per_source_count[key] = per_source_count.get(key, 0) + 1
             selected.append((score, chunk))
 
         backfilled = 0

@@ -80,3 +80,13 @@ class TestQueryFilters:
     def test_game_master_uses_sidebar_filters(self):
         assert roles.query_filters(roles.GAME_MASTER, ["a"], {"$in": ["lore"]}, None) == {"group": {"$in": ["lore"]}}
         assert roles.query_filters(roles.GAME_MASTER, ["a"], None, None) is None
+
+
+def test_game_master_can_exclude_simulation(fake_backend):
+    """Unticking 📊 Simulation limits the search to the other three groups."""
+    at = open_page("chat", role=roles.GAME_MASTER).run()
+    next(c for c in at.sidebar.checkbox if c.label == "📊 Simulation").uncheck().run()
+    _ask(at)
+
+    assert fake_backend.bodies["POST /query/stream"][-1]["metadata_filters"] == \
+        {"group": {"$in": ["lore", "adventure", "rules"]}}

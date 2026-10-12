@@ -252,10 +252,10 @@ lorekeeper/
 
 Sources werden in `config/sources.yaml` (Sidecar, gitignored) konfiguriert.
 Eine Source ist entweder ein **Ordner** oder eine **einzelne Datei**. Jede
-Source hat eine `group` (`lore` / `adventure` / `rules`) als Fallback für die
-UI-Filter „🗺️ Lore / 📖 Abenteuer / 📋 Regelwerk". Über `category_map`
+Source hat eine `group` (`lore` / `adventure` / `rules` / `simulation`) als Fallback für die
+UI-Filter „🗺️ Lore / 📖 Abenteuer / 📋 Regelwerk / 📊 Simulation". Über `category_map`
 kann die `group` **pro Top-Level-Ordner** überschrieben werden — so lässt sich
-ein einzelner Obsidian-Vault sauber auf alle drei Gruppen verteilen.
+ein einzelner Obsidian-Vault sauber auf mehrere Gruppen verteilen.
 
 ```yaml
 # config/sources.yaml

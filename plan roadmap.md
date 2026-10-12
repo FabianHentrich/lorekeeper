@@ -267,7 +267,9 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 
 **Offener Punkt**: Der Gaming-PC muss laufen. Wake-on-LAN von unterwegs braucht ein immer laufendes Gerät im Heimnetz (Router-Funktion oder Raspberry Pi); sonst bleibt der PC an.
 
-**Aufwand**: Gering (Einrichtung, kaum Code).
+**Offener Punkt — Spieler-Modus im Backend durchsetzen**: Welche Quellen Spieler sehen, steht zentral in `sources.yaml` (`player_visible`), durchgesetzt wird es aber nur in der Streamlit-UI (`ui/roles.py:query_filters` baut den `source_id`-Filter, das Backend kennt keine Rollen und führt jeden `metadata_filters` aus). Im Heimnetz reicht das, weil das Backend nur auf `127.0.0.1` lauscht und nur Streamlit es erreicht. Sobald die API selbst von außen erreichbar wird (oder ein weiterer Client dazukommt), fehlt der Spieler-Schutz dort → `/query`, `/query/stream` und `/eval/preview` nehmen eine Rolle entgegen und bauen den Spieler-Filter selbst aus `player_visible`; ein mitgeschickter Filter darf ihn nur einschränken, nie erweitern. Die Sicherheitstests aus 3.11 (A/C) dann gegen die API-Seite richten.
+
+**Aufwand**: Gering (Einrichtung, kaum Code); Spieler-Modus im Backend Gering-Mittel.
 
 ## 5.0 Performance-Optimierung und Performance-Tests
 
@@ -335,13 +337,32 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 **Aufwand**: je Hebel Gering bis Mittel.
 
 
-## 6.0 PnP-Simulation zugreifbar machen
+## 6.0 PnP-Simulation zugreifbar machen — 🔄 Umgesetzt, Abschluss nach dem nächsten Simulationslauf
 
-**Fragen (zu klären)**: Reichen die HTML-Dateien als Zugriff? Welche Daten soll das LLM bekommen? Wie wird das Ganze indexiert?
+**Entscheidung (12.10.)**: Minimaler Input — fünf Dateien aus `PnP_Simulation` als Einzeldatei-Sources in der neuen Gruppe **`simulation`** (Sidebar „📊 Simulation“, im Spielleiter-Modus abwählbar für reine Regelfragen). HTML, JSON, CSV, Cache, README und die übrigen `docs/` bleiben draußen (Entwickler-Doku, Duplikate des Vaults/Regelwerks oder veraltete Protokolle). Gegnerwerte und Kampagnen-Kämpfe stehen bereits über die `sim:start`-/`sim:kampf`-Blöcke im Vault.
 
-**Nächster Schritt**: HTML-Dateien und `pnp_sim`-Exporte gemeinsam ansehen (was steht drin, was ist generiert, was ändert sich wie oft), dann Lösung und Aufwand festlegen. Bezug: Die Vault-Gegnerseiten enthalten bereits `sim:start`/`sim:end`-Blöcke aus `pnp_sim` (`scripts/begegnungen/vault_export.py`).
+| Source-ID | Datei | Spieler |
+|---|---|---|
+| `sim-begegnungen-bericht` | `output/begegnungen/llm_report.md` | ❌ (Gegner-LP/-Stärke) |
+| `sim-begegnungsbaukasten` | `docs/begegnungen/begegnungsbaukasten.md` | ❌ |
+| `sim-faehigkeiten-bericht` | `output/faehigkeiten/llm_report.md` | ✅ (Charakterbau) |
+| `sim-faehigkeiten-analyse` | `docs/faehigkeiten/fachliche_analyse.md` | ✅ |
+| `sim-balance-roadmap` | `docs/BALANCE_ROADMAP.md` | ❌ (nennt Kampagnen-Kämpfe) |
 
-**Aufwand**: offen.
+**Umgesetzt**: Gruppe `simulation` (Config, Chat-Sidebar, Sources-Seite, Doku, Tests); Fix: `max_per_source` im Reranker zählt je (`source_id`, Datei) — beide Berichte heißen `llm_report.md`; Evaluation: `expected_source_ids` und benannte Überschriften als `expected_section`; Golden Set z001–z016 (prüft Quelle und Abschnitt, Antwort-Keywords nur Methoden-Begriffe — robust gegen neue Läufe).
+
+**Messung (12.10., Index mit SIM 50 und Begegnungsbericht vom 10.10.)**:
+- Bestehendes Golden Set: Datei-Treffer unverändert 261/262; Abschnitt 122 → 121 von 137 (p061 verliert 4.8).
+- Simulation z001–z016: Datei 13/16, Abschnitt 10/16. Misses z009/z012/z014 — ohne das Wort „Simulation“ gewinnt das Regelbuch.
+- Verdrängung: 38 von 262 Fragen bekommen Simulations-Chunks in den Kontext (meist 1 von 8; Krit-Fragen p050/p052 4 von 8). Spielleiter: „📊 Simulation“ abwählen.
+- Spieler-Modus live (`pytest -m live -k vault_question`): 278 passed — Begegnungsquellen erreichen Spieler nie.
+
+**Offen (nach einem sauberen Simulationslauf)**:
+- ⚠️ **Vorher nicht inkrementell indizieren**: Der fehlerhafte SIM-51-Lauf (12.10.) hat `output/faehigkeiten/llm_report.md` überschrieben; im Index steht noch SIM 50.
+- Nach dem Lauf: `python begegnungen.py` (Begegnungsbericht passt sonst nicht zu den neuen Baukasten-Konstanten), dann „⚡ Nur Änderungen indizieren“, Eval wiederholen.
+- Messen, wie viele Simulations-Chunks Spieler bei reinen Regelfragen bekommen (sie haben keinen Quellenfilter) → entscheiden, ob der Fähigkeitsbericht für Spieler freigegeben bleibt oder nur `fachliche_analyse.md`.
+
+**Aufwand**: Gering (umgesetzt); Rest Messung.
 
 ---
 
@@ -353,7 +374,7 @@ Erledigt: 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz
 
 | Reihenfolge | Punkt | Impact | Aufwand | Begründung |
 |---|---|---|---|---|
-| 1 | 6.0 PnP-Simulation zugreifbar machen | offen | offen | Nächstes neues Thema — erst Daten (HTML, `pnp_sim`-Exporte) gemeinsam ansehen und Umfang klären |
+| 1 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | Umgesetzt; wartet auf einen sauberen Simulationslauf, dann Re-Index, Eval, Spieler-Messung |
 | 2 | 3.10 Regelwerk-Slot im Retrieval | Mittel — SL-Fragen, die Vault und Regel mischen | Mittel | Mit Abschnittsprüfung messbar (x002–x008) |
 | 3 | 3.8/3.9 Ingest-Fortschritt + 5.3 UI-Reste (`/config`, `/folders` cachen) | Gering-Mittel — Sources-Seite bleibt bedienbar | Gering-Mittel | Komfort; UI-Trägheit selbst ist behoben |
 | 4 | 5.3 Reranker/Embeddings auf GPU (CUDA-PyTorch) | Mittel — ~0,5 s pro Frage, schnellere Indexierung | Gering (Code) | Neue Abhängigkeit — erst entscheiden |
@@ -363,7 +384,7 @@ Erledigt: 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz
 | 8 | 3.4 Antwort-Feedback | Gering-Mittel | Gering | Quick Win |
 | 9 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | |
 | 10 | 3.2 Session-History | Mittel | Mittel | Spieler-/SL-Sessions getrennt halten |
-| 11 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | Später; dann auch HTTPS-Frage erledigt |
+| 11 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | Später; dann auch HTTPS-Frage erledigt. Vorher Spieler-Modus ins Backend, falls die API selbst erreichbar wird |
 | 12 | 3.5 Wikilink-Expansion | Mittel | Mittel | Experimentell; im Spieler-Modus darf sie keine SL-Quellen nachladen |
 | 13 | 3.3 Chunk-Inspector | Gering (Dev-Tool) | Gering-Mittel | Wenn nötig |
 | 14 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | Später |

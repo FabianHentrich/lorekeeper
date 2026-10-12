@@ -2364,3 +2364,158 @@ pairs:
     expected_answer_contains: ["Kultpriester"]
     expected_section: "7.2.4"
     notes: "Loot-Tabelle in I-2 + Artefakttabelle 7.2.4."
+
+  # ─────────────────────────────────────────
+  # SIMULATION — Begegnungs- und Fähigkeitswertung aus PnP_Simulation (z001–z016)
+  # Robust gegen neue Simulationsläufe: geprüft werden Quelle und Abschnitt
+  # (Überschriften erzeugt der Simulator selbst), Antwort-Keywords sind
+  # Methoden-Begriffe — keine Zahlen, Plätze oder Gegner-Ergebnisse.
+  # Beide Berichte heißen llm_report.md → expected_source_ids legt die Quelle fest.
+  # Begegnungsfragen sind Spielleiter-Wissen; der Live-Test im Spieler-Modus
+  # prüft mit ihnen, dass die Begegnungsquellen gesperrt bleiben.
+  # ─────────────────────────────────────────
+
+  - id: z001
+    question: "Wie stuft die Simulation die Schwierigkeit einer Begegnung ein?"
+    source_type: simulation
+    category: encounter
+    expected_sources: ["llm_report.md"]
+    expected_source_ids: ["sim-begegnungen-bericht"]
+    expected_answer_contains: ["tödlich"]
+    expected_section: "So entsteht die Bewertung"
+    notes: "Einstufung leicht/neutral/fordernd/tödlich nach dem Verlust bis zum Sieg."
+
+  - id: z002
+    question: "Wie werden Lebenspunkte und Schaden eines Gegners aus der Spielergruppe abgeleitet?"
+    source_type: simulation
+    category: encounter
+    expected_sources: ["llm_report.md"]
+    expected_source_ids: ["sim-begegnungen-bericht"]
+    expected_answer_contains: ["Haltbarkeit"]
+    expected_section: "Das Gleichungssystem: Gegner aus der Spielergruppe"
+
+  - id: z003
+    question: "Wie hart darf der stärkste Treffer eines Gegners einen einzelnen Charakter treffen?"
+    source_type: simulation
+    category: encounter
+    expected_sources: ["llm_report.md"]
+    expected_source_ids: ["sim-begegnungen-bericht"]
+    expected_answer_contains: ["Vorrat"]
+    expected_section: "Stärkster Treffer je SC"
+    notes: "Anteil am Vorrat LP + 2·RP eines SC."
+
+  - id: z004
+    question: "Wie schwer sind die Kämpfe der Söldner-Kampagne laut Simulation?"
+    source_type: simulation
+    category: encounter
+    expected_sources: ["llm_report.md"]
+    expected_source_ids: ["sim-begegnungen-bericht"]
+    expected_answer_contains: ["Verlust"]
+    expected_section: "Kampagnen-Kämpfe"
+    notes: "Auch die sim:kampf-Blöcke in den Abenteuertexten nennen die Schwierigkeit je Kampf."
+
+  - id: z005
+    question: "Wie stark verkürzt bessere Ausrüstung einen Bosskampf?"
+    source_type: simulation
+    category: encounter
+    expected_sources: ["llm_report.md"]
+    expected_source_ids: ["sim-begegnungen-bericht"]
+    expected_answer_contains: ["Ausrüstung"]
+    expected_section: "Machtkurve der Ausrüstung"
+
+  - id: z006
+    question: "Wie berechne ich am Tisch ohne Laptop, wie gefährlich eine Begegnung ist?"
+    source_type: simulation
+    category: encounter
+    expected_sources: ["begegnungsbaukasten.md"]
+    expected_answer_contains: ["Druck"]
+    expected_section: "Rechnen"
+    notes: "Punkte = Σ Druck × Uhr; Konstanten ändern sich mit Nachmessungen, die Methode nicht."
+
+  - id: z007
+    question: "Wie viele Begleiter kann ich einem Anführer in einer Begegnung mitgeben?"
+    source_type: simulation
+    category: encounter
+    expected_sources: ["begegnungsbaukasten.md"]
+    expected_answer_contains: ["Begleiter"]
+    expected_section: "Schnelltabelle: Wie viele Begleiter?"
+
+  - id: z008
+    question: "Wie viele Punkte darf eine fordernde Begegnung im Begegnungsbaukasten haben?"
+    source_type: simulation
+    category: encounter
+    expected_sources: ["begegnungsbaukasten.md"]
+    expected_answer_contains: ["fordernd"]
+    expected_section: "Budget"
+    notes: "Budget je Level; die Grenzwerte werden nachgemessen, deshalb kein Zahlen-Keyword."
+
+  - id: z009
+    question: "Nach welchen Kriterien wird die Rangliste der Fähigkeiten gebildet?"
+    source_type: simulation
+    category: ability_balance
+    expected_sources: ["llm_report.md"]
+    expected_source_ids: ["sim-faehigkeiten-bericht"]
+    expected_answer_contains: ["Zeit", "Preis"]
+    expected_section: "Gesamtwertung"
+    notes: "Dominanz auf zwei Achsen (Zeit, Preis), keine Gewichte."
+
+  - id: z010
+    question: "Welche Fähigkeiten sind im Kampf gegen mehrere Gegner am stärksten?"
+    source_type: simulation
+    category: ability_balance
+    expected_sources: ["llm_report.md"]
+    expected_source_ids: ["sim-faehigkeiten-bericht"]
+    expected_answer_contains: []
+    expected_section: "Gruppenkampf"
+    notes: "Gruppen-Rangliste gegen 3 Gegner; die Namen der Spitze ändern sich mit jedem Lauf."
+
+  - id: z011
+    question: "Wie schneiden die Klassen im Vergleich miteinander ab?"
+    source_type: simulation
+    category: ability_balance
+    expected_sources: ["llm_report.md"]
+    expected_source_ids: ["sim-faehigkeiten-bericht"]
+    expected_answer_contains: ["Klasse"]
+    expected_section: "Bilanz je Klasse"
+
+  - id: z012
+    question: "Wie wächst der Schaden pro Runde einer Fähigkeit von Rang 1 bis Rang 6?"
+    source_type: simulation
+    category: ability_balance
+    expected_sources: ["llm_report.md"]
+    expected_source_ids: ["sim-faehigkeiten-bericht"]
+    expected_answer_contains: ["Rang"]
+    expected_section: "Rang-Skalierung: DPR je Rang"
+
+  - id: z013
+    question: "Worauf muss ich achten, wenn ich die Rangliste der Fähigkeitswertung lese?"
+    source_type: simulation
+    category: ability_balance
+    expected_sources: ["fachliche_analyse.md"]
+    expected_answer_contains: ["Median"]
+    expected_section: "1. Wie man die Rangliste liest"
+
+  - id: z014
+    question: "Welche Fähigkeiten wurden aufgrund der Simulation geändert und warum?"
+    source_type: simulation
+    category: ability_balance
+    expected_sources: ["fachliche_analyse.md"]
+    expected_answer_contains: []
+    expected_section: "3. Entscheidungen je Fähigkeit"
+
+  - id: z015
+    question: "Welche Auffälligkeiten in der Fähigkeitswertung sind bewusst akzeptiert?"
+    source_type: simulation
+    category: ability_balance
+    expected_sources: ["BALANCE_ROADMAP.md"]
+    expected_answer_contains: []
+    expected_section: "Akzeptiert"
+    notes: "Spielleiter-Quelle (Roadmap nennt auch Kampagnen-Kämpfe)."
+
+  - id: z016
+    question: "Was kann die Simulation der Fähigkeiten nicht abbilden?"
+    source_type: simulation
+    category: ability_balance
+    expected_sources: ["BALANCE_ROADMAP.md"]
+    expected_answer_contains: []
+    expected_section: "4. Grenzen des Modells"
