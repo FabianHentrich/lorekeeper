@@ -259,7 +259,7 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 3. ✅ `scripts\setup-lan.ps1` als Administrator ausgeführt; Server-Modus läuft (`0.0.0.0:8501`, Backend `127.0.0.1:8000`).
 4. Autostart-Aufgabe der ersten Skript-Version entfernen (braucht Admin): `Unregister-ScheduledTask -TaskName "LoreKeeper Server" -Confirm:$false`
 5. DHCP-Reservierung im Router (offen); ✅ Zugriff vom Handy im Heimnetz funktioniert.
-6. Danach: Startup-Messung (5.2) mit dem Server-Modus.
+6. Danach: Startup-Messung (5.2) — Test steht (`tests/perf/test_startup.py`), Baseline offen.
 
 **Befund**: Es existieren Inbound-Allow-Regeln für `python.exe` im Profil „Öffentlich“ (alle Ports) — für andere Python-Installationen (alte LoreKeeper-Kopie unter OneDrive, PortraitForge, globales Python 3.12), nicht für LoreKeeper. Nicht angefasst; ggf. selbst aufräumen.
 
@@ -285,7 +285,7 @@ Umgesetzt mit `rank_bm25` als In-Memory-Index, lazy aus der ChromaDB-Collection 
 | Retrieval | ⚠️ offen | 0,6–0,8 s, davon Rerank 0,5–0,75 s — läuft auf der **CPU** (PyTorch-CPU-Build), siehe 5.3 |
 | UI-Reaktion | ✅ Hauptursache behoben (5.2) | `localhost`-Delay von ~2 s pro Backend-Request beseitigt (Chat −4 s pro Nachricht, Sources-Seite −10 s); UI-Code selbst 0,02–0,04 s pro Rerun; Rest nur noch Millisekunden (5.3) |
 | Start | ❌ offen | ~12 s (Embedding-Modell ~7 s, Reranker ~4 s); nur einfache Hebel geplant; Messung kommt mit dem Server-Modus (4.1) |
-| Regressionsschutz | ✅ erledigt (5.2) | Deterministische Budgets im normalen `pytest`, Zeit-Checks per `pytest -m perf` gegen `tests/perf/baseline.json`; Startup-Messung offen (mit 4.1) |
+| Regressionsschutz | ✅ erledigt (5.2) | Deterministische Budgets im normalen `pytest`, Zeit-Checks per `pytest -m perf` gegen `tests/perf/baseline.json`; Startup-Test da, Baseline offen |
 
 ### 5.1 Messen: Stage-Timings — ✅ Erledigt
 
@@ -297,7 +297,7 @@ Pro Anfrage loggen und im `done`-Event mitliefern: Condense, Retrieval (Embeddin
 
 **Erste Messung (qwen3:14b, warm, GPU)**: Retrieval 0,6–0,8 s (davon Rerank ~0,5–0,75 s), erster Token nach 8,7–9,9 s, gesamt 14–20 s. → Der große Block vor dem ersten Token ist **nicht** Retrieval, sondern verstecktes Denken (siehe 5.3).
 
-### 5.2 Performance-Tests (Regressionsschutz) — ✅ Erledigt (Startup-Messung offen)
+### 5.2 Performance-Tests (Regressionsschutz) — ✅ Erledigt (Startup-Baseline offen)
 
 Zwei Arten von Prüfungen — **deterministische** schlagen zuverlässig an und laufen im normalen `pytest`, **zeitbasierte** sind hardwareabhängig und laufen separat:
 
@@ -317,7 +317,7 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 **Umgesetzt** (Details in `CONTRIBUTING.md` → „Performance checks“):
 - Deterministisch, im normalen `pytest`: Backend-Requests pro Seiten-Render/Rerun/Chat-Nachricht (`tests/ui/test_backend_calls.py`, `AppTest` + Fake-Backend, Budgets in `BUDGETS`); LLM-Aufrufe pro Anfrage (`test_llm_calls_per_request`); keine `localhost`-URLs für lokale Dienste.
 - Zeitbasiert, `pytest -m perf` gegen `tests/perf/baseline.json` (×1,5 + Slack; `PERF_UPDATE_BASELINE=1` übernimmt neue Werte): Render-Zeit je Seite; Golden Set über das laufende Backend — p50/p95 Retrieval-Latenz, Ø/max Chunks pro Frage, Abschnitt-Trefferquote darf nicht sinken.
-- **Offen**: Startup-Messung — ein zweites Backend kann nicht parallel zum laufenden starten (Port, eingebettete ChromaDB); sinnvoll erst mit dem Server-Modus aus 4.1.
+- **Startup-Messung** (`tests/perf/test_startup.py`, 12.10.): startet ein zweites Backend auf freiem Port gegen echte Config und `chroma_data/`, misst bis zur ersten `/health`-Antwort (die Lifespan lädt Ollama-Autostart, Embedding-Warm-up, ChromaDB, Reranker vorher). Wird übersprungen, solange LoreKeeper läuft (eingebettete ChromaDB nicht doppelt öffnenbar). **Offen**: Baseline aufnehmen — bei gestopptem LoreKeeper und ohne laufende Simulation: `pytest -m perf tests/perf/test_startup.py`.
 
 **Befunde aus der ersten Messung**:
 - **`localhost` kostet 2 s pro Verbindung (behoben)**: Unter Windows löst `localhost` zuerst auf IPv6 `::1` auf, uvicorn und Ollama lauschen nur auf IPv4 → jede neue Verbindung wartet ~2 s auf den Fallback (gemessen 2000 ms vs. 3 ms). Betraf jede Chat-Nachricht (~4 s: `/config` + `/query/stream`), jeden Sources-Seiten-Aufbau (~10 s) und neue Verbindungen zu Ollama nach einer Pause. Alle Standard-URLs (UI, Config, Eval) stehen jetzt auf `127.0.0.1`; ein Test verhindert die Rückkehr. **Achtung**: Eine offene Browser-Session mit `localhost` im Sidebar-Feld „API URL“ behält den Delay bis zum Neuladen.
@@ -396,7 +396,7 @@ Erledigt: 3.8/3.9 Ingest-Fortschritt, 7.0 Testlücken, 3.11 Spieler-/Spielleiter
 |---|---|---|---|---|
 | 1 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | Umgesetzt; wartet auf einen sauberen Simulationslauf, dann Re-Index, Eval, Spieler-Messung |
 | 2 | 3.10 Regelwerk-Slot im Retrieval | Mittel — SL-Fragen, die Vault und Regel mischen | Mittel | Mit Abschnittsprüfung messbar (x002–x008) |
-| 3 | 5.2 Startup-Messung | Gering — Regressionsschutz für den Start | Gering | Test schreiben geht jederzeit; Baseline erst ohne laufende Simulation messen |
+| 3 | 5.2 Startup-Baseline aufnehmen | Gering — Regressionsschutz für den Start | Gering | Test steht; einmal messen bei gestopptem LoreKeeper und ohne Simulation |
 | 4 | 5.3 Reranker/Embeddings auf GPU (AMD: ONNX Runtime + DirectML) | Mittel — ~0,5 s pro Frage, schnellere Indexierung, CPU frei für die Simulation | Mittel | Kein CUDA (AMD-Karte); neue Abhängigkeit — erst entscheiden; ROCm erst nach Bugfix |
 | 5 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | Mit der Chunk-Prüfung aus 5.2 messbar |
 | 6 | 3.6 Chat-Verlauf im Antwort-Prompt | Mittel — bessere Folgefragen | Gering-Mittel | Kontext jetzt 16k; Spieler-Modus beachten (nur eigener Verlauf) |

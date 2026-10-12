@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Startup timing check `tests/perf/test_startup.py` (`pytest -m perf`, roadmap 5.2): starts a second backend on a free port and measures the time until `/health` answers; skipped while LoreKeeper runs. Baseline not recorded yet
 - Tests for `providers/gemini.py`, `api/prompt_routes.py` and `api/eval_routes.py` — all three at 100 % coverage (roadmap 7.0)
 - Non-blocking ingest progress on the Sources page (roadmap 3.8/3.9): the job id lives in session state, an `st.fragment` polls `/ingest/status` while the rest of the page stays usable; ingest/Reindex buttons are disabled meanwhile. New `GET /ingest/active` — a `409` now attaches to the running job instead of only warning
 - Source group `simulation` (📊 Simulation in the game-master sidebar filter, selectable on the Sources page) for balance-simulation reports, so rules questions can exclude them

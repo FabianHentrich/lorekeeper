@@ -167,10 +167,16 @@ right away:
     **running** backend (`127.0.0.1:8000`; skipped if none) and checks p50/p95
     retrieval latency, chunks per question (avg/max — catches context bloat) and
     that the section hit rate does not drop. Takes a few minutes.
+  - `tests/perf/test_startup.py` — starts a second backend on a free port against the
+    real config and `chroma_data/` and measures the time until `/health` answers
+    (Ollama autostart, embedding warm-up, ChromaDB, reranker). The opposite precondition
+    of the golden-set check: **skipped while the backend runs** (embedded ChromaDB can't
+    be opened twice), so run it on its own with LoreKeeper stopped and the machine idle.
 
 ```bash
 pytest -m perf                          # compare against the baseline
 PERF_UPDATE_BASELINE=1 pytest -m perf   # accept the current values (new hardware, intended trade-off)
+pytest -m perf tests/perf/test_startup.py   # startup only — LoreKeeper must be stopped
 ```
 
 LLM answer times are not tested automatically (model- and hardware-dependent);
