@@ -26,7 +26,7 @@ prompts — to catch regressions before they bite during a session.
 ## TL;DR
 
 ```bash
-# Fast loop: retrieval only, no LLM call (~1 min for 262 questions)
+# Fast loop: retrieval only, no LLM call (~1 min for 278 questions with the GPU reranker)
 python -m evaluation.evaluate_retrieval
 
 # Override per-run parameters
@@ -42,7 +42,7 @@ Reports are written to `evaluation/results/` as timestamped JSON.
 
 ## The Golden Set (`evaluation/qa_pairs.yaml`)
 
-262 manually-curated questions covering:
+278 manually-curated questions covering:
 
 | Block | Count | What it tests |
 |---|---|---|
@@ -52,7 +52,9 @@ Reports are written to `evaluation/results/` as timestamped JSON.
 | `adventure` (a001–a031) | 31 | Adventure/campaign structure, multi-act recall (a001–a015) plus scene/mechanic questions inside single adventures (a016–a031): Relikt der Verlorenen Stadt, Im Namen der Reinheit, Maskenball des Winterkönigs, Spiegelbruch. |
 | `s001–s006` **structure tests** | 6 | Sub-section recall, multi-source diversity, table atomicity, identity-layer, wikilink cross-references |
 | `k001–k020` **keyword tests** | 20 | Exact-term questions designed to reward BM25 over pure vector — rare proper nouns (Rhaz'Muell, Thal'Emyra, Artheon Knisterhand Faraday), distinct compounds (Ephraskal-Handschuh, Venthir-Siegelnetz-Blaupause, Sequenz-Schlüssel), and single-color variant collisions (Blauer/Roter/Grüner Monolith). Use with the A/B run to measure hybrid lift. |
-| `x001–x008` **cross-source** (`source_type: mixed`) | 8 | Vault file names an Eigenheit/Zauber/Artefakt whose rules live only in the PDF (e.g. Maleks Schattenfreund, Escanors Ritterlichkeit). Several flag content contradictions between vault and rulebook in `notes`. |
+| `x001–x008` **cross-source** (`source_type: mixed`) | 8 | Vault file names an Eigenheit/Zauber/Artefakt whose rules live only in the PDF (e.g. Maleks Schattenfreund, Escanors Ritterlichkeit). Several flag content contradictions between vault and rulebook in `notes`. Measured by section; the rulebook slot (`retrieval.rules_slot`) raised them from 1/8 to 5/8. |
+| `z001–z016` **simulation** | 16 | PnP-Simulation reports (group `simulation`). Check source (`expected_source_ids`) and named section; answer keywords are method terms only, so new simulation runs don't break them. |
+| `f###` **from feedback** | — | Added from chat ratings via Evaluation → tab "Feedback": 👍 keeps the answer's sources, 👎 leaves them empty to fill in. |
 
 The structure tests (`s00x`) exist specifically to catch failure modes that
 the entity tests miss:
@@ -146,6 +148,17 @@ carry a three-way mode selector (Config default / Vector only / Hybrid).
 > sweep it, edit `config/settings.yaml` (or set
 > `RETRIEVAL__RERANKING__MAX_PER_SOURCE=N` in the environment) before
 > running. Per-request override via the API/UI works at runtime.
+
+> **Compare variants in the same process.** ChromaDB's HNSW search is
+> approximate: after a restart ~9 of 278 questions get slightly different vector
+> candidates (query embeddings are bit-identical), so two separate runs differ by
+> about ±2 section hits. For parameter sweeps build one `Retriever` per variant
+> in a single script and call `run_evaluation_with_retriever` (roadmap 5.5).
+
+Two more tabs help with diagnosis: **"Chunks"** shows every stored chunk of one
+file (document order, length, full text, metadata) — e.g. to see why a table row
+without a heading never matches — and **"Feedback"** lists rated chat answers and
+turns them into golden-set questions.
 
 Console output shows the per-`source_type` breakdown plus a `Misses`
 section with the expected vs. retrieved files for every failure — read

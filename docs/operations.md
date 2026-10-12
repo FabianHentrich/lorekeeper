@@ -16,6 +16,7 @@ This document covers operational instructions for LoreKeeper: initial setup work
    - [ChromaDB file lock](#chromadb-file-lock)
    - [Gemini 429 (rate limit)](#gemini-429-rate-limit)
    - [Reranker model not found](#reranker-model-not-found)
+   - [Reranker runs on the CPU (DirectML warning)](#reranker-runs-on-the-cpu-directml-warning)
    - [PDF OCR not working](#pdf-ocr-not-working)
    - [Retrieval returns wrong document](#retrieval-returns-wrong-document)
 6. [Logs](#logs)
@@ -179,7 +180,9 @@ encrypts everything end-to-end, so plain HTTP inside the tunnel is fine there to
 **Players at the table:** on their phones, players pick **🎲 Spieler** — they can only
 search the sources released for players (Sources page → column "🎲 Spieler"; default:
 rulebook and Charakterbogen). The game master picks **📜 Spielleiter**. This is a
-spoiler guard, not a lock: anyone can choose either role (see `docs/ui-ux.md`).
+spoiler guard, not a lock: anyone can choose either role (see `docs/ui-ux.md`). The
+backend enforces the player restriction itself (`role` on `/query`), so it holds even
+for a client other than the UI.
 
 Access from outside the home network (Tailscale) is planned as roadmap 4.2.
 
@@ -223,7 +226,23 @@ Occurs when the backend and ingestion script run simultaneously (embedded mode):
 
 ### Reranker model not found
 On first start, LoreKeeper downloads `intfloat/multilingual-e5-base` (~1.1 GB) and `mmarco-mMiniLMv2-L12-H384-v1` (~120 MB) from HuggingFace.
-Afterwards it is cached at `~/.cache/huggingface/`.
+Afterwards it is cached at `~/.cache/huggingface/`. With `reranking.backend: directml`
+the reranker's ONNX export (`onnx/model.onnx`, ~450 MB) is downloaded on first start as well.
+
+### Reranker runs on the CPU (DirectML warning)
+Log line `DirectML reranker unavailable (…) — falling back to the CPU (torch)`: answers
+stay the same, only retrieval is slower (~0.8 s instead of ~0.05 s, much more while the
+CPU is busy). Usual cause: a `pip install -r requirements.txt` put the plain `onnxruntime`
+back over `onnxruntime-directml` (both share the `onnxruntime/` module). Check and fix:
+
+```powershell
+python -c "import onnxruntime; print(onnxruntime.get_available_providers())"   # needs DmlExecutionProvider
+pip uninstall -y onnxruntime
+pip install --force-reinstall --no-deps onnxruntime-directml
+```
+
+`pip check` then reports that chromadb, pymupdf-layout and rapidocr miss `onnxruntime` —
+expected, the module is there. On success the log says `Reranker loaded on the GPU (DirectML)`.
 
 ### PDF OCR not working
 - Verify `rapidocr_onnxruntime` is installed: `pip show rapidocr_onnxruntime`

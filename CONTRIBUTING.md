@@ -180,6 +180,9 @@ right away:
     (Ollama autostart, embedding warm-up, ChromaDB, reranker). The opposite precondition
     of the golden-set check: **skipped while the backend runs** (embedded ChromaDB can't
     be opened twice), so run it on its own with LoreKeeper stopped and the machine idle.
+    Baseline (12.10.): 17.7 s — ~9.6 s Python imports, ~6.7 s lifespan.
+  - `tests/perf/test_reranker_gpu.py` — real model on the GPU vs. the CPU: identical
+    ranking and the GPU at least 3× faster. Skipped without `onnxruntime-directml`.
 
 ```bash
 pytest -m perf                          # compare against the baseline

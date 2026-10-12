@@ -63,9 +63,10 @@ not the enriched `embed_text`.
 
 ```mermaid
 flowchart TD
-    USER([User question]) --> API["POST /query/stream\n{question, session_id, metadata_filters, hybrid_search}"]
+    USER([User question]) --> API["POST /query/stream\n{question, session_id, role, metadata_filters, hybrid_search}"]
 
-    API --> CM["ConversationManager\nget_or_create_session()"]
+    API --> ACCESS["effective_filters(role)\nplayer → source_id ∈ player_visible\nAND request filter (can only narrow)\nno released source → 403"]
+    ACCESS --> CM["ConversationManager\nget_or_create_session(id, role)\nsessions are bound to their role"]
 
     CM -->|"History present\n+ condense=true"| COND["Condense step\nrender_condense(history, question)\n→ LLM → standalone question"]
     CM -->|"New session\nor first question"| RET
@@ -77,15 +78,18 @@ flowchart TD
     RET --> VEC[("ChromaDB Vector Search\nembed_text(query) → e5-base\nCosine top_k=15")]
     RET -.->|"if hybrid=true"| BM25[("BM25 Keyword Search\nrank_bm25 top_k=15\n(lazy initialized)")]
 
+    RET -.->|"if rules_slot"| RULES[("Rules search\ngroup = rules AND same filter\ntop 5, separate pool")]
+
     VEC --> RRF["Reciprocal Rank Fusion (RRF)\nMerge & rescore candidates"]
     BM25 -.->|"results"| RRF
 
-    RRF --> RERANK["CrossEncoder Reranking\nmmarco-mMiniLMv2-L12-H384-v1\npairs: query × chunk.content\n→ top_k_rerank=8\n+ soft cap max_per_source=3\n(diverse fill → backfill)"]
+    RRF --> RERANK["CrossEncoder Reranking (GPU via DirectML, CPU fallback)\nmmarco-mMiniLMv2-L12-H384-v1\npairs: query × chunk.content\n→ top_k_rerank=8\n+ soft cap max_per_source=3\n(diverse fill → backfill)\n+ rules slot: no rules chunk in top 8 →\nbest one ≥ -4 replaces the weakest (max 1)"]
+    RULES -.->|"scored, kept apart"| RERANK
 
     RERANK -->|"no chunks"| NOCX["render_no_context(question)\nreturn directly"]
     RERANK -->|"chunks found"| GEN
 
-    GEN["Generation\nrender_qa(chunks, question)\n→ LLMProvider.generate_stream()"]
+    GEN["Generation\nrender_qa(chunks, question, history)\nhistory = last QA pair, marked 'no source'\n→ LLMProvider.generate_stream()"]
 
     GEN --> SSE["SSE stream\ndata: {type: token, content: ...}\ndata: {type: done, session_id, sources}"]
 
@@ -93,6 +97,7 @@ flowchart TD
 
     style VEC fill:#dbeafe,stroke:#3b82f6
     style BM25 fill:#dbeafe,stroke:#3b82f6
+    style RULES fill:#dbeafe,stroke:#3b82f6
     style NOCX fill:#fef3c7,stroke:#f59e0b
     style UI fill:#d1fae5,stroke:#10b981
 ```

@@ -516,6 +516,7 @@ retrieval:
   reranking:
     enabled: true                   # Cross-Encoder Reranking (Stage 2)
     model: "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"   # multilingual
+    backend: directml               # torch = CPU | directml = GPU (ONNX Runtime + DirectML, CPU-Fallback mit Warnung)
     top_k_rerank: 8                 # Finale Chunks für den LLM
     max_per_source: 3               # Soft cap auf Chunks pro Source-File (0 = unlimited).
                                     # Zwei-Pass-Verfahren nach dem Reranking:
@@ -528,6 +529,10 @@ retrieval:
                                     # Diversität ist also eine Präferenz, kein
                                     # Slot-Killer — der Retriever liefert nie weniger
                                     # als top_k_rerank, solange Kandidaten da sind.
+  rules_slot:                       # Entität + Regelbegriff → 1 Regelwerk-Chunk (3.10)
+    enabled: true
+    candidates: 5                   # zweite Vektorsuche nur in Gruppe rules, gleicher Filter
+    min_score: -4.0                 # bester Regel-Chunk ersetzt den schwächsten, wenn keiner in den Top-8 ist
 ```
 
 Diese Werte sind pro Request über die `QueryRequest`-Felder `top_k`,
@@ -905,6 +910,9 @@ in Env-Variablen übersetzt. Pydantic-Settings liest diese automatisch:
 | GET    | `/ingest/status/{job_id}` | Status eines laufenden Ingestion-Jobs abfragen      |
 | GET    | `/ingest/active`          | Laufender/wartender Ingestion-Job oder `null` (UI hängt sich nach 409 daran) |
 | POST   | `/feedback`               | 👍/👎 zu einer Chat-Antwort → eine Zeile in `logs/feedback.jsonl` (letzte Zeile je `message_id` gilt) |
+| GET    | `/feedback`               | Aktuelle Bewertung je Antwort (zurückgenommene ausgelassen), neueste zuerst — Evaluation-Tab „Feedback“ |
+| GET    | `/eval/chunks/files`      | Indizierte Dateien einer Quelle (`?source_id=`) — Chunk-Inspector |
+| GET    | `/eval/chunks`            | Alle Chunks einer Datei in Dokumentreihenfolge (`?source_id=&source_file=`), 404 wenn keine |
 | GET    | `/sources`                | Konfigurierte Sources                               |
 | PUT    | `/sources`                | Source-Liste ersetzen → `config/sources.yaml`       |
 | POST   | `/sources/scan`           | Beliebigen Pfad scannen (Ordner/Dateien für „Source hinzufügen") |

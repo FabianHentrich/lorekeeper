@@ -89,10 +89,13 @@ multilingual E5 model and prompts for any other language.
 | 🔀 **Dual LLM providers** | Ollama (local) ↔ Gemini (cloud), switch at runtime |
 | 📜 **Obsidian-native** | Wikilinks, callouts, embeds, tags, aliases all parsed |
 | 📄 **PDF OCR + structure** | RapidOCR for scanned regions, TOC-based heading hierarchy, embedded image extraction |
-| 🎯 **Category filtering** | Lore / Adventure / Rules filters restrict context |
+| 🎯 **Category filtering** | Lore / Adventure / Rules / Simulation filters restrict context; a rulebook slot keeps one rule chunk in mixed entity + rule questions |
+| 🎲 **Player / game-master mode** | Players only search sources released for them — enforced in the backend; sessions are bound to their role |
+| ⚡ **GPU reranking** | Cross-encoder on any DX12 GPU (AMD included) via ONNX Runtime + DirectML, CPU fallback |
+| 👍 **Answer feedback** | Rate answers in the chat; ratings become golden-set questions on the Evaluation page |
 | 🌊 **SSE streaming** | Token-by-token with source citations in the done event |
 | 📊 **Token accounting** | Per-message and per-session token usage (in / out / thinking), shown live in the UI |
-| 💬 **Multi-turn chat** | Sliding-window memory + automatic session GC |
+| 💬 **Multi-turn chat** | Sliding-window memory for follow-up rewriting, the last Q/A pair in the answer prompt ("fass das kürzer zusammen"), automatic session GC |
 | 💬 **Telegram-style answers** | Scannable chat-like formatting: short paragraphs, emoji headers, bullets — instead of flat 3-line prose |
 | 🔁 **Incremental indexing** | SHA-256 content hashing — only changed files re-embed; one click for "only changes" or a full re-index on the Sources page |
 | ✏ **Prompt management** | Edit active prompts, save/load/compare variants, Jinja2 preview — all from the UI with instant hot-reload |
@@ -250,7 +253,7 @@ For a complete walkthrough of the chat interface, token accounting, evaluation t
 | Backend | FastAPI + Pydantic v2 |
 | UI | Streamlit |
 | Embeddings | sentence-transformers (`intfloat/multilingual-e5-base`, 768-dim, asymmetric) |
-| Reranker | sentence-transformers CrossEncoder (`cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`) |
+| Reranker | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` — ONNX Runtime + DirectML on the GPU, sentence-transformers CrossEncoder on the CPU as fallback |
 | Vector store | ChromaDB (embedded / HTTP client) |
 | LLM | Ollama (`qwen3:14b`) or Google Gemini (`gemini-2.5-flash`) |
 | Prompts | Jinja2 + YAML |

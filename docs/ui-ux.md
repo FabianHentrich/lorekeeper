@@ -441,7 +441,7 @@ by later ingests (ingest only looks at configured IDs) — remove the source via
 | First query after server start | +2–4s (embedding model warm, ChromaDB connected) |
 | Query (Ollama qwen3:8b) | 8–30s total |
 | Query (Gemini 2.5 Flash) | 3–8s total |
-| Reranking (8 candidates) | ~300ms |
+| Reranking (15 candidates) | ~50ms on the GPU (DirectML), ~800ms CPU fallback |
 
 **Embedding model** is preloaded at server start (`warmup` in lifespan) —
 the first query is therefore no slower than subsequent ones.

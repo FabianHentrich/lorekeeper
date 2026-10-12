@@ -114,10 +114,25 @@ Rendered for every request when context chunks are found.
 | `chunks[i].heading` | `str` | Heading path, e.g. `Arkenfeld > Overview` |
 | `chunks[i].content` | `str` | Chunk text (with heading prefix) |
 | `question` | `str` | The (possibly condensed) user question |
+| `history` | `list[dict]` | The last question/answer pair of the session (`role`: `user`/`assistant`, `content`) — empty on the first question. Size: `conversation.answer_history_pairs` (default 1), earlier answers cut at `answer_history_max_chars` (1500). Templates without a history block simply ignore it |
+
+The history sits **before** the sources and is marked as "no source": it only
+resolves references to the previous answer ("fass das kürzer zusammen"), facts must
+come from the sources. Kept to one pair on purpose — more history dilutes the sources
+and gives earlier, possibly hallucinated answers weight.
 
 ```yaml
 qa: |
   Answer the following question based on the provided sources.
+  {% if history %}
+
+  ### Previous chat (no source):
+  Only to understand references like "that", "he" or "shorter". Facts come
+  only from the sources below.
+  {% for msg in history %}
+  {{ "User" if msg.role == "user" else "LoreKeeper" }}: {{ msg.content }}
+  {% endfor %}
+  {% endif %}
 
   ### Sources:
   {% for chunk in chunks %}

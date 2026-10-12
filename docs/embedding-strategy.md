@@ -9,6 +9,7 @@ This document details LoreKeeper's retrieval architecture, explaining the choice
    - [Why a cross-encoder rerank stage?](#why-a-cross-encoder-rerank-stage)
    - [Why BM25 Hybrid Search?](#why-bm25-hybrid-search)
    - [Why a per-source diversity cap?](#why-a-per-source-diversity-cap)
+   - [Why a rulebook slot?](#why-a-rulebook-slot)
    - [Why the identity layer?](#why-the-identity-layer-stem--aliases)
    - [Why `heading_aware` chunking?](#why-heading_aware-chunking-not-recursive-character)
    - [Why SHA-256 for re-ingestion?](#why-sha-256-content-hashing-for-re-ingestion)
@@ -67,6 +68,15 @@ directly scores relevance. It's ~20× slower per pair, so we only run it over th
 
 In practice: the bi-encoder gets you 90% of the way on recall; the cross-encoder
 fixes the ordering so the LLM's context window is used efficiently.
+
+**Where it runs:** with `reranking.backend: directml` the cross-encoder runs on the
+GPU via ONNX Runtime + DirectML (any DX12 card, AMD included) using the model's
+published ONNX export — identical scores, ~50 ms for 15 pairs instead of ~840 ms on
+the CPU, and unaffected by CPU load (~70 ms vs. ~14 s while a simulation keeps all
+cores busy). If DirectML is unavailable the retriever logs a warning and falls back to
+the torch model on the CPU. The bi-encoder stays on the CPU on purpose: a query
+embedding costs ~0.08 s, and a different backend would shift the vectors slightly
+against the existing index.
 
 ### Why BM25 Hybrid Search?
 
@@ -140,6 +150,24 @@ Tuning:
   than dilute with weaker matches.
 - `max_per_source: 0` — disable the cap entirely; pure reranker order.
 
+### Why a rulebook slot?
+
+Questions that name a vault entity **and** a rule term — *"Was bewirkt
+Ritterlichkeit bei Escanor?"*, *"Thalion trägt eine Phönixfeder – was kann sie?"* —
+hit the entity's file so strongly that it fills all 15 vector candidates. The rule
+definition in the PDF never reaches the reranker, so no cap or reorder can help.
+
+`retrieval.rules_slot` adds a second, small vector search restricted to group
+`rules` (5 candidates, AND-ed with the request filter so player mode still holds).
+These candidates are scored by the cross-encoder but **kept out of the main pool**.
+Only if no `rules` chunk made the final top `top_k_rerank`, the best of them replaces
+the weakest chunk — if its score is ≥ `min_score` (-4), and never more than one.
+
+Mixing the extra candidates into the main pool was measured and rejected: slightly
+more section hits (138 vs. 136 of 153), but rulebook chunks in 121 of 138 pure lore
+questions instead of 64. Golden set with the slot: sections 132 → 136/153,
+cross-source questions x001–x008 1 → 5/8.
+
 ### Why the identity layer (`stem | aliases`)?
 
 This is the trick that matters most for entity-centric TTRPG content.
@@ -210,7 +238,7 @@ chunk cites the same file (see below).
 flowchart LR
     Q([Query]) --> BE["Bi-Encoder\ne5-base 'query: '+text\n~20–80ms"]
     BE -->|"768-dim\nquery vector"| CS["ChromaDB\nCosine search\ntop_k=15\n~5ms"]
-    CS -->|"15 candidates\n(score = 1 - cosine_dist)"| CE["Cross-Encoder\nmmarco-mMiniLMv2\n~200–400ms"]
+    CS -->|"15 candidates\n(score = 1 - cosine_dist)"| CE["Cross-Encoder\nmmarco-mMiniLMv2\n~50ms GPU (DirectML)\n~800ms CPU fallback"]
     CE -->|"top_k_rerank=8\nsorted by relevance"| LLM([LLM context])
 
     style BE fill:#dbeafe,stroke:#3b82f6
