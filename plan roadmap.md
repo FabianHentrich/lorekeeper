@@ -346,11 +346,7 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 - **Antwortzeit — Kontextfenster (gemessen)**: `ollama ps` zeigt `CONTEXT 4096` für qwen3:14b. Die Krieger-Frage brauchte 3621 Eingabe- + 919 Ausgabe-Tokens — am bzw. über dem Limit; bei größerer Section Expansion wird der Prompt-Anfang (Systemprompt) still abgeschnitten. ✅ **Erledigt**: `OLLAMA_CONTEXT_LENGTH=16384` als Benutzer-Umgebungsvariable gesetzt (der OpenAI-kompatible Endpoint ignoriert `num_ctx` pro Request, getestet). Danach `CONTEXT 16384`, 11 GB von 16 GB VRAM, weiterhin 100 % GPU, keine messbare Verlangsamung (warm: erster Token 1,1 s / 2,3 s).
 - **Antwortzeit — Modell entladen nach 5 Minuten (gemessen)**: Ollama entlädt das Modell nach 5 min Leerlauf; die erste Frage danach wartet ~16 s aufs Laden (erster Token 18 s statt 1,1 s). ✅ **Erledigt**: `OLLAMA_KEEP_ALIVE=1h` als Benutzer-Umgebungsvariable — das Modell bleibt bis 1 h nach der letzten Frage geladen (`ollama ps`: „59 minutes from now“). Belegt in der Zeit ~11 GB VRAM; `-1` hielte es dauerhaft geladen.
 - **Präzision/Kontext — Section Expansion begrenzt** ✅ **Erledigt**: `section_expansion.top_rank: 3` — expandiert nur, wenn ein Treffer der Sektion unter den ersten 3 Chunks liegt. Golden Set (0 = altes Verhalten / 3 / 2 / 1): Ø Chunks 13,9 / 12,6 / 11,9 / 10,7; expandierte Fragen 144 / 119 / 102 / 75; Abschnitt-Treffer überall 89,1 %. Bei 3 fallen nur Fehl-Expansionen weg (z.B. Geisterwesen-Statblöcke bei „Eigenheiten Geist und Psyche“); 2 und 1 schneiden bereits relevante Übersichts-Chunks ab (Akademie-Geschichte, Szenenübersicht, Arkenfeld-Steckbrief). Offen: Gesamtbudget über alle expandierten Sektionen (max. 49 Chunks bleiben möglich). Unnötige Condense-Aufrufe sind bereits entfernt (`needs_condense`).
-- **Retrieval — Reranker/Embeddings auf der CPU (gemessen, offen)**: `torch 2.14.1+cpu` ist installiert, `torch.cuda.is_available()` = False. Rerank kostet 0,5–0,75 s pro Frage, Re-Indexierung des Regelwerks ~80 s. Auf der GPU wäre Platz (Modell 11 GB + Reranker/Embedding ~1–2 GB von 16 GB); Ollama nutzt die Karte bereits für das LLM. **Hardware: AMD Radeon RX 9070 XT → kein CUDA** (nur NVIDIA). Optionen unter Windows (Stand 10/2026):
-  - **ONNX Runtime + DirectML** (empfohlen): beide Modelle über sentence-transformers als ONNX exportieren, DirectML läuft auf jeder DX12-Karte. Neue Abhängigkeit (`onnxruntime-directml`), mittlerer Code-Aufwand in `embeddings.py`/Reranker.
-  - **PyTorch mit ROCm für Windows**: nur Preview; offener Bug [ROCm/TheRock #8379](https://github.com/ROCm/TheRock/issues/8379) — PyTorch 2.12 + ROCm 7.14 liefert auf der RX 9070 XT unter Windows **stillschweigend Nullen** → würde den Index unbemerkt zerstören. Erst wieder prüfen, wenn der Bug behoben ist.
-  - `torch-directml`: läuft, aber kaum gepflegt und an alte torch-Versionen gebunden. WSL2 + ROCm passt nicht zu „nur Windows“.
-  - Vorgehen: Abhängigkeit entscheiden, dann Embeddings auf CPU vs. DirectML vergleichen (identische Vektoren bis auf Rundung prüfen!), Rerank-/Index-Zeiten und VRAM messen. CPU-lastig → nicht parallel zur Simulation.
+- **Retrieval — Reranker/Embeddings auf der CPU (gemessen, offen)** → Entscheidungsvorlage unten (5.4).
 - **Kontext — Gesamtbudget für Section Expansion (offen)**: Mehrere expandierte Sektionen können zusammen noch bis zu 49 Chunks ergeben (z.B. „Wie wird die Bonusaktion im Kampf eingesetzt?“). Ein Budget über alle Sektionen (z.B. max. 20 Chunks) begrenzt das; messbar mit der Chunk-Prüfung aus 5.2.
 - **UI-Reaktion (gemessen, Hauptursache behoben)**: Die 2-s-`localhost`-Verzögerung pro Request ist behoben (5.2). ✅ Reste erledigt: Der Chat holt das LLM-Timeout aus dem gecachten `/sidebar-state` statt `/config` vor jeder Nachricht (1 Request pro Nachricht statt 2); Sources-Seite cacht `/folders`; Polling blockiert nicht mehr (3.8/3.9). Kosten eines Reruns mit langer Chat-Historie und vielen Quellen-Expandern noch nicht gemessen.
 - **Start (offen)**: nur einfache Hebel — `--reload` im Server-Modus aus (4.1); Reranker wird in `src/main.py` beim Start vorgeladen (~4 s) — lazy laden verschiebt die Zeit nur auf die erste Frage, lohnt also nur mit GPU-Inferenz (dann deutlich schneller geladen).
@@ -358,6 +354,31 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 
 **Aufwand**: je Hebel Gering bis Mittel.
 
+
+### 5.4 Entscheidungsvorlage: Reranker/Embeddings auf GPU (Stand 12.10.)
+
+**Warum überhaupt?** Der Cross-Encoder-Rerank ist der teuerste Schritt im Retrieval und läuft auf der CPU (`torch 2.14.1+cpu`). Gemessen (`logs/`, 34 Anfragen): Rerank Median 0,8 s, p90 1,5 s — aber **9,7–9,9 s, während die Simulation lief** (Retrieval gesamt 11,7 s, Embedding 1,7 s statt 0,08 s). Der eigentliche Nutzen ist deshalb nicht die halbe Sekunde im Normalfall, sondern:
+1. **Unabhängig von CPU-Last**: Chat bleibt schnell, auch wenn die Simulation (oder ein Ingest) läuft — heute kostet jede Frage dann ~10 s extra.
+2. **Evals und Indexierung**: Golden-Set-Lauf ~12 min (Rerank dominiert), Re-Index Regelwerk ~80 s. Auf der GPU würden 3.10 und das Section-Budget (je mehrere Läufe) billiger — und müssten nicht auf eine freie CPU warten (Eval am 12.10. abgebrochen wegen Simulation).
+3. Im Normalfall: erster Token ~1,1 s → ~0,5 s. Spürbar, aber allein kein Grund.
+
+**Optionen**
+
+| Option | Gewinn | Kosten / Risiko | Bewertung |
+|---|---|---|---|
+| A. Reranker als ONNX **int8 auf der CPU** (`backend="onnx"`, `export_dynamic_quantized_onnx_model`) | weniger CPU-Arbeit pro Frage (Faktor erst messen); unter Last weiterhin Konkurrenz mit der Simulation | neue Abhängigkeit `optimum-onnx` (über `sentence-transformers[onnx]`), nutzt das **schon installierte** `onnxruntime 1.31` — kein Konflikt; Quantisierung kann Ranking leicht verschieben → Golden Set prüfen | **Erster Schritt**: kleines Risiko, sofort messbar |
+| B. ONNX Runtime + **DirectML** (GPU) | Rerank weg von der CPU → Punkt 1 und 2 voll | DirectML ist laut Microsoft in *sustained engineering* (keine neuen Features, Nachfolger Windows ML); letztes Paket `onnxruntime-directml 1.24.4` (17.03.2026) vs. installiert `onnxruntime 1.31`. Beide Pakete schreiben ins selbe Modul `onnxruntime/` — chromadb, pymupdf-layout und rapidocr verlangen `onnxruntime`, also Downgrade für alle drei; jedes spätere `pip install -r requirements.txt` kann das CPU-Paket zurückholen → **stiller Rückfall auf CPU** (nur langsamer, nicht falsch). VRAM unkritisch (~0,5 GB neben 11 GB LLM) | Machbar, aber Sackgasse; nur mit Startup-Log/Test „DmlExecutionProvider aktiv“ |
+| C. **Windows ML** (Nachfolger, wählt den Provider je Hardware, Python-API vorhanden) | wie B, zukunftssicher | Radeon-GPU-Pfad (MIGraphX-Provider) unter Windows aus Python nicht belegt; Doku auf NPU/Ryzen AI fokussiert | Beobachten, jetzt nicht |
+| D. PyTorch + **ROCm für Windows** | wie B, ohne ONNX-Export | Bug [ROCm/TheRock #8379](https://github.com/ROCm/TheRock/issues/8379): RX 9070 XT liefert still Nullen → würde den Index zerstören | Erst nach Bugfix |
+| E. Nichts tun, Evals/Ingest nur ohne Simulation | — | Status quo; Chat während Simulation ~10 s langsamer | Fallback |
+
+**Nur den Reranker umstellen, nicht das Embedding-Modell**: Query-Embedding kostet normal ~0,08 s; ein anderes Backend ändert die Vektoren minimal → Index und Golden Set müssten neu verglichen bzw. neu indiziert werden. Der Reranker wirkt nur zur Abfragezeit, ein Wechsel ist jederzeit rückgängig zu machen.
+
+**Empfehlung**: A zuerst (Config-Schalter `reranking.backend: torch | onnx`, Default `torch`; ONNX-Modell einmal exportieren und lokal speichern). Messen: Rerank-Zeit idle und unter Simulationslast, Golden Set Treffer/Abschnitte gegen heute (261/262, 121/137). Reicht das unter Last nicht, B als zweiter Schritt — mit Provider-Check beim Start. C/D halbjährlich neu prüfen.
+
+**Entscheidung (12.10.): ⏸ zurückgestellt.** Im Leerlauf spart die GPU geschätzt nur ~0,7 s pro Frage (Antwort ~3,7 s → ~3 s, das LLM dominiert) — den Abhängigkeitsärger von DirectML nicht wert. Lohnend wäre es nur, wenn Chat/Evals regelmäßig parallel zur Simulation laufen.
+
+**Offen — Benchmark bei freier CPU** (~1 min, nichts im Projekt ändern): Reranker CPU (torch, heute) vs. ONNX int8 CPU vs. DirectML, je 15 Paare × ~50 Wiederholungen, plus dieselben Paare unter künstlicher CPU-Last. DirectML/optimum nur in einem **separaten Scratch-venv** installieren, nie in `.venv`. Danach mit echten Zahlen neu entscheiden.
 
 ## 6.0 PnP-Simulation zugreifbar machen — 🔄 Umgesetzt, Abschluss nach dem nächsten Simulationslauf
 
@@ -420,7 +441,7 @@ Erledigt: 3.3 Chunk-Inspector, 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-F
 |---|---|---|---|---|-----------------------------------------------------------------------------------------------------------------------------|
 | 1 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf; dann Re-Index, Eval, Spieler-Messung — dabei 3.8/3.9 im Browser durchklicken     |
 | 2 | 5.2 Startup-Baseline aufnehmen | Gering — Regressionsschutz für den Start | Gering | 🟡 | Test steht; einmal messen bei gestopptem LoreKeeper und ohne Simulation                                                     |
-| 3 | 5.3 Reranker/Embeddings auf GPU (AMD: ONNX Runtime + DirectML) | Mittel — ~0,5 s pro Frage, schnellere Indexierung und Evals, CPU frei für die Simulation | Mittel | 🔴 | Vor 3.10/Section-Budget: macht deren Golden-Set-Läufe billiger. Neue Abhängigkeit — erst entscheiden; ROCm erst nach Bugfix |
+| 3 | 5.4 Reranker schneller — ⏸ zurückgestellt, erst Benchmark | Gering im Leerlauf (~0,7 s), hoch nur parallel zur Simulation (~10 s) | Gering (Benchmark) | 🔴 | Benchmark CPU vs. ONNX int8 vs. DirectML bei freier CPU, im Scratch-venv; danach entscheiden |
 | 4 | 3.10 Regelwerk-Slot im Retrieval | Mittel — SL-Fragen, die Vault und Regel mischen | Mittel | 🔴 | Mit Abschnittsprüfung messbar (x002–x008)                                                                                   |
 | 5 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🔴 | Mit der Chunk-Prüfung aus 5.2 messbar                                                                                       |
 | 6 | 3.2 Session-History | Mittel | Mittel | 🟢 | Später; Spieler-/SL-Sessions getrennt halten; Fraglich ob überhaupt gebraucht                                               |
