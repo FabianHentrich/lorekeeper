@@ -1,19 +1,26 @@
-# LoreKeeper — Architecture Document
+# LoreKeeper — Architektur
 
-**RAG-based Q&A System for Structured Worldbuilding Documents**
+**RAG-basiertes Frage-Antwort-System für strukturierte Worldbuilding-Dokumente**
 
-Version: 0.2.0 — Last Updated: 2026-04-04
+Stand: 2026-10-13
 
-> Dieses Dokument beschreibt die Systemarchitektur auf Komponentenebene.
-> Für spezialisierte Themen siehe die detaillierten Docs:
+> Dieses Dokument beschreibt die Architektur auf Komponentenebene: wer was macht, wie die
+> Teile zusammenhängen und warum. Details stehen jeweils an **einer** Stelle:
 >
 > | Thema | Dokument |
 > |-------|----------|
-> | Ingestion- & Query-Pipeline | [docs/data-flow.md](docs/data-flow.md) |
-> | Embedding-Aufbau & Reranking | [docs/embedding-strategy.md](docs/embedding-strategy.md) |
-> | Ollama vs. Gemini, Provider-Wechsel | [docs/provider-strategy.md](docs/provider-strategy.md) |
-> | Streamlit UI, Session-State | [docs/ui-ux.md](docs/ui-ux.md) |
-> | Ingest, Troubleshooting | [docs/operations.md](docs/operations.md) |
+> | Installation, Schnellstart, Tech Stack | [README.md](README.md) |
+> | Alle Einstellungen und Umgebungsvariablen | [docs/configuration.md](docs/configuration.md) |
+> | Ingestion- und Query-Pipeline als Diagramme | [docs/data-flow.md](docs/data-flow.md) |
+> | Embedding, Reranking, Hybrid Search, Regelwerk-Slot — und warum | [docs/embedding-strategy.md](docs/embedding-strategy.md) |
+> | Parser (Markdown/Obsidian, PDF, Bilder) | [docs/parsing.md](docs/parsing.md) |
+> | Prompt-Templates und -Varianten | [docs/prompts.md](docs/prompts.md) |
+> | Ollama vs. Gemini, Provider-Wechsel, Token-Zählung | [docs/provider-strategy.md](docs/provider-strategy.md) |
+> | Streamlit-Oberfläche, Seiten, Session-State | [docs/ui-ux.md](docs/ui-ux.md) |
+> | Golden Set und Evaluation | [docs/evaluation.md](docs/evaluation.md) |
+> | Betrieb, Heimnetz, Fehlersuche, Logs | [docs/operations.md](docs/operations.md) |
+> | Mitarbeit, Tests, Sicherheits- und Performance-Prüfungen | [CONTRIBUTING.md](CONTRIBUTING.md) |
+> | Geplante Arbeit | [plan roadmap.md](plan%20roadmap.md) |
 
 ---
 
@@ -23,47 +30,43 @@ Version: 0.2.0 — Last Updated: 2026-04-04
 2. [Systemübersicht](#2-systemübersicht)
 3. [Repository-Struktur](#3-repository-struktur)
 4. [Komponenten im Detail](#4-komponenten-im-detail)
-   - 4.1 Document Ingestion Pipeline
+   - 4.1 Ingestion-Pipeline
    - 4.2 Embedding & Vector Store
    - 4.3 Retrieval Engine
-   - 4.4 Generation Engine & Provider-Abstraction
+   - 4.4 Generation Engine & Provider-Abstraktion
    - 4.5 Conversation Manager
    - 4.6 Prompt Manager
    - 4.7 Config Manager
-   - 4.8 API Layer
-   - 4.9 Streamlit Chat UI
-5. [Konfiguration](#5-konfiguration)
-   - 5.1 settings.yaml
-   - 5.2 prompts.yaml
-6. [Hardware-Profile & Modellempfehlungen](#6-hardware-profile--modellempfehlungen)
-7. [Evaluation](#7-evaluation)
-8. [Deployment & Infrastruktur](#8-deployment--infrastruktur)
-9. [Erweiterbarkeit & Roadmap](#9-erweiterbarkeit--roadmap)
-10. [Tech Stack Zusammenfassung](#10-tech-stack-zusammenfassung)
+   - 4.8 Zugriff nach Rolle (Spieler / Spielleiter)
+   - 4.9 API-Schicht (FastAPI)
+   - 4.10 Streamlit-Oberfläche
+5. [Hardware & Modelle](#5-hardware--modelle)
+6. [Betrieb](#6-betrieb)
+7. [Erweiterungspunkte](#7-erweiterungspunkte)
 
 ---
 
 ## 1. Vision & Zielsetzung
 
-LoreKeeper ist ein modulares Retrieval-Augmented Generation (RAG) System, das strukturierte
-Worldbuilding-Dokumente (Lore, Charakterbeschreibungen, Fraktionen, Regionen, Regeln etc.)
-indiziert und über eine Chat-Oberfläche durchsuchbar und abfragbar macht.
+LoreKeeper ist ein modulares Retrieval-Augmented-Generation-System (RAG), das strukturierte
+Worldbuilding-Dokumente (Lore, Charaktere, Fraktionen, Orte, Regeln, Abenteuer, Simulationsberichte)
+indiziert und über eine Chat-Oberfläche abfragbar macht.
 
 ### Kernziele
 
-- Natürlichsprachliche Fragen über eine PnP-Welt beantworten, gestützt auf die tatsächlichen Quellen
-- Quellenangabe bei jeder Antwort (Dokument, Abschnitt, Heading)
-- Konversationsgedächtnis über mehrere Nachrichten (Sliding Window)
-- Lokale und Cloud-basierte LLM-Nutzung (Ollama / Gemini) über einen einheitlichen Provider-Layer
-- Modularer Aufbau, zentral konfigurierbar über YAML, erweiterbar
-- Deutschsprachig als Primärsprache, englische Queries als spätere Option
+- Natürlichsprachliche Fragen über eine Pen-and-Paper-Welt beantworten, gestützt auf die tatsächlichen Quellen
+- Quellenangabe bei jeder Antwort (Datei, Abschnitt)
+- Folgefragen im Gespräch (Sliding Window für die Suche, letztes Frage/Antwort-Paar im Antwort-Prompt)
+- Lokale und Cloud-LLMs (Ollama / Gemini) über eine einheitliche Provider-Schicht
+- Spieler sehen nur freigegebene Quellen, Spielleiter alles
+- Zentral über YAML konfigurierbar, Laufzeit-Einstellungen über die UI
+- Deutsch als Primärsprache
 
-### Nicht im Scope (v1)
+### Nicht im Scope
 
-- Multimodale Bildbeschreibung / Vision (Bilder werden als Metadaten indiziert, nicht analysiert)
-- React-Frontend (kommt nach Streamlit als v2)
-- Cloud-Deployment / Docker (läuft ausschließlich lokal unter Windows)
-- Schreibzugriff auf Dokumente (read-only)
+- Bildinhalte analysieren (Bilder werden nur über Dateiname und Pfad indiziert, siehe Roadmap 2)
+- Cloud-Deployment / Docker — LoreKeeper läuft ausschließlich lokal unter Windows
+- Schreibzugriff auf die Quellen (read-only)
 - Fine-Tuning von Modellen
 
 ---
@@ -72,37 +75,38 @@ indiziert und über eine Chat-Oberfläche durchsuchbar und abfragbar macht.
 
 ```mermaid
 flowchart TB
-    UI["🖥️ Streamlit Chat UI<br/>Chat-Verlauf · Quellenanzeige · Settings"]
+    UI["🖥️ Streamlit-Oberfläche<br/>Chat · Quellen · Evaluation · Prompts · Settings"]
 
-    subgraph BACKEND["⚡ FastAPI Backend"]
+    subgraph BACKEND["⚡ FastAPI-Backend"]
         direction TB
-        ROUTER["Query Router<br/>/query · /query/stream · /ingest"]
+        ROUTER["API<br/>/query · /query/stream · /ingest · /eval · /prompts · …"]
 
         subgraph CORE[" "]
             direction LR
-            RETRIEVE["🔍 Retrieval Engine<br/>ChromaDB + Reranker"]
-            GEN["🧠 Generation Engine<br/>Provider Layer"]
+            ACCESS["🎲 Zugriff nach Rolle<br/>player_visible-Filter"]
+            RETRIEVE["🔍 Retrieval Engine<br/>Vektor (+ BM25) · Rerank (GPU) · Regelwerk-Slot · Section Expansion"]
+            GEN["🧠 Generation Engine<br/>Provider-Schicht"]
         end
 
         subgraph SUPPORT[" "]
             direction LR
-            CFG["⚙️ Config Manager<br/>YAML"]
-            CONV["💬 Conversation<br/>Sliding Window + GC"]
-            PROMPT["📝 Prompt Manager<br/>Jinja2 Templates"]
+            CFG["⚙️ Config Manager<br/>YAML + Sidecars"]
+            CONV["💬 Conversation<br/>Sessions je Rolle + GC"]
+            PROMPT["📝 Prompt Manager<br/>Jinja2-Templates"]
         end
 
-        INGEST["📥 Ingestion Pipeline<br/>Parsers (MD/PDF/IMG) → Chunking → Embedding → Store"]
+        INGEST["📥 Ingestion<br/>Parser (MD/PDF/Bild) → Chunking → Embedding → Speichern"]
 
-        ROUTER --> RETRIEVE
+        ROUTER --> ACCESS --> RETRIEVE
         ROUTER --> GEN
         ROUTER -.-> CFG
         ROUTER -.-> CONV
         ROUTER -.-> PROMPT
     end
 
-    CHROMA[("🗃️ ChromaDB<br/>Vectors")]
-    OLLAMA["🖥️ Ollama<br/>local"]
-    GEMINI["☁️ Gemini<br/>cloud API"]
+    CHROMA[("🗃️ ChromaDB<br/>embedded")]
+    OLLAMA["🖥️ Ollama<br/>lokal"]
+    GEMINI["☁️ Gemini<br/>Cloud-API"]
 
     UI <-->|HTTP / SSE| ROUTER
     RETRIEVE <--> CHROMA
@@ -118,29 +122,30 @@ flowchart TB
     class UI ui
 ```
 
-### Datenfluss einer Query
+### Ablauf einer Frage
 
 ```mermaid
 flowchart TD
-    Q([User-Frage])
-    CM["💬 Conversation Manager<br/>Sliding-Window-History anhängen"]
-    PM1["📝 Prompt Manager<br/>Condense-Prompt rendern"]
-    LLM1["🧠 LLM Provider<br/>Standalone-Frage generieren<br/><i>optional · nur mit Verlauf</i>"]
-    RET["🔍 Retrieval Engine<br/>Embed → ChromaDB → Rerank → Top-K"]
-    PM2["📝 Prompt Manager<br/>QA-Prompt rendern (System + Chunks + Frage)"]
-    LLM2["🧠 LLM Provider<br/>Antwort mit Quellenreferenzen"]
-    API["⚡ API Response<br/>Antwort + Quellen + Chunks"]
-    UI([🖥️ Streamlit UI<br/>Antwort + klickbare Quellen])
+    Q([Frage + Rolle])
+    ACC["🎲 Zugriff<br/>Spieler → nur player_visible-Quellen"]
+    CM["💬 Conversation Manager<br/>Session der Rolle, Verlauf"]
+    LLM1["🧠 Condense<br/>Folgefrage → eigenständige Frage<br/><i>nur bei Rückbezügen</i>"]
+    RET["🔍 Retrieval<br/>Embed → ChromaDB → Rerank → Slot → Expansion"]
+    PM["📝 QA-Prompt<br/>System + letztes Q/A-Paar + Chunks + Frage"]
+    LLM2["🧠 Antwort<br/>gestreamt, mit Quellen"]
+    UI([🖥️ Chat<br/>Antwort · Quellen · 👍/👎])
 
-    Q --> CM --> PM1 --> LLM1 --> RET --> PM2 --> LLM2 --> API --> UI
+    Q --> ACC --> CM --> LLM1 --> RET --> PM --> LLM2 --> UI
 
     classDef io fill:#d1fae5,stroke:#10b981,color:#064e3b
     classDef llm fill:#fef3c7,stroke:#d97706,color:#78350f
     classDef svc fill:#ede9fe,stroke:#7c3aed,color:#4c1d95
     class Q,UI io
     class LLM1,LLM2 llm
-    class CM,PM1,PM2,RET,API svc
+    class ACC,CM,RET,PM svc
 ```
+
+Ausführliche Diagramme beider Pipelines: [docs/data-flow.md](docs/data-flow.md).
 
 ---
 
@@ -148,1306 +153,414 @@ flowchart TD
 
 ```
 lorekeeper/
-│
 ├── config/
-│   ├── settings.yaml              # Zentrale Konfiguration
+│   ├── settings.yaml              # Zentrale Konfiguration (versioniert)
+│   ├── settings.local.yaml        # Überschreibungen der Settings-Seite (Sidecar, gitignored)
+│   ├── sources.yaml               # Quellen (Sidecar, gitignored — Vorlage: sources_example.yaml)
 │   ├── prompts.yaml               # Aktive Prompt-Templates
-│   ├── prompts/                   # Gespeicherte Prompt-Varianten (*.yaml)
-│   ├── sources.yaml               # Sources (Sidecar, gitignored — Vorlage: sources_example.yaml)
-│   └── settings.local.yaml        # UI-Overrides der Settings-Seite (Sidecar, gitignored)
+│   └── prompts/                   # Gespeicherte Prompt-Varianten (gitignored)
 │
 ├── src/
-│   ├── __init__.py
-│   ├── main.py                    # FastAPI App Entry Point
-│   │
-│   ├── config/
-│   │   ├── __init__.py
-│   │   └── manager.py             # YAML Loader + Pydantic Validation
-│   │
+│   ├── main.py                    # FastAPI-App, Lifespan (Modelle laden, Session-GC)
+│   ├── config/manager.py          # YAML + Env + Sidecars → Pydantic-Settings
 │   ├── ingestion/
-│   │   ├── __init__.py
-│   │   ├── orchestrator.py        # Koordiniert: Parse → Chunk → Embed → Store
-│   │   ├── parsers/
-│   │   │   ├── __init__.py
-│   │   │   ├── base.py            # Abstract Base Parser
-│   │   │   ├── markdown.py        # Markdown (Frontmatter, Headings, Links)
-│   │   │   ├── pdf.py             # PDF (PyMuPDF / pymupdf4llm)
-│   │   │   └── image.py           # Bild-Metadaten (Dateiname, Pfad, Ordner)
-│   │   └── chunking.py            # Chunking-Strategien
-│   │
+│   │   ├── orchestrator.py        # Parse → Chunk → Embed → Speichern (je Quelle)
+│   │   ├── recategorize.py        # group/category neu setzen ohne Re-Embedding
+│   │   ├── parsers/               # markdown.py · pdf.py · image.py (BaseParser)
+│   │   └── chunking.py            # heading_aware | recursive | fixed_size
 │   ├── retrieval/
-│   │   ├── __init__.py
-│   │   ├── embeddings.py          # sentence-transformers Wrapper
-│   │   ├── vectorstore.py         # ChromaDB Interface (CRUD, Query, Filter)
-│   │   └── retriever.py           # Retrieval-Logik + Metadaten-Filtering
-│   │
+│   │   ├── embeddings.py          # sentence-transformers (run_in_threadpool!)
+│   │   ├── vectorstore.py         # ChromaDB-Zugriff
+│   │   ├── bm25_index.py          # BM25 für Hybrid Search
+│   │   ├── retriever.py           # Suche, Rerank, Cap, Regelwerk-Slot, Section Expansion
+│   │   └── onnx_reranker.py       # Cross-Encoder auf der GPU (ONNX Runtime + DirectML)
 │   ├── generation/
-│   │   ├── __init__.py
-│   │   ├── providers/
-│   │   │   ├── __init__.py
-│   │   │   ├── base.py            # Abstract Base Provider (Interface)
-│   │   │   ├── ollama.py          # Ollama Client (OpenAI-kompatible API)
-│   │   │   └── gemini.py          # Google Gemini Client (google-genai SDK)
-│   │   ├── provider_factory.py    # Factory: Config → Provider-Instanz
-│   │   └── generator.py           # Orchestriert Prompt + LLM + Response-Parsing
-│   │
-│   ├── conversation/
-│   │   ├── __init__.py
-│   │   └── manager.py             # Sliding Window, Session-Verwaltung
-│   │
-│   ├── prompts/
-│   │   ├── __init__.py
-│   │   └── manager.py             # Lädt + rendert Templates via Jinja2
-│   │
+│   │   ├── providers/             # base.py · ollama.py · gemini.py
+│   │   ├── provider_factory.py    # Config → Provider-Instanz
+│   │   └── generator.py           # Prompt + LLM + Fallback
+│   ├── conversation/manager.py    # Sessions je Rolle, Sliding Window, GC
+│   ├── prompts/manager.py         # Jinja2-Rendering
 │   └── api/
-│       ├── __init__.py
-│       ├── routes.py               # Endpoints: /query, /query/stream, /ingest, /ingest/status, /health, /sessions,
-│       │                           #   /sources/*, /provider/*, /config, /stats, /admin/wipe
-│       ├── schemas.py              # Pydantic Request/Response Models
-│       ├── prompt_routes.py        # Endpoints: /prompts/* (active, variants, preview)
-│       ├── prompt_schemas.py       # Pydantic Models für Prompt-Endpoints
-│       └── eval_routes.py          # Endpoints: /eval/* (Golden Set, Preview, Eval-Jobs, Chunk-Inspector)
+│       ├── routes.py              # /query, /ingest, /sources, /provider, /config, /feedback, …
+│       ├── access.py              # Spieler-Filter aus player_visible
+│       ├── eval_routes.py         # /eval/* (Golden Set, Preview, Eval-Jobs, Chunk-Inspector)
+│       ├── prompt_routes.py       # /prompts/*
+│       └── *schemas.py            # Pydantic-Request/Response-Modelle
 │
 ├── ui/
-│   ├── LoreKeeper.py              # Streamlit Chat-Oberfläche
-│   └── pages/
-│       ├── 1_Sources.py            # Source-Verwaltung
-│       ├── 2_Evaluation.py         # Evaluation-Seite
-│       ├── 3_Prompts.py            # Prompt-Editor + Varianten
-│       └── 4_Settings.py           # Settings-Seite (Retrieval/LLM/Conversation/Chunking)
+│   ├── LoreKeeper.py              # Chat (Rollenwahl, Streaming, Quellen, 👍/👎)
+│   ├── admin_gate.py              # Passwortschutz der Admin-Seiten
+│   ├── roles.py                   # Spieler-/Spielleiter-Filter in der UI
+│   ├── feedback.py                # Bewertungen → Golden-Set-Fragen
+│   └── pages/                     # 1_Sources · 2_Evaluation · 3_Prompts · 4_Settings
 │
-├── tests/
-│   ├── unit/                      # Pro Modul, externe Abhängigkeiten gemockt
-│   ├── integration/               # FastAPI-Routen (TestClient), RAG-Pipeline, E2E Ingest → Query
-│   └── test_code_quality.py       # ruff check + mypy als Teil von pytest
-│
-├── evaluation/
-│   ├── qa_pairs.yaml              # Golden Set: 262 Fragen (markdown/pdf/image/adventure/mixed)
-│   ├── evaluate.py                # End-to-End Evaluation (inkl. LLM via /query)
-│   ├── evaluate_retrieval.py      # Retrieval-Only Evaluation (kein LLM, schnell)
-│   └── results/                   # Ergebnisse als JSON
-│
-├── data/
-│   └── .gitkeep                   # Dokumente werden NICHT committed
-│
-├── chroma_data/
-│   └── .gitkeep                   # ChromaDB Persistenz (NICHT committed)
-│
-├── requirements.txt
-├── pyproject.toml
-├── .env.example                   # Environment-Variablen Template
-├── ARCHITECTURE.md
-└── README.md
+├── evaluation/                    # Golden Set (278 Fragen), evaluate_retrieval.py, evaluate.py
+├── tests/                         # unit · integration · ui · perf (-m perf) · live (-m live)
+├── scripts/setup-lan.ps1          # Firewall-Regel für den Heimnetz-Betrieb
+├── start.ps1                      # Start von Backend + UI (Entwicklung / -Server)
+├── chroma_data/                   # ChromaDB-Persistenz (nicht versioniert)
+└── logs/                          # lorekeeper.log, feedback.jsonl (nicht versioniert)
 ```
 
 ---
 
 ## 4. Komponenten im Detail
 
-### 4.1 Document Ingestion Pipeline
+### 4.1 Ingestion-Pipeline
 
-**Aufgabe:** Dokumente einlesen, parsen, chunken, embedden, in ChromaDB persistieren.
+**Aufgabe:** Dokumente einlesen, parsen, in Chunks zerlegen, embedden und in ChromaDB speichern.
 
-#### Dokumentquellen
+#### Quellen
 
-Sources werden in `config/sources.yaml` (Sidecar, gitignored) konfiguriert.
-Eine Source ist entweder ein **Ordner** oder eine **einzelne Datei**. Jede
-Source hat eine `group` (`lore` / `adventure` / `rules` / `simulation`) als Fallback für die
-UI-Filter „🗺️ Lore / 📖 Abenteuer / 📋 Regelwerk / 📊 Simulation". Über `category_map`
-kann die `group` **pro Top-Level-Ordner** überschrieben werden — so lässt sich
-ein einzelner Obsidian-Vault sauber auf mehrere Gruppen verteilen.
+Quellen stehen in `config/sources.yaml` (Sidecar, gitignored). Eine Quelle ist ein **Ordner** oder
+eine **einzelne Datei** und gehört zu einer `group` (`lore` / `adventure` / `rules` / `simulation`) —
+das sind die Filter „🗺️ Lore / 📖 Abenteuer / 📋 Regelwerk / 📊 Simulation“ im Chat. Über
+`category_map` lässt sich die `group` **pro Top-Level-Ordner** überschreiben, so verteilt sich ein
+Obsidian-Vault auf mehrere Gruppen. `player_visible` gibt eine Quelle für Spieler frei (4.8).
+Schema und Beispiele: [docs/configuration.md](docs/configuration.md) → „Sources sidecar“.
 
-```yaml
-# config/sources.yaml
-sources:
-  - id: pnp-welt                         # stabile ID — wird für Reindex/Delete benutzt
-    path: C:/Users/you/Obsidian/PnP-Welt  # beliebiger absoluter oder relativer Pfad
-    group: lore                          # Fallback-Group für unmapped Ordner
-    default_category: misc               # Fallback-Kategorie
-    category_map:
-      NPCs: npc                          # String-Kurzform → erbt group: lore
-      Orte: location
-      Gegner: enemy
-      Geschichte:                        # Dict-Form → überschreibt group
-        category: story
-        group: adventure
-      Regelwerk:
-        category: rules
-        group: rules
-```
+Verwaltung per Editor, per REST (`GET/PUT /sources`, `POST /sources/{id}/reindex`,
+`DELETE /sources/{id}`, `POST /sources/recategorize`, `POST /admin/wipe`) oder über die Seite
+**⚙ Sources**. Source-IDs sind Freitext; die Routen nutzen den `{source_id:path}`-Converter, damit
+auch IDs mit `/` funktionieren. `PUT /sources` lehnt **neue** IDs ab, die leer, `.`/`..` sind oder
+mit Leerzeichen beginnen/enden.
 
-`config/settings.yaml → ingestion.supported_formats / exclude_patterns` bleiben
-global. `ingestion.document_paths` ist **deprecated**: wenn `sources.yaml` fehlt
-und `document_paths` gesetzt ist, baut der ConfigManager beim Start automatisch
-einen Migrations-Shim (alle Pfade → `group=lore`) und loggt eine Warnung.
+**Recategorize** (`python -m src.ingestion.recategorize` bzw. UI-Button) überträgt geänderte
+`category_map`-/`group`-Werte auf bestehende Chunks, ohne neu zu embedden.
 
-**Sources verwalten** geht entweder per Editor (`config/sources.yaml`), per
-REST (`GET/PUT /sources`, `POST /sources/{id}/reindex`, `DELETE /sources/{id}`,
-`POST /sources/recategorize`, `POST /admin/wipe`) oder über die Streamlit-Seite
-**⚙ Sources** (siehe `ui/pages/`).
+#### Parser
 
-**Source-IDs** sind Freitext (`Pen & Paper #1`, `Lore/NPCs` usw. funktionieren). Die
-UI URL-encodiert sie; die Per-Source-Routen nutzen den `{source_id:path}`-Converter,
-damit auch IDs mit `/` erreichbar sind. `PUT /sources` lehnt **neue** IDs ab, die leer,
-`.`/`..` sind oder führende/abschließende Leerzeichen haben — bereits konfigurierte IDs
-werden nie abgelehnt, damit eine Alt-ID das Speichern der Liste nicht blockiert.
+Jeder Parser implementiert `BaseParser` (`can_parse()`, `parse()` → `list[ParsedDocument]`):
 
-**Recategorize** (`python -m src.ingestion.recategorize` bzw. UI-Button) wendet
-geänderte `category_map` / `group`-Werte auf bestehende Chunks an, ohne neu zu
-embedden — sekundenschnell, da nur Metadata-Update.
+| Dateityp   | Parser            | Strategie |
+|------------|-------------------|-----------|
+| `.md`      | `MarkdownParser`  | Obsidian-Format: Frontmatter (inkl. `aliases`), Überschriften-Hierarchie, `[[Wikilinks]]` als Metadaten, `![[Bild]]` entfernen, Callouts als Text, `#Tags` extrahieren |
+| `.pdf`     | `PDFParser`       | `pymupdf4llm` → Markdown, OCR (RapidOCR) für Bildbereiche, Überschriften aus dem Inhaltsverzeichnis; danach heading-aware wie Markdown |
+| `.png/jpg/jpeg/webp` | `ImageMetaParser` | Dateiname + Ordnerpfad als durchsuchbarer Text (kein Bildinhalt) |
 
-#### Parser-Strategie
-
-Jeder Parser implementiert das `BaseParser`-Interface:
-
-```python
-class BaseParser(ABC):
-    @abstractmethod
-    def can_parse(self, file_path: Path) -> bool: ...
-
-    @abstractmethod
-    def parse(self, file_path: Path) -> list[ParsedDocument]: ...
-```
-
-| Dateityp   | Parser            | Strategie                                                          |
-|------------|-------------------|--------------------------------------------------------------------|
-| `.md`      | `MarkdownParser`  | Obsidian-Vault-Format: YAML-Frontmatter (inkl. `aliases`),        |
-|            |                   | Heading-Hierarchie, `[[Wikilinks]]` als Metadaten-Referenzen,     |
-|            |                   | `![[Bild.png]]`-Embeds entfernen, Callouts (`> [!abstract]`)      |
-|            |                   | als normalen Text behandeln, Obsidian-Tags (`#NPC`) extrahieren   |
-| `.pdf`     | `PDFParser`       | PyMuPDF (`pymupdf4llm`) konvertiert PDF zu Markdown; Splitting     |
-|            |                   | erfolgt heading-aware (identisch zu `MarkdownParser`), nicht       |
-|            |                   | seitenweise — Abschnitte bleiben thematisch zusammenhängend        |
-| `.png/jpg` | `ImageMetaParser` | Dateiname + vollständige Ordnerhierarchie ab Vault-Root als        |
-|            |                   | durchsuchbarer Text. Kein Bildinhalt-Parsing in v1.                |
-
-> **Obsidian-spezifische Syntax im `MarkdownParser`:**
-> - `[[Link]]` und `[[Link|Alias]]` → als `wikilinks: ["Link"]` Metadaten speichern, aus dem Chunk-Text entfernen oder als plain Text erhalten
-> - `![[Bild.png]]` → aus dem Text entfernen (Bild wird separat über `ImageMetaParser` indiziert)
-> - `> [!abstract]`, `> [!info]` etc. → Callout-Syntax entfernen, Inhalt als normalen Paragraphen behandeln
-> - `#Tag` am Zeilenende → als `obsidian_tags: ["NPC", "Ort"]` Metadaten extrahieren
-> - `aliases:` im YAML-Frontmatter → als zusätzliche Suchbegriffe in Metadaten speichern
+Details: [docs/parsing.md](docs/parsing.md).
 
 #### Chunking
 
-```yaml
-# settings.yaml
-chunking:
-  strategy: heading_aware       # heading_aware | recursive | fixed_size
-  max_chunk_size: 256           # geschätzte Tokens (~900 Zeichen Fließtext)
-  chunk_overlap: 30             # nur für Fließtext; Tabellen erhalten kein Overlap
-  min_chunk_size: 20            # Chunks darunter werden mit Vorgänger gemerged —
-                                # aber nur innerhalb derselben heading_hierarchy.
-                                # Cross-heading-Merges würden die Heading-Metadaten
-                                # über den halben Inhalt lügen lassen.
-```
-
-> **Token-Schätzung:** `_estimate_tokens()` rechnet `len(text) / 3.5` (Zeichen pro Token).
-> Für Deutsch sind ~3,5 Zeichen/Token realistisch (Komposita → viele Subwörter).
-> `max_chunk_size: 256` entspricht ~900 Zeichen Fließtext. Mit Identity-Line und
-> Heading-Prefix bleibt der Embed-Text zuverlässig unter dem 512-Token-Limit von
-> `intfloat/multilingual-e5-base`.
->
-> **Table-aware Chunking:** Markdown-Tabellen (Zeilen die mit `|` beginnen) werden
-> als atomare Einheiten behandelt — kein Overlap, kein Split mitten in eine Zeile.
-> Sehr große Tabellen werden nur an Zeilengrenzen gesplittet, mit wiederholtem Header.
-
-**Heading-Aware Chunking (Default für Markdown und PDF):**
-- Jede Überschriften-Sektion wird ein eigener Chunk
-- Bei Überschreitung von `max_chunk_size`: Recursive Character Split mit Overlap
-- Heading-Hierarchie wird als Metadaten erhalten (`["Regionen", "Nordlande", "Klima"]`)
-
-**Recursive Character Splitting:**
-- Trennzeichen-Hierarchie: `\n\n` → `\n` → `. ` → ` `
+Standard ist `heading_aware`: jede Überschriften-Sektion wird ein Chunk; zu lange Sektionen werden
+rekursiv (`\n\n` → `\n` → `. ` → ` `) mit Overlap geteilt. Tabellen sind atomar (kein Overlap,
+Splits nur an Zeilengrenzen mit wiederholtem Kopf). Zu kleine Chunks werden nur **innerhalb
+derselben Überschrift** mit dem Vorgänger zusammengeführt. Tokens werden mit `len(text) / 3,5`
+geschätzt; `max_chunk_size: 256` ≈ 900 Zeichen hält den Embed-Text unter dem 512-Token-Limit von
+`multilingual-e5-base`. Parameter: [docs/configuration.md](docs/configuration.md) → `chunking`.
 
 #### Chunk-Metadaten
 
-Jeder Chunk erhält Metadaten für Retrieval-Filterung und Quellenangabe:
-
 ```python
 {
-    "source_file": "characters/aldric.md",      # Relativer Pfad
-    "source_path": "/abs/path/characters/aldric.md",
+    "source_id": "pnp-welt",                     # Quelle aus sources.yaml
+    "source_file": "NPCs/Malek Nocthar.md",      # relativer Pfad
+    "source_path": "C:/…/NPCs/Malek Nocthar.md",
     "document_type": "markdown",                 # markdown | pdf | image
-    "heading_hierarchy": ["Charaktere", "Aldric", "Hintergrund"],
-    "chunk_index": 3,                            # Position im Dokument
-    "total_chunks": 7,
-    "content_category": "npc",                   # Aus Ordnerstruktur (siehe Mapping unten)
-    "last_modified": "2026-03-15T14:30:00",      # Für inkrementelle Re-Ingestion
-    "content_hash": "sha256:abc123...",          # SHA-256 des Quelldokuments
-    "obsidian_tags": ["NPC", "DunkleMagie"],     # Aus #Tags am Dateiende
-    "aliases": ["Malek", "Der Monarch"],         # Aus YAML-Frontmatter aliases:
-    "wikilinks": ["Schwarzer Monolith", "Schattenorden"],  # [[Wikilinks]] aus dem Text
-    "source_collection": "pnp_welt"             # Herkunfts-Pfad-Alias
+    "heading_hierarchy": "Malek Nocthar > Kampfstil",
+    "chunk_index": 3, "total_chunks": 7,
+    "group": "lore",                             # Filter im Chat, Spieler-Freigabe je Quelle
+    "content_category": "npc",                   # aus category_map
+    "content_hash": "…",                         # SHA-256 der Quelldatei
+    "obsidian_tags": "NPC, DunkleMagie",         # Listen werden als Komma-String gespeichert
+    "aliases": "Malek, Der Monarch",
+    "wikilinks": "Schwarzer Monolith, Schattenorden",
 }
 ```
-
-#### `content_category`-Mapping aus Ordnerstruktur
-
-Der Wert wird aus dem **obersten** Ordnernamen unterhalb des jeweiligen `document_path`-Roots abgeleitet:
-
-| Ordner                   | `content_category`   | UI-Gruppe       |
-|--------------------------|----------------------|-----------------|
-| `PnP-Welt/NPCs/`         | `npc`                | 🗺️ Lore         |
-| `PnP-Welt/Orte/`         | `location`           | 🗺️ Lore         |
-| `PnP-Welt/Gegner/`       | `enemy`              | 🗺️ Lore         |
-| `PnP-Welt/Gegenstände/`  | `item`               | 🗺️ Lore         |
-| `PnP-Welt/Organisationen/` | `organization`     | 🗺️ Lore         |
-| `PnP-Welt/Dämonen/`      | `daemon`             | 🗺️ Lore         |
-| `PnP-Welt/Götter/`       | `god`                | 🗺️ Lore         |
-| `PnP-Welt/Backstorys/`   | `backstory`          | 🗺️ Lore         |
-| `PnP-Welt/Geschichte - *`| `story`              | 📖 Abenteuer    |
-| `PnP-Welt/Spielleiter-Tools/` | `tool`          | 📋 Regelwerk    |
-| `rules/`                 | `rules`              | 📋 Regelwerk    |
-| *(unbekannt)*            | `misc`               | 🗺️ Lore         |
-
-> Die UI-Gruppen (🗺️ Lore / 📖 Abenteuer / 📋 Regelwerk) in `ui/LoreKeeper.py` filtern direkt
-> auf diese `content_category`-Werte via ChromaDB-Metadaten-Filter.
 
 #### Inkrementelle Re-Ingestion
 
-Standardmäßig (`POST /ingest`, CLI, UI-Button **⚡ Nur Änderungen indizieren**) werden
-nur geänderte Dateien neu indiziert:
+Standard (`POST /ingest`, CLI, Button **⚡ Nur Änderungen indizieren**):
 
-1. **Content-Hash:** Pro Datei wird ein SHA-256-Hash des Inhalts in den Chunk-Metadaten
-   gespeichert. Änderungserkennung vergleicht ausschließlich den Hash (robust gegen
-   unzuverlässige Timestamps bei externen Repos / Windows-Mounts); `last_modified` ist nur
-   Information. Unveränderte Dateien werden vor dem Parsen übersprungen (`documents_skipped`).
-2. Geänderte Dateien: neu parsen → alte Chunks löschen → neu embedden → speichern
-   (Löschen + Upsert pro Batch, die Chunks einer Datei landen immer im selben Batch)
-3. Gelöschte Dateien: Verwaiste Chunks aus ChromaDB entfernen (`chunks_deleted` zählt Chunks)
-4. Neue Dateien: Normal verarbeiten
-5. Parse-Fehler: die zuvor indizierte Version bleibt erhalten
+1. Änderungserkennung **nur über den Content-Hash** (SHA-256) — Zeitstempel sind bei Windows-Mounts
+   und externen Repos unzuverlässig. Unveränderte Dateien werden vor dem Parsen übersprungen.
+2. Geänderte Dateien: neu parsen → alte Chunks löschen → neu embedden → speichern.
+3. Gelöschte Dateien: verwaiste Chunks entfernen.
+4. Parse-Fehler: die zuvor indizierte Version bleibt erhalten.
 
-**Voll-Reindex** (`POST /ingest?full=true`, UI-Button **🔄 Alle Dokumente neu indizieren**)
-verarbeitet auch unveränderte Dateien — nötig nach Änderungen an Chunking-Settings oder
-Parser-Logik, denn die ändern den Datei-Hash nicht. Für geänderte `category_map`/`group`
-reicht **Recategorize** (kein Re-Embedding).
-
-```python
-# Chunk-Metadaten ergänzt um:
-{
-    "content_hash": "sha256:abc123...",    # Hash des Quelldokuments
-    ...
-}
-```
+**Voll-Reindex** (`?full=true`, Button **🔄 Alle Dokumente neu indizieren**) ist nach Änderungen an
+Chunking oder Parsern nötig — die ändern den Datei-Hash nicht. Ingestion läuft immer als
+Background-Job; während ein Job läuft, antwortet `/ingest` mit 409.
 
 ---
 
 ### 4.2 Embedding & Vector Store
 
-#### Embedding-Modell
+**Embedding-Modell** `intfloat/multilingual-e5-base`: 768 Dimensionen, 512 Tokens Kontext, gut auf
+Deutsch, asymmetrisch trainiert (`"query: "` für Fragen, `"passage: "` für Dokumente — der
+`EmbeddingService` setzt die Präfixe automatisch). Läuft bewusst auf der CPU; eine andere
+Rechenbibliothek würde die Vektoren gegenüber dem bestehenden Index leicht verschieben.
 
-```yaml
-# settings.yaml
-embeddings:
-  model: "intfloat/multilingual-e5-base"
-  device: "cpu"             # cpu | cuda | auto
-  batch_size: 64
-  normalize: true
-```
+> **Async-Regel:** `encode()` ist synchron und CPU-gebunden. Jeder Aufruf in
+> `src/retrieval/embeddings.py` läuft über `run_in_threadpool`, sonst blockiert eine Anfrage den
+> ganzen Event-Loop.
 
-**Modellwahl:** `intfloat/multilingual-e5-base` bietet:
-- 768-dimensionale Embeddings
-- 512-Token-Kontextfenster (4× mehr als MiniLM)
-- Asymmetrisches Retrieval-Training: Query-Prefix `"query: "`, Passage-Prefix `"passage: "`
-- Starke Deutsch-Performance auf MIRACL/MTEB-Benchmarks
-- ~1.1 GB Modellgröße, läuft auf CPU und Laptop
+**Embed-Text ≠ gespeicherter Inhalt:** Embedded wird eine angereicherte Fassung (Dateiname,
+Aliase, Überschriftenpfad + Inhalt), gespeichert wird der Inhalt, den später das LLM sieht.
+Begründung: [docs/embedding-strategy.md](docs/embedding-strategy.md).
 
-> **e5-Prefixes:** `EmbeddingService` erkennt e5-Modelle automatisch via Modellname
-> und setzt `"query: "` für Suchanfragen und `"passage: "` für Dokumente.
-> Ohne diese Prefixes verliert das Modell einen wesentlichen Teil seiner Retrieval-Qualität.
-
-> **Achtung Async:** `sentence-transformers.encode()` ist synchron und CPU-bound
-> (PyTorch). Direkter Aufruf im FastAPI-Request-Handler blockiert den asyncio-Event-Loop
-> und hängt alle parallelen Anfragen. Alle `encode()`-Aufrufe in `src/retrieval/embeddings.py`
-> **müssen** via `fastapi.concurrency.run_in_threadpool` in einen Thread-Pool ausgelagert werden:
->
-> ```python
-> from fastapi.concurrency import run_in_threadpool
-> embedding = await run_in_threadpool(self.model.encode, text)
-> ```
-
-#### ChromaDB — Embedded vs. Client/Server
-
-ChromaDB unterstützt zwei Modi; LoreKeeper nutzt lokal unter Windows ausschließlich `embedded`:
-
-| Modus        | Wann              | Beschreibung                                              |
-|--------------|-------------------|-----------------------------------------------------------|
-| `embedded`   | Lokal (Windows)   | Chroma läuft als Library direkt im FastAPI-Prozess.       |
-|              |                   | Zugriff auf `./chroma_data` via SQLite. Kein extra Prozess. |
-| `client`     | (ungenutzt)       | Externer ChromaDB-Server. FastAPI kommuniziert über HTTP  |
-|              |                   | (`chroma_host`/`chroma_port`). Kein `persist_directory`.  |
-
-> **Wichtig:** Beide Modi dürfen **nicht** gleichzeitig auf dasselbe `chroma_data`-Verzeichnis
-> zugreifen (File-Lock / SQLite-Korruption).
-
-```yaml
-# settings.yaml
-vectorstore:
-  provider: chroma
-  mode: embedded              # embedded | client  (via Env-Var CHROMA_MODE überschreibbar)
-  persist_directory: ./chroma_data   # nur für mode: embedded (lokal)
-  chroma_host: chromadb              # nur für mode: client
-  chroma_port: 8000                  # nur für mode: client
-  collection_name: lorekeeper
-  distance_metric: cosine            # cosine | l2 | ip
-```
-
-**Warum ChromaDB:**
-- Embedded: läuft im FastAPI-Prozess, kein separater Server nötig
-- Persistenz auf Disk
-- Metadaten-Filterung (nach `content_category`, `source_collection` etc.)
-- Python-native, minimale Abhängigkeiten
+**ChromaDB** läuft `embedded` im FastAPI-Prozess und persistiert nach `./chroma_data`. Der Modus
+`client` (externer Server) existiert im Code, wird aber nicht genutzt. Weil die Datenbank im
+Backend-Prozess steckt, darf **kein zweiter Prozess** (z.B. die Ingestion-CLI) gleichzeitig auf
+`chroma_data/` zugreifen.
 
 ---
 
 ### 4.3 Retrieval Engine
 
-```yaml
-# settings.yaml
-retrieval:
-  top_k: 15                         # Kandidaten aus der Suche (Recall-Pool)
-  score_threshold: 0.5              # Minimum Cosine-Score für Vektor-Suche. 0.5 ≈ "ähnlich"
-  hybrid:
-    enabled: false                  # Hybrid Search (BM25 + Vector) an/aus; per-Request via hybrid_search überschreibbar
-    bm25_weight: 0.3                # BM25-Anteil in RRF (0.0 = nur Vector, 1.0 = nur BM25)
-    bm25_top_k: 15                  # Wie viele BM25-Kandidaten geholt werden
-  reranking:
-    enabled: true                   # Cross-Encoder Reranking (Stage 2)
-    model: "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"   # multilingual
-    backend: directml               # torch = CPU | directml = GPU (ONNX Runtime + DirectML, CPU-Fallback mit Warnung)
-    top_k_rerank: 8                 # Finale Chunks für den LLM
-    max_per_source: 3               # Soft cap auf Chunks pro Source-File (0 = unlimited).
-                                    # Zwei-Pass-Verfahren nach dem Reranking:
-                                    #   Pass 1 — diverse fill: pro File max. N Chunks
-                                    #     in Score-Reihenfolge; Cap-blockierte Chunks
-                                    #     wandern in eine Overflow-Liste.
-                                    #   Pass 2 — backfill: falls top_k_rerank nicht
-                                    #     erreicht wurde (Pool zu dünn), werden die
-                                    #     besten Overflow-Chunks nachgezogen.
-                                    # Diversität ist also eine Präferenz, kein
-                                    # Slot-Killer — der Retriever liefert nie weniger
-                                    # als top_k_rerank, solange Kandidaten da sind.
-  rules_slot:                       # Entität + Regelbegriff → 1 Regelwerk-Chunk (3.10)
-    enabled: true
-    candidates: 5                   # zweite Vektorsuche nur in Gruppe rules, gleicher Filter
-    min_score: -4.0                 # bester Regel-Chunk ersetzt den schwächsten, wenn keiner in den Top-8 ist
-```
+Ablauf in `Retriever.retrieve()` — alle Parameter in [docs/configuration.md](docs/configuration.md)
+→ `retrieval`, die Begründungen in [docs/embedding-strategy.md](docs/embedding-strategy.md):
 
-Diese Werte sind pro Request über die `QueryRequest`-Felder `top_k`,
-`top_k_rerank` und `max_per_source` überschreibbar — die Streamlit-UI
-exponiert sie als drei gekoppelte Slider im „⚙️ Erweitert:
-Retrieval-Tuning"-Expander (`max_per_source = 0` deaktiviert den Cap
-komplett für diesen Request).
+1. **Vektorsuche** (immer): Frage embedden, `top_k` (15) Kandidaten aus ChromaDB. Bilder sind
+   ausgeschlossen. `score_threshold` (0,5) greift auf die Cosine-Scores **vor** einer Fusion.
+2. **BM25** (nur Hybrid): In-Memory-Index (`rank_bm25`), lazy aus der Collection gebaut, nach
+   Ingestion verworfen. Fusion mit der Vektorsuche über Reciprocal Rank Fusion.
+3. **Metadaten-Filter** (Gruppe, Quelle, Spieler-Freigabe) gehen an Vektorsuche und BM25.
+4. **Regelwerk-Slot** (`rules_slot`): eine zweite, kleine Vektorsuche nur in Gruppe `rules` (5
+   Kandidaten, derselbe Filter) für Fragen wie „Was bewirkt Ritterlichkeit bei Escanor?“, bei denen
+   die NPC-Datei alle 15 Kandidaten belegt.
+5. **Reranking** mit dem Cross-Encoder `mmarco-mMiniLMv2-L12-H384-v1` — auf der GPU über ONNX
+   Runtime + DirectML (`reranking.backend: directml`, ~50 ms), sonst mit Warnung auf der CPU.
+6. **Soft-Cap je Datei** (`max_per_source`, 3): erst divers füllen, dann aus dem Überlauf
+   nachfüllen, damit nie weniger als `top_k_rerank` (8) Chunks zurückkommen.
+7. **Slot einlösen:** Hat es kein `rules`-Chunk in die Top-8 geschafft, ersetzt der beste
+   Regelwerk-Kandidat mit Score ≥ `min_score` (−4) den schwächsten — höchstens einer.
+8. **Section Expansion:** Teilen sich ≥ 2 Treffer einer Datei eine Eltern-Überschrift mit
+   verschiedenen Unter-Überschriften und liegt einer davon unter den ersten `top_rank` (3), wird die
+   ganze Sektion (bis `max_chunks`, 25) in Dokumentreihenfolge eingesetzt.
 
-**Ablauf (Hybrid Search):**
-
-1. **Vektor-Suche** (immer): Query wird embedded (gleiches Modell wie Dokumente). ChromaDB Similarity Search → Top-K Chunks. Score-Threshold Filterung **auf die Cosine-Scores, bevor die Fusion passiert** — RRF-Scores liegen auf anderer Skala und wären durch den Threshold sonst komplett weggefiltert.
-2. **Lexikalische Suche (BM25)** (nur wenn Hybrid aktiv): Query wird tokenisiert (Lowercase, `\w+`-Wörter — Satzzeichen fallen weg). In-Memory-Index von `rank_bm25`, lazy aus der ChromaDB-Collection gebaut, nach Ingestion invalidiert. Post-hoc Metadaten-Filter (ChromaDB-kompatible `$eq`/`$ne`/`$in`/`$and`-Operatoren).
-3. **Score-Fusion**: Ergebnisse beider Suchen werden über Reciprocal Rank Fusion (RRF) kombiniert (`hybrid.bm25_weight` regelt den Einfluss). BM25-only-Kandidaten werden mit aufgenommen.
-4. Optional: Metadaten-Filter (nur bestimmte Kategorien/Quellen) — wird sowohl an Vektor-Query als auch an BM25 durchgereicht.
-5. Reranking via Cross-Encoder (Score-sortierte Liste). `reranking.backend: directml` rechnet auf
-   der GPU (`src/retrieval/onnx_reranker.py`, ONNX Runtime + DirectML, gleiche Scores); ist DirectML
-   nicht verfügbar, Warnung im Log und Fallback auf das torch-Modell auf der CPU.
-   **Regelwerk-Slot** (`rules_slot`, 3.10): eine zweite Vektorsuche nur in Gruppe `rules` (gleicher
-   Filter wie die Anfrage) liefert Extra-Kandidaten, die mit gereranked, aber nicht in den Haupt-Pool
-   gemischt werden. Hat es kein `rules`-Chunk in die Top-`top_k_rerank` geschafft, ersetzt der beste
-   mit Score ≥ `min_score` den schwächsten — höchstens einer.
-6. **Soft per-source cap** (`max_per_source`):
-   - Pass 1 (diverse fill): pro Source-File max. N Chunks akzeptieren,
-     Cap-Überlauf in Overflow-Liste parken
-   - Pass 2 (backfill): falls `top_k_rerank` nicht erreicht, Overflow
-     in Score-Reihenfolge nachziehen
-   - Final-Re-Sort nach Reranker-Score, damit der LLM die relevantesten
-     Chunks zuerst sieht
-7. **Section Expansion** (`section_expansion`): Teilen sich ≥ 2 Treffer einer Datei eine
-   Eltern-Überschrift mit *verschiedenen* Unter-Überschriften (z.B. `5.4.3 Waldläufer > Kampfstil`
-   und `> Fesselschuss`), wird die komplette Eltern-Sektion geladen (`get_chunks_for_file`) und in
-   Dokument-Reihenfolge an der Position des besten Treffers eingesetzt. Sektionen über `max_chunks`
-   bleiben unverändert. Behebt fragmentarische Antworten auf Aufzählungs-Fragen. Expandiert wird nur,
-   wenn ein Treffer der Sektion unter den ersten `top_rank` (Default 3) Chunks liegt — sonst ziehen zwei
-   zufällige, schwache Treffer eine fremde Sektion in den Kontext.
-8. Rückgabe: Chunks + Metadaten + Scores
+`top_k`, `top_k_rerank`, `max_per_source` und `hybrid_search` sind pro Anfrage überschreibbar.
 
 ---
 
-### 4.4 Generation Engine & Provider-Abstraction
+### 4.4 Generation Engine & Provider-Abstraktion
 
-#### Provider-Interface
+Alle Provider implementieren `BaseLLMProvider`:
 
 ```python
 class BaseLLMProvider(ABC):
     provider: str = "unknown"
-    model: str                       # muss im __init__ gesetzt werden (kein Default)
+    model: str                       # im __init__ setzen (kein Default)
 
     @abstractmethod
     async def generate(self, prompt: str, **kwargs) -> LLMResponse: ...
 
     @abstractmethod
-    def generate_stream(
-        self,
-        prompt: str,
-        system_prompt: str = "",
-        stream_result: StreamResult | None = None,
-        **kwargs,
-    ) -> AsyncGenerator[str, None]:
-        """Yields token-by-token für SSE-Streaming; schreibt usage in stream_result."""
-        ...
+    def generate_stream(self, prompt: str, system_prompt: str = "",
+                        stream_result: StreamResult | None = None, **kwargs) -> AsyncGenerator[str, None]:
+        """Liefert Token für Token; schreibt die Token-Zählung in stream_result.usage."""
 
     @abstractmethod
     async def health_check(self) -> bool: ...
 ```
 
-`generate_stream` ist im Interface ein normales `def` — Implementierungen sind
-`async def` mit `yield` (Async-Generator). Ein `async def` ohne `yield` im Interface
-würde für mypy eine Coroutine statt eines `AsyncGenerator` liefern.
+`generate_stream` ist im Interface ein normales `def`; Implementierungen sind `async def` mit
+`yield`. `StreamResult` ist ein Kontext pro Aufruf: der Provider füllt `usage`, der `Generator`
+setzt `model` auf das Modell, das tatsächlich geantwortet hat (nach einem Fallback das
+Fallback-Modell).
 
-`StreamResult` ist ein Per-Call-Kontext (keine geteilten Zustände bei parallelen Streams):
+- **Ollama** über die OpenAI-kompatible API (`/v1/chat/completions`), Standardmodell `qwen3:14b`;
+  für Qwen3 wird das Denken mit `reasoning_effort: "none"` abgeschaltet.
+- **Gemini** über das `google-genai`-SDK. API-Key-Reihenfolge: Laufzeit-Override aus der UI
+  (`POST /provider/gemini/key`, nur im Prozess, nie auf Platte) → Umgebungsvariable → `.env`.
+  `GET /provider/gemini/status` verrät nie den Key selbst.
+- **ProviderFactory** baut aus der Config den Provider; Wechsel zur Laufzeit über `POST /provider`.
+- **Fallback** (`llm.fallback_enabled`): schlägt der Hauptprovider vor dem ersten Token fehl,
+  antwortet der Fallback-Provider.
+- **`condense_model`**: optional ein zweites, schnelleres Ollama-Modell nur für das Umschreiben von
+  Folgefragen (immer Ollama, gleiche `base_url`).
 
-```python
-@dataclass
-class StreamResult:
-    usage: dict             # vom Provider befüllt (tokens_in, tokens_out, tokens_thinking)
-    model: str | None       # vom Generator gesetzt: Modell, das tatsächlich geantwortet hat
-                            # (nach einem Fallback das Fallback-Modell)
-```
-
-Rückgabe-Schema:
-
-```python
-@dataclass
-class LLMResponse:
-    content: str
-    model: str
-    provider: str
-    usage: dict             # tokens_in, tokens_out, latency_ms
-    raw_response: dict      # Provider-spezifische Rohdaten
-```
-
-> **Streaming-Hinweis:** Ollama unterstützt Streaming nativ über `/api/chat` mit
-> `"stream": true`. Gemini über `stream=True` im google-genai SDK. Beide Provider
-> implementieren `generate_stream()` als `AsyncGenerator[str, None]`
-> (`from typing import AsyncGenerator`).
-
-#### Ollama Provider
-
-```yaml
-# settings.yaml
-llm:
-  provider: ollama                       # ollama | gemini
-  ollama:
-    base_url: "http://127.0.0.1:11434"
-    model: "qwen3:14b"
-    temperature: 0.3
-    top_p: 0.9
-    max_tokens: 1024
-    timeout: 120
-```
-
-Kommunikation über die OpenAI-kompatible API von Ollama (`/v1/chat/completions`).
-Vorteil: Falls später ein OpenAI-kompatibler Provider dazukommt, ist die Integration
-trivial.
-
-#### Gemini Provider
-
-```yaml
-# settings.yaml
-llm:
-  provider: gemini
-  gemini:
-    model: "gemini-2.0-flash"
-    api_key_env: "GEMINI_API_KEY"       # Aus .env geladen
-    temperature: 0.3
-    top_p: 0.9
-    max_tokens: 1024
-    timeout: 30
-```
-
-Nutzt das `google-genai` SDK. API-Key-Auflösung in dieser Reihenfolge:
-
-1. **Runtime-Override** (Process-lokal, gesetzt via `POST /provider/gemini/key` aus der UI)
-2. `os.environ[api_key_env]`
-3. `.env`-Datei
-
-Der Runtime-Override wird **nicht** auf Disk persistiert — er überlebt keinen
-Backend-Neustart. Das ist Absicht: das ermöglicht "Programm starten → Key in der
-UI eintragen → loslegen" ohne `.env` anfassen zu müssen, schreibt aber keine
-Secrets in versionierte oder unversionierte Dateien. Statusabfrage über
-`GET /provider/gemini/status` liefert nur `{has_key, source: env|runtime|none}`,
-niemals den Key selbst. Wird Gemini gerade als aktiver Provider benutzt, baut
-der `POST`-Endpoint Provider + `Generator` direkt neu, sodass der neue Key sofort
-greift.
-
-#### Provider Factory
-
-```python
-class ProviderFactory:
-    @staticmethod
-    def create(config: LLMConfig) -> BaseLLMProvider:
-        match config.provider:
-            case "ollama":
-                return OllamaProvider(config.ollama)
-            case "gemini":
-                return GeminiProvider(config.gemini)
-            case _:
-                raise ValueError(f"Unknown provider: {config.provider}")
-```
-
-Umschalten zwischen Ollama und Gemini: Eine Zeile in `settings.yaml` ändern
-oder via Environment-Variable `LLM_PROVIDER=gemini` überschreiben.
-
-#### `condense_model` — zweite Provider-Instanz
-
-Wenn `conversation.condense_model` gesetzt ist, erstellt die `ProviderFactory` eine
-zweite Ollama-Instanz **mit demselben `base_url`**, aber dem alternativen Modellnamen.
-`condense_model` ist immer ein Ollama-Modellname — ein anderer Provider als Ollama für
-Condense wird in v1 nicht unterstützt.
-
-```python
-# src/generation/provider_factory.py
-if config.conversation.condense_model:
-    condense_provider = OllamaProvider(
-        base_url=config.llm.ollama.base_url,
-        model=config.conversation.condense_model,
-    )
-```
-
-Wenn `condense_model: null`, übernimmt der Haupt-LLM-Provider auch das Condense.
-
-#### Fallback-Logik (optional, konfigurierbar)
-
-```yaml
-# settings.yaml
-llm:
-  provider: ollama
-  fallback_provider: gemini             # Bei Ollama-Fehler → Gemini
-  fallback_enabled: true
-```
+Vergleich, Kosten und Token-Zählung: [docs/provider-strategy.md](docs/provider-strategy.md).
 
 ---
 
 ### 4.5 Conversation Manager
 
-**Aufgabe:** Chat-Verlauf pro Session verwalten, Sliding Window pflegen, Standalone-Frage
-generieren.
+Sessions liegen im Speicher (Dict, Session-ID als Schlüssel) und überleben keinen Neustart.
 
-```yaml
-# settings.yaml
-conversation:
-  window_size: 8                        # Anzahl Nachrichten-Paare (User + Assistant)
-  max_context_tokens: 4096              # Hard Limit für History-Tokens
-  answer_history_pairs: 1               # QA-Paare im Antwort-Prompt (0 = aus)
-  answer_history_max_chars: 1500        # frühere Antworten dort gekürzt
-  condense_question: true               # History + Frage → Standalone-Frage via LLM
-  condense_model: null                  # null = selbes Modell wie llm.provider.
-                                        # Optional: schnelleres Modell nur für Condense,
-                                        # z.B. "qwen3:8b" (Ollama).
-                                        # Spart ~50 % Latenz pro Folgefrage.
-  session_timeout_minutes: 60           # Session nach Inaktivität verwerfen
-  session_gc_interval_seconds: 300      # Wie oft der Background-GC läuft (alle 5 min)
-```
-
-**Sliding Window Strategie:**
-
-- Die letzten `window_size` Message-Paare werden beibehalten
-- Ältere Nachrichten werden verworfen (kein Summarization in v1)
-- `max_context_tokens` als Hard Limit: Falls 8 Paare das Limit überschreiten,
-  werden von vorne weitere Paare entfernt
-- Sweet Spot von 8 Paaren basiert auf dem Tradeoff: Kleine Modelle (8-14B)
-  zeigen ab ~4-6K Tokens Kontextlänge das "Lost in the Middle"-Problem —
-  relevante Informationen in der Mitte des Kontexts werden schlechter verarbeitet.
-  8 Paare halten den Gesamtkontext (History + Retrieved Chunks + Prompt) im
-  effektiven Bereich.
-
-**Verlauf im Antwort-Prompt:** Das Sliding Window speist nur den Condense-Schritt. Der
-QA-Prompt bekommt zusätzlich nur das **letzte** Frage/Antwort-Paar (`answer_history_pairs`,
-Antwort auf `answer_history_max_chars` gekürzt), vor den Quellen und als „keine Quelle“
-markiert — genug für „fass das kürzer zusammen“, ohne dass ältere (evtl. halluzinierte)
-Antworten die Quellen verwässern. Sessions sind rollengebunden, Spieler sehen nur ihren Verlauf.
-
-**Condense Question (Question Rewriting):**
-
-Bei aktiviertem `condense_question` wird die aktuelle Frage im Kontext der
-Chat-History zu einer Standalone-Frage umgeschrieben, bevor sie für Retrieval
-verwendet wird:
-
-```
-User: "Erzähl mir über Aldric"
-Assistant: "Aldric ist ein Krieger aus den Nordlanden..."
-User: "Welche Feinde hat er?"
-→ Condensed: "Welche Feinde hat der Krieger Aldric aus den Nordlanden?"
-```
-
-Umgeschrieben wird nur, wenn die Frage vom Verlauf abhängt (`needs_condense()` in
-`src/conversation/manager.py`: Pronomen/Rückverweise wie „er“, „sein“, „dazu“, „dort“,
-führendes „und/aber“, „das/es“ am Satzende oder ≤ 2 Wörter). Eigenständige Fragen gehen
-unverändert ins Retrieval. Die tatsächlich gesuchte Frage steht als `search_query` in der
-Antwort; die UI zeigt sie als „🔎 Gesucht nach: …“, wenn sie umgeschrieben wurde.
-
-Das verbessert die Retrieval-Qualität erheblich, da die Standalone-Frage
-ohne Konversationskontext sinnvolle Embeddings erzeugt.
-
-**Session-Verwaltung:**
-
-- Sessions werden in-memory verwaltet (dict mit Session-ID als Key)
-- Kein Persistieren von Sessions über Neustarts (Streamlit State reicht)
-- Session-Timeout nach konfigurierbarer Inaktivität
-
-**Session Garbage Collection (Background Task):**
-
-Ein `asyncio`-Background-Task im FastAPI `lifespan`-Context läuft alle
-`session_gc_interval_seconds` und entfernt abgelaufene Sessions aus dem Dict.
-Ohne diese explizite GC ist `session_timeout_minutes` wirkungslos und der
-RAM läuft bei längerer Laufzeit voll.
-
-```python
-# src/conversation/manager.py (Skizze)
-async def _gc_loop(self):
-    while True:
-        await asyncio.sleep(self.config.session_gc_interval_seconds)
-        now = datetime.utcnow()
-        expired = [
-            sid for sid, s in self._sessions.items()
-            if (now - s.last_active).seconds / 60 > self.config.session_timeout_minutes
-        ]
-        for sid in expired:
-            del self._sessions[sid]
-```
+- **Sessions sind an ihre Rolle gebunden:** Kommt eine Spieler-Anfrage mit der ID einer
+  Spielleiter-Session, bekommt sie eine **neue** Session — kein Spielleiter-Verlauf in Folgefragen
+  eines Spielers.
+- **Sliding Window** (`window_size`, 8 Paare, hart begrenzt durch `max_context_tokens`) speist nur
+  den **Condense**-Schritt: Folgefragen mit Rückbezug („Welche Feinde hat er?“) werden zu einer
+  eigenständigen Frage umgeschrieben, bevor gesucht wird. Eigenständige Fragen gehen unverändert in
+  die Suche (`needs_condense()`); die gesuchte Frage steht als `search_query` in der Antwort.
+- **Verlauf im Antwort-Prompt:** Der QA-Prompt bekommt nur das **letzte** Frage/Antwort-Paar
+  (`answer_history_pairs: 1`, Antwort auf 1500 Zeichen gekürzt), vor den Quellen und als „keine
+  Quelle“ markiert — genug für „fass das kürzer zusammen“, ohne dass ältere (evtl. halluzinierte)
+  Antworten die Quellen verwässern.
+- **Garbage Collection:** Ein `asyncio`-Task im FastAPI-Lifespan entfernt alle
+  `session_gc_interval_seconds` die Sessions, die länger als `session_timeout_minutes` inaktiv sind.
+  Ohne ihn wäre das Timeout wirkungslos und der Speicher würde volllaufen.
 
 ---
 
 ### 4.6 Prompt Manager
 
-**Aufgabe:** Alle Prompts zentral in `prompts.yaml` verwalten, via Jinja2 rendern.
-Prompts können zur Laufzeit über die UI oder die `/prompts/*` API-Endpoints
-bearbeitet und hot-reloaded werden — kein Neustart nötig.
-
-```python
-class PromptManager:
-    def __init__(self, prompts_dict: dict):
-        self.templates = prompts_dict
-        self.jinja_env = Environment()
-
-    def render(self, template_name: str, **kwargs) -> str:
-        template = self.jinja_env.from_string(self.templates[template_name])
-        return template.render(**kwargs)
-```
-
-**Hot-Reload:** Beim Speichern über die UI/API wird `config/prompts.yaml`
-geschrieben und der globale `PromptManager` in `src.main` durch eine neue
-Instanz ersetzt — analog zum Provider-Switching.
-
-**Varianten:** Neben den aktiven Prompts können benannte Varianten in
-`config/prompts/` als YAML gespeichert, geladen, editiert und aktiviert werden.
-Jede Variante enthält die gleichen vier Template-Keys plus einen optionalen
-`_meta`-Key (Name, Beschreibung). Beim Aktivieren wird die Variante nach
-`prompts.yaml` kopiert und der PromptManager neu geladen.
-
-**Template-Typen (siehe Abschnitt 5.2 für vollständige Templates):**
-
-| Template           | Zweck                                                    |
-|--------------------|----------------------------------------------------------|
-| `system`           | System-Prompt: Rolle, Sprache, Antwortformat             |
-| `qa`               | Hauptprompt: Context-Chunks + Frage → Antwort            |
-| `condense`         | History + Follow-Up → Standalone-Frage                   |
-| `no_context`       | Fallback wenn kein relevanter Chunk gefunden wurde        |
+Vier Jinja2-Templates in `config/prompts.yaml`: `system` (Rolle, Sprache, Antwortformat), `qa`
+(Verlauf + Chunks + Frage), `condense` (Verlauf + Folgefrage → eigenständige Frage) und
+`no_context` (keine Treffer). Bearbeiten, Varianten speichern/vergleichen/aktivieren über die
+Seite **✏ Prompts** oder `/prompts/*` — Änderungen greifen sofort (Hot-Reload, der globale
+`PromptManager` wird ersetzt). Templates, Variablen und Gestaltungsregeln:
+[docs/prompts.md](docs/prompts.md).
 
 ---
 
 ### 4.7 Config Manager
 
-**Aufgabe:** Zentrale Konfiguration laden, validieren, bereitstellen.
+Lädt und validiert die Konfiguration mit Pydantic-Settings. Reihenfolge (höchste zuerst):
 
-```python
-class ConfigManager:
-    def __init__(self, settings_path: Path, prompts_path: Path):
-        self.settings = Settings.model_validate(
-            yaml.safe_load(settings_path.read_text())
-        )
-        self.prompts = PromptManager(prompts_path)
-```
+1. Umgebungsvariablen (verschachtelt mit `__`, z.B. `LLM__OLLAMA__MODEL`) — für `GEMINI_API_KEY`
+   zusätzlich der Laufzeit-Override aus der UI
+2. `.env`
+3. `config/settings.local.yaml` — schreibt die Settings-Seite; `settings.yaml` wird nie umgeschrieben
+4. `config/settings.yaml`
 
-**Pydantic-Modelle** für typsichere Validierung aller Config-Werte.
-
-**Override-Hierarchie:**
-1. `config/settings.yaml` (Basis)
-2. `.env` Datei (für Secrets wie `GEMINI_API_KEY`)
-3. Environment-Variablen (höchste Priorität)
-
-Für `GEMINI_API_KEY` gibt es zusätzlich einen **Runtime-Override** (process-lokal,
-über die UI bzw. `POST /provider/gemini/key` setzbar). Der überschreibt env/.env
-während der laufenden Session, wird aber nicht auf Disk persistiert. Siehe
-§4.5 Gemini Provider.
-
-**Namenskonvention für Env-Var-Overrides:**
-
-Verschachtelte YAML-Keys werden mit doppeltem Underscore (`__`) als Trennzeichen
-in Env-Variablen übersetzt. Pydantic-Settings liest diese automatisch:
-
-| Env-Variable              | Überschreibt YAML-Key              |
-|---------------------------|------------------------------------|
-| `LLM__PROVIDER`           | `llm.provider`                     |
-| `LLM__OLLAMA__BASE_URL`   | `llm.ollama.base_url`              |
-| `LLM__OLLAMA__MODEL`      | `llm.ollama.model`                 |
-| `CHROMA_MODE`             | `vectorstore.mode`                 |
-| `GEMINI_API_KEY`          | Secret, wird direkt aus Env geladen|
-
-> Kurzformen wie `OLLAMA_BASE_URL` oder `OLLAMA_MODEL` in Kap. 6 und 8 sind
-> Aliases — der Config Manager mapped diese auf die korrekten Pydantic-Felder.
+Welche Werte die UI ändern darf, legt eine Allow-List fest (`_EDITABLE_KEYS`); Änderungen werden
+auf die laufenden Dienste angewendet, ohne Neustart. Quellen kommen aus dem Sidecar
+`config/sources.yaml`; ein veraltetes `ingestion.document_paths` wird beim Start einmalig migriert.
+Alle Schlüssel und Variablen: [docs/configuration.md](docs/configuration.md).
 
 ---
 
-### 4.8 API Layer (FastAPI)
+### 4.8 Zugriff nach Rolle (Spieler / Spielleiter)
 
-#### Endpoints
+Spieler nutzen LoreKeeper am Tisch (z.B. am Handy) und dürfen keine Spielleiter-Geheimnisse sehen.
 
-| Method | Endpoint                  | Beschreibung                                        |
-|--------|---------------------------|-----------------------------------------------------|
-| POST   | `/query`                  | Frage stellen, Antwort + Quellen erhalten (synchron). `role: "player"` → Backend beschränkt selbst auf `player_visible`-Quellen (`src/api/access.py`), mitgeschickte Filter können nur einengen; gilt auch für `/query/stream` und `/eval/preview` |
-| POST   | `/query/stream`           | Wie `/query`, aber Antwort als SSE-Stream (Token-by-Token) |
-| POST   | `/ingest`                 | Ingestion als Background-Job starten (inkrementell; `?full=true` = Voll-Reindex). 409, solange ein Job läuft |
-| GET    | `/ingest/status/{job_id}` | Status eines laufenden Ingestion-Jobs abfragen      |
-| GET    | `/ingest/active`          | Laufender/wartender Ingestion-Job oder `null` (UI hängt sich nach 409 daran) |
-| POST   | `/feedback`               | 👍/👎 zu einer Chat-Antwort → eine Zeile in `logs/feedback.jsonl` (letzte Zeile je `message_id` gilt) |
-| GET    | `/feedback`               | Aktuelle Bewertung je Antwort (zurückgenommene ausgelassen), neueste zuerst — Evaluation-Tab „Feedback“ |
-| GET    | `/eval/chunks/files`      | Indizierte Dateien einer Quelle (`?source_id=`) — Chunk-Inspector |
-| GET    | `/eval/chunks`            | Alle Chunks einer Datei in Dokumentreihenfolge (`?source_id=&source_file=`), 404 wenn keine |
-| GET    | `/sources`                | Konfigurierte Sources                               |
-| PUT    | `/sources`                | Source-Liste ersetzen → `config/sources.yaml`       |
-| POST   | `/sources/scan`           | Beliebigen Pfad scannen (Ordner/Dateien für „Source hinzufügen") |
-| GET    | `/sources/{id}/folders`   | Top-Level-Einträge einer Source                     |
-| POST   | `/sources/{id}/reindex`   | Chunks der Source löschen + neu indizieren (Background-Job) |
-| DELETE | `/sources/{id}`           | Source entfernen + alle ihre Chunks löschen         |
-| POST   | `/sources/recategorize`   | `group`/`category` aller Chunks neu setzen (kein Re-Embedding) |
-| POST   | `/admin/wipe`             | Collection komplett leeren (Body `{"confirm": "DELETE"}`) |
-| GET    | `/provider`               | Aktiver Provider + Modell                           |
-| POST   | `/provider`               | Provider zur Laufzeit wechseln                      |
-| GET    | `/provider/gemini/status` | Ob ein Gemini-Key verfügbar ist (ohne den Key)      |
-| POST   | `/provider/gemini/key`    | Gemini-Key zur Laufzeit setzen (nur im Prozess, nie auf Disk) |
-| GET    | `/sidebar-state`          | Gebündelter Status für die Chat-Sidebar             |
-| GET    | `/health`                 | Health Check (API + ChromaDB + LLM)                 |
-| GET    | `/sessions/{id}`          | Session-History abrufen                             |
-| DELETE | `/sessions/{id}`          | Session löschen                                     |
-| GET    | `/stats`                  | Index-Statistiken (Chunk-Count etc.)                |
-| GET    | `/config`                 | UI-editierbare Settings + Read-only-Infrastruktur (Embeddings/Vectorstore) |
-| PUT    | `/config`                 | Partial Update (Allow-List-gefiltert) → persistiert nach `settings.local.yaml` (Sidecar) + Live-Mutation |
-| GET    | `/prompts/active`         | Aktive Prompts lesen                                |
-| PUT    | `/prompts/active`         | Aktive Prompts speichern + Hot-Reload               |
-| GET    | `/prompts/variants`       | Gespeicherte Varianten auflisten                    |
-| GET    | `/prompts/variants/{name}`| Einzelne Variante laden                             |
-| PUT    | `/prompts/variants/{name}`| Variante erstellen / aktualisieren                  |
-| DELETE | `/prompts/variants/{name}`| Variante löschen                                    |
-| POST   | `/prompts/activate/{name}`| Variante aktivieren (→ prompts.yaml + Reload)       |
-| POST   | `/prompts/preview`        | Jinja2-Template mit Beispieldaten rendern            |
+- **Zentral gesteuert** über `player_visible` je Quelle in `sources.yaml` (Spalte „🎲 Spieler“
+  auf der Sources-Seite).
+- **Im Backend erzwungen** (`src/api/access.py`): `/query`, `/query/stream` und `/eval/preview`
+  nehmen `role` entgegen. Für `player` baut das Backend selbst den Filter
+  `source_id ∈ player_visible` und verknüpft mitgeschickte Filter per `$and` — sie können nur
+  einengen, nie erweitern. Ohne freigegebene Quelle → 403. Default ist `game_master` (CLI,
+  Eval-Tools); wird die API je außerhalb von `127.0.0.1` erreichbar, muss der Default auf
+  `player` oder eine Authentifizierung her.
+- **Die UI** schickt `role` und zusätzlich ihren eigenen Filter als zweite Sicherung; Sessions sind
+  rollengebunden (4.5).
+- Es ist ein Spoiler-Schutz, keine Zugangskontrolle: die Rolle wählt jeder selbst. Die Admin-Seiten
+  schützt ein Passwort (`LOREKEEPER_ADMIN_PASSWORD`, `ui/admin_gate.py`).
 
-#### Request/Response Schemas
-
-```python
-# POST /query
-class QueryRequest(BaseModel):
-    question: str
-    session_id: str | None = None           # Neue Session wenn None
-    metadata_filters: dict | None = None    # Optional: Filterung nach Kategorie
-
-class QueryResponse(BaseModel):
-    answer: str
-    sources: list[SourceReference]
-    session_id: str
-    retrieval_scores: list[float]
-    model_used: str
-    latency_ms: float
-
-class SourceReference(BaseModel):
-    file: str                               # Relativer Pfad
-    source_path: str = ""                   # Absoluter Pfad für klickbare file://-Links in der UI
-    document_type: str                      # "markdown" | "pdf" | "image"
-                                            # Erlaubt der UI, Bilder via st.image() zu rendern
-    heading: str | None                     # Heading-Hierarchie
-    chunk_preview: str                      # Erste ~100 Zeichen des Chunks
-    score: float                            # Similarity Score
-
-# POST /query/stream  →  text/event-stream (SSE)
-# Request: QueryRequest (identisch zu /query)
-# Antwort-Events:
-#   data: {"type": "token", "content": "..."}\n\n   (pro Token)
-#   data: {"type": "done",
-#          "session_id": "...",
-#          "sources": [...],
-#          "model_used": "...",
-#          "search_query": "...",
-#          "timings": {"retrieval_ms": N, "retrieval_stages_ms": {...}, "first_token_ms": N, "total_ms": N, "chunks": N, "prompt_chars": N},
-#          "usage": {"tokens_in": N, "tokens_out": N, "tokens_thinking": N},
-#          "session_usage": {"tokens_in": N, "tokens_out": N, "tokens_thinking": N}}\n\n
-# Das "done"-Event enthält:
-#   - session_id   → für Folgefragen
-#   - model_used   → Modell, das tatsächlich geantwortet hat (nach Fallback das Fallback-Modell)
-#   - search_query → Frage, mit der gesucht wurde (bei Folgefragen ggf. die umgeschriebene)
-#   - timings      → Dauer je Stufe in ms (condense_ms nur bei Umformulierung; Retrieval-Stufen embed/search/bm25/rerank/expand), Chunk-Anzahl, Prompt-Größe
-#   - usage        → Token-Verbrauch dieser einzelnen Anfrage
-#   - session_usage → kumulierte Session-Totals (für die Header-Metric in der UI)
-# usage wird aus dem Stream extrahiert (Ollama: stream_options.include_usage,
-# Gemini: chunk.usage_metadata) und in Session.usage_totals akkumuliert.
-
-# POST /ingest  →  startet Background-Job, gibt job_id zurück
-class IngestJobResponse(BaseModel):
-    job_id: str
-    status: str                             # "queued" | "running" | "done" | "error"
-
-# GET /ingest/status/{job_id}
-class IngestStatusResponse(BaseModel):
-    job_id: str
-    status: str                             # "queued" | "running" | "done" | "error"
-    phase: str                              # "starting" | "parsing" | "embedding"
-    documents_processed: int                # inkl. übersprungener Dateien (für den Fortschritt)
-    documents_total: int
-    documents_skipped: int                  # unverändert (Hash gleich), nicht neu indiziert
-    chunks_created: int
-    chunks_updated: int
-    chunks_deleted: int                     # gelöschte Chunks verwaister Dateien
-    errors: list[str]
-    duration_seconds: float
-```
+Sicherheitstests: [CONTRIBUTING.md](CONTRIBUTING.md) → „Sicherheitsprüfungen“.
 
 ---
 
-### 4.9 Streamlit Chat UI
+### 4.9 API-Schicht (FastAPI)
 
-**Aufgabe:** Chat-Oberfläche für Fragen und Antworten mit Quellenanzeige.
+Das Backend lauscht nur auf `127.0.0.1:8000`; der Browser spricht ausschließlich mit Streamlit.
 
-#### Features (v1)
+| Methode | Endpoint | Beschreibung |
+|---------|----------|--------------|
+| POST   | `/query`                    | Frage stellen, Antwort + Quellen (synchron). Felder: `question`, `session_id`, `role`, `metadata_filters`, `top_k`, `top_k_rerank`, `max_per_source`, `hybrid_search` |
+| POST   | `/query/stream`             | Wie `/query`, Antwort als SSE-Stream (siehe unten) |
+| POST   | `/feedback`                 | 👍/👎 zu einer Antwort → Zeile in `logs/feedback.jsonl` (letzte Zeile je `message_id` gilt) |
+| GET    | `/feedback`                 | Aktuelle Bewertung je Antwort, neueste zuerst |
+| POST   | `/ingest`                   | Ingestion-Job starten (inkrementell; `?full=true` = alles). 409, solange ein Job läuft |
+| GET    | `/ingest/status/{job_id}`   | Fortschritt eines Jobs |
+| GET    | `/ingest/active`            | Laufender Job oder `null` |
+| GET    | `/sources`                  | Konfigurierte Quellen |
+| PUT    | `/sources`                  | Quellenliste ersetzen → `sources.yaml` |
+| POST   | `/sources/scan`             | Pfad scannen (für „Quelle hinzufügen“) |
+| GET    | `/sources/{id}/folders`     | Top-Level-Einträge einer Quelle |
+| POST   | `/sources/{id}/reindex`     | Quelle löschen + neu indizieren (Job) |
+| DELETE | `/sources/{id}`             | Quelle und ihre Chunks entfernen |
+| POST   | `/sources/recategorize`     | `group`/`category` neu setzen (ohne Re-Embedding) |
+| POST   | `/admin/wipe`               | Collection leeren (Body `{"confirm": "DELETE"}`) |
+| GET/POST | `/provider`               | Aktiver Provider / zur Laufzeit wechseln |
+| GET    | `/provider/gemini/status`   | Ob ein Gemini-Key da ist (ohne den Key) |
+| POST   | `/provider/gemini/key`      | Gemini-Key zur Laufzeit setzen (nur im Prozess) |
+| GET    | `/sidebar-state`            | Gebündelter Status für die Chat-Sidebar |
+| GET    | `/health`                   | API + ChromaDB + LLM |
+| GET/DELETE | `/sessions/{id}`        | Session-Verlauf lesen / löschen |
+| GET    | `/stats`                    | Chunk-Anzahl |
+| GET/PUT | `/config`                  | UI-editierbare Settings lesen / Teil-Update (→ `settings.local.yaml`, live angewendet) |
+| GET/PUT | `/eval/qa-pairs`           | Golden Set lesen / speichern |
+| POST   | `/eval/preview`             | Eine Frage gegen den Retriever (ohne LLM), mit `role` |
+| GET    | `/eval/chunks/files`        | Indizierte Dateien einer Quelle (Chunk-Inspector) |
+| GET    | `/eval/chunks`              | Alle Chunks einer Datei in Dokumentreihenfolge |
+| POST   | `/eval/run`                 | Retrieval- oder End-to-End-Eval als Job |
+| GET    | `/eval/status/{job_id}`     | Fortschritt eines Eval-Jobs |
+| GET/DELETE | `/eval/results[/{file}]` | Ergebnisse auflisten / lesen / löschen |
+| GET/PUT | `/prompts/active`          | Aktive Prompts lesen / speichern (Hot-Reload) |
+| GET/PUT/DELETE | `/prompts/variants[/{name}]` | Varianten |
+| POST   | `/prompts/activate/{name}`  | Variante aktivieren |
+| POST   | `/prompts/preview`          | Template mit Beispieldaten rendern |
 
-- Chat-Interface mit Message-History (Streamlit `st.chat_message`)
-- **Streaming-Antworten** via `st.write_stream()` — Tokens erscheinen direkt,
-  kein Warten auf vollständige Antwort (wichtig für lokale Modelle mit 10–30s Latenz)
-- Quellenangaben als ausklappbare Sidebar oder Expander unter jeder Antwort
-  - Bild-Quellen werden via `st.image()` gerendert (dank `document_type` in `SourceReference`)
-- Session-Management (neue Session starten, bestehende fortsetzen)
-- Provider-Status-Anzeige (welches Modell aktiv, Health-Status)
-- Sidebar hält sich schlank:
-  - Provider umschalten (Ollama / Gemini) + Gemini-Key-Override
-  - Quellen-Filter (Lore / Adventure / Rules)
-  - Hybrid-Search-Toggle (Per-Session-Override über Settings-Default)
-- **⚙ Sources** Seite (`ui/pages/1_Sources.py`):
-  - Chunk-Gesamtzahl + zwei Ingest-Buttons: **⚡ Nur Änderungen indizieren** (inkrementell)
-    und **🔄 Alle Dokumente neu indizieren** (`full=true`); Fortschritt nicht-blockierend
-    (`st.fragment` pollt `/ingest/status`, Job-ID im Session-State; bei 409 über
-    `/ingest/active` an den laufenden Job angehängt), Ergebnis „X indiziert · Y unverändert übersprungen"
-  - Sources bearbeiten (Tabelle), hinzufügen (Pfad scannen → ID/Group/Ordner-Mapping),
-    pro Source Reindex / Recategorize / Entfernen, Ordner-Zuordnung, Danger-Zone-Wipe
-  - Fehlertexte des Backends (`detail`) werden angezeigt; nach 30 s ohne Backend bricht
-    das Polling ab
-- **🛠 Settings** Seite (`ui/pages/4_Settings.py`):
-  - Zentrale Stelle für Retrieval-, LLM-, Conversation- und Chunking-Defaults
-  - `GET /config` lädt die Allow-List-gefilterte Snapshot, `PUT /config` persistiert Diff nach `settings.local.yaml` (Sidecar, überschreibt `settings.yaml`) und mutiert die laufenden Services in place
-  - Chunking-Tab persistiert sofort, wirkt aber erst nach Reindex (Warning-Banner)
-  - Read-only-Expander für Embeddings- und Vectorstore-Infos (änderbar nur via `.env` + Restart)
-- **✏ Prompts** Seite (`ui/pages/3_Prompts.py`):
-  - Aktive Prompts inline bearbeiten mit Jinja2-Preview
-  - Varianten speichern, laden, editieren, aktivieren, löschen
-  - Side-by-side Vergleich zweier Varianten
-  - Hot-Reload: Änderungen sofort wirksam, kein Neustart nötig
-
-#### Kommunikation
-
-Streamlit kommuniziert mit dem FastAPI-Backend über HTTP.
-Für normale Abfragen `requests`, für Streaming `requests` mit `stream=True` + SSE-Parsing.
-Kein direkter Import von Backend-Modulen — saubere Trennung.
+**SSE-Format von `/query/stream`:**
 
 ```
-Streamlit (ui/LoreKeeper.py) ──HTTP/SSE──▶ FastAPI (src/main.py) ──▶ Backend-Logik
+data: {"type": "token", "content": "..."}                       (je Token)
+data: {"type": "done", "session_id": "...", "sources": [...], "model_used": "...",
+       "search_query": "...", "timings": {...}, "usage": {...}, "session_usage": {...}}
+data: {"type": "error", "content": "..."}                       (bei Abbruch)
 ```
+
+- `session_id` kommt im `done`-Event — ohne sie kann der Client keine Folgefrage zuordnen.
+- `model_used` ist das Modell, das tatsächlich geantwortet hat (nach Fallback das Fallback-Modell).
+- `timings`: Dauer je Stufe in ms (`condense_ms`, `retrieval_ms` mit Stufen embed/search/bm25/rerank/expand,
+  `first_token_ms`, `total_ms`), Chunk-Anzahl, Prompt-Größe — auch als Log-Zeile `Query timings: …`.
+- `usage` / `session_usage`: Tokens dieser Anfrage / kumuliert für die Session.
+- Jede Quelle hat ein `document_type`; nur bei `image` rendert die UI ein Bild.
 
 ---
 
-## 5. Konfiguration
+### 4.10 Streamlit-Oberfläche
 
-### 5.1 settings.yaml (vollständig)
+Die UI spricht über HTTP/SSE mit dem Backend und importiert keine Backend-Module.
 
-```yaml
-# ─────────────────────────────────────────
-# LoreKeeper Configuration
-# ─────────────────────────────────────────
+- **Chat** (`ui/LoreKeeper.py`): Rollenwahl, gestreamte Antworten, Quellen nach Datei gruppiert,
+  Token-Anzeige, Zeiten unter jeder Antwort, 👍/👎.
+- **⚙ Sources**: Quellen anlegen/bearbeiten, Spieler-Freigabe, Indizieren mit nicht-blockierendem
+  Fortschritt, Reindex/Recategorize/Entfernen je Quelle.
+- **🎯 Evaluation**: Golden Set, „Frage testen“, Retrieval- und End-to-End-Eval, Ergebnisse,
+  Feedback → Golden Set, Chunk-Inspector.
+- **✏ Prompts**: Templates bearbeiten, Varianten, Vergleich.
+- **🛠 Settings**: Retrieval-, LLM-, Gesprächs- und Chunking-Einstellungen ohne Neustart.
 
-# Ingestion — Sources liegen in config/sources.yaml (Sidecar, gitignored)
-# document_paths ist DEPRECATED, nur noch als Migrations-Shim aktiv.
-ingestion:
-  supported_formats: [".md", ".pdf", ".png", ".jpg", ".jpeg", ".webp"]
-  exclude_patterns:
-    - ".obsidian/*"
-    - ".trash/*"
-    - "*alt.md"
-    - "*(1).md"
-    - "*.draft.*"
-  watch_for_changes: false
-
-# Chunking
-chunking:
-  strategy: heading_aware           # heading_aware | recursive | fixed_size
-  max_chunk_size: 80                # geschätzte Tokens via len(text) / 3.5 (~280 Zeichen Content)
-  chunk_overlap: 16                 # geschätzte Tokens
-  min_chunk_size: 20
-
-# Embeddings
-embeddings:
-  model: "intfloat/multilingual-e5-base"
-  device: auto                      # auto | cpu | cuda
-  batch_size: 64
-  normalize: true
-
-# Vector Store
-vectorstore:
-  provider: chroma
-  mode: embedded              # embedded (lokal) | client (externer Server) — via CHROMA_MODE überschreibbar
-  persist_directory: ./chroma_data   # nur für mode: embedded
-  chroma_host: chromadb              # nur für mode: client
-  chroma_port: 8000                  # nur für mode: client
-  collection_name: lorekeeper
-  distance_metric: cosine
-
-# Retrieval
-retrieval:
-  top_k: 15
-  score_threshold: 0.5        # Cosine-Threshold. 0.5 ≈ "ähnlich", 0.3 wäre fast orthogonal.
-  hybrid:
-    enabled: false            # Hybrid Search (BM25 + Vector) an/aus
-    bm25_weight: 0.3          # BM25-Anteil in RRF (0.0 = nur Vector, 1.0 = nur BM25)
-    bm25_top_k: 15            # Wie viele BM25-Kandidaten geholt werden
-  reranking:
-    enabled: true
-    model: "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
-    top_k_rerank: 8
-    max_per_source: 3           # Cap auf Chunks pro Source-File (0 = unlimited)
-
-# LLM
-llm:
-  provider: ollama                  # ollama | gemini
-  fallback_provider: gemini
-  fallback_enabled: false
-  ollama:
-    base_url: "http://127.0.0.1:11434"
-    model: "qwen3:14b"
-    temperature: 0.3
-    top_p: 0.9
-    max_tokens: 1024
-    timeout: 120
-  gemini:
-    model: "gemini-2.0-flash"
-    api_key_env: GEMINI_API_KEY
-    temperature: 0.3
-    top_p: 0.9
-    max_tokens: 1024
-    timeout: 30
-
-# Conversation
-conversation:
-  window_size: 8
-  max_context_tokens: 4096
-  condense_question: true
-  condense_model: null        # null = selbes Modell. Schnelleres Modell spart ~50% Latenz:
-                              # z.B. "qwen3:8b"
-  session_timeout_minutes: 60
-  session_gc_interval_seconds: 300
-
-# API
-api:
-  host: "0.0.0.0"
-  port: 8000
-  reload: true                      # Nur für Development
-
-# UI
-ui:
-  title: "LoreKeeper"
-  subtitle: "Frag deine Welt."
-  api_url: "http://127.0.0.1:8000"
-```
-
-### 5.2 prompts.yaml + Varianten
-
-Die aktiven Prompts liegen in `config/prompts.yaml`. Zusätzlich können
-benannte Varianten in `config/prompts/` gespeichert werden. Beide können
-über die UI (✏ Prompts Seite) oder die `/prompts/*` API bearbeitet werden.
-Änderungen werden sofort hot-reloaded — kein Neustart nötig.
-
-Detaillierte Dokumentation: [docs/prompts.md](docs/prompts.md)
-
-```yaml
-# ─────────────────────────────────────────
-# LoreKeeper Prompt Templates
-# Jinja2 Syntax: {{ variable }}
-# ─────────────────────────────────────────
-
-system: |
-  Du bist LoreKeeper, ein Experte für die Pen-and-Paper-Welt des Nutzers.
-  Du beantwortest Fragen ausschließlich auf Basis der bereitgestellten
-  Quellendokumente. Wenn die Quellen keine Antwort enthalten, sage das
-  ehrlich. Erfinde keine Informationen.
-
-  Regeln:
-  - Antworte auf Deutsch, es sei denn der Nutzer fragt auf Englisch
-  - Nenne bei jeder Aussage die Quelle (Dokumentname und Abschnitt)
-  - Halte Antworten präzise aber vollständig
-  - Bei Widersprüchen zwischen Quellen: beide Varianten nennen
-
-qa: |
-  Beantworte die folgende Frage basierend auf den bereitgestellten Quellen.
-
-  ### Quellen:
-  {% for chunk in chunks %}
-  [{{ chunk.source_file }} — {{ chunk.heading }}]
-  {{ chunk.content }}
-  {% endfor %}
-
-  ### Frage:
-  {{ question }}
-
-  ### Antwort:
-
-condense: |
-  Gegeben ist ein Chat-Verlauf und eine Follow-Up-Frage. Formuliere die
-  Follow-Up-Frage so um, dass sie als eigenständige Frage verständlich ist.
-  Gib NUR die umformulierte Frage zurück, ohne Erklärung.
-
-  ### Chat-Verlauf:
-  {% for msg in history %}
-  {{ msg.role }}: {{ msg.content }}
-  {% endfor %}
-
-  ### Follow-Up-Frage:
-  {{ question }}
-
-  ### Eigenständige Frage:
-
-no_context: |
-  Zu deiner Frage "{{ question }}" konnte ich leider keine relevanten
-  Informationen in den Quellendokumenten finden.
-
-  Mögliche Gründe:
-  - Das Thema ist in den aktuell indizierten Dokumenten nicht abgedeckt
-  - Die Frage könnte anders formuliert bessere Treffer liefern
-
-  Versuche es gerne mit einer umformulierten oder spezifischeren Frage.
-```
+Alles im Detail (Widgets, Caching, Session-State): [docs/ui-ux.md](docs/ui-ux.md).
 
 ---
 
-## 6. Hardware-Profile & Modellempfehlungen
+## 5. Hardware & Modelle
 
-### Desktop (Gaming-PC)
+Referenzsystem (Gaming-PC): AMD Ryzen 5 5600X (6 Kerne), 32 GB RAM, AMD Radeon RX 9070 XT (16 GB VRAM).
 
-| Komponente   | Spezifikation                            |
-|-------------|------------------------------------------|
-| CPU          | AMD Ryzen 5 5600X (6-Core, 3.70 GHz)    |
-| RAM          | 32 GB                                    |
-| GPU          | AMD Radeon RX 9070 XT (16 GB VRAM)      |
+| Teil | Läuft auf | Modell | Kennzahl |
+|------|-----------|--------|----------|
+| LLM | GPU (Ollama) | `qwen3:14b`, Kontext 16k (`OLLAMA_CONTEXT_LENGTH=16384`), `OLLAMA_KEEP_ALIVE=1h` | ~11 GB VRAM, erster Token ~1 s, Antwort ~3–4 s |
+| Reranker | GPU (ONNX Runtime + DirectML) | `mmarco-mMiniLMv2-L12-H384-v1` | ~50 ms für 15 Paare (CPU: ~840 ms, unter Last ~14 s) |
+| Embedding | CPU | `multilingual-e5-base` | ~0,08 s pro Frage |
+| Fallback | Cloud | Gemini `gemini-2.5-flash` | nur bei Bedarf — kostenpflichtig, Budgets stoppen nicht automatisch |
 
-**Empfohlene Modelle (Ollama):**
+**AMD-Hinweise:** CUDA gibt es nur für NVIDIA. PyTorch mit ROCm unter Windows liefert auf der
+RX 9070 XT derzeit stillschweigend Nullen (Roadmap 5.4) — deshalb läuft der Reranker über
+DirectML und das Embedding auf der CPU. Ollama nutzt die Karte direkt.
 
-| Modell                          | VRAM (Q4) | Qualität (DE) | Status       |
-|---------------------------------|-----------|---------------|--------------|
-| **Qwen 2.5 14B (Q4_K_M)**      | ~9 GB     | Exzellent     | ✅ Default    |
-| Gemma 4 26B-A4B (Q4)           | ~13 GB    | Sehr gut*     | ⏳ Testen     |
-| Gemma 4 E4B                    | ~5 GB     | Gut           | ⏳ Testen     |
-| Mistral Nemo 12B (Q4)          | ~7 GB     | Sehr gut      | ✅ Alternative |
-| Qwen 2.5 7B (Q4_K_M)          | ~5 GB     | Gut           | ✅ Schnell    |
-
-*Gemma 4 ist einen Tag alt (Release: 02.04.2026). Ollama-Support und reale
-Deutsch-Performance müssen noch validiert werden. Benchmarks sehen vielversprechend
-aus (140+ Sprachen, Apache 2.0 Lizenz), aber "frisch released" bedeutet mögliche
-Kinderkrankheiten.*
-
-**Hinweis AMD GPU:** Die RX 9070 XT (RDNA4) wird über ROCm von Ollama unterstützt.
-Falls ROCm-Probleme auftreten, funktioniert CPU-Inferenz mit 32 GB RAM
-problemlos — langsamer, aber für RAG-Anwendungen ausreichend.
-
-### Laptop (8 GB RAM, keine GPU)
-
-| Modell                     | RAM-Bedarf | Qualität     | Empfehlung        |
-|----------------------------|------------|--------------|-------------------|
-| **Gemini API (Free Tier)** | —          | Sehr gut     | ✅ Default         |
-| Gemma 4 E2B (Q4)          | ~3 GB      | Akzeptabel   | ⏳ Experimentell   |
-| Qwen 2.5 3B (Q4)          | ~2.5 GB    | Akzeptabel   | ✅ Offline-Backup  |
-
-**Empfehlung:** Gemini API als Primary auf dem Laptop. Lokale Modelle bei 8 GB RAM
-nur als Offline-Fallback — die Qualität kleiner Modelle (≤4B) reicht für einfache
-Fragen, aber nicht für komplexe Lore-Zusammenfassungen.
-
-**Gemini Free Tier Limits (Stand April 2026):**
-- 15 Requests/Minute
-- 1M+ Tokens/Tag (bei Flash-Modell)
-- Mehr als ausreichend für persönliche Nutzung
-
-### Modellwechsel
-
-Modell wechseln erfordert keinen Code-Eingriff:
-
-```bash
-# Neues Modell herunterladen
-ollama pull gemma4:26b-a4b-q4_K_M
-
-# In settings.yaml ändern
-# ollama.model: "gemma4:26b-a4b-q4_K_M"
-
-# Oder via Environment-Variable
-OLLAMA_MODEL=gemma4:26b-a4b-q4_K_M python -m src.main
-```
+Modell wechseln: `ollama pull <modell>`, dann `llm.ollama.model` in der Settings-Seite bzw.
+`settings.yaml` oder `LLM__OLLAMA__MODEL=<modell>` setzen.
 
 ---
 
-## 7. Evaluation
+## 6. Betrieb
 
-LoreKeeper hat ein Golden Set (`evaluation/qa_pairs.yaml`, 262 Fragen) und
-zwei Eval-Skripte:
+LoreKeeper läuft ausschließlich lokal unter Windows; ChromaDB steckt im Backend-Prozess.
 
-- **`evaluation/evaluate_retrieval.py`** — schneller Loop ohne LLM, misst
-  Hit Rate@K direkt gegen ChromaDB + Reranker.
-- **`evaluation/evaluate.py`** — End-to-End via `/query`-API inkl.
-  LLM-Antwort und `answer_contains`-Metrik.
-
-Vollständige Anleitung — Schema, CLI-Flags, Metriken, Workflow,
-Anleitung zum Erweitern des Golden Sets — in **[`docs/evaluation.md`](docs/evaluation.md)**.
+- **Installation und Start:** [README.md](README.md) → Schnellstart. `.\start.ps1` startet Backend
+  und UI für die Entwicklung, `.\start.ps1 -Server` für den Heimnetz-Betrieb (UI im LAN, Backend
+  bleibt auf `127.0.0.1`, kein Auto-Reload). Bewusst **kein Autostart**.
+- **Heimnetz, Passwort, Firewall, Fehlersuche, Logs:** [docs/operations.md](docs/operations.md).
+- **Evaluation:** Golden Set mit 278 Fragen, `evaluate_retrieval.py` (ohne LLM, ~1 min) und
+  `evaluate.py` (mit LLM) — [docs/evaluation.md](docs/evaluation.md).
 
 ---
 
-## 8. Deployment & Infrastruktur
+## 7. Erweiterungspunkte
 
-LoreKeeper läuft ausschließlich lokal unter Windows mit ChromaDB im `embedded`-Modus.
+| Erweiterung | Vorgehen |
+|-------------|----------|
+| Neuer Parser | `BaseParser` implementieren, im Orchestrator registrieren |
+| Neuer LLM-Provider | `BaseLLMProvider` implementieren (`generate_stream` als `async def` mit `yield`, `usage` in `stream_result`), `self.model` setzen, in `ProviderFactory` registrieren |
+| Neue Quellengruppe | `SourceGroup` in `src/config/manager.py`, Filter in Chat-Sidebar und Sources-Seite |
+| Neues Prompt-Template | Schlüssel in `prompts.yaml`, Render-Methode im `PromptManager` |
+| Anderer Reranker | Modell in `reranking.model`; für die GPU braucht es einen ONNX-Export (`onnx/model.onnx`) |
 
----
-
-### Lokal (Windows) — Entwicklung & tägliche Nutzung
-
-**ChromaDB läuft embedded** — kein separater Prozess, FastAPI greift direkt auf
-`./chroma_data` zu.
-
-#### Voraussetzungen
-
-- Python 3.11+ (`winget install Python.Python.3.11`)
-- [Ollama für Windows](https://ollama.com/download) — installiert sich als Windows-Dienst,
-  startet automatisch beim Booten
-- Git
-
-#### Ersteinrichtung (einmalig)
-
-```powershell
-# 1. Repo klonen
-git clone https://github.com/FabianHentrich/lorekeeper.git
-cd lorekeeper
-
-# 2. Virtual Environment erstellen und aktivieren
-python -m venv .venv
-.venv\Scripts\activate
-
-# 3. Dependencies installieren
-pip install -r requirements.txt
-# GPU reranker (DirectML): chromadb & co. also pull the plain onnxruntime, which shares the
-# onnxruntime/ folder and hides DirectML — remove it, then restore the DirectML build:
-pip uninstall -y onnxruntime
-pip install --force-reinstall --no-deps onnxruntime-directml
-
-# 4. Ollama-Modell herunterladen (Ollama muss laufen)
-ollama pull qwen3:14b
-
-# 5. Config anpassen
-copy .env.example .env
-# → .env öffnen: GEMINI_API_KEY eintragen (optional)
-# → config/sources.yaml: Sources anlegen (siehe §4 Ingestion)
-```
-
-#### Starten (nach Einrichtung)
-
-```powershell
-# Virtual Environment aktivieren (jede neue Shell)
-.venv\Scripts\activate
-
-# Terminal 1: FastAPI Backend (Embedded ChromaDB, kein separater Prozess)
-uvicorn src.main:app --reload --port 8000
-
-# Terminal 2: Streamlit UI
-streamlit run ui/LoreKeeper.py
-```
-
-Oder beides in einem Schritt: `.\start.ps1` (Entwicklung) bzw. `.\start.ps1 -Server`
-(Heimnetz-Server: UI im LAN erreichbar, Backend bleibt auf `127.0.0.1`, kein Auto-Reload).
-Einrichtung des Heimnetz-Betriebs (Passwort, Firewall; bewusst kein Autostart): `docs/operations.md`
-→ „Home-network server (LAN)“. Die UI lauscht standardmäßig nur auf `127.0.0.1`
-(`.streamlit/config.toml`); der Zugriffsschutz steckt in `ui/admin_gate.py`.
-
-> Ollama läuft als Windows-Dienst im Hintergrund — kein manuelles Starten nötig.
-> Falls nicht: `ollama serve` in einem dritten Terminal.
-
-**Dokumente indizieren:**
-
-```powershell
-python -m src.ingestion.orchestrator
-# oder via API: POST http://localhost:8000/ingest
-# Status prüfen: GET http://localhost:8000/ingest/status/{job_id}
-```
-
----
-
-## 9. Erweiterbarkeit & Roadmap
-
-### v1 (MVP) — aktueller Scope
-
-- [x] Architektur-Design
-- [ ] Document Ingestion (MD, PDF, Image-Metadaten) inkl. Content-Hash-Deduplication
-- [ ] Embedding + ChromaDB (Embedded)
-- [ ] Retrieval Engine
-- [ ] Provider-Abstraction (Ollama + Gemini) inkl. `generate_stream()`
-- [ ] Conversation Manager (Sliding Window + Background-GC für Sessions)
-- [ ] Prompt Manager (Jinja2 + YAML)
-- [ ] FastAPI Backend inkl. `/query/stream` (SSE) + `/ingest` als Background-Job
-- [ ] Streamlit Chat UI mit Streaming (`st.write_stream`) + Bild-Quellenanzeige
-- [ ] Evaluation Framework
-- [ ] Lokales Windows-Setup
-- [ ] README + Dokumentation
-
-### v2 — geplante Erweiterungen
-
-- [ ] **React-Frontend** als Alternative zu Streamlit
-- [ ] **Cross-Encoder Reranking** für bessere Retrieval-Qualität
-- [ ] **Multimodale Bildbeschreibung** via Gemini Vision oder LLaVA
-- [ ] **Filesystem Watcher** für automatische Re-Ingestion bei Dateiänderungen
-- [ ] **Session-Persistenz** (SQLite) für Neustarts
-- [ ] **Combat Tracker API-Integration** (bidirektionale Anbindung)
-- [ ] **Query Analytics Dashboard** (häufige Fragen, Retrieval-Qualität over time)
-- [ ] **Conversation Summarization** für längere Sessions über Sliding Window hinaus
-- [ ] **Caching-Layer** für wiederkehrende Queries
-- [ ] **Weitere LLM-Provider** (OpenAI, Anthropic) für Flexibilität
-
-### Erweiterungspunkte (Plugin-Pattern)
-
-Neue Komponenten können ohne Änderung bestehenden Codes hinzugefügt werden:
-
-| Erweiterung        | Methode                                                |
-|--------------------|--------------------------------------------------------|
-| Neuer Parser       | `BaseParser` implementieren, in Orchestrator registrieren |
-| Neuer LLM-Provider | `BaseLLMProvider` implementieren, in Factory registrieren |
-| Neuer Vector Store | `vectorstore.py` Interface implementieren (z.B. FAISS) |
-| Neues Prompt       | Template in `prompts.yaml` hinzufügen                  |
-
----
-
-## 10. Tech Stack Zusammenfassung
-
-| Kategorie           | Technologie                                         |
-|---------------------|-----------------------------------------------------|
-| **Sprache**         | Python 3.11+                                        |
-| **API Framework**   | FastAPI + Pydantic + Uvicorn                        |
-| **UI**              | Streamlit (v1), React (v2)                          |
-| **LLM (lokal)**     | Ollama (Qwen 2.5 14B, Gemma 4, Mistral)            |
-| **LLM (Cloud)**     | Google Gemini API (Free Tier)                       |
-| **Embeddings**      | sentence-transformers (`multilingual-e5-base`, 512 Token) |
-| **Vector Store**    | ChromaDB                                            |
-| **PDF Parsing**     | PyMuPDF (pymupdf4llm)                               |
-| **Templating**      | Jinja2                                              |
-| **Config**          | YAML + Pydantic Validation                          |
-| **Tests**           | pytest + pytest-asyncio + httpx (FastAPI TestClient), ChromaDB `EphemeralClient` |
-| **Code-Qualität**   | ruff (Lint) + mypy (Typen), laufen als Teil von `pytest` |
-| **Versionierung**   | Git + GitHub                                        |
-
----
-
-*Dieses Dokument wird iterativ aktualisiert, sobald Implementierungsentscheidungen
-getroffen werden.*
+Geplante Arbeit: [plan roadmap.md](plan%20roadmap.md).

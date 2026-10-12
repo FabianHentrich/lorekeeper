@@ -1,283 +1,260 @@
-# Embedding Strategy
+# Embedding-Strategie
 
-This document details LoreKeeper's retrieval architecture, explaining the choices behind embedding models, reranking, hybrid search (BM25 + Vector), and how text chunks are constructed to maximize match quality.
+Wie LoreKeeper sucht und **warum so**: Embedding-Modell, Reranking, Hybrid Search, Deckel pro
+Datei, Regelwerk-Slot, Section Expansion und der Aufbau der Embed-Texte. Die Parameter stehen in
+[configuration.md](configuration.md) → `retrieval`, der Ablauf als Diagramm in
+[data-flow.md](data-flow.md).
 
-## Table of Contents
-1. [Overview](#overview)
-2. [Why these choices?](#why-these-choices)
-   - [Why `multilingual-e5-base`?](#why-multilingual-e5-base-not-all-minilm-l6-v2-or-openai)
-   - [Why a cross-encoder rerank stage?](#why-a-cross-encoder-rerank-stage)
-   - [Why BM25 Hybrid Search?](#why-bm25-hybrid-search)
-   - [Why a per-source diversity cap?](#why-a-per-source-diversity-cap)
-   - [Why a rulebook slot?](#why-a-rulebook-slot)
-   - [Why the identity layer?](#why-the-identity-layer-stem--aliases)
-   - [Why `heading_aware` chunking?](#why-heading_aware-chunking-not-recursive-character)
-   - [Why SHA-256 for re-ingestion?](#why-sha-256-content-hashing-for-re-ingestion)
-   - [Why exclude images?](#why-exclude-images-from-retrieval)
-3. [Retrieval Pipeline](#retrieval-pipeline)
-4. [Embed Text Construction](#embed-text-construction)
-5. [Document Types](#document-types)
-6. [What Is NOT in the Embedding](#what-is-not-in-the-embedding)
-7. [Re-ingest After Changes](#re-ingest-after-changes)
-
----
-
-## Overview
-
-LoreKeeper uses `intfloat/multilingual-e5-base` (768 dimensions, 512-token context,
-cosine similarity) for all document embeddings, optionally combined with a **BM25 keyword index** for hybrid retrieval. The embedding model is **asymmetric**: queries
-get a `"query: "` prefix, passages get a `"passage: "` prefix — this is applied
-automatically by `EmbeddingService` when the model name contains `"e5"`.
-
-There is no explicit field weighting — sentence-transformers has no concept of field
-weights. The effect is achieved through **position** (earlier in the text → stronger
-influence on the vector) and **repetition**.
+## Inhaltsverzeichnis
+1. [Überblick](#überblick)
+2. [Warum diese Entscheidungen?](#warum-diese-entscheidungen)
+   - [Warum `multilingual-e5-base`?](#warum-multilingual-e5-base)
+   - [Warum ein Cross-Encoder-Reranking?](#warum-ein-cross-encoder-reranking)
+   - [Warum BM25-Hybrid-Suche?](#warum-bm25-hybrid-suche)
+   - [Warum ein Deckel pro Datei?](#warum-ein-deckel-pro-datei)
+   - [Warum ein Regelwerk-Slot?](#warum-ein-regelwerk-slot)
+   - [Warum Section Expansion?](#warum-section-expansion)
+   - [Warum die Identitäts-Schicht?](#warum-die-identitäts-schicht-dateiname--aliase)
+   - [Warum Chunking nach Überschriften?](#warum-chunking-nach-überschriften)
+   - [Warum SHA-256 fürs Neu-Indizieren?](#warum-sha-256-fürs-neu-indizieren)
+   - [Warum Bilder ausschließen?](#warum-bilder-aus-der-suche-ausschließen)
+3. [Retrieval-Ablauf](#retrieval-ablauf)
+4. [Aufbau des Embed-Texts](#aufbau-des-embed-texts)
+5. [Dokumenttypen](#dokumenttypen)
+6. [Was NICHT im Embedding steckt](#was-nicht-im-embedding-steckt)
+7. [Neu indizieren nach Änderungen](#neu-indizieren-nach-änderungen)
 
 ---
 
-## Why these choices?
+## Überblick
 
-The embedding stack is the single biggest quality lever in a RAG system. Each
-decision below solves a concrete failure mode we hit on real TTRPG vault data.
+LoreKeeper embeddet alle Dokumente mit `intfloat/multilingual-e5-base` (768 Dimensionen,
+512 Tokens Kontext, Cosine-Ähnlichkeit), optional ergänzt um einen **BM25-Index** für die
+Hybrid-Suche. Das Modell ist **asymmetrisch**: Fragen bekommen das Präfix `"query: "`, Passagen
+`"passage: "` — der `EmbeddingService` setzt das automatisch, wenn der Modellname `"e5"` enthält.
 
-### Why `multilingual-e5-base` (not `all-MiniLM-L6-v2` or OpenAI)?
-
-- **The vault is German.** English-only models (MiniLM, `bge-*-en`) collapse
-  German morphology into noise. Benchmarks on MIRACL/mMARCO show E5 multilingual
-  beating MiniLM by 10–20 points on non-English retrieval.
-- **E5 is asymmetric.** The `query: ` / `passage: ` prefixes train the model to
-  represent short questions and long passages in compatible subspaces. Symmetric
-  models trained on sentence-pair similarity underperform on Q→document retrieval
-  because the geometry is wrong.
-- **Local, free, small.** 768 dimensions, ~280 MB, runs on CPU. No API cost, no
-  data leaving the machine, no rate limits during bulk ingestion of thousands of
-  files.
-- **Trade-off accepted:** `e5-large` would be ~2% more accurate but 3× slower and
-  larger. The cross-encoder rerank (below) recovers most of that accuracy for a
-  fraction of the cost.
-
-### Why a cross-encoder rerank stage?
-
-Bi-encoders encode query and document **separately** and compare with cosine —
-fast, but the model never "sees" the pair together. This is how you get
-plausible-looking top-1 hits that are actually about the wrong entity.
-
-The cross-encoder (`mmarco-mMiniLMv2-L12-H384-v1`) encodes **both together** and
-directly scores relevance. It's ~20× slower per pair, so we only run it over the
-15 bi-encoder candidates, reducing to the final top 8.
-
-In practice: the bi-encoder gets you 90% of the way on recall; the cross-encoder
-fixes the ordering so the LLM's context window is used efficiently.
-
-**Where it runs:** with `reranking.backend: directml` the cross-encoder runs on the
-GPU via ONNX Runtime + DirectML (any DX12 card, AMD included) using the model's
-published ONNX export — identical scores, ~50 ms for 15 pairs instead of ~840 ms on
-the CPU, and unaffected by CPU load (~70 ms vs. ~14 s while a simulation keeps all
-cores busy). If DirectML is unavailable the retriever logs a warning and falls back to
-the torch model on the CPU. The bi-encoder stays on the CPU on purpose: a query
-embedding costs ~0.08 s, and a different backend would shift the vectors slightly
-against the existing index.
-
-### Why BM25 Hybrid Search?
-
-Dense vector search generalises well semantically but loses precision on exact
-terms — proper nouns, numbers, and rule-specific vocabulary ("Langschwert",
-"Bonusaktion", "Marke") can drift into neighbouring chunks even when the term
-appears verbatim. BM25 is a lexical ranker that rewards exact token overlap
-with length-normalised TF-IDF, so it nails these cases.
-
-LoreKeeper runs both in **parallel**, not as a pre-filter:
-
-1. Vector search queries ChromaDB for the top-K nearest embeddings and applies
-   `score_threshold` on the cosine scores. This drops irrelevant vector hits
-   while they're still on a comparable scale.
-2. BM25 queries an in-memory `rank_bm25` index built lazily from the same
-   ChromaDB collection (invalidated after ingestion). Metadata filters are
-   applied post-hoc with ChromaDB-compatible operators (`$eq`, `$ne`, `$in`,
-   `$and`).
-3. Both result lists are merged via **Reciprocal Rank Fusion**:
-   `score = weight / (k + rank + 1)`, with `bm25_weight` tuning the balance
-   (0.3 by default) and `k=60` dampening the advantage of the top ranks.
-4. The fused candidate pool goes to the cross-encoder reranker as before.
-
-RRF scores live on a different scale from cosine (max ≈ 1/61), so thresholding
-must happen on the vector side *before* fusion — never on the fused score.
-BM25 has no comparable absolute threshold; we trust `bm25_top_k` to cap noise
-on the keyword side.
-
-Hybrid can be toggled per request via `hybrid_search` on `QueryRequest`,
-overriding the `retrieval.hybrid.enabled` config default. The Evaluation page
-exposes a three-way selector (Config default / Vector only / Hybrid) and a
-one-click A/B run that executes both modes against the Golden Set.
-
-### Why a per-source diversity cap?
-
-Cross-encoder scores are query-pair-relevance only — the model has no notion
-of "I already picked something similar". On a high-recall query like
-*"Was ist Arkenfeld?"* the bi-encoder happily returns 8 chunks all from
-`Arkenfeld.md`, the reranker scores them all highly, and the LLM gets a
-deep but **narrow** context: lots of Arkenfeld detail, zero from related
-docs (factions, campaign structure, NPCs).
-
-LoreKeeper applies a **`max_per_source` cap** (default `3`) after reranking,
-in **two passes**:
-
-1. **Diverse fill** — walk the score-sorted list and accept chunks until
-   each source hits `max_per_source`. Cap-blocked chunks are parked in an
-   `overflow` list (still in score order).
-2. **Backfill** — if pass 1 produced fewer than `top_k_rerank` results
-   (because the post-threshold pool was thin and dominated by one source),
-   fill the remaining slots from `overflow` in score order.
-
-The cap is therefore a **preference** for diversity, not a hard slot-killer.
-The retriever never silently returns fewer chunks than `top_k_rerank` when
-candidates are available — diversity is a quality goal, but starving the
-LLM of context is worse. After backfill, the final list is re-sorted by
-reranker score so the LLM still sees the most relevant chunks first.
-
-This is intentionally **not** a heading-level dedupe. The `heading_aware`
-chunker can legitimately produce multiple chunks under the same heading
-(`chunk_index 0..N` of one long section) — discarding them as duplicates
-would drop real content. The cap operates at the file level, where
-crowding-out actually happens.
-
-Tuning:
-
-- `max_per_source: 3` (default) — good balance for an Obsidian vault with
-  many small interlinked notes.
-- `max_per_source: 5+` — when individual files are large and authoritative
-  (e.g. a single rulebook PDF) and you'd rather pull more from one source
-  than dilute with weaker matches.
-- `max_per_source: 0` — disable the cap entirely; pure reranker order.
-
-### Why a rulebook slot?
-
-Questions that name a vault entity **and** a rule term — *"Was bewirkt
-Ritterlichkeit bei Escanor?"*, *"Thalion trägt eine Phönixfeder – was kann sie?"* —
-hit the entity's file so strongly that it fills all 15 vector candidates. The rule
-definition in the PDF never reaches the reranker, so no cap or reorder can help.
-
-`retrieval.rules_slot` adds a second, small vector search restricted to group
-`rules` (5 candidates, AND-ed with the request filter so player mode still holds).
-These candidates are scored by the cross-encoder but **kept out of the main pool**.
-Only if no `rules` chunk made the final top `top_k_rerank`, the best of them replaces
-the weakest chunk — if its score is ≥ `min_score` (-4), and never more than one.
-
-Mixing the extra candidates into the main pool was measured and rejected: slightly
-more section hits (138 vs. 136 of 153), but rulebook chunks in 121 of 138 pure lore
-questions instead of 64. Golden set with the slot: sections 132 → 136/153,
-cross-source questions x001–x008 1 → 5/8.
-
-### Why the identity layer (`stem | aliases`)?
-
-This is the trick that matters most for entity-centric TTRPG content.
-
-A chunk like `| Type | Trading city, mid-sized |` contains no proper noun — it's
-a table row. A bi-encoder embedding of just that row has zero signal for "what
-is Arkenfeld?". The chunk would never surface.
-
-Solution: **prepend the filename stem and frontmatter aliases to the embed text**
-(but not the content stored in ChromaDB). The vector now carries "Arkenfeld | City
-of Arkenfeld" semantics, so it matches on entity queries. The LLM still sees only
-the clean content, not the hack.
-
-Filename-as-signal works because Obsidian vaults encode entity identity in the
-filename by convention. This would not work on arbitrary Markdown dumps.
-
-### Why `heading_aware` chunking (not recursive-character)?
-
-Obsidian documents are **semantically structured by headings**. A character sheet
-has `## Stats`, `## Background`, `## Relationships`. A location doc has `## Geography`,
-`## Factions`, `## Notable NPCs`.
-
-Recursive-character chunking slices mid-paragraph or mid-table and destroys this
-structure. Heading-aware chunking:
-
-1. Splits at `#`/`##`/`###` boundaries first.
-2. Keeps tables **atomic** — never splits between rows (a half-row is garbage).
-   Tables stay in a single chunk up to `max_chunk_size * 3`; only very large
-   tables are split at row boundaries with the header repeated.
-3. Merges too-small sections **only within the same heading boundary** — a
-   tiny `### Bruchgraben` table will *not* absorb the next sibling section,
-   because the merged chunk would otherwise carry the wrong
-   `heading_hierarchy` and silently lie about its content. Sections under
-   different headings always stay separate, regardless of size.
-4. Preserves the heading path (`Arkenfeld > Geography`) in the chunk body so the
-   LLM sees where the content came from.
-
-Result: each chunk is a semantically coherent unit, not a window of characters,
-and its `heading_hierarchy` metadata is always truthful — which is what the
-reranker's `max_per_source` cap relies on to enforce diversity across files.
-
-### Why SHA-256 content hashing for re-ingestion?
-
-- **Obvious alternative: file mtime.** Fails on Windows network mounts, Git
-  checkouts, Dropbox/OneDrive sync (which touches mtime without changing content),
-  and batch operations.
-- **SHA-256 over the raw file bytes** is deterministic, portable, and cheap — a
-  1 MB Markdown file hashes in ~1 ms. We cache the hash per source in ChromaDB
-  metadata; on re-ingest we compute the current hash, compare, skip unchanged
-  files entirely. For a 1000-file vault where 5 files changed, this turns a
-  multi-minute embedding run into a sub-second operation.
-
-### Why exclude images from retrieval?
-
-Image "chunks" are filename stubs like `"Bild: Malek Nocthar 1 (Pfad: NPCs)"`.
-They're too thin to rank well — but worse, they **pollute** top-K with near-zero
-content. A hard `document_type != image` filter at the retriever level keeps them
-out of the LLM context while still allowing the UI to render them when a text
-chunk cites the same file (see below).
+Gewichte für einzelne Felder gibt es in sentence-transformers nicht. Die Wirkung entsteht über die
+**Position** (was früher im Text steht, prägt den Vektor stärker) und **Wiederholung**.
 
 ---
 
+## Warum diese Entscheidungen?
+
+Der Embedding-Stack ist der größte Qualitätshebel eines RAG-Systems. Jede Entscheidung unten löst
+ein konkretes Problem, das mit echten Vault-Daten aufgetreten ist.
+
+### Warum `multilingual-e5-base`?
+
+- **Der Vault ist deutsch.** Nur-Englisch-Modelle (MiniLM, `bge-*-en`) machen aus deutscher
+  Morphologie Rauschen. Auf MIRACL/mMARCO liegt E5 multilingual bei nicht-englischer Suche 10–20
+  Punkte vor MiniLM.
+- **E5 ist asymmetrisch.** Die Präfixe `query: ` / `passage: ` trainieren das Modell, kurze Fragen
+  und lange Passagen in verträglichen Räumen abzubilden. Symmetrische Modelle, auf Satzpaar-
+  Ähnlichkeit trainiert, schneiden bei Frage→Dokument schlechter ab.
+- **Lokal, kostenlos, überschaubar.** ~1,1 GB, läuft auf der CPU. Keine API-Kosten, keine Daten
+  verlassen den Rechner, keine Rate-Limits beim Indizieren Tausender Dateien.
+- **Bewusster Kompromiss:** `e5-large` wäre ~2 % genauer, aber dreimal langsamer und größer. Das
+  Reranking holt den Großteil davon zu einem Bruchteil der Kosten.
+
+### Warum ein Cross-Encoder-Reranking?
+
+Bi-Encoder kodieren Frage und Dokument **getrennt** und vergleichen per Cosine — schnell, aber das
+Modell sieht das Paar nie zusammen. So entstehen plausibel wirkende Top-Treffer, die von der
+falschen Entität handeln.
+
+Der Cross-Encoder (`mmarco-mMiniLMv2-L12-H384-v1`) kodiert **beides zusammen** und bewertet die
+Relevanz direkt. Pro Paar ist er ~20× langsamer, deshalb läuft er nur über die 15 Kandidaten der
+Vektorsuche und wählt die finalen 8. Kurz: Der Bi-Encoder findet 90 % der richtigen Kandidaten,
+der Cross-Encoder bringt sie in die richtige Reihenfolge.
+
+**Wo er läuft:** Mit `reranking.backend: directml` auf der GPU über ONNX Runtime + DirectML (jede
+DX12-Karte, auch AMD), mit dem veröffentlichten ONNX-Export des Modells — identische Scores, ~50 ms
+für 15 Paare statt ~840 ms auf der CPU und unabhängig von CPU-Last (~70 ms statt ~14 s, während
+eine Simulation alle Kerne belegt). Ist DirectML nicht verfügbar, schreibt der Retriever eine
+Warnung ins Log und nimmt das torch-Modell auf der CPU. Der Bi-Encoder bleibt bewusst auf der
+CPU: ein Query-Embedding kostet ~0,08 s, und eine andere Rechenbibliothek würde die Vektoren
+gegenüber dem bestehenden Index leicht verschieben. Hintergrund und Benchmark: Roadmap 5.4.
+
+### Warum BM25-Hybrid-Suche?
+
+Vektorsuche verallgemeinert gut, verliert aber Präzision bei exakten Begriffen — Eigennamen,
+Zahlen, Regelvokabular („Langschwert“, „Bonusaktion“, „Marke“) rutschen in Nachbar-Chunks, selbst
+wenn das Wort wörtlich vorkommt. BM25 belohnt exakte Wortübereinstimmung und trifft diese Fälle.
+
+LoreKeeper führt beide **parallel** aus, nicht als Vorfilter:
+
+1. Die Vektorsuche holt die Top-K aus ChromaDB und wendet `score_threshold` auf die Cosine-Scores
+   an — solange sie noch vergleichbar sind.
+2. BM25 fragt einen In-Memory-Index (`rank_bm25`), lazy aus derselben Collection gebaut und nach
+   jeder Ingestion verworfen. Metadaten-Filter werden nachträglich mit ChromaDB-kompatiblen
+   Operatoren angewandt (`$eq`, `$ne`, `$in`, `$and`).
+3. Beide Listen werden per **Reciprocal Rank Fusion** zusammengeführt:
+   `score = Gewicht / (k + Rang + 1)`, `bm25_weight` (0,3) steuert die Balance, `k=60` dämpft den
+   Vorteil der obersten Ränge.
+4. Der fusionierte Pool geht wie gehabt zum Reranker.
+
+RRF-Scores liegen auf einer anderen Skala (max. ≈ 1/61); deshalb greift die Schwelle **vor** der
+Fusion, nie auf dem fusionierten Score. Für BM25 gibt es keine vergleichbare absolute Schwelle,
+`bm25_top_k` begrenzt das Rauschen.
+
+Hybrid ist pro Anfrage schaltbar (`hybrid_search`); die Evaluation-Seite hat eine Auswahl
+(Config / nur Vektor / Hybrid) und einen A/B-Lauf über das Golden Set.
+
+### Warum ein Deckel pro Datei?
+
+Cross-Encoder-Scores bewerten nur Frage und Passage — das Modell weiß nicht, dass es schon etwas
+Ähnliches gewählt hat. Bei „Was ist Arkenfeld?“ kommen 8 Chunks aus `Arkenfeld.md`, alle hoch
+bewertet, und das LLM bekommt tiefen, aber **engen** Kontext: viel Arkenfeld, nichts aus
+Fraktionen, Kampagne oder NPCs.
+
+Deshalb gilt nach dem Reranking ein Deckel **`max_per_source`** (3), in **zwei Durchgängen**:
+
+1. **Divers füllen** — die nach Score sortierte Liste ablaufen und Chunks annehmen, bis eine Datei
+   den Deckel erreicht; blockierte Chunks wandern in einen Überlauf (weiter in Score-Reihenfolge).
+2. **Nachfüllen** — kommen so weniger als `top_k_rerank` zusammen (dünner Pool, eine Datei
+   dominiert), werden die freien Plätze aus dem Überlauf gefüllt.
+
+Der Deckel ist also eine **Vorliebe** für Vielfalt, kein Platzvernichter: Solange Kandidaten da
+sind, kommen nie weniger als `top_k_rerank` Chunks zurück. Danach wird nach Score neu sortiert,
+damit das LLM das Relevanteste zuerst sieht. Er zählt je (Quelle, Datei) — zwei gleichnamige
+Dateien in verschiedenen Quellen (z.B. zwei `llm_report.md`) haben je einen eigenen Deckel.
+
+Bewusst **keine** Deduplizierung nach Überschrift: Ein langer Abschnitt ergibt legitim mehrere
+Chunks. Verdrängt wird auf Dateiebene, also wirkt der Deckel dort.
+
+- `3` (Standard) — gut für einen Vault mit vielen kleinen, verlinkten Notizen.
+- `5+` — wenn einzelne Dateien groß und maßgeblich sind (z.B. ein Regelwerk-PDF).
+- `0` — kein Deckel, reine Reranker-Reihenfolge.
+
+### Warum ein Regelwerk-Slot?
+
+Fragen, die eine Vault-Entität **und** einen Regelbegriff nennen — „Was bewirkt Ritterlichkeit bei
+Escanor?“, „Thalion trägt eine Phönixfeder – was kann sie?“ — treffen die Datei der Entität so
+stark, dass sie alle 15 Vektor-Kandidaten belegt. Die Regeldefinition im PDF erreicht den Reranker
+nie; kein Deckel und keine Umsortierung hilft dann.
+
+`retrieval.rules_slot` ergänzt eine zweite, kleine Vektorsuche nur in Gruppe `rules`
+(5 Kandidaten, mit demselben Filter wie die Anfrage — der Spieler-Modus bleibt dicht). Diese
+Kandidaten bewertet der Cross-Encoder mit, sie bleiben aber **außerhalb des Haupt-Pools**. Nur
+wenn kein `rules`-Chunk in die finalen Top-`top_k_rerank` gekommen ist, ersetzt der beste davon
+den schwächsten Chunk — wenn sein Score ≥ `min_score` (−4) ist, und nie mehr als einer.
+
+Die Extra-Kandidaten in den Haupt-Pool zu mischen wurde gemessen und verworfen: etwas mehr
+Abschnitt-Treffer (138 statt 136 von 153), aber Regelwerk-Chunks in 121 von 138 reinen
+Lore-Fragen statt 64. Golden Set mit Slot: Abschnitte 132 → 136/153, Fragen mit Entität + Regel
+(x001–x008) 1 → 5/8.
+
+### Warum Section Expansion?
+
+Aufzählungsfragen („Welche Fähigkeiten hat der Waldläufer?“) treffen oft nur zwei, drei
+Unterabschnitte einer Sektion; die Antwort wird dann lückenhaft. Teilen sich ≥ 2 Treffer einer
+Datei eine Eltern-Überschrift mit **verschiedenen** Unter-Überschriften, lädt der Retriever die
+ganze Sektion in Dokumentreihenfolge und setzt sie an der Stelle des besten Treffers ein.
+
+Zwei Grenzen schützen den Kontext: Sektionen über `max_chunks` (25) bleiben unverändert, und
+expandiert wird nur, wenn ein Treffer der Sektion unter den ersten `top_rank` (3) liegt — sonst
+ziehen zwei zufällige, schwache Treffer eine fremde Sektion herein. Golden Set mit `top_rank: 3`:
+Ø Chunks 13,9 → 12,6, Abschnitt-Treffer unverändert. Offen: ein Gesamtbudget über mehrere
+expandierte Sektionen (bis zu 49 Chunks sind noch möglich, Roadmap 5.3).
+
+### Warum die Identitäts-Schicht (Dateiname | Aliase)?
+
+Der wichtigste Trick für Inhalte, die sich um Entitäten drehen.
+
+Ein Chunk wie `| Typ | Handelsstadt, mittelgroß |` enthält keinen Eigennamen — es ist eine
+Tabellenzeile. Ihr Embedding hat null Bezug zu „Was ist Arkenfeld?“; der Chunk würde nie gefunden.
+
+Lösung: **Dateiname und Aliase aus dem Frontmatter werden dem Embed-Text vorangestellt** (nicht
+dem in ChromaDB gespeicherten Inhalt). Der Vektor trägt jetzt „Arkenfeld | Stadt Arkenfeld“ und
+passt zu Fragen nach der Entität; das LLM sieht weiter nur den sauberen Inhalt.
+
+Das funktioniert, weil Obsidian-Vaults die Identität einer Entität per Konvention im Dateinamen
+tragen. Bei beliebigen Markdown-Sammlungen ginge das nicht.
+
+### Warum Chunking nach Überschriften?
+
+Obsidian-Dokumente sind **über Überschriften strukturiert**: ein Charakterbogen hat `## Werte`,
+`## Hintergrund`, `## Beziehungen`. Zeichenbasiertes Chunking schneidet mitten in Absätze und
+Tabellen und zerstört das. Chunking nach Überschriften:
+
+1. Teilt zuerst an `#`/`##`/`###`.
+2. Hält Tabellen **atomar** — nie zwischen Zeilen geteilt (eine halbe Zeile ist Müll). Tabellen
+   bleiben bis `max_chunk_size × 3` in einem Chunk; nur sehr große werden an Zeilengrenzen mit
+   wiederholtem Kopf geteilt.
+3. Legt zu kleine Abschnitte **nur innerhalb derselben Überschrift** zusammen — eine winzige
+   Tabelle unter `### Bruchgraben` schluckt nicht den nächsten Abschnitt, sonst würde
+   `heading_hierarchy` über den Inhalt lügen.
+4. Behält den Überschriftenpfad (`Arkenfeld > Geografie`) im Chunk, damit das LLM sieht, woher
+   der Inhalt stammt.
+
+Ergebnis: jeder Chunk ist eine inhaltliche Einheit, und seine Überschrift stimmt immer — darauf
+bauen Deckel, Section Expansion und die Abschnittsprüfung der Evaluation.
+
+### Warum SHA-256 fürs Neu-Indizieren?
+
+- **Naheliegende Alternative: Änderungszeit.** Versagt bei Windows-Netzlaufwerken, Git-Checkouts,
+  OneDrive/Dropbox (ändern die Zeit ohne Inhalt) und Massenoperationen.
+- **SHA-256 über die Dateibytes** ist deterministisch und billig — 1 MB Markdown in ~1 ms. Der Hash
+  steht in den Chunk-Metadaten; beim Neu-Indizieren wird verglichen und Unverändertes komplett
+  übersprungen. Bei 1000 Dateien mit 5 Änderungen wird aus Minuten eine Sekunde.
+
+### Warum Bilder aus der Suche ausschließen?
+
+Bild-„Chunks“ sind Platzhalter wie `"Bild: Malek Nocthar 1 (Pfad: NPCs)"`. Sie ranken schlecht und
+**verdrängen** schlimmer noch inhaltsreiche Chunks. Ein harter Filter `document_type != image` im
+Retriever hält sie aus dem LLM-Kontext. Fragen nach Bildern funktionieren trotzdem über die
+zugehörige `.md`-Datei (siehe [Dokumenttypen](#dokumenttypen)). Echte Bildbeschreibungen sind
+Roadmap 2.
+
 ---
 
-## Retrieval Pipeline
+## Retrieval-Ablauf
 
 ```mermaid
 flowchart LR
-    Q([Query]) --> BE["Bi-Encoder\ne5-base 'query: '+text\n~20–80ms"]
-    BE -->|"768-dim\nquery vector"| CS["ChromaDB\nCosine search\ntop_k=15\n~5ms"]
-    CS -->|"15 candidates\n(score = 1 - cosine_dist)"| CE["Cross-Encoder\nmmarco-mMiniLMv2\n~50ms GPU (DirectML)\n~800ms CPU fallback"]
-    CE -->|"top_k_rerank=8\nsorted by relevance"| LLM([LLM context])
+    Q([Frage]) --> BE["Bi-Encoder\ne5-base 'query: '+Text\n~20–80 ms"]
+    BE -->|"768-dim.\nFrage-Vektor"| CS["ChromaDB\nCosine-Suche\ntop_k=15\n~5 ms"]
+    CS -->|"15 Kandidaten\n(Score = 1 − Cosine-Distanz)"| CE["Cross-Encoder\nmmarco-mMiniLMv2\n~50 ms GPU (DirectML)\n~800 ms CPU-Rückfall"]
+    CE -->|"top_k_rerank=8\nnach Relevanz"| LLM([LLM-Kontext])
 
     style BE fill:#dbeafe,stroke:#3b82f6
     style CE fill:#ede9fe,stroke:#7c3aed
     style LLM fill:#d1fae5,stroke:#10b981
 ```
 
-### Why two models?
+Vollständiger Ablauf mit BM25, Regelwerk-Slot und Section Expansion:
+[data-flow.md](data-flow.md#beantwortung-einer-frage).
 
 | | Bi-Encoder (e5-base) | Cross-Encoder (mMiniLMv2) |
 |---|---|---|
-| **How it works** | Query & document encoded separately → cosine comparison | Query + document encoded together → direct interaction |
-| **Advantage** | Vectors precomputed → extremely fast | Understands relationship between query and text |
-| **Disadvantage** | Loses interaction context | Too slow for the full index |
-| **Role** | Find candidates (top 15) | Re-rank candidates (top 8) |
+| **Funktionsweise** | Frage und Dokument getrennt → Cosine | Frage + Dokument zusammen → direkte Bewertung |
+| **Vorteil** | Vektoren vorberechnet → sehr schnell | Versteht die Beziehung zwischen Frage und Text |
+| **Nachteil** | Kein Zusammenspiel | Zu langsam für den ganzen Index |
+| **Rolle** | Kandidaten finden (Top 15) | Kandidaten ordnen (Top 8) |
 
 ---
 
-## Embed Text Construction
+## Aufbau des Embed-Texts
 
-For each chunk an **embed text** is constructed. ChromaDB stores the original
-**content** (what the LLM sees later):
+Für jeden Chunk wird ein **Embed-Text** gebaut; ChromaDB speichert den ursprünglichen
+**Inhalt** (den später das LLM sieht):
 
 ```mermaid
 flowchart TD
-    subgraph EMBED_TEXT["Embed Text (→ e5-base vector)"]
-        L1["① Arkenfeld | City of Arkenfeld\n   Stem | Alias1 | Alias2"]
-        L2["② Arkenfeld > Overview\n   Heading path"]
-        L3["③ | Type | Trading city, mid-sized |\n   Content"]
+    subgraph EMBED_TEXT["Embed-Text (→ e5-base-Vektor)"]
+        L1["① Arkenfeld | Stadt Arkenfeld\n   Dateiname | Alias1 | Alias2"]
+        L2["② Arkenfeld > Überblick\n   Überschriftenpfad"]
+        L3["③ | Typ | Handelsstadt, mittelgroß |\n   Inhalt"]
         L1 --- L2 --- L3
     end
 
-    subgraph CONTENT["Content (→ ChromaDB · LLM)"]
-        C2["Arkenfeld > Overview\n(heading prefix)"]
-        C3["| Type | Trading city, mid-sized |"]
+    subgraph CONTENT["Inhalt (→ ChromaDB · LLM)"]
+        C2["Arkenfeld > Überblick\n(Überschrift vorangestellt)"]
+        C3["| Typ | Handelsstadt, mittelgroß |"]
         C2 --- C3
     end
 
-    EMBED_TEXT -->|"embed_texts_sync()\n'passage: '+text"| VEC["768-dim vector"]
+    EMBED_TEXT -->|"embed_texts_sync()\n'passage: '+Text"| VEC["768-dim. Vektor"]
     CONTENT -->|"document="| DB[("ChromaDB")]
     VEC -->|"embedding="| DB
 
@@ -286,69 +263,56 @@ flowchart TD
     style DB fill:#dbeafe,stroke:#3b82f6
 ```
 
-### Layer 1 — Identity
-`[filename stem] | [alias 1] | [alias 2]`
-
-- **Filename stem**: `Arkenfeld.md → "Arkenfeld"` — the most important search term
-- **Aliases**: from Obsidian frontmatter (`aliases: ["City of Arkenfeld"]`) — alternative names
-- **Problem without this layer:** A chunk `| Type | Trading city |` does not contain the name
-  "Arkenfeld" → a search for "what is Arkenfeld?" would not find the chunk
-
-### Layer 2 — Context
-`[Heading > Subheading]` — which section of a document (embedded in content by the chunker)
-
-### Layer 3 — Content
-The actual text. Tables, prose, lists.
+- **Schicht 1 — Identität:** `Dateiname | Alias 1 | Alias 2`. Der Dateiname
+  (`Arkenfeld.md → "Arkenfeld"`) ist der wichtigste Suchbegriff, Aliase kommen aus dem Frontmatter.
+  Ohne diese Schicht fände „Was ist Arkenfeld?“ den Chunk `| Typ | Handelsstadt |` nicht.
+- **Schicht 2 — Kontext:** `Überschrift > Unterüberschrift` — welcher Abschnitt (vom Chunker in den
+  Inhalt geschrieben).
+- **Schicht 3 — Inhalt:** der eigentliche Text, Tabellen, Listen.
 
 ---
 
-## Document Types
+## Dokumenttypen
 
-| Type | Embed Text Structure | In Retrieval |
-|------|---------------------|:---:|
-| Markdown | `Stem \| Aliases` · `Heading > Sub` · `Content` | ✅ |
-| PDF | `Stem` · `Heading > Sub` · `Content` | ✅ |
-| Image | — | ❌ |
+| Typ | Aufbau des Embed-Texts | In der Suche |
+|-----|------------------------|:---:|
+| Markdown | `Dateiname \| Aliase` · `Überschrift > Unter` · `Inhalt` | ✅ |
+| PDF | `Dateiname` · `Überschrift > Unter` · `Inhalt` | ✅ |
+| Bild | — | ❌ |
 
-**Images excluded from retrieval:** The retriever applies `document_type != image` as a
-hard filter. Image stubs (`"Bild: Malek Nocthar 1 (Pfad: NPCs)"`) are too thin to rank
-well and would displace content-rich chunks from the top-K slots.
-
-**Image questions still work:** Queries like "Zeig mir ein Bild von Malek Nocthar" return
-the associated `.md` file (`NPCs/Malek Nocthar.md`). The UI then renders any images
-referenced in that file via `st.image()` when `document_type == "image"` is set in the
-source reference. The Golden Set reflects this: image questions use `.md` as
-`expected_sources`.
+**Fragen nach Bildern** wie „Zeig mir ein Bild von Malek Nocthar“ liefern die zugehörige
+`.md`-Datei (`NPCs/Malek Nocthar.md`). Bild-Quellen rendert die UI per `st.image()`, wenn
+`document_type == "image"` gesetzt ist. Das Golden Set bildet das ab: Bildfragen erwarten die
+`.md`-Datei.
 
 ---
 
-## What Is NOT in the Embedding
+## Was NICHT im Embedding steckt
 
-| Field | Why not | Instead |
-|-------|---------|---------|
-| `obsidian_tags` | Category signal too weak | ChromaDB metadata → sidebar filter |
-| `wikilinks` | Reference graph, not a retrieval signal | ChromaDB metadata |
-| `content_category` | Controllable via filter | ChromaDB metadata → sidebar filter |
-| `source_path` | Absolute path, no semantic content | UI links (file://) |
+| Feld | Warum nicht | Stattdessen |
+|------|-------------|-------------|
+| `obsidian_tags` | Kategoriesignal zu schwach | ChromaDB-Metadaten |
+| `wikilinks` | Verweis-Graph, kein Suchsignal | ChromaDB-Metadaten (Roadmap 3.5: Wikilink-Expansion) |
+| `group` / `content_category` | Über Filter steuerbar | ChromaDB-Metadaten → Filter im Chat |
+| `source_path` | Absoluter Pfad ohne Bedeutung | Links in der UI (`file://`) |
 
 ---
 
-## Re-ingest After Changes
+## Neu indizieren nach Änderungen
 
-The `content_hash` is based on the **file content**, not the generated embed text.
-Changes to chunking or embed text construction therefore require a **full**
-re-ingest — the incremental run would skip every file:
+Der `content_hash` hängt am **Dateiinhalt**, nicht am erzeugten Embed-Text. Änderungen an Chunking
+oder Embed-Text erfordern deshalb eine **vollständige** Neu-Indizierung — der inkrementelle Lauf
+würde jede Datei überspringen:
 
-- Sources page → **🔄 Alle Dokumente neu indizieren**, or
+- Sources-Seite → **🔄 Alle Dokumente neu indizieren**, oder
 - `POST /ingest?full=true`
 
-A changed **embedding model** (new vector dimension) additionally needs an empty
-collection first: Sources page → Danger Zone (`POST /admin/wipe`), or with the
-backend stopped:
+Ein anderes **Embedding-Modell** (andere Vektordimension) braucht zusätzlich eine leere
+Collection: Sources-Seite → Danger Zone (`POST /admin/wipe`), oder bei gestopptem Backend:
 
 ```powershell
 Remove-Item -Recurse -Force .\chroma_data
 python -m src.ingestion.orchestrator
 ```
 
-See [operations.md](operations.md) for details.
+Mehr in [operations.md](operations.md).

@@ -1,233 +1,180 @@
-# Contributing to LoreKeeper
+# Mitarbeit an LoreKeeper
 
-Thanks for your interest in improving LoreKeeper! This document describes how
-to set up a development environment, the expectations for code changes, and
-how to submit a pull request.
+Dieses Dokument beschreibt die Entwicklungsumgebung, die Regeln für Code-Änderungen, die Tests
+und den Ablauf eines Pull Requests.
 
 ---
 
-## Development Setup
+## Entwicklungsumgebung
 
-### Prerequisites
+Einrichtung (venv, Abhängigkeiten inkl. DirectML-Tausch, Modelle, `.env`):
+[README.md](README.md) → „Schnellstart“. LoreKeeper läuft nur unter Windows.
 
-- Python 3.11+
-- [Ollama](https://ollama.com/) (for local LLM) **or** a Gemini API key
-- ~5 GB disk space for models (embedding + reranker + LLM)
+Backend und UI für die Entwicklung getrennt starten:
 
-### Local (venv)
-
-```bash
-python -m venv .venv
-# Windows
-.venv\Scripts\activate
-# macOS / Linux
-source .venv/bin/activate
-
-pip install -r requirements.txt
-# Windows, GPU reranker: swap the plain onnxruntime for the DirectML build (see README → Quickstart)
-pip uninstall -y onnxruntime
-pip install --force-reinstall --no-deps onnxruntime-directml
-cp .env.example .env   # fill in GEMINI_API_KEY if using Gemini
+```powershell
+uvicorn src.main:app --reload --port 8000   # Backend
+streamlit run ui/LoreKeeper.py              # UI (zweites Terminal)
 ```
 
-### Running the stack
-
-```bash
-# Backend
-uvicorn src.main:app --reload --port 8000
-
-# Frontend (separate terminal)
-streamlit run ui/LoreKeeper.py
-```
+oder beides zusammen mit `.\start.ps1`.
 
 ---
 
-## Project Layout
+## Projektaufbau
 
-See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full system overview and
-[`CLAUDE.md`](./CLAUDE.md) for the coding conventions used throughout the
-project.
+Gesamtüberblick: [ARCHITECTURE.md](ARCHITECTURE.md). Die wichtigsten Ordner:
 
-Key directories:
-
-- `src/api/` — FastAPI routes and Pydantic schemas
-- `src/ingestion/` — Parsers, chunking, ingestion orchestrator
-- `src/retrieval/` — Embeddings, ChromaDB wrapper, retriever, reranker
-- `src/generation/` — LLM providers and generator
-- `src/conversation/` — Session management
-- `ui/` — Streamlit frontend
-- `tests/unit/` — Fast unit tests (mocked externals)
-- `tests/integration/` — RAG pipeline + API layer tests
-- `tests/ui/` — Streamlit pages rendered with `AppTest` against a fake backend
-- `tests/perf/` — timing-based performance checks (`pytest -m perf`, see below)
+- `src/api/` — FastAPI-Routen, Pydantic-Schemas, Zugriff nach Rolle (`access.py`)
+- `src/ingestion/` — Parser, Chunking, Ingestion-Orchestrator
+- `src/retrieval/` — Embeddings, ChromaDB, BM25, Retriever, GPU-Reranker
+- `src/generation/` — LLM-Provider und Generator
+- `src/conversation/` — Sessions
+- `ui/` — Streamlit-Oberfläche
+- `tests/unit/` — schnelle Unit-Tests (externe Dienste gemockt)
+- `tests/integration/` — API-Schicht und RAG-Pipeline
+- `tests/ui/` — Streamlit-Seiten mit `AppTest` gegen ein Fake-Backend
+- `tests/perf/` — zeitbasierte Prüfungen (`pytest -m perf`)
+- `tests/live/` — Prüfungen gegen das laufende Backend (`pytest -m live`)
 
 ---
 
-## Coding Guidelines
+## Regeln für Code-Änderungen
 
-- **Read before you write.** Fully read any file you're modifying.
-- **Minimal changes.** Change only what the task requires — no drive-by
-  refactors, cleanup commits, or style passes in unrelated code.
-- **Follow the provider interface.** New LLM backends implement
-  [`BaseLLMProvider`](./src/generation/providers/base.py) (`generate`,
-  `generate_stream`, `health_check`), set `self.model` in `__init__` (there is
-  no default) and register in `ProviderFactory`.
-- **Respect async boundaries.** Any CPU-bound call (especially
-  `sentence_transformers` `encode()` / `predict()`) **must** be offloaded via
-  `fastapi.concurrency.run_in_threadpool`. Blocking the event loop is a bug.
-- **ChromaDB mode.** LoreKeeper runs Windows-only with `embedded` (on-disk)
-  ChromaDB. Don't run the ingestion CLI while the backend holds `chroma_data/`
-  — it causes file locks.
-- **Tests are required.** Any logic added to `src/` (except thin wiring in
-  `src/api/routes.py`) needs a unit test. API route behavior should be
-  covered in `tests/integration/` (`test_api_routes.py` for query/session/config,
-  `test_sources_routes.py` for `/sources/*`, the ingest job lifecycle and
+- **Erst lesen, dann schreiben.** Jede Datei, die du änderst, vorher vollständig lesen.
+- **So wenig wie nötig.** Nur ändern, was die Aufgabe verlangt — kein Refactoring nebenbei, keine
+  Aufräum-Commits, keine Kommentare oder Typannotationen in unverändertem Code.
+- **Keine Über-Abstraktion.** Keine Abstraktionen für Einmal-Logik; drei ähnliche Zeilen sind
+  besser als eine verfrühte Abstraktion.
+- **Provider-Interface einhalten.** Neue LLM-Backends implementieren
+  [`BaseLLMProvider`](src/generation/providers/base.py) (`generate`, `generate_stream` als
+  `async def` mit `yield`, `health_check`), setzen `self.model` im `__init__` (es gibt keinen
+  Default), schreiben die Token-Zählung in `stream_result.usage` und werden in der
+  `ProviderFactory` registriert.
+- **Async-Grenzen beachten.** Jeder CPU-lastige Aufruf (vor allem `encode()` / `predict()`) läuft
+  über `fastapi.concurrency.run_in_threadpool`. Den Event-Loop zu blockieren ist ein Fehler.
+- **ChromaDB embedded.** Die Ingestion-CLI nie starten, während das Backend `chroma_data/` hält —
+  das führt zu Dateisperren. Nie direkt in `chroma_data/` schreiben, solange das Backend läuft.
+- **Tests sind Pflicht.** Neue Logik in `src/` (außer dünner Verdrahtung in `src/api/routes.py`)
+  bekommt einen Unit-Test. Routenverhalten gehört in `tests/integration/` (`test_api_routes.py`
+  für Query/Session/Config, `test_sources_routes.py` für `/sources/*`, Ingest-Jobs und
   `/admin/wipe`).
-- **Lint and types.** `ruff check .` and `mypy` must be clean — both run as
-  part of `pytest` (`tests/test_code_quality.py`). Config lives in
-  `pyproject.toml`.
-- **No secrets in config.** Keys come from `.env` / environment variables,
-  never from `config/settings.yaml`.
-
-See [`CLAUDE.md`](./CLAUDE.md) for the complete list of conventions.
+- **Fehlerbehandlung nur an Systemgrenzen** (Nutzereingaben, externe APIs, Dateisystem) — keine
+  Handler für Fälle, die intern nicht auftreten können.
+- **Lint und Typen.** `ruff check .` und `mypy` müssen sauber sein; beide laufen als Teil von
+  `pytest` (`tests/test_code_quality.py`), Konfiguration in `pyproject.toml`.
+- **Keine Geheimnisse in der Config.** Schlüssel kommen aus `.env` oder Umgebungsvariablen, nie aus
+  `config/settings.yaml`.
+- **Neue Abhängigkeiten** nur nach Absprache und immer in `requirements.txt`.
+- **Score-Schwelle 0,5** nicht senken — bei 0,3 kommen fast orthogonale Chunks in den Kontext.
 
 ---
 
-## Running the Test Suite
+## Tests ausführen
 
-```bash
-# Full suite
-pytest
-
-# With coverage
-pytest --cov=src --cov-report=term-missing
-
-# Single file
-pytest tests/unit/retrieval/test_embeddings.py
-
-# Only the fast unit tests
-pytest tests/unit
-
-# Lint + type check on their own (also part of the full suite)
-ruff check .
-mypy
+```powershell
+pytest                                        # komplette Suite (~1 min)
+pytest --cov=src --cov-report=term-missing    # mit Coverage
+pytest tests/unit/retrieval/test_embeddings.py   # eine Datei
+pytest tests/unit                             # nur Unit-Tests
+ruff check .; mypy                            # Lint + Typen einzeln
 ```
 
-All tests mock external services (Ollama, Gemini, ChromaDB for unit tests).
-Integration tests use `chromadb.EphemeralClient` (in-memory). **No real LLM
-calls in the test suite — ever.**
+Alle Tests mocken externe Dienste (Ollama, Gemini; ChromaDB in Unit-Tests). Integrationstests
+nutzen `chromadb.EphemeralClient` (im Speicher). **Kein echter LLM-Aufruf in der Testsuite.**
 
-`tests/integration/test_e2e_ingest_query.py` is the end-to-end check: it ingests
-a small vault over HTTP and queries it via `/query/stream`, with real parsing,
-embeddings (small MiniLM model) and ChromaDB, and a fake LLM. It loads the
-embedding model, so it takes noticeably longer than the rest.
+`tests/integration/test_e2e_ingest_query.py` ist der End-to-End-Test: Er indiziert einen kleinen
+Vault über HTTP und fragt ihn über `/query/stream` ab — echtes Parsen, echte Embeddings (kleines
+MiniLM-Modell), echte ChromaDB, Fake-LLM. Er lädt ein Modell und dauert daher länger als der Rest.
 
-### Security checks (player mode, admin login)
+### Sicherheitsprüfungen (Spieler-Modus, Admin-Login)
 
-The player mode must never hand game-master content to players. Three levels:
+Der Spieler-Modus darf Spielern nie Spielleiter-Inhalte geben. Drei Ebenen:
 
-- **Retrieval, deterministic** — `tests/integration/test_player_mode_security.py`:
-  a rules source (released) and a game-master source with secrets deliberately
-  phrased to match rule questions, real embeddings + in-memory ChromaDB, a fake
-  cross-encoder that ranks game-master text first, cap backfill, section
-  expansion without top-rank limit, vector and hybrid search, condense with a
-  bait follow-up. Neither chunks, sources nor the LLM prompt may contain a secret.
-  The backend enforcement (`role: "player"`, `src/api/access.py`) is checked on its
-  own: role alone restricts the search, filters sent along can only narrow it
-  (`source_id`, `group`, nested `$and` pointed at game-master sources), a game-master
-  session id gives the player a fresh session, `/eval/preview` is restricted too, and
-  no released source means `403`.
-- **UI and session, deterministic** — `tests/ui/test_player_mode_security.py`:
-  tampered/leftover session state, every follow-up filtered, fail closed when
-  `/sidebar-state` fails or lacks the list, revoking a source takes effect on the
-  next question, and the admin-login brute-force protection.
-- **Live, `pytest -m live`** (excluded by default) — `tests/live/test_player_mode_live.py`
-  against the running backend and the real index: every golden-set question about
-  vault knowledge, vector and hybrid, must retrieve only released sources; five
-  game-master secrets asked through the full answer path (LLM) must not appear.
-  Takes ~7 minutes (251 checks).
+- **Retrieval, deterministisch** — `tests/integration/test_player_mode_security.py`: eine
+  freigegebene Regel-Quelle und eine Spielleiter-Quelle mit Geheimnissen, die bewusst wie
+  Regelfragen formuliert sind; echte Embeddings, ChromaDB im Speicher, ein Fake-Cross-Encoder, der
+  Spielleiter-Text zuerst rankt; Cap-Backfill, Section Expansion ohne Top-Rank-Grenze, Vektor- und
+  Hybrid-Suche, Condense mit einer Köder-Folgefrage. Weder Chunks, Quellen noch der LLM-Prompt
+  dürfen ein Geheimnis enthalten. Die Durchsetzung im Backend (`role: "player"`,
+  `src/api/access.py`) wird eigens geprüft: die Rolle allein schränkt ein, mitgeschickte Filter
+  (`source_id`, `group`, verschachteltes `$and` auf Spielleiter-Quellen) können nur einengen, eine
+  Spielleiter-Session-ID ergibt eine neue Session, `/eval/preview` ist ebenfalls eingeschränkt, ohne
+  freigegebene Quelle kommt `403`.
+- **UI und Session, deterministisch** — `tests/ui/test_player_mode_security.py`: manipulierter
+  oder übriggebliebener Session-State, jede Folgefrage gefiltert, Fail-closed bei Fehlern von
+  `/sidebar-state`, Entzug einer Freigabe wirkt bei der nächsten Frage, Bruteforce-Schutz des
+  Admin-Logins.
+- **Live, `pytest -m live`** (standardmäßig ausgeschlossen) — `tests/live/test_player_mode_live.py`
+  gegen das laufende Backend und den echten Index: jede Golden-Set-Frage zu Vault-Wissen (Vektor und
+  Hybrid) darf im Spieler-Modus nur freigegebene Quellen liefern; fünf Spielleiter-Geheimnisse über
+  den vollen Antwortweg (LLM) dürfen nicht auftauchen. Dauert ~7 Minuten.
 
-The deterministic tests were mutation-checked: breaking the BM25 filter, keying
-section expansion by file name only, dropping the vector filter, merging game-master
-filters into the player filter, failing open, old cache clearing and skipping the
-lockout check each make them fail.
+Die deterministischen Tests sind mutationsgeprüft: Absichtlich eingebaute Lücken (BM25-Filter
+kaputt, Section Expansion nur nach Dateiname, Vektorfilter weg, Spielleiter-Filter in den
+Spieler-Filter gemischt, Fail-open, Backend-Durchsetzung entfernt, …) lassen sie fehlschlagen.
 
-### Performance checks
+### Performance-Prüfungen
 
-Two kinds, so a change that makes LoreKeeper noticeably less efficient shows up
-right away:
+Zwei Arten, damit eine Änderung, die LoreKeeper spürbar langsamer macht, sofort auffällt:
 
-- **Deterministic — part of the normal `pytest` run.** They count work, not time,
-  so they are hardware-independent and fail reliably:
-  - `tests/ui/test_backend_calls.py` — backend requests per page render and per
-    rerun (every click reruns the page script, so an uncached request costs its
-    full latency on every click), requests per chat message, and that local
-    service URLs use `127.0.0.1` instead of `localhost` (on Windows `localhost`
-    resolves to IPv6 first and costs ~2 s per new connection). Budgets live in
-    `BUDGETS`; raise one in the same change if an extra request is intended.
-  - `tests/integration/test_api_routes.py::test_llm_calls_per_request` — one LLM
-    call per answer, a second one only for a real follow-up (condense).
-- **Timing-based — `pytest -m perf`, excluded by default.** Compared against
-  `tests/perf/baseline.json` with a tolerance (×1.5 plus a small absolute slack),
-  because absolute times depend on the machine:
-  - `tests/perf/test_ui_render.py` — render time per page (fake backend).
-  - `tests/perf/test_golden_retrieval.py` — runs the golden set through the
-    **running** backend (`127.0.0.1:8000`; skipped if none) and checks p50/p95
-    retrieval latency, chunks per question (avg/max — catches context bloat) and
-    that the section hit rate does not drop. Takes a few minutes.
-  - `tests/perf/test_startup.py` — starts a second backend on a free port against the
-    real config and `chroma_data/` and measures the time until `/health` answers
-    (Ollama autostart, embedding warm-up, ChromaDB, reranker). The opposite precondition
-    of the golden-set check: **skipped while the backend runs** (embedded ChromaDB can't
-    be opened twice), so run it on its own with LoreKeeper stopped and the machine idle.
-    Baseline (12.10.): 17.7 s — ~9.6 s Python imports, ~6.7 s lifespan.
-  - `tests/perf/test_reranker_gpu.py` — real model on the GPU vs. the CPU: identical
-    ranking and the GPU at least 3× faster. Skipped without `onnxruntime-directml`.
+- **Deterministisch — Teil des normalen `pytest`.** Sie zählen Arbeit statt Zeit, sind also
+  hardwareunabhängig:
+  - `tests/ui/test_backend_calls.py` — Backend-Anfragen pro Seitenaufbau und Rerun (jeder Klick
+    führt das Seitenskript neu aus), Anfragen pro Chat-Nachricht, und dass lokale Dienste über
+    `127.0.0.1` statt `localhost` angesprochen werden (unter Windows kostet `localhost` ~2 s pro
+    neuer Verbindung). Budgets stehen in `BUDGETS`; ist eine zusätzliche Anfrage gewollt, im selben
+    Commit erhöhen.
+  - `tests/integration/test_api_routes.py::test_llm_calls_per_request` — ein LLM-Aufruf pro
+    Antwort, ein zweiter nur bei einer echten Folgefrage (Condense).
+- **Zeitbasiert — `pytest -m perf`, standardmäßig ausgeschlossen.** Vergleich gegen
+  `tests/perf/baseline.json` mit Toleranz (×1,5 plus kleiner fester Puffer):
+  - `tests/perf/test_ui_render.py` — Renderzeit je Seite (Fake-Backend).
+  - `tests/perf/test_golden_retrieval.py` — Golden Set über das **laufende** Backend
+    (`127.0.0.1:8000`, sonst übersprungen): p50/p95 der Retrieval-Latenz, Chunks pro Frage
+    (Ø/max — fängt aufgeblähten Kontext), Abschnitt-Trefferquote darf nicht sinken.
+  - `tests/perf/test_startup.py` — startet ein zweites Backend auf freiem Port gegen die echte
+    Config und `chroma_data/` und misst bis zur ersten `/health`-Antwort. **Übersprungen, solange
+    LoreKeeper läuft**; auf einem ruhigen Rechner bei gestopptem LoreKeeper ausführen.
+    Baseline (12.10.): 17,7 s — ~9,6 s Python-Imports, ~6,7 s Lifespan.
+  - `tests/perf/test_reranker_gpu.py` — echtes Modell auf GPU vs. CPU: identisches Ranking, GPU
+    mindestens 3× schneller. Übersprungen ohne `onnxruntime-directml`.
 
-```bash
-pytest -m perf                          # compare against the baseline
-PERF_UPDATE_BASELINE=1 pytest -m perf   # accept the current values (new hardware, intended trade-off)
-pytest -m perf tests/perf/test_startup.py   # startup only — LoreKeeper must be stopped
+```powershell
+pytest -m perf                                # gegen die Baseline prüfen
+$env:PERF_UPDATE_BASELINE=1; pytest -m perf   # aktuelle Werte übernehmen (neue Hardware, gewollte Änderung)
+pytest -m perf tests/perf/test_startup.py     # nur Start — LoreKeeper muss gestoppt sein
 ```
 
-LLM answer times are not tested automatically (model- and hardware-dependent);
-use the per-query `timings` (log line `Query timings:` / caption in the chat).
+LLM-Antwortzeiten werden nicht automatisch getestet (modell- und hardwareabhängig); dafür gibt es
+die `timings` pro Anfrage (Log-Zeile `Query timings:` / Zeile unter jeder Antwort im Chat).
 
 ---
 
-## Pull Request Process
+## Pull Requests
 
-1. Fork and create a feature branch (`feat/short-name` or `fix/short-name`).
-2. Make your changes with accompanying tests.
-3. Run the full test suite locally — everything must pass.
-4. Update `CHANGELOG.md` under the `## [Unreleased]` section.
-5. If you changed behavior documented in `README.md`, `ARCHITECTURE.md`, or
-   `docs/`, update those too.
-6. Open a PR with a clear description: **what** changed and **why**.
+1. Feature-Branch anlegen (`feat/kurzer-name` oder `fix/kurzer-name`).
+2. Änderung mit Tests umsetzen.
+3. Komplette Testsuite lokal laufen lassen — alles muss grün sein.
+4. Geändertes Verhalten in `README.md`, `ARCHITECTURE.md` oder `docs/` nachziehen — jede
+   Information steht an genau einer Stelle (siehe Dokumenttabelle in ARCHITECTURE.md).
+5. Erledigte Roadmap-Punkte in `plan roadmap.md` abhaken (was umgesetzt wurde, Messwerte, offene
+   Reste). Ein Changelog gibt es nicht — die Historie steht in Roadmap und `git log`.
+6. PR mit klarer Beschreibung öffnen: **was** sich ändert und **warum**.
 
-PRs are reviewed on:
-
-- Correctness and test coverage
-- Adherence to the async/threading rules above
-- Whether documentation reflects the new behavior
-- Minimalism — does the diff stay focused on the stated goal?
+Geprüft wird: Korrektheit und Tests, die Async-Regeln, ob die Doku stimmt, und ob der Diff beim
+Thema bleibt.
 
 ---
 
-## Reporting Bugs
+## Fehler melden
 
-Open an issue with:
-
-- What you expected to happen
-- What actually happened (stack trace, log output)
-- Steps to reproduce (ideally a minimal example)
-- Your environment (OS, Python version, provider: Ollama/Gemini)
-
-Log output lives in `logs/lorekeeper.log` by default.
+Issue mit: erwartetem Verhalten, tatsächlichem Verhalten (Stacktrace, Log-Ausgabe aus
+`logs/lorekeeper.log`), Schritten zum Nachstellen und Umgebung (Windows-Version, Python-Version,
+Provider Ollama/Gemini).
 
 ---
 
-## License
+## Lizenz
 
-By contributing, you agree that your contributions will be licensed under the
-[MIT License](./LICENSE).
+Beiträge stehen unter der [MIT-Lizenz](LICENSE).

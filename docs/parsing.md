@@ -1,234 +1,205 @@
-# Parsing Pipeline
+# Parsing
 
-This document explains how LoreKeeper extracts text, metadata, and structural information from different file formats before they enter the chunking and embedding phases. It covers the specific handling of Obsidian Markdown syntax, the advanced PDF OCR and structure extraction, and image metadata parsing.
+Wie LoreKeeper Text, Metadaten und Struktur aus den Dateiformaten holt, bevor Chunking und
+Embedding beginnen: Obsidian-Markdown, PDF mit OCR und Bild-Metadaten. Einstellungen:
+[configuration.md](configuration.md) → `ingestion`, `chunking`.
 
-## Table of Contents
-1. [Overview](#overview)
+## Inhaltsverzeichnis
+1. [Überblick](#überblick)
 2. [Markdown (Obsidian)](#markdown-obsidian)
 3. [PDF](#pdf)
-4. [Images](#images)
-5. [How parsing flows into chunking](#how-parsing-flows-into-chunking)
+4. [Bilder](#bilder)
+5. [Vom Parsen zum Chunking](#vom-parsen-zum-chunking)
 
 ---
 
-## Overview
+## Überblick
 
-LoreKeeper supports three document types: Markdown (Obsidian), PDF, and images.
-Each has a dedicated parser that produces `ParsedDocument` entries, which then
-flow into the [chunking pipeline](../ARCHITECTURE.md) and vector store.
-
-All parsers implement `BaseParser` with `can_parse()` and `parse()`.
-The `IngestionOrchestrator` selects the right parser based on file extension.
+Drei Dokumenttypen, je ein Parser, der `ParsedDocument`-Einträge erzeugt. Alle implementieren
+`BaseParser` mit `can_parse()` und `parse()`; der `IngestionOrchestrator` wählt nach Dateiendung.
 
 ```
-File on disk
+Datei
   │
   ├── .md  → MarkdownParser   ─┐
   ├── .pdf → PDFParser         ├──→ list[ParsedDocument] → Chunker → Embeddings → ChromaDB
   └── .png/.jpg/… → ImageMetaParser ─┘
 ```
 
+Welche Endungen überhaupt gelesen werden, legt `ingestion.supported_formats` fest (Standard:
+`.md`, `.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`). `.tex` wird bewusst nicht gelesen.
+
 ---
 
 ## Markdown (Obsidian)
 
-**File:** `src/ingestion/parsers/markdown.py`
-**Extensions:** `.md`
+**Datei:** `src/ingestion/parsers/markdown.py` · **Endung:** `.md`
 
-The Markdown parser is designed for Obsidian vaults and handles all
-Obsidian-specific syntax that standard Markdown parsers would ignore or
-break on.
+Für Obsidian-Vaults gebaut; behandelt die Obsidian-Syntax, an der normale Markdown-Parser
+scheitern.
 
-### What it does
+### Was er macht
 
-1. **YAML frontmatter** — extracted via `python-frontmatter`. The `aliases`
-   field is stored separately (used for identity-layer embedding); all other
-   frontmatter keys are passed through as metadata.
+1. **YAML-Frontmatter** — über `python-frontmatter`. `aliases` wird gesondert gespeichert (für die
+   Identitäts-Schicht im Embedding), die übrigen Schlüssel gehen als Metadaten durch.
+2. **Wikilinks** — `[[Ziel]]` und `[[Ziel|Anzeigetext]]` werden erkannt. Die Ziele landen in
+   `metadata.wikilinks` (für eine spätere Graph-Expansion, Roadmap 3.5); im Text steht der
+   Anzeigetext bzw. der Zielname.
+3. **Bild-Einbettungen** — `![[bild.png]]` wird aus dem Text entfernt; Bilder indiziert der
+   `ImageMetaParser` separat.
+4. **Callouts** — `> [!abstract] Titel` verliert die Markierung, der Inhalt bleibt als normaler
+   Text; Folgezeilen (`> …`) werden ausgerückt.
+5. **Tags** — `#Tag` am Zeilenende wird nach `metadata.obsidian_tags` übernommen, das `#` aus dem
+   Text entfernt.
+6. **Aufteilung nach Überschriften** — `#` bis `######`. Jeder Abschnitt wird ein eigenes
+   `ParsedDocument` mit `heading_hierarchy` (z.B. `["Charakter", "Hintergrund"]` für eine H2 unter
+   einer H1).
 
-2. **Wikilinks** — `[[Target]]` and `[[Target|Display Text]]` are detected.
-   Targets are stored in `metadata.wikilinks` for potential graph expansion
-   during retrieval. In the content text, wikilinks are replaced with their
-   display text (alias if present, otherwise the target name).
+### Ausgabe je Abschnitt
 
-3. **Image embeds** — `![[image.png]]` references are removed from the text
-   entirely. Images are indexed separately by the `ImageMetaParser`.
-
-4. **Callouts** — `> [!abstract] Title` markers are stripped, but the callout
-   content is kept as plain text. Continuation lines (`> ...`) are unindented.
-
-5. **Tags** — `#TagName` at the end of lines is extracted into
-   `metadata.obsidian_tags`. The `#` prefix is removed from the content text.
-
-6. **Heading-based splitting** — the document is split into sections by
-   Markdown headings (`#` through `######`). Each section becomes a separate
-   `ParsedDocument` with a `heading_hierarchy` list reflecting its nesting
-   (e.g. `["Charakter", "Hintergrund"]` for an H2 under an H1).
-
-### Output per section
-
-| Field | Value |
-|-------|-------|
-| `content` | Cleaned section text (no wikilink brackets, no image embeds, no callout markers) |
+| Feld | Wert |
+|------|------|
+| `content` | Bereinigter Abschnittstext (ohne Wikilink-Klammern, Bild-Einbettungen, Callout-Marker) |
 | `document_type` | `"markdown"` |
-| `heading_hierarchy` | `["H1 title", "H2 title", ...]` |
-| `metadata.aliases` | From frontmatter `aliases` field |
-| `metadata.obsidian_tags` | Extracted `#Tag` values |
-| `metadata.wikilinks` | Extracted `[[link]]` targets |
+| `heading_hierarchy` | `["H1-Titel", "H2-Titel", …]` |
+| `metadata.aliases` | Aus dem Frontmatter |
+| `metadata.obsidian_tags` | Gefundene `#Tags` |
+| `metadata.wikilinks` | Gefundene `[[Link]]`-Ziele |
 
-### Obsidian syntax reference
+### Obsidian-Syntax
 
-| Syntax | Handling |
-|--------|----------|
-| `[[Wikilink]]` | Store target in `wikilinks`, replace with plain text |
-| `[[Link\|Alias]]` | Store `Link` in `wikilinks`, display `Alias` in text |
-| `![[image.png]]` | Remove from text (indexed separately by ImageMetaParser) |
-| `> [!abstract] Title` | Remove callout marker, keep content as plain text |
-| `#Tag` | Extract to `obsidian_tags`, remove `#` from text |
-| `aliases:` in YAML frontmatter | Store as additional search terms in metadata |
+| Syntax | Behandlung |
+|--------|------------|
+| `[[Wikilink]]` | Ziel in `wikilinks`, im Text als Klartext |
+| `[[Link\|Alias]]` | `Link` in `wikilinks`, im Text `Alias` |
+| `![[bild.png]]` | Aus dem Text entfernt (Bild separat indiziert) |
+| `> [!abstract] Titel` | Marker weg, Inhalt als Text |
+| `#Tag` | Nach `obsidian_tags`, `#` aus dem Text |
+| `aliases:` im Frontmatter | Zusätzliche Suchbegriffe |
+
+Nicht indiziert (über `exclude_patterns`): `.obsidian/*`, `.trash/*`, `*alt.md`, `*(1).md`.
 
 ---
 
 ## PDF
 
-**File:** `src/ingestion/parsers/pdf.py`
-**Extensions:** `.pdf`
-**Config:** `ingestion.pdf` in `settings.yaml` (see [configuration.md](configuration.md))
+**Datei:** `src/ingestion/parsers/pdf.py` · **Endung:** `.pdf` · **Einstellungen:** `ingestion.pdf`
 
-The PDF parser uses `pymupdf4llm` to convert PDF pages to Markdown, then
-applies OCR, heading correction, and image extraction before splitting
-by headings (reusing the Markdown parser's splitting logic).
+`pymupdf4llm` wandelt die Seiten in Markdown; danach folgen OCR, Korrektur der Überschriften und
+Bildextraktion, und schließlich die Aufteilung nach Überschriften (dieselbe Logik wie bei Markdown).
 
-### Pipeline
+### Ablauf
 
 ```
-PDF file
+PDF
   │
   ▼
 pymupdf4llm.to_markdown(page_chunks=True)
-  │  ├── OCR (RapidOCR) on text-less regions
-  │  ├── Table detection → Markdown tables
-  │  └── Image extraction → temp directory
+  │  ├── OCR (RapidOCR) für Bereiche ohne Text
+  │  ├── Tabellen → Markdown-Tabellen
+  │  └── Bilder → temporärer Ordner
   │
-  ▼  per page:
-1. TOC-based heading correction
-   (PDF table-of-contents → correct heading levels)
-  │
-  ▼
-2. Numbered-heading regex fallback
-   (e.g. "## **5.4 Mönch**" → "# **5.4 Mönch**")
+  ▼  je Seite:
+1. Überschriften über das Inhaltsverzeichnis korrigieren
   │
   ▼
-3. Image reference extraction
-   (![alt](path) → [Bild: alt] + ParsedDocument)
+2. Fallback: nummerierte Überschriften per Regex
+   (z.B. "## **5.4 Mönch**" → "# **5.4 Mönch**")
   │
   ▼
-Combined Markdown → split by headings → list[ParsedDocument]
+3. Bildverweise auflösen
+   (![alt](pfad) → [Bild: alt] + eigenes ParsedDocument)
+  │
+  ▼
+Gesamtes Markdown → nach Überschriften teilen → list[ParsedDocument]
 ```
 
 ### OCR
 
-When `ocr_enabled: true` (default), pymupdf4llm uses RapidOCR
-(`rapidocr_onnxruntime`) to recognize text in image-only regions of the PDF.
-This handles mixed PDFs where some pages are scanned and others have
-extractable text.
+Mit `ocr_enabled: true` (Standard) erkennt RapidOCR (`rapidocr_onnxruntime`) Text in Bereichen, die
+nur aus Bild bestehen — für gemischte PDFs mit gescannten und normalen Seiten. Sprache über
+`ocr_language` (`deu`), Auflösung über `ocr_dpi` (300). Scheitert OCR (Engine-Fehler, kaputte
+Seite), wiederholt der Parser das ganze Dokument ohne OCR und schreibt eine Warnung ins Log.
 
-- **Language:** `ocr_language` (default `"deu"` for German, ISO 639-3 codes)
-- **Resolution:** `ocr_dpi` (default `300`)
-- **Fallback:** If OCR fails (engine error, corrupt page), the parser
-  automatically retries the entire document without OCR and logs a warning.
+### Überschriften-Hierarchie
 
-### Heading hierarchy
+`pymupdf4llm` setzt oft alle Überschriften auf dieselbe Ebene (`##`) und verliert die Struktur.
+Korrektur in zwei Schritten:
 
-pymupdf4llm often renders all headings at the same level (`##`), losing the
-document's real structure. The parser corrects this in two passes:
+1. **Inhaltsverzeichnis** (am zuverlässigsten) — hat das PDF eins, liefert `toc_items`
+   `[Ebene, Titel, Seite]`; Überschriften werden per Titel zugeordnet und neu eingestuft.
+2. **Regex für nummerierte Überschriften** (Fallback) — `## **5.4.5 Mönch**` wird hochgestuft, weil
+   nummerierte Titel auf Struktur hindeuten, die `pymupdf4llm` übersehen hat.
 
-1. **TOC data** (most reliable) — if the PDF has a table of contents,
-   `toc_items` provides `[level, title, page]` entries. Headings in the
-   Markdown are matched by title and re-levelled accordingly.
+Die Nummern in den Überschriften nutzt die Evaluation für die Abschnittsprüfung
+(`expected_section`).
 
-2. **Numbered-heading regex** (fallback) — headings like `## **5.4.5 Mönch**`
-   are promoted to `#`, since numbered section titles indicate top-level
-   structure that pymupdf4llm missed.
+### Bildextraktion
 
-### Image extraction
+Mit `extract_images: true` (Standard) landen eingebettete Bilder in einem temporären Ordner. Für
+jedes Bild:
 
-When `extract_images: true` (default), embedded images are written to a
-temporary directory during parsing. For each extracted image:
+- entsteht ein `ParsedDocument` mit `document_type="image"`
+  (Inhalt: `"Bild: {name} (aus PDF: {datei})"`),
+- wird `![alt](pfad)` im Markdown durch `[Bild: {name}]` ersetzt,
+- stehen `extracted_from_pdf: true` und das Bildformat in den Metadaten,
+- werden die temporären Dateien nach dem Parsen gelöscht.
 
-- A `ParsedDocument` with `document_type="image"` is created
-  (content: `"Bild: {name} (aus PDF: {filename})"`)
-- The `![alt](path)` reference in the Markdown is replaced with
-  `[Bild: {name}]` as a text placeholder
-- Metadata includes `extracted_from_pdf: true` and the image format
-- Temporary image files are cleaned up automatically after parsing
+### Weitere Einstellungen
 
-### Other settings
+- `ignore_code=True` — Festbreitentext (häufig in Regelwerken und Werteblöcken) wird nicht als
+  Code-Block erkannt.
+- `page_chunks=True` — Seiten einzeln verarbeiten (Inhaltsverzeichnis und Bilder je Seite), dann
+  zusammenführen.
 
-- `ignore_code=True` — prevents monospace text (common in rulebooks,
-  stat blocks) from being misidentified as code blocks
-- `page_chunks=True` — processes pages individually for per-page TOC data
-  and image extraction, then combines the results
+### Ausgabe je Abschnitt
 
-### Output per section
-
-| Field | Value |
-|-------|-------|
-| `content` | Cleaned section text with image placeholders |
-| `document_type` | `"pdf"` (text sections) or `"image"` (extracted images) |
-| `heading_hierarchy` | Corrected via TOC / numbered-heading regex |
-| `metadata` | `{}` for text sections; `{image_format, extracted_from_pdf}` for images |
+| Feld | Wert |
+|------|------|
+| `content` | Bereinigter Text mit Bild-Platzhaltern |
+| `document_type` | `"pdf"` (Text) oder `"image"` (extrahierte Bilder) |
+| `heading_hierarchy` | Über Inhaltsverzeichnis / Regex korrigiert |
+| `metadata` | `{}` bei Text; `{image_format, extracted_from_pdf}` bei Bildern |
 
 ---
 
-## Images
+## Bilder
 
-**File:** `src/ingestion/parsers/image.py`
-**Extensions:** `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`
+**Datei:** `src/ingestion/parsers/image.py` · **Endungen:** `.png`, `.jpg`, `.jpeg`, `.webp`
+(der Parser kann auch `.gif`, das steht aber nicht in `supported_formats`)
 
-The image parser creates minimal metadata entries so that images are
-findable by filename and folder path. It does not analyze image content
-(no OCR, no vision model).
+Erzeugt nur minimale Einträge, damit Bilder über Dateiname und Ordner auffindbar sind. Der
+Bildinhalt wird nicht analysiert (kein OCR, kein Vision-Modell).
 
-### What it does
+1. Dateiname ohne Endung, `_` und `-` werden zu Leerzeichen
+   (`karte_arkenfeld.png` → `"karte arkenfeld"`).
+2. `heading_hierarchy` aus den Ordnern plus bereinigtem Namen.
+3. Ein `ParsedDocument` mit `"Bild: karte arkenfeld (Pfad: Orte)"`.
 
-1. Extracts the filename stem, replacing `_` and `-` with spaces
-   (e.g. `karte_arkenfeld.png` → `"karte arkenfeld"`)
-2. Builds a `heading_hierarchy` from the folder path segments plus the
-   cleaned filename
-3. Creates a single `ParsedDocument` with a descriptive content string:
-   `"Bild: karte arkenfeld (Pfad: Orte)"`
-
-### Output
-
-| Field | Value |
-|-------|-------|
-| `content` | `"Bild: {name} (Pfad: {folder})"` |
+| Feld | Wert |
+|------|------|
+| `content` | `"Bild: {name} (Pfad: {ordner})"` |
 | `document_type` | `"image"` |
-| `heading_hierarchy` | `["folder1", "folder2", "cleaned filename"]` |
-| `metadata.image_format` | `.png`, `.jpg`, etc. |
+| `heading_hierarchy` | `["ordner1", "ordner2", "bereinigter name"]` |
+| `metadata.image_format` | `.png`, `.jpg`, … |
 
-### Limitations
-
-- Content is derived only from filename and path — the image itself is not
-  analyzed. This means retrieval only matches on obvious filename terms.
-- For richer image indexing (e.g. vision-model descriptions), see the
-  roadmap in `plan roadmap.md`.
+**Grenzen:** Der Inhalt stammt nur aus Name und Pfad — gefunden wird nur über offensichtliche
+Begriffe im Dateinamen. Bilder sind zudem aus der Suche ausgeschlossen
+([embedding-strategy.md](embedding-strategy.md#warum-bilder-aus-der-suche-ausschließen)).
+Bildbeschreibungen per Vision-Modell: Roadmap 2.
 
 ---
 
-## How parsing flows into chunking
+## Vom Parsen zum Chunking
 
-After parsing, `ParsedDocument` entries are passed to `chunk_documents()`
-(see [configuration.md — chunking](configuration.md#chunking)):
+Die `ParsedDocument`-Einträge gehen an `chunk_documents()`
+([configuration.md](configuration.md#chunking)):
 
-1. **heading_aware** (default) — each `ParsedDocument` section becomes a
-   chunk. Tables (lines starting with `|`) are kept atomic. Oversized prose
-   sections are split recursively. Small chunks are merged only within the
-   same heading boundary.
-
-2. The heading hierarchy and filename stem are prepended to each chunk's
-   content before embedding (identity layer), so a stat table with no
-   self-reference still matches queries about its subject.
-
-3. `document_type` is preserved through chunking and stored in ChromaDB
-   metadata — the UI uses it to render image sources via `st.image()`.
+1. **heading_aware** (Standard) — jeder Abschnitt wird ein Chunk; Tabellen (Zeilen mit `|`) bleiben
+   ganz, zu lange Abschnitte werden rekursiv geteilt, kleine nur innerhalb derselben Überschrift
+   zusammengelegt.
+2. Vor dem Embedding werden Dateiname, Aliase und Überschriftenpfad vorangestellt
+   (Identitäts-Schicht) — so passt auch eine Werte-Tabelle ohne Namensnennung zu Fragen nach ihrem
+   Gegenstand.
+3. `document_type` bleibt erhalten und steht in den ChromaDB-Metadaten — die UI rendert damit
+   Bild-Quellen per `st.image()`.

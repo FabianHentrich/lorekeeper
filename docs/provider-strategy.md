@@ -1,30 +1,32 @@
-# Provider Strategy
+# Provider-Strategie
 
-This document details the Language Model (LLM) providers supported by LoreKeeper, how to configure them, how fallback and condense mechanisms work, and how token usage is tracked.
+Welche LLM-Provider LoreKeeper unterstützt, wie man sie konfiguriert und wechselt, wie Fallback
+und Condense-Modell funktionieren und wie Tokens gezählt werden. Alle Schlüssel:
+[configuration.md](configuration.md#llm).
 
-## Table of Contents
-1. [Overview](#overview)
-2. [Provider Comparison](#provider-comparison)
-3. [Configuration](#configuration)
+## Inhaltsverzeichnis
+1. [Überblick](#überblick)
+2. [Vergleich](#vergleich)
+3. [Einrichtung](#einrichtung)
    - [Ollama](#ollama)
    - [Gemini](#gemini)
-4. [Switching Providers at Runtime](#switching-providers-at-runtime)
-5. [Fallback Provider](#fallback-provider)
-6. [Condense Provider](#condense-provider)
-7. [Token Usage Reporting](#token-usage-reporting)
-8. [Adding a New Provider](#adding-a-new-provider)
+4. [Provider zur Laufzeit wechseln](#provider-zur-laufzeit-wechseln)
+5. [Fallback-Provider](#fallback-provider)
+6. [Condense-Modell](#condense-modell)
+7. [Token-Zählung](#token-zählung)
+8. [Neuen Provider hinzufügen](#neuen-provider-hinzufügen)
 
 ---
 
-## Overview
+## Überblick
 
-LoreKeeper abstracts LLM access behind a unified `BaseLLMProvider` interface.
-Currently supported providers: **Ollama** (local) and **Gemini** (cloud).
+Der LLM-Zugriff liegt hinter einer einheitlichen Schnittstelle `BaseLLMProvider`. Unterstützt:
+**Ollama** (lokal, Hauptweg) und **Gemini** (Cloud, Ausweichlösung).
 
 ```python
 class BaseLLMProvider(ABC):
     provider: str = "unknown"
-    model: str                       # set in __init__ — no default
+    model: str                       # im __init__ setzen — kein Default
 
     async def generate(self, prompt: str, **kwargs) -> LLMResponse: ...
     def generate_stream(self, prompt: str, system_prompt: str = "",
@@ -33,219 +35,153 @@ class BaseLLMProvider(ABC):
     async def health_check(self) -> bool: ...
 ```
 
-Implementations write `generate_stream` as `async def` with `yield`. `StreamResult`
-is a per-call context: the provider fills `usage`, the `Generator` sets `model` to
-the model that actually answered. A new provider must set `self.model` in
-`__init__` and be registered in `ProviderFactory`.
+Implementierungen schreiben `generate_stream` als `async def` mit `yield`. `StreamResult` ist ein
+Kontext pro Aufruf: der Provider füllt `usage`, der `Generator` setzt `model` auf das Modell, das
+tatsächlich geantwortet hat.
 
 ---
 
-## Provider Comparison
+## Vergleich
 
-| Criterion | Ollama (local) | Gemini (cloud) |
-|-----------|---------------|----------------|
-| **Latency** | 5–30s (hardware-dependent) | 2–8s |
-| **Cost** | Power + GPU | Pay-per-token |
-| **Privacy** | Fully local | Data leaves the system |
-| **Context window** | Model-dependent (qwen3:8b: 128k) | 1M tokens (Flash) |
-| **Quality** | Good for German, model-dependent | Very good, multimodal |
+| Kriterium | Ollama (lokal) | Gemini (Cloud) |
+|-----------|----------------|----------------|
+| **Antwortzeit** | erster Token ~1 s, gesamt ~3–4 s (qwen3:14b auf RX 9070 XT, warm) | 2–8 s |
+| **Kosten** | Strom + GPU | Pro Token — Budgets in Google Cloud warnen nur, sie stoppen nicht |
+| **Datenschutz** | Komplett lokal | Daten verlassen den Rechner |
+| **Kontext** | Über `OLLAMA_CONTEXT_LENGTH` (LoreKeeper: 16384) | 1 Mio. Tokens (Flash) |
+| **Qualität** | Gut auf Deutsch, modellabhängig | Sehr gut |
 | **Offline** | ✅ | ❌ |
-| **Setup** | Install Ollama + pull model | API key in `.env` |
+| **Einrichtung** | Ollama installieren + Modell holen | API-Key in `.env` oder der UI |
+
+Deshalb ist Ollama der Hauptweg und Gemini nur Fallback.
 
 ---
 
-## Configuration
+## Einrichtung
 
 ### Ollama
 
-```yaml
-llm:
-  provider: ollama
-  ollama:
-    base_url: "http://127.0.0.1:11434"
-    model: "qwen3:14b"         # currently recommended (16 GB VRAM)
-    temperature: 0.3
-    top_p: 0.9
-    max_tokens: 2048
-    timeout: 300
+`llm.ollama` in `settings.yaml` (Standard: `qwen3:14b`, `base_url` `http://127.0.0.1:11434`).
+
+| VRAM | Empfehlung |
+|------|------------|
+| < 8 GB | `qwen3:4b` |
+| 8–12 GB | `qwen3:8b` |
+| ≥ 16 GB | `qwen3:14b` |
+
+**Kontextfenster:** Ollamas Standardkontext (4096 Tokens) ist zu klein — eine Regelfrage mit
+expandierter Sektion braucht schon ~3600 Eingabe-Tokens plus bis zu `max_tokens` für die Antwort,
+und ein Überlauf schneidet still den Anfang des Prompts (den Systemprompt) ab. Der OpenAI-
+kompatible Endpoint ignoriert `num_ctx` pro Anfrage, also wird die Größe auf Ollama-Seite gesetzt:
+
+```powershell
+setx OLLAMA_CONTEXT_LENGTH 16384   # danach Ollama im Tray beenden und neu starten
+ollama ps                          # Spalte CONTEXT muss 16384 zeigen
 ```
 
-**Model recommendations by hardware:**
+16384 kostet bei qwen3:14b ~2,6 GB VRAM (11 GB gesamt, passt komplett in 16 GB). Startet das
+LoreKeeper-Backend `ollama serve` selbst (Ollama lief beim Start nicht), erbt dieser Prozess die
+Umgebung des Backends — nach dem Ändern der Variable erst die Ollama-App starten.
 
-| VRAM | Recommendation | Quality |
-|------|---------------|---------|
-| < 8 GB | `qwen3:4b` | Good |
-| 8–12 GB | `qwen3:8b` | Very good |
-| ≥ 16 GB | `qwen3:14b` | Excellent |
+**Keep-alive:** Ollama entlädt ein Modell nach 5 Minuten Leerlauf; die nächste Frage wartet dann
+~16 s (gemessen: erster Token nach 18 s statt 1,1 s). `setx OLLAMA_KEEP_ALIVE 1h` hält es bis eine
+Stunde nach der letzten Frage geladen (`ollama ps` → „59 minutes from now“), belegt solange aber
+~11 GB VRAM; `-1` entlädt nie.
 
-**Qwen3-specific:** LoreKeeper automatically filters `<think>...</think>` blocks out of the
-stream. Reasoning is disabled via `reasoning_effort: "none"` in the request body (faster responses).
+**Qwen3-Denken:** abgeschaltet über `extra_body={"reasoning_effort": "none"}`
+(`OllamaProvider._thinking_off`). Aktuelle Ollama-Versionen ignorieren das alte Suffix `/no_think`
+und streamen das Denken in einem eigenen Feld `reasoning` statt in `<think>`-Tags — gemessen ~7 s
+vor dem ersten Antwort-Token bei qwen3:14b. `think: false` wird ebenfalls ignoriert. Was trotzdem
+ankommt (andere Denkmodelle, ältere Server), wird nie angezeigt und als `tokens_thinking` gezählt —
+ein Wert ungleich 0 heißt also: das Denken ist wieder an.
 
 ### Gemini
 
-```yaml
-llm:
-  provider: gemini
-  gemini:
-    model: "gemini-2.5-flash"
-    api_key_env: GEMINI_API_KEY   # name of the env variable
-    temperature: 0.3
-    top_p: 0.9
-    max_tokens: 1024
-    timeout: 30
-```
+`llm.gemini` in `settings.yaml` (Standard: `gemini-2.5-flash`), Key in `.env`:
 
 ```ini
-# .env
-GEMINI_API_KEY=your-key-here
+GEMINI_API_KEY=dein-key
 ```
 
-**Rate limiting:** Gemini Free Tier allows 15 RPM. LoreKeeper implements automatic
-rate limiting (4s minimum interval) + retry with exponential backoff on 429 errors.
+oder zur Laufzeit in der Chat-Sidebar (nur im Prozess, nie auf Platte —
+[configuration.md](configuration.md#llm)).
+
+**Rate-Limit:** LoreKeeper hält mindestens 4 s Abstand zwischen Anfragen und wiederholt bei 429
+mit exponentiellem Backoff (bis zu 3×).
 
 ---
 
-## Switching Providers at Runtime
+## Provider zur Laufzeit wechseln
 
-Via the Streamlit sidebar (dropdown) or directly via API:
-
-```bash
-curl -X POST http://localhost:8000/provider \
-  -H "Content-Type: application/json" \
-  -d '{"provider": "gemini"}'
-```
-
-The switch:
-1. Creates a new provider (`ProviderFactory.create()`)
-2. Creates a new `condense_provider` (if configured)
-3. Creates a new `Generator` with the new provider
-4. On failure (e.g. missing API key): rolls back to the old provider
-
-The active provider remains set until the next server restart — it does **not** overwrite
-`settings.yaml`, only the in-memory state.
-
----
-
-## Fallback Provider
-
-```yaml
-llm:
-  fallback_provider: gemini
-  fallback_enabled: true   # default: false
-```
-
-When `fallback_enabled: true` and the primary provider fails (timeout, Ollama down),
-the system automatically switches to the fallback. The fallback uses the same configuration
-of the respective provider (same model settings).
-
-For streaming (`/query/stream`) the fallback only kicks in if the primary fails
-**before the first token** — once tokens are on the wire, a restart would duplicate
-output, so the error is surfaced instead. The `done` event's `model_used` names the
-model that actually answered (the fallback's model after a fallback).
-
----
-
-## Condense Provider
-
-```yaml
-conversation:
-  condense_model: "qwen3:4b"   # null = use primary provider
-```
-
-Optionally, a separate, faster model can be configured for question condensing (reformulating
-follow-up questions into standalone questions). Always an Ollama model —
-Gemini is not supported for condensing.
-
----
-
-## Token Usage Reporting
-
-Both providers expose per-request token counts that LoreKeeper surfaces in
-the SSE `done` event (`usage`) and accumulates per session
-(`session_usage`). The UI renders these as a per-message caption and a
-header metric — see [`docs/ui-ux.md`](ui-ux.md) for the rendering details.
-This section covers what each provider actually reports and the
-provider-specific quirks.
-
-| Field | Ollama (Qwen3) | Gemini 2.5 |
-|---|---|---|
-| `tokens_in` | ✅ `prompt_tokens` (from OpenAI-compatible response) | ✅ `usage_metadata.prompt_token_count` |
-| `tokens_out` | ✅ `completion_tokens` | ✅ `usage_metadata.candidates_token_count` |
-| `tokens_thinking` | Reasoning chunks still received in the `reasoning` field — normally `0`, see below | ✅ `usage_metadata.thoughts_token_count` (when thinking is enabled) |
-
-### Ollama specifics
-
-**Context window:** Ollama's default context (4096 tokens) is too small for
-LoreKeeper's prompts — a section-expanded rule question already needs ~3600
-input tokens plus up to `max_tokens` for the answer, and overflow silently cuts
-off the start of the prompt (the system prompt). The OpenAI-compatible endpoint
-ignores a per-request `num_ctx`, so the size is set on the Ollama side:
+Über das Auswahlfeld in der Chat-Sidebar (hinter dem Admin-Passwort) oder per API:
 
 ```powershell
-setx OLLAMA_CONTEXT_LENGTH 16384   # then quit Ollama in the tray and start it again
-ollama ps                          # CONTEXT column must show 16384
+curl.exe -X POST http://127.0.0.1:8000/provider -H "Content-Type: application/json" -d '{\"provider\": \"gemini\"}'
 ```
 
-16384 costs ~2.6 GB VRAM on qwen3:14b (11 GB total, fits a 16 GB GPU fully).
-If the LoreKeeper backend auto-starts `ollama serve` itself (Ollama not running
-at backend start), that process inherits the backend's environment — start the
-Ollama app first after changing the variable.
-
-**Keep-alive:** Ollama unloads a model after 5 minutes idle; the next question
-then waits ~16 s for the reload (measured: first token 18 s instead of 1.1 s).
-`setx OLLAMA_KEEP_ALIVE 1h` keeps it loaded for an hour after the last
-question (`ollama ps` → UNTIL "59 minutes from now"), at the cost of ~11 GB
-VRAM held during that time; `-1` never unloads.
-
-The OpenAI-compatible streaming API only emits a usage block when
-`stream_options={"include_usage": True}` is passed on the request. Without
-that flag the final stream chunk arrives with empty `usage` and
-LoreKeeper would report zeros. The flag is set in
-`OllamaProvider.generate_stream` and the resulting numbers are written to the
-per-call `StreamResult.usage`, which the route reads after the stream
-finishes (no shared provider state, so concurrent streams don't mix).
-
-Qwen3 thinking is switched off with `extra_body={"reasoning_effort": "none"}`
-(`OllamaProvider._thinking_off`). Current Ollama versions ignore the older
-`/no_think` prompt suffix and stream reasoning in a separate `reasoning` delta
-field instead of `<think>` tags — measured at ~7 s before the first answer
-token on qwen3:14b. `think: false` in the body is ignored as well. Any
-reasoning that still arrives (other thinking models, older servers) is never
-shown and is counted as `tokens_thinking`, so a non-zero value means thinking
-is back on. This trades reasoning quality for latency — there is no
-$-per-token penalty locally, so the goal is "answer fast".
-
-### Gemini specifics
-
-`google-genai` exposes `usage_metadata` on stream chunks, typically only on
-the final one. LoreKeeper reads it from any chunk that carries it, so the
-last non-null value wins.
-
-`thoughts_token_count` is the **cost-relevant** field on Gemini 2.5 models:
-when thinking is enabled (default for `gemini-2.5-flash` and
-`gemini-2.5-pro` on complex queries), thinking tokens are billed as output
-tokens but do not appear in `candidates_token_count`. They can easily
-exceed the visible output by a factor of 2–10× on reasoning-heavy
-questions, so the UI shows them as a separate `🧠 N think` segment in the
-per-message caption. **Watch this number** when comparing Gemini cost
-against Ollama — it is the most common source of "why is my bill higher
-than expected".
-
-### What this means for the cost comparison
-
-The per-session totals in the header metric give a rough live estimate of
-what a session would cost on a paid provider. For Ollama runs the numbers
-are still useful as a load indicator (input context size, generated length),
-but the cost column in the [Provider Comparison](#provider-comparison)
-table only kicks in when running on Gemini — and `tokens_thinking` is the
-column that decides whether the bill is small or surprising.
+Der Wechsel baut einen neuen Provider (`ProviderFactory.create()`), ggf. einen neuen
+Condense-Provider und einen neuen `Generator`; scheitert er (z.B. fehlender Key), bleibt der alte
+Provider. Der Wechsel gilt bis zum nächsten Neustart und schreibt nicht in `settings.yaml`.
 
 ---
 
-## Adding a New Provider
+## Fallback-Provider
 
-1. Create `src/generation/providers/my_provider.py`, implement `BaseLLMProvider`
-2. Set class attribute `provider = "my_provider"`
-3. Register in `ProviderFactory` (`provider_factory.py`)
-4. Add config class in `src/config/manager.py`
-5. Update `settings.yaml` and `.env.example`
+`llm.fallback_enabled: true` (Standard `false`) mit `fallback_provider: gemini`: Fällt der
+Hauptprovider aus (Timeout, Ollama nicht erreichbar), antwortet der Fallback mit seiner eigenen
+Konfiguration.
+
+Beim Streaming (`/query/stream`) greift der Fallback nur **vor dem ersten Token** — sind schon
+Tokens unterwegs, würde ein Neustart die Ausgabe doppeln, dann kommt stattdessen ein Fehler. Das
+`done`-Event nennt in `model_used` das Modell, das tatsächlich geantwortet hat.
+
+---
+
+## Condense-Modell
+
+`conversation.condense_model` (Standard `null` = Hauptprovider): optional ein eigenes, schnelleres
+Modell nur fürs Umschreiben von Folgefragen, z.B. `qwen3:4b`. Immer ein Ollama-Modell (gleiche
+`base_url`); Gemini wird dafür nicht unterstützt. Spart Zeit bei Folgefragen — eigenständige
+Fragen brauchen ohnehin keinen Condense-Aufruf.
+
+---
+
+## Token-Zählung
+
+Beide Provider liefern Token-Zahlen pro Anfrage; LoreKeeper gibt sie im `done`-Event aus (`usage`)
+und summiert sie pro Session (`session_usage`). Die UI zeigt sie unter jeder Antwort und im Kopf
+der Seite ([ui-ux.md](ui-ux.md)).
+
+| Feld | Ollama (Qwen3) | Gemini 2.5 |
+|---|---|---|
+| `tokens_in` | ✅ `prompt_tokens` | ✅ `usage_metadata.prompt_token_count` |
+| `tokens_out` | ✅ `completion_tokens` | ✅ `usage_metadata.candidates_token_count` |
+| `tokens_thinking` | Reasoning-Chunks im Feld `reasoning` — normalerweise `0` | ✅ `usage_metadata.thoughts_token_count` (wenn Denken an ist) |
+
+**Ollama:** Die OpenAI-kompatible Streaming-API liefert die Zählung nur mit
+`stream_options={"include_usage": True}` — sonst kämen Nullen. Gesetzt in
+`OllamaProvider.generate_stream`; die Werte landen im `StreamResult.usage` des Aufrufs (kein
+geteilter Zustand, parallele Streams mischen sich nicht).
+
+**Gemini:** `google-genai` hängt `usage_metadata` an Stream-Chunks, meist nur an den letzten; der
+letzte vorhandene Wert gilt. `thoughts_token_count` ist bei Gemini 2.5 das **kostenrelevante**
+Feld: Denk-Tokens werden als Ausgabe berechnet, stehen aber nicht in `candidates_token_count` und
+können die sichtbare Ausgabe um das 2–10-fache übersteigen. Die UI zeigt sie getrennt als
+`🧠 N think`. **Diese Zahl im Blick behalten** — sie ist die häufigste Ursache für eine höhere
+Rechnung als erwartet.
+
+Die Session-Summen im Seitenkopf geben eine grobe Live-Schätzung, was eine Session bei einem
+bezahlten Provider kosten würde; bei Ollama sind sie ein Lastindikator (Kontextgröße,
+Antwortlänge).
+
+---
+
+## Neuen Provider hinzufügen
+
+1. `src/generation/providers/mein_provider.py` anlegen, `BaseLLMProvider` implementieren
+   (`generate_stream` als `async def` mit `yield`, Tokens in `stream_result.usage`).
+2. Klassenattribut `provider = "mein_provider"` und `self.model` im `__init__` setzen.
+3. In der `ProviderFactory` (`provider_factory.py`) registrieren.
+4. Config-Klasse in `src/config/manager.py` ergänzen.
+5. `settings.yaml`, `.env.example` und [configuration.md](configuration.md) nachziehen.
+6. Unit-Tests mit gemocktem Client — nie echte API-Aufrufe.

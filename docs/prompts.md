@@ -1,318 +1,259 @@
-# Prompt System
+# Prompts
 
-This document explains how LoreKeeper handles LLM prompts using Jinja2 templates, including their structure, available variables, and how to manage and customize prompt variants via the UI or API.
+Wie LoreKeeper die Prompts fürs LLM baut: die vier Jinja2-Templates, ihre Variablen und wie man
+sie über UI, API oder YAML anpasst. Die aktuelle Fassung steht immer in `config/prompts.yaml` —
+dieses Dokument zeigt Aufbau und Absicht, keine vollständige Kopie.
 
-## Table of Contents
-1. [Overview](#overview)
-2. [Templates in Detail](#templates-in-detail)
-   - [`system` — System Prompt](#system--system-prompt)
-   - [`qa` — Main QA Template](#qa--main-qa-template)
-   - [`condense` — Question Condensing](#condense--question-condensing)
-   - [`no_context` — Fallback Without Hits](#no_context--fallback-without-hits)
-3. [Customizing Prompts](#customizing-prompts)
-   - [Via the UI (recommended)](#via-the-ui-recommended)
-   - [Via the API](#via-the-api)
-   - [Variant storage](#variant-storage)
-   - [Via YAML (manual)](#via-yaml-manual)
-4. [Prompt Design Notes](#prompt-design-notes)
+## Inhaltsverzeichnis
+1. [Überblick](#überblick)
+2. [Die Templates](#die-templates)
+   - [`system` — Systemprompt](#system--systemprompt)
+   - [`qa` — Antwort-Prompt](#qa--antwort-prompt)
+   - [`condense` — Folgefragen umschreiben](#condense--folgefragen-umschreiben)
+   - [`no_context` — keine Treffer](#no_context--keine-treffer)
+3. [Prompts anpassen](#prompts-anpassen)
+   - [Über die UI (empfohlen)](#über-die-ui-empfohlen)
+   - [Über die API](#über-die-api)
+   - [Varianten](#varianten)
+   - [Per Hand in der YAML](#per-hand-in-der-yaml)
+4. [Gestaltungsregeln](#gestaltungsregeln)
 
 ---
 
-## Overview
+## Überblick
 
-All prompts live in `config/prompts.yaml` as Jinja2 templates.
-The `PromptManager` (`src/prompts/manager.py`) renders them at runtime.
+Alle Prompts liegen als Jinja2-Templates in `config/prompts.yaml`; der `PromptManager`
+(`src/prompts/manager.py`) rendert sie zur Laufzeit.
 
 ```yaml
-# config/prompts.yaml – structure
-system:   "You are LoreKeeper..."             # system prompt for the LLM
-qa:       "Answer the question..."            # main QA template
-condense: "Reformulate the question..."       # follow-ups → standalone
-no_context: "No relevant sources found..."   # fallback when no hits
+# config/prompts.yaml – Aufbau
+system:     "Du bist LoreKeeper, …"            # Systemprompt
+qa:         "Beantworte die folgende Frage …"  # Antwort-Prompt: Verlauf + Quellen + Frage
+condense:   "Gegeben ist ein Chat-Verlauf …"   # Folgefrage → eigenständige Frage
+no_context: "Zu deiner Frage … keine …"        # keine Treffer (ohne LLM)
 ```
 
 ---
 
-## Templates in Detail
+## Die Templates
 
-### `system` — System Prompt
+### `system` — Systemprompt
 
-Passed to every LLM call as a system message. Defines persona, language,
-**Telegram-style answer format**, length heuristics, and source citation
-rules.
+Geht bei jedem LLM-Aufruf als Systemnachricht mit. Legt Rolle, Sprache, **Antwortformat im
+Telegram-Stil**, Längenregeln und Quellenangaben fest. **Keine Variablen.**
 
-**No template variables** — static text.
+Der Prompt verlangt:
 
-The current system prompt instructs the model to:
+- **Deutsch**, außer die Frage ist englisch.
+- **Telegram-Stil**: kurze, scanbare Absätze (max. 2–3 Sätze), Leerzeile dazwischen; locker, aber
+  sachlich — keine Textwände.
+- **Lead = genau ein Satz** mit der Kernantwort, wie die erste Nachricht in einem Chat.
+- **Emoji-Überschriften** statt Markdown-Überschriften — Emoji + fetter Titel, z.B.
+  `**⚔️ Fähigkeiten**`, `**📜 Hintergrund**`, `**🤝 Beziehungen**`; frei passend zum Inhalt
+  gewählt. `**🎲 Werte**` nur für echte Spielwerte.
+- **Listen** mit `- ` direkt am Zeilenanfang (eingerückte Listen rendert Streamlit als Code-Block).
+- **Fett** für Eigennamen, Schlüsselbegriffe und Werte.
+- Optional am Ende **`**🔗 Siehe auch:**`** mit verwandten Themen aus den Quellen.
+- **Quellen** als Dateiname in Klammern, z.B. `(Arkenfeld.md)`, bei jeder nicht-trivialen Aussage.
+- **Lücken offen benennen** („Quellen schweigen dazu …“) statt zu raten; bei Widersprüchen beide
+  Varianten mit Quelle.
 
-- **Answer in German** by default (English when asked in English).
-- **Use a Telegram-messenger style**: short, scannable paragraphs (max 2–3
-  sentences each), separated by blank lines. Mobile-friendly, casual but
-  factual — no academic walls of text.
-- **Open with a one-line lead** that delivers the core answer, the way a
-  chat reply would.
-- **Use emoji headers** instead of classic Markdown headings — an emoji
-  plus bold text, e.g. `**⚔️ Fähigkeiten**`, `**📜 Hintergrund**`,
-  `**🤝 Beziehungen**`, `**📍 Ort**`, `**🎲 Regeln**`. The emoji is chosen
-  to fit the section's content.
-- **Use bullet lists** with `•` or `–` for enumerations (stats, members,
-  steps). One bullet = one line.
-- **Bold proper names, key terms, and numerical values**.
-- **Optionally close with `**🔗 Siehe auch:**`** when sources mention
-  related topics.
-- **Cite sources** as a filename in parentheses, e.g. `(Arkenfeld.md)`,
-  for any non-trivial claim.
-- **Acknowledge gaps explicitly** ("Quellen schweigen dazu …") instead of
-  inventing facts. On contradictions, name both variants and mark the
-  source of each.
-
-#### Length heuristics
-
-| Question type | Format |
+| Fragetyp | Format |
 |---|---|
-| Factual lookup ("How old is X?") | 1–2 short sentences, no headers |
-| Open-ended ("Tell me about …") | Multiple paragraph chunks with emoji headers, scannable but never bloated |
-| Detail by type | NPCs → role · background · abilities · relationships; Locations → position · meaning · inhabitants · specifics; Rules → principle then concrete values as a list |
+| Faktenfrage („Wie alt ist X?“) | 1–2 kurze Sätze, keine Überschriften |
+| Offene Frage („Erzähl mir von …“) | Mehrere Häppchen mit Emoji-Überschriften, dicht statt lang |
+| Nach Typ | NPCs → Rolle · Hintergrund · Fähigkeiten · Beziehungen; Orte → Lage · Bedeutung · Bewohner · Besonderheiten; Regeln → Grundprinzip in einem Satz, dann Werte als Liste |
 
-The prompt explicitly forbids generating length by speculating beyond the
-sources.
-
-#### Example output (Telegram style)
+Länge durch Spekulation über die Quellen hinaus ist ausdrücklich verboten.
 
 ```markdown
-**Arkenfeld** ist eine mittelgroße Handelsstadt im zentralen Tiefland und
-ein Knotenpunkt für Karawanen aus dem Norden. (Arkenfeld.md)
+**Arkenfeld** ist eine mittelgroße Handelsstadt im zentralen Tiefland und ein Knotenpunkt für
+Karawanen aus dem Norden. (Arkenfeld.md)
 
 **📍 Lage**
-Im Schnittpunkt der Salzstraße und des Flusses Veren — strategisch
-zwischen den Eisbergen im Norden und den südlichen Königreichen.
+Am Schnittpunkt von Salzstraße und Fluss Veren — zwischen den Eisbergen und den südlichen Königreichen.
 
 **🏛️ Bedeutung**
-• Größter Salzumschlagplatz der Region
-• Sitz der **Händlergilde der Sieben Siegel**
-• Neutraler Boden für Verhandlungen zwischen den Nordstämmen (Arkenfeld.md)
-
-**🤝 Bewohner**
-Etwa 12.000 Seelen, gemischt aus Menschen, Halblingen und einer kleinen
-Zwergenenklave aus den Eisbergen.
+- Größter Salzumschlagplatz der Region
+- Sitz der **Händlergilde der Sieben Siegel** (Arkenfeld.md)
 
 **🔗 Siehe auch:** Salzstraße, Händlergilde der Sieben Siegel
 ```
 
 ---
 
-### `qa` — Main QA Template
+### `qa` — Antwort-Prompt
 
-Rendered for every request when context chunks are found.
+Wird bei jeder Anfrage mit gefundenen Chunks gerendert.
 
-**Available variables:**
+| Variable | Typ | Inhalt |
+|----------|-----|--------|
+| `chunks` | `list[dict]` | Chunks nach Reranking, Slot und Expansion |
+| `chunks[i].source_file` | `str` | Relativer Pfad, z.B. `Orte\Arkenfeld.md` |
+| `chunks[i].heading` | `str` | Überschriftenpfad, z.B. `Arkenfeld > Überblick` |
+| `chunks[i].content` | `str` | Chunk-Text (mit Überschrift vorangestellt) |
+| `question` | `str` | Die (ggf. umgeschriebene) Frage |
+| `history` | `list[dict]` | Das letzte Frage/Antwort-Paar der Session (`role`: `user`/`assistant`, `content`) — leer bei der ersten Frage. Umfang: `conversation.answer_history_pairs` (1), frühere Antworten auf `answer_history_max_chars` (1500) gekürzt. Templates ohne Verlaufsblock ignorieren ihn |
 
-| Variable | Type | Content |
-|----------|------|---------|
-| `chunks` | `list[dict]` | Retrieved chunks after reranking |
-| `chunks[i].source_file` | `str` | Relative file path, e.g. `Locations\Arkenfeld.md` |
-| `chunks[i].heading` | `str` | Heading path, e.g. `Arkenfeld > Overview` |
-| `chunks[i].content` | `str` | Chunk text (with heading prefix) |
-| `question` | `str` | The (possibly condensed) user question |
-| `history` | `list[dict]` | The last question/answer pair of the session (`role`: `user`/`assistant`, `content`) — empty on the first question. Size: `conversation.answer_history_pairs` (default 1), earlier answers cut at `answer_history_max_chars` (1500). Templates without a history block simply ignore it |
-
-The history sits **before** the sources and is marked as "no source": it only
-resolves references to the previous answer ("fass das kürzer zusammen"), facts must
-come from the sources. Kept to one pair on purpose — more history dilutes the sources
-and gives earlier, possibly hallucinated answers weight.
+Der Verlauf steht **vor** den Quellen und ist als „keine Quelle“ markiert: Er löst nur Bezüge auf
+die vorige Antwort auf („fass das kürzer zusammen“), Fakten kommen aus den Quellen. Bewusst nur ein
+Paar — mehr Verlauf verwässert die Quellen und gibt früheren, evtl. halluzinierten Antworten
+Gewicht. Sessions sind rollengebunden, ein Spieler sieht hier nur seinen eigenen Verlauf.
 
 ```yaml
 qa: |
-  Answer the following question based on the provided sources.
+  Beantworte die folgende Frage basierend auf den bereitgestellten Quellen.
   {% if history %}
 
-  ### Previous chat (no source):
-  Only to understand references like "that", "he" or "shorter". Facts come
-  only from the sources below.
+  ### Bisheriger Chat (keine Quelle):
+  Nur um Bezüge wie „das“, „er“ oder „kürzer“ zu verstehen. Fakten kommen
+  ausschließlich aus den Quellen unten — was nur im Chat steht, gilt nicht als belegt.
   {% for msg in history %}
-  {{ "User" if msg.role == "user" else "LoreKeeper" }}: {{ msg.content }}
+  {{ "Nutzer" if msg.role == "user" else "LoreKeeper" }}: {{ msg.content }}
   {% endfor %}
   {% endif %}
 
-  ### Sources:
+  ### Quellen:
   {% for chunk in chunks %}
   [{{ chunk.source_file }} — {{ chunk.heading }}]
   {{ chunk.content }}
   {% endfor %}
 
-  ### Question:
+  ### Frage:
   {{ question }}
 
-  ### Answer:
-```
-
-**Rendered example:**
-```
-Answer the following question based on the provided sources.
-
-### Sources:
-[Locations\Arkenfeld.md — Arkenfeld > Overview]
-Arkenfeld > Overview
-
-| Property    | Detail                   |
-| Type        | Trading city, mid-sized  |
-...
-
-### Question:
-What is Arkenfeld?
-
-### Answer:
+  ### Antwort:
 ```
 
 ---
 
-### `condense` — Question Condensing
+### `condense` — Folgefragen umschreiben
 
-Only called when `conversation.condense_question: true`, conversation history is present, and the
-question looks like a follow-up (`needs_condense()` in `src/conversation/manager.py` — pronouns,
-back-references, leading „und/aber“, or ≤ 2 words). Standalone questions are retrieved verbatim.
-Reformulates follow-up questions into standalone questions.
+Nur aufgerufen, wenn `conversation.condense_question: true`, ein Verlauf existiert **und** die
+Frage wie eine Folgefrage aussieht (`needs_condense()` in `src/conversation/manager.py` —
+Pronomen, Rückverweise, führendes „und/aber“, „das/es“ am Ende oder ≤ 2 Wörter). Eigenständige
+Fragen gehen unverändert in die Suche.
 
-**Available variables:**
-
-| Variable | Type | Content |
-|----------|------|---------|
-| `history` | `list[dict]` | Previous messages (sliding window) |
-| `history[i].role` | `str` | `user` or `assistant` |
-| `history[i].content` | `str` | Message text |
-| `question` | `str` | The new follow-up question |
+| Variable | Typ | Inhalt |
+|----------|-----|--------|
+| `history` | `list[dict]` | Bisherige Nachrichten (Sliding Window, `window_size` Paare) |
+| `history[i].role` | `str` | `user` oder `assistant` |
+| `history[i].content` | `str` | Nachrichtentext |
+| `question` | `str` | Die neue Folgefrage |
 
 ```yaml
 condense: |
-  Given a chat history and a follow-up question, reformulate the
-  follow-up question so it is understandable as a standalone question.
-  Return ONLY the reformulated question, without explanation.
+  Gegeben ist ein Chat-Verlauf und eine Follow-Up-Frage. Formuliere die
+  Follow-Up-Frage so um, dass sie als eigenständige Frage verständlich ist.
+  Gib NUR die umformulierte Frage zurück, ohne Erklärung.
 
-  ### Chat History:
+  ### Chat-Verlauf:
   {% for msg in history %}
   {{ msg.role }}: {{ msg.content }}
   {% endfor %}
 
-  ### Follow-Up Question:
+  ### Follow-Up-Frage:
   {{ question }}
 
-  ### Standalone Question:
+  ### Eigenständige Frage:
 ```
 
-**Example:**
-```
-Chat history:
-user: What is Arkenfeld?
-assistant: A trading city in the central lowlands...
-
-Follow-up question: Who rules it?
-→ Standalone question: Who rules Arkenfeld?
-```
+Beispiel: „Was ist Arkenfeld?“ → … → „Wer regiert dort?“ wird zu „Wer regiert Arkenfeld?“. Die UI
+zeigt die tatsächlich gesuchte Frage als „🔎 Gesucht nach: …“.
 
 ---
 
-### `no_context` — Fallback Without Hits
+### `no_context` — keine Treffer
 
-Returned when ChromaDB finds no chunks above the `score_threshold`.
-No LLM call — direct string interpolation.
-
-**Available variables:**
-
-| Variable | Type | Content |
-|----------|------|---------|
-| `question` | `str` | The original user question |
+Kommt, wenn kein Chunk die `score_threshold` erreicht. **Kein LLM-Aufruf** — reine Textersetzung.
+Einzige Variable: `question` (die ursprüngliche Frage).
 
 ```yaml
 no_context: |
-  For your question "{{ question }}" I could not find any relevant
-  information in the source documents.
-  ...
+  Zu deiner Frage "{{ question }}" konnte ich leider keine relevanten
+  Informationen in den Quellendokumenten finden.
+  …
 ```
 
 ---
 
-## Customizing Prompts
+## Prompts anpassen
 
-### Via the UI (recommended)
+### Über die UI (empfohlen)
 
-The **✏ Prompts** page in the Streamlit UI provides a full prompt editor with
-three tabs:
+Die Seite **✏ Prompts** hat drei Tabs:
 
-| Tab | Purpose |
-|-----|---------|
-| **Aktive Prompts** | Edit the four active templates directly. Each template has a help tooltip showing available Jinja2 variables. A "Preview" expander renders the template with sample data before saving. |
-| **Varianten** | Save the current active prompts as a named variant, browse/edit/activate/delete saved variants. Variants are stored as YAML files in `config/prompts/`. |
-| **Vergleichen** | Side-by-side comparison of any two variants (or active vs. variant). Templates that differ are marked with ⚠. |
+| Tab | Zweck |
+|-----|-------|
+| **Aktive Prompts** | Die vier Templates bearbeiten; jedes zeigt seine Variablen als Hilfe, eine Vorschau rendert mit Beispieldaten |
+| **Varianten** | Aktive Prompts als benannte Variante speichern, Varianten bearbeiten, aktivieren, löschen. Die aktive Variante ist mit ✅ markiert |
+| **Vergleichen** | Zwei Varianten (oder aktiv vs. Variante) nebeneinander; unterschiedliche Templates mit ⚠ |
 
-Changes take effect **immediately** — the backend hot-reloads the `PromptManager`
-on save, no server restart required.
+Änderungen wirken **sofort** — das Backend ersetzt den `PromptManager` beim Speichern, kein
+Neustart.
 
-### Via the API
+### Über die API
 
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| GET | `/prompts/active` | Read active prompts |
-| PUT | `/prompts/active` | Update active prompts (validates Jinja2, hot-reloads) |
-| GET | `/prompts/variants` | List saved variants |
-| GET | `/prompts/variants/{name}` | Load a single variant |
-| PUT | `/prompts/variants/{name}` | Create or update a variant |
-| DELETE | `/prompts/variants/{name}` | Delete a variant |
-| POST | `/prompts/activate/{name}` | Activate a variant (overwrites `prompts.yaml` + hot-reload) |
-| POST | `/prompts/preview` | Render a Jinja2 template with sample data |
+| Methode | Endpoint | Zweck |
+|---------|----------|-------|
+| GET | `/prompts/active` | Aktive Prompts lesen |
+| PUT | `/prompts/active` | Aktive Prompts speichern (Jinja2 wird geprüft, Hot-Reload) |
+| GET | `/prompts/variants` | Varianten auflisten (mit `is_active`) |
+| GET | `/prompts/variants/{name}` | Eine Variante laden |
+| PUT | `/prompts/variants/{name}` | Variante anlegen oder ändern |
+| DELETE | `/prompts/variants/{name}` | Variante löschen |
+| POST | `/prompts/activate/{name}` | Variante aktivieren (überschreibt `prompts.yaml`, Hot-Reload) |
+| POST | `/prompts/preview` | Template mit Beispieldaten rendern |
 
-All write endpoints validate Jinja2 syntax before saving — a template with
-syntax errors returns HTTP 422.
+Alle schreibenden Endpoints prüfen die Jinja2-Syntax — ein fehlerhaftes Template ergibt HTTP 422.
 
-### Variant storage
+### Varianten
 
-Variants are saved in `config/prompts/` as YAML files (e.g. `concise.yaml`).
-Each file has the same structure as `prompts.yaml` plus an optional `_meta` key:
+Varianten liegen als YAML in `config/prompts/` (gitignored), Aufbau wie `prompts.yaml` plus
+optionalem `_meta`:
 
 ```yaml
 _meta:
-  name: "Concise German"
+  name: "Knapp"
   description: "Kürzere, knackigere Antworten"
 system: |
-  ...
+  …
 qa: |
-  ...
+  …
 condense: |
-  ...
+  …
 no_context: |
-  ...
+  …
 ```
 
-The `_meta` key is stripped when loading templates into the `PromptManager`.
+`_meta` wird beim Laden entfernt. „Aktiv“ ist eine Variante, wenn ihre vier Templates mit
+`prompts.yaml` übereinstimmen — eine Variante, die vor einer Änderung an `prompts.yaml` gespeichert
+wurde (z.B. ohne Verlaufsblock im `qa`), gilt danach als nicht aktiv; einmal neu speichern.
 
-### Via YAML (manual)
+### Per Hand in der YAML
 
-Edit `config/prompts.yaml` directly. Note that manual edits require a server
-restart unless you also call `PUT /prompts/active` to trigger the hot-reload.
+`config/prompts.yaml` direkt bearbeiten — wirkt erst nach einem Neustart oder einem
+`PUT /prompts/active`.
 
-**Jinja2 syntax:**
 ```jinja2
-{{ variable }}           # output
-{% for x in list %}      # loop
-{% if condition %}        # condition
-{# comment #}            # not rendered
+{{ variable }}           # Ausgabe
+{% for x in liste %}     # Schleife
+{% if bedingung %}       # Bedingung
+{# Kommentar #}          # wird nicht gerendert
 ```
 
-**Adding a custom template key:**
-1. Add a new key in `prompts.yaml`
-2. Add a `render_*` method in `src/prompts/manager.py`
-3. Call it from `src/api/routes.py`
+**Eigenes Template ergänzen:** Schlüssel in `prompts.yaml`, `render_*`-Methode in
+`src/prompts/manager.py`, Aufruf in `src/api/routes.py`.
 
 ---
 
-## Prompt Design Notes
+## Gestaltungsregeln
 
-- **Enforce source citations:** The `system` prompt requires `(filename.md)` —
-  this prevents the LLM from using training knowledge as a source
-- **Telegram-style formatting:** short paragraphs + emoji headers + bullets
-  produce answers that are scannable on mobile and visually structured
-  without forcing verbosity. The prompt shifted from "max 3–5 sentences"
-  (which produced flat 3-line prose blocks) to a structure-first format
-  with explicit length heuristics by question type
-- **Hallucination prevention:** "Do not invent information" + "say so honestly if no source exists" —
-  together with the `no_context` fallback, this reduces hallucinations
-- **Language:** German as default with automatic English switch when the user asks in English
+- **Quellenpflicht:** Der Systemprompt verlangt `(datei.md)` — das hält das LLM davon ab,
+  Trainingswissen als Quelle auszugeben.
+- **Telegram-Format:** kurze Absätze + Emoji-Überschriften + Listen sind am Handy scanbar und
+  strukturiert, ohne Länge zu erzwingen. Früher stand dort „max. 3–5 Sätze“, das ergab flache
+  Drei-Zeilen-Blöcke; jetzt erst Struktur, dann Längenregeln nach Fragetyp.
+- **Gegen Halluzinationen:** „Erfinde keine Informationen“ + „sag ehrlich, wenn die Quellen nichts
+  hergeben“, dazu `no_context` ohne LLM und ein Verlauf, der ausdrücklich keine Quelle ist.
+- **Sprache:** Deutsch, automatisch Englisch bei englischen Fragen.

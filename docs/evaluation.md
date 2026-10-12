@@ -1,223 +1,200 @@
 # Evaluation
 
-This document describes the offline evaluation framework for LoreKeeper. It covers the Golden Set of test questions, the evaluation scripts for fast retrieval testing and full end-to-end (LLM) testing, target metrics, and the recommended iterative workflow.
+Wie LoreKeeper Suchqualität messbar macht: das Golden Set, das schnelle Retrieval-Skript, der
+End-to-End-Lauf mit LLM, Kennzahlen und das empfohlene Vorgehen. Die Bedienung der
+Evaluation-Seite steht in [ui-ux.md](ui-ux.md#evaluation-seite-uipages2_evaluationpy).
 
-## Table of Contents
-1. [Overview](#overview)
-2. [TL;DR](#tldr)
-3. [The Golden Set (`evaluation/qa_pairs.yaml`)](#the-golden-set-evaluationqa_pairsyaml)
-4. [`evaluate_retrieval.py` — fast loop](#evaluate_retrievalpy--fast-loop)
-5. [`evaluate.py` — end-to-end](#evaluatepy--end-to-end)
-6. [Metrics & targets](#metrics--targets)
-7. [Workflow](#workflow)
-8. [Adding new questions](#adding-new-questions)
-
----
-
-## Overview
-
-LoreKeeper ships with a Golden Set and two evaluation scripts to measure
-retrieval quality without guesswork. Use them whenever you change anything
-that touches retrieval — chunking, embedding, reranking, the soft cap,
-prompts — to catch regressions before they bite during a session.
+## Inhaltsverzeichnis
+1. [Überblick](#überblick)
+2. [Kurz und knapp](#kurz-und-knapp)
+3. [Das Golden Set (`evaluation/qa_pairs.yaml`)](#das-golden-set-evaluationqa_pairsyaml)
+4. [`evaluate_retrieval.py` — schneller Durchlauf](#evaluate_retrievalpy--schneller-durchlauf)
+5. [`evaluate.py` — End-to-End](#evaluatepy--end-to-end)
+6. [Kennzahlen und Ziele](#kennzahlen-und-ziele)
+7. [Vorgehen](#vorgehen)
+8. [Neue Fragen hinzufügen](#neue-fragen-hinzufügen)
 
 ---
 
-## TL;DR
+## Überblick
 
-```bash
-# Fast loop: retrieval only, no LLM call (~1 min for 278 questions with the GPU reranker)
+Das Golden Set und zwei Skripte messen die Suchqualität ohne Rätselraten. Immer einsetzen, wenn
+sich etwas an der Suche ändert — Chunking, Embedding, Reranking, Deckel, Slot, Prompts —, damit
+Verschlechterungen auffallen, bevor sie am Spieltisch stören.
+
+---
+
+## Kurz und knapp
+
+```powershell
+# Schnell: nur Retrieval, kein LLM (~1 min für 278 Fragen mit GPU-Reranker)
 python -m evaluation.evaluate_retrieval
 
-# Override per-run parameters
+# Parameter für einen Lauf überschreiben
 python -m evaluation.evaluate_retrieval --top-k 25 --top-k-rerank 10
 
-# End-to-end including the LLM (slow, requires running backend)
+# End-to-End mit LLM (langsam, Backend muss laufen)
 python -m evaluation.evaluate --qa-pairs evaluation/qa_pairs.yaml --output evaluation/results/
 ```
 
-Reports are written to `evaluation/results/` as timestamped JSON.
+`evaluate_retrieval.py` öffnet die eingebettete ChromaDB selbst — nur bei **gestopptem** Backend
+starten; bei laufendem Backend die Evaluation-Seite nutzen (gleicher Code über `/eval/run`).
+Berichte landen als JSON mit Zeitstempel in `evaluation/results/`.
 
 ---
 
-## The Golden Set (`evaluation/qa_pairs.yaml`)
+## Das Golden Set (`evaluation/qa_pairs.yaml`)
 
-278 manually-curated questions covering:
+278 handverlesene Fragen:
 
-| Block | Count | What it tests |
+| Block | Anzahl | Was er prüft |
 |---|---|---|
-| `markdown` (m001–m067) | 67 | Entity-centric Q→file recall (NPC, location, organisation, item, enemy) plus section-level detail questions (m026–m067) against single tables/sub-sections — Arkenfeld districts, Thal'Emyra, Malek, Gegner weaknesses, Dämmerorden, Schattenorden, Sequenz-Schlüssel. Some keep `source_type: pdf` because their item moved into the rulebook (m005). |
-| `pdf` (p001–p120) | 120 | Rulebook PDF covering all 7 chapters. p001–p041: one question per chapter/class. p042–p120: specific rules — Kampfunfähigkeit/Überschaden/Heroische Runde vs. Überheilung, kritischer Treffer, Schadens-/Statuseffekt-Details, Ressourcen & Level-Tabelle, Ausrüstung/Tränke/Handel, einzelne Skill- und Zauberkarten, alle 7 Eigenheiten-Gruppen, Artefakte. |
-| `image` (i001–i010) | 10 | Image questions resolve to the **associated `.md` file** (images are excluded from retrieval — see `embedding-strategy.md`) |
-| `adventure` (a001–a031) | 31 | Adventure/campaign structure, multi-act recall (a001–a015) plus scene/mechanic questions inside single adventures (a016–a031): Relikt der Verlorenen Stadt, Im Namen der Reinheit, Maskenball des Winterkönigs, Spiegelbruch. |
-| `s001–s006` **structure tests** | 6 | Sub-section recall, multi-source diversity, table atomicity, identity-layer, wikilink cross-references |
-| `k001–k020` **keyword tests** | 20 | Exact-term questions designed to reward BM25 over pure vector — rare proper nouns (Rhaz'Muell, Thal'Emyra, Artheon Knisterhand Faraday), distinct compounds (Ephraskal-Handschuh, Venthir-Siegelnetz-Blaupause, Sequenz-Schlüssel), and single-color variant collisions (Blauer/Roter/Grüner Monolith). Use with the A/B run to measure hybrid lift. |
-| `x001–x008` **cross-source** (`source_type: mixed`) | 8 | Vault file names an Eigenheit/Zauber/Artefakt whose rules live only in the PDF (e.g. Maleks Schattenfreund, Escanors Ritterlichkeit). Several flag content contradictions between vault and rulebook in `notes`. Measured by section; the rulebook slot (`retrieval.rules_slot`) raised them from 1/8 to 5/8. |
-| `z001–z016` **simulation** | 16 | PnP-Simulation reports (group `simulation`). Check source (`expected_source_ids`) and named section; answer keywords are method terms only, so new simulation runs don't break them. |
-| `f###` **from feedback** | — | Added from chat ratings via Evaluation → tab "Feedback": 👍 keeps the answer's sources, 👎 leaves them empty to fill in. |
+| `markdown` (m001–m067) | 67 | Entitäten-Fragen → Datei (NPC, Ort, Organisation, Gegenstand, Gegner) plus Detailfragen zu einzelnen Tabellen/Unterabschnitten (m026–m067) — Arkenfeld-Viertel, Thal'Emyra, Malek, Gegner-Schwächen, Dämmerorden, Schattenorden, Sequenz-Schlüssel. Manche haben `source_type: pdf`, weil ihr Gegenstand ins Regelwerk gewandert ist (m005) |
+| `pdf` (p001–p120) | 120 | Regelwerk-PDF, alle 7 Kapitel. p001–p041: eine Frage je Kapitel/Klasse. p042–p120: einzelne Regeln — Kampfunfähigkeit/Überschaden/Heroische Runde vs. Überheilung, kritischer Treffer, Schadens- und Statuseffekte, Ressourcen und Stufentabelle, Ausrüstung/Tränke/Handel, Skill- und Zauberkarten, alle 7 Eigenheiten-Gruppen, Artefakte |
+| `image` (i001–i010) | 10 | Bildfragen zeigen auf die **zugehörige `.md`-Datei** (Bilder sind aus der Suche ausgeschlossen, siehe [embedding-strategy.md](embedding-strategy.md)) |
+| `adventure` (a001–a031) | 31 | Abenteuer- und Kampagnenstruktur, aktübergreifend (a001–a015), plus Szenen und Mechaniken in einzelnen Abenteuern (a016–a031) |
+| `s001–s006` **Strukturtests** | 6 | Unterabschnitte, Vielfalt über Quellen, Tabellen am Stück, Identitäts-Schicht, Wikilink-Querverweise |
+| `k001–k020` **Stichworttests** | 20 | Exakte Begriffe, bei denen BM25 der Vektorsuche überlegen sein sollte — seltene Eigennamen (Rhaz'Muell, Artheon Knisterhand Faraday), eindeutige Komposita (Ephraskal-Handschuh, Venthir-Siegelnetz-Blaupause), Farbvarianten (Blauer/Roter/Grüner Monolith). Für den A/B-Lauf Vektor vs. Hybrid |
+| `x001–x008` **quellenübergreifend** (`source_type: mixed`) | 8 | Eine Vault-Datei nennt eine Eigenheit/einen Zauber/ein Artefakt, dessen Regel nur im PDF steht (Maleks Schattenfreund, Escanors Ritterlichkeit). Einige vermerken Widersprüche zwischen Vault und Regelwerk in `notes`. Gemessen nach Abschnitt; der Regelwerk-Slot hob sie von 1/8 auf 5/8 |
+| `z001–z016` **Simulation** | 16 | Berichte der PnP-Simulation (Gruppe `simulation`). Prüfen Quelle (`expected_source_ids`) und benannten Abschnitt; Antwort-Stichwörter nur Methodenbegriffe, damit neue Simulationsläufe sie nicht brechen |
+| `f###` **aus Feedback** | — | Über Evaluation → „Feedback“ aus bewerteten Chat-Antworten übernommen: 👍 behält die Quellen der Antwort, 👎 lässt sie leer zum Nachtragen |
 
-The structure tests (`s00x`) exist specifically to catch failure modes that
-the entity tests miss:
+Die Strukturtests fangen Fehler, die Entitäten-Fragen übersehen:
 
-| ID | Failure mode it catches |
+| ID | Fängt |
 |---|---|
-| `s001` | `_merge_small_chunks` collapsing sections across heading boundaries (the bug that hid the Gotteslicht-Viertel chunk) |
-| `s002` | Sub-section addressability — does heading-aware chunking actually split deep `###` sections cleanly? |
-| `s003` | Multi-source recall — does `max_per_source` diversify, or does one dense file eat all slots? |
-| `s004` | Table atomicity + identity layer — pure stat tables with no prose self-reference |
-| `s005` | Wikilink-as-context — entities mentioned only via `[[...]]` in another file |
-| `s006` | Information that lives only in a table cell, found via the identity-layer |
+| `s001` | Zusammenlegen kleiner Chunks über Überschriftsgrenzen (der Fehler, der den Gotteslicht-Viertel-Chunk versteckte) |
+| `s002` | Erreichbarkeit tiefer `###`-Abschnitte |
+| `s003` | Vielfalt über Quellen — wirkt `max_per_source`, oder frisst eine Datei alle Plätze? |
+| `s004` | Tabellen am Stück + Identitäts-Schicht — reine Werte-Tabellen ohne Namensnennung |
+| `s005` | Wikilink als Kontext — Entitäten nur per `[[…]]` in einer anderen Datei erwähnt |
+| `s006` | Information nur in einer Tabellenzelle, gefunden über die Identitäts-Schicht |
 
 ### Schema
 
 ```yaml
 - id: m001
   question: "Wo liegt Arkenfeld und was ist das für ein Ort?"
-  source_type: markdown          # markdown | pdf | image | mixed
-  category: location             # label only — not stored in ChromaDB
+  source_type: markdown          # markdown | pdf | image | mixed | simulation
+  category: location             # nur Label — nicht in ChromaDB
   expected_sources:
-    - "Orte/Arkenfeld.md"        # path relative to source base path
+    - "Orte/Arkenfeld.md"        # Pfad relativ zur Quelle
+  expected_source_ids: []        # optional: die Datei muss aus einer dieser Quellen kommen
   expected_answer_contains:
-    - "Arkenfeld"                # substrings the LLM answer should contain
-  expected_section: "4.10"       # optional: numbered heading a retrieved chunk must lie in
+    - "Arkenfeld"                # Teilstrings, die die LLM-Antwort enthalten soll
+  expected_section: "4.10"       # optional: nummerierte Überschrift oder Überschriften-Name
   notes: "optional"
 ```
 
-> `category` is a Golden Set label only — it has no relation to the
-> `content_category` ChromaDB metadata derived from folder structure.
+`category` ist nur ein Label des Golden Sets und hat nichts mit `content_category` in ChromaDB zu
+tun.
 
-### A "hit" is loose by design
+### Ein „Treffer“ ist bewusst großzügig
 
-`evaluate_retrieval.py` counts a question as a hit if **any** of its
-`expected_sources` filenames appears in the retrieved chunks. Subdirectory
-prefixes are ignored (`Orte/Arkenfeld.md` matches a chunk with
-`source_file == "Orte\\Arkenfeld.md"` or just `Arkenfeld.md`). This keeps
-the metric stable across path-separator quirks and lets multi-source
-questions be marked as hits even if only one of several expected files is
-returned — the per-question `details` block in the JSON report shows
-exactly what was retrieved.
+Eine Frage zählt als Treffer, wenn **irgendeine** ihrer `expected_sources` unter den gefundenen
+Chunks ist. Unterordner werden ignoriert (`Orte/Arkenfeld.md` passt auch zu
+`Orte\Arkenfeld.md` oder `Arkenfeld.md`). Das hält die Kennzahl stabil gegen Pfadtrenner und lässt
+Fragen mit mehreren Quellen auch dann treffen, wenn nur eine kommt — der `details`-Block im
+JSON-Bericht zeigt genau, was gefunden wurde. Mit `expected_source_ids` muss die Datei zusätzlich
+aus einer bestimmten Quelle stammen (nötig bei gleichnamigen Dateien wie den beiden
+`llm_report.md`).
 
-For the rulebook this means a hit is almost always true — every chunk
-comes from `pnp_regelbuch.pdf`, so the wrong section still counts. That is
-what `expected_section` is for: a numbered heading prefix (`"4.10"`) that at
-least one retrieved chunk heading must start with. Sub-sections count
-(`"5.4"` matches `5.4.1 Krieger`), siblings don't (`"4.1"` ≠ `4.10`). The
-report adds `section_hit_rate`, `section_total` and `section_misses`
-(with the retrieved headings); the Evaluation page marks "right file,
-wrong section" with ⚠️. For the end-to-end check, pick
-`expected_answer_contains` keywords that exist only in the correct section
-(e.g. `Todeszähler` for Überschaden, not `Überheilung`).
+Beim Regelwerk ist ein Datei-Treffer fast immer wahr — jeder Chunk kommt aus
+`pnp_regelbuch.pdf`, auch der falsche Abschnitt. Dafür gibt es `expected_section`: eine
+nummerierte Überschrift (`"4.10"`), mit der mindestens eine gefundene Überschrift beginnen muss.
+Unterabschnitte zählen (`"5.4"` passt zu `5.4.1 Krieger`), Geschwister nicht (`"4.1"` ≠ `4.10`).
+Unnummerierte Überschriften passen über den Namen (`"Gesamtwertung"` passt zu „Gesamtwertung (R3
+vs Median aus 6 Profilen)“). Der Bericht enthält `section_hit_rate`, `section_total` und
+`section_misses` (mit den gefundenen Überschriften); die Evaluation-Seite markiert „richtige Datei,
+falscher Abschnitt“ mit ⚠️. Für den End-to-End-Lauf `expected_answer_contains` so wählen, dass die
+Wörter nur im richtigen Abschnitt stehen (z.B. `Todeszähler` für Überschaden, nicht `Überheilung`).
 
 ---
 
-## `evaluate_retrieval.py` — fast loop
+## `evaluate_retrieval.py` — schneller Durchlauf
 
-Talks directly to the Retriever (embedding → ChromaDB → reranker → soft
-cap), no LLM. Use this for every retrieval-tuning iteration.
+Spricht direkt mit dem Retriever (Embedding → ChromaDB → Reranker → Deckel → Slot → Expansion),
+ohne LLM. Für jede Iteration beim Tunen der Suche.
 
-```bash
+```powershell
 python -m evaluation.evaluate_retrieval
 python -m evaluation.evaluate_retrieval --top-k 25 --top-k-rerank 10
 python -m evaluation.evaluate_retrieval --qa-pairs evaluation/qa_pairs.yaml --output evaluation/results/
 ```
 
-CLI flags:
-
-| Flag | Default | Effect |
+| Flag | Default | Wirkung |
 |---|---|---|
-| `--top-k` | from `settings.yaml` | Bi-encoder candidate count |
-| `--top-k-rerank` | from `settings.yaml` | Final chunk count after reranking |
-| `--hybrid` / `--no-hybrid` | from `settings.yaml` | Force hybrid retrieval on/off for this run, overriding `retrieval.hybrid.enabled`. Omit both to use the config default. |
-| `--qa-pairs` | `evaluation/qa_pairs.yaml` | Path to the question set |
-| `--output` | `evaluation/results/` | Where to write the JSON report |
+| `--top-k` | aus `settings.yaml` | Kandidaten der Vektorsuche |
+| `--top-k-rerank` | aus `settings.yaml` | Chunks nach dem Reranking |
+| `--hybrid` / `--no-hybrid` | aus `settings.yaml` | Hybrid-Suche für diesen Lauf erzwingen bzw. abschalten; ohne beide gilt die Config |
+| `--qa-pairs` | `evaluation/qa_pairs.yaml` | Fragenkatalog |
+| `--output` | `evaluation/results/` | Zielordner des JSON-Berichts |
 
-For A/B comparisons, run the same Golden Set twice and diff the JSON reports:
+`max_per_source` ist (noch) kein Flag — zum Durchprobieren `RETRIEVAL__RERANKING__MAX_PER_SOURCE=N`
+setzen. Pro Anfrage lässt es sich über API und UI überschreiben.
 
-```bash
-python -m evaluation.evaluate_retrieval --no-hybrid --output evaluation/results/
-python -m evaluation.evaluate_retrieval --hybrid    --output evaluation/results/
+A/B-Vergleich: zweimal laufen lassen und die Berichte vergleichen (z.B. `--no-hybrid` vs.
+`--hybrid`). Die Evaluation-Seite hat dafür den Knopf **⚖ A/B starten (Vektor vs. Hybrid)** mit
+Differenz der Trefferquote und den Fragen, die Hybrid gewinnt oder verliert.
+
+> **Varianten im selben Prozess vergleichen.** ChromaDBs HNSW-Suche ist approximativ: nach einem
+> Neustart bekommen ~9 von 278 Fragen leicht andere Vektor-Kandidaten (bei bitgleichen
+> Query-Embeddings), zwei getrennte Läufe weichen deshalb um etwa ±2 Abschnitt-Treffer ab. Für
+> Parameter-Vergleiche in einem Skript je Variante einen `Retriever` bauen und
+> `run_evaluation_with_retriever` aufrufen (Roadmap 5.5).
+
+Die Konsolenausgabe zeigt die Aufteilung nach `source_type` und einen Block `Misses` mit erwarteten
+und gefundenen Dateien für jeden Fehlschlag — genau lesen, er erklärt, *warum* eine Frage scheitert.
+Bei der Ursachensuche helfen die Tabs **„Frage testen“** (welche Chunks eine Frage liefert) und
+**„Chunks“** (alle gespeicherten Chunks einer Datei — z.B. um zu sehen, warum eine Tabellenzeile
+ohne Überschrift nie passt).
+
+---
+
+## `evaluate.py` — End-to-End
+
+Ruft den laufenden `/query`-Endpoint auf, misst also die **ganze** Pipeline inklusive LLM.
+Langsamer (eine Generierung pro Frage); das Backend muss laufen (`.\start.ps1`).
+
+```powershell
+python -m evaluation.evaluate --qa-pairs evaluation/qa_pairs.yaml --output evaluation/results/
 ```
 
-The Streamlit Evaluation page has a one-click equivalent: in the "Retrieval
-Eval" tab, the **⚖ A/B starten (Vektor vs. Hybrid)** button runs both modes
-sequentially and shows the hit-rate delta plus the list of questions where
-Hybrid wins or loses. The "Frage testen" and "Retrieval Eval" tabs each
-carry a three-way mode selector (Config default / Vector only / Hybrid).
-
-> **`max_per_source` is not (yet) a CLI flag** for the eval script. To
-> sweep it, edit `config/settings.yaml` (or set
-> `RETRIEVAL__RERANKING__MAX_PER_SOURCE=N` in the environment) before
-> running. Per-request override via the API/UI works at runtime.
-
-> **Compare variants in the same process.** ChromaDB's HNSW search is
-> approximate: after a restart ~9 of 278 questions get slightly different vector
-> candidates (query embeddings are bit-identical), so two separate runs differ by
-> about ±2 section hits. For parameter sweeps build one `Retriever` per variant
-> in a single script and call `run_evaluation_with_retriever` (roadmap 5.5).
-
-Two more tabs help with diagnosis: **"Chunks"** shows every stored chunk of one
-file (document order, length, full text, metadata) — e.g. to see why a table row
-without a heading never matches — and **"Feedback"** lists rated chat answers and
-turns them into golden-set questions.
-
-Console output shows the per-`source_type` breakdown plus a `Misses`
-section with the expected vs. retrieved files for every failure — read
-those carefully, they tell you *why* a question failed.
+Zusätzlich gemessen wird `answer_contains`: wie oft die Antwort die Teilstrings aus
+`expected_answer_contains` enthält. Als Abnahme, nachdem die Suche stabil ist.
 
 ---
 
-## `evaluate.py` — end-to-end
+## Kennzahlen und Ziele
 
-Hits the live `/query` endpoint, so it measures the **whole** pipeline
-including the LLM. Slower (one full generation per question), and the
-backend has to be running.
+| Kennzahl | Skript | Was sie misst | Ziel | Stand 13.10. |
+|---|---|---|---|---|
+| **Trefferquote (Datei)** | `evaluate_retrieval.py` | Erwartete Datei unter den gefundenen Chunks | > 0,85 | 0,986 |
+| **Abschnitt-Trefferquote** | `evaluate_retrieval.py` | Erwarteter Abschnitt unter den Überschriften | darf nicht sinken | 136/153 |
+| **Answer Contains** | `evaluate.py` | Stichwörter in der LLM-Antwort | > 0,75 | — |
+| **Latenz** | `evaluate.py` | Antwortzeit gesamt | < 10 s | ~3–4 s |
 
-```bash
-# Terminal 1
-uvicorn src.main:app --port 8000
-
-# Terminal 2
-python -m evaluation.evaluate \
-    --qa-pairs evaluation/qa_pairs.yaml \
-    --output evaluation/results/
-```
-
-Adds an `answer_contains` metric: how often the LLM's actual response
-contains the substrings listed in `expected_answer_contains`. Use this as
-a final acceptance check after the retrieval loop has stabilised.
+Die Ziel-Trefferquote liegt bewusst unter 1,0 — die Strukturtests prüfen Randfälle, sie alle zu
+treffen ist ein Ziel, keine Grundlinie. Unter 0,85 → etwas ist kaputt. Dass die
+Abschnitt-Trefferquote nicht sinkt, prüft auch `pytest -m perf` (CONTRIBUTING.md).
 
 ---
 
-## Metrics & targets
-
-| Metric | Script | What it measures | Target |
-|---|---|---|---|
-| **Hit Rate@K** | `evaluate_retrieval.py` | Expected file in top-K chunks | > 0.85 |
-| **Answer Contains** | `evaluate.py` | Expected keywords in LLM answer | > 0.75 |
-| **Latency** | `evaluate.py` | End-to-end response time | < 10s |
-
-The target on Hit Rate is intentionally below 1.0 — the structure tests
-include questions that exercise edge cases (cross-file wikilinks, deeply
-nested sections), and getting them all right is a goal, not a baseline.
-Drop below 0.85 → something regressed.
-
----
-
-## Workflow
+## Vorgehen
 
 ```mermaid
 flowchart LR
-    CHANGE([Change<br/>chunking · embeds · cap · prompt])
-    INGEST([Re-Ingest if<br/>chunking/embeds touched])
-    EVAL["evaluate_retrieval.py<br/><i>fast · no LLM</i>"]
-    ANALYZE["Read 'Misses' block<br/>compare retrieved vs. expected"]
-    TUNE["Adjust:<br/>top_k · top_k_rerank<br/>max_per_source · score_threshold<br/>chunking params"]
-    STABLE{Hit Rate<br/>≥ target?}
-    E2E([evaluate.py<br/>end-to-end with LLM])
+    CHANGE([Änderung<br/>Chunking · Embeds · Deckel · Prompt])
+    INGEST([Neu indizieren, falls<br/>Chunking/Embeds betroffen])
+    EVAL["evaluate_retrieval.py<br/><i>schnell · ohne LLM</i>"]
+    ANALYZE["Misses lesen<br/>gefunden vs. erwartet"]
+    TUNE["Anpassen:<br/>top_k · top_k_rerank<br/>max_per_source · Slot<br/>Chunking-Parameter"]
+    STABLE{Trefferquote<br/>≥ Ziel?}
+    E2E([evaluate.py<br/>End-to-End mit LLM])
 
     CHANGE --> INGEST --> EVAL --> ANALYZE --> TUNE --> STABLE
-    STABLE -->|no| EVAL
-    STABLE -->|yes| E2E
+    STABLE -->|nein| EVAL
+    STABLE -->|ja| E2E
 
     classDef io fill:#d1fae5,stroke:#10b981,color:#064e3b
     classDef step fill:#ede9fe,stroke:#7c3aed,color:#4c1d95
@@ -227,31 +204,28 @@ flowchart LR
     class STABLE decision
 ```
 
-**Re-ingest is only required if you changed chunking, embedding, or the
-identity layer.** Reranking, soft cap, `top_k`, and prompt changes do not
-need a re-ingest — the loop stays sub-minute.
+**Neu indizieren nur nach Änderungen an Chunking, Embedding oder der Identitäts-Schicht.**
+Reranking, Deckel, Slot, `top_k` und Prompts brauchen keine Neu-Indizierung — der Durchlauf bleibt
+bei etwa einer Minute.
 
 ---
 
-## Adding new questions
+## Neue Fragen hinzufügen
 
-Add an entry to `evaluation/qa_pairs.yaml` and re-run
-`evaluate_retrieval.py`. Things to keep in mind:
+Eintrag in `evaluation/qa_pairs.yaml` ergänzen (oder über die Evaluation-Seite: Tab „Golden Set“,
+„Frage testen“ → „Zum Golden Set hinzufügen“, „Feedback“) und `evaluate_retrieval.py` erneut laufen
+lassen. Dabei:
 
-1. **Pick the smallest meaningful `expected_sources`.** If a question
-   could be answered from three files, list all of them — the hit rule is
-   "any match", so this gives the retriever fair chances and the report
-   shows which file was actually used.
-2. **Image questions point at the `.md` file**, not the image. The
-   retriever excludes `document_type == image`; the UI renders images by
-   following the `.md` file's references.
-3. **Add a `notes:` field** explaining *what* the question is supposed to
-   stress. Future-you will thank you when a regression breaks it and you
-   need to remember whether it was about table atomicity or the identity
-   layer.
-4. **Avoid `expected_answer_contains` for broad questions.** Leave it
-   empty (`[]`) when the answer space is too wide for fixed substrings —
-   `evaluate.py` then only checks retrieval, not text content.
-5. **Re-run after adding** to confirm the new question hits with the
-   current configuration. A new question that already misses is a
-   feature request, not a regression test.
+1. **`expected_sources` vollständig, aber knapp.** Lässt sich eine Frage aus drei Dateien
+   beantworten, alle drei nennen — die Regel ist „irgendeine passt“, der Bericht zeigt, welche kam.
+2. **Bildfragen zeigen auf die `.md`-Datei**, nicht auf das Bild.
+3. **`notes:` ausfüllen** — *was* die Frage prüfen soll. Wenn sie später bricht, weißt du, ob es um
+   Tabellen oder die Identitäts-Schicht ging.
+4. **Keine `expected_answer_contains` bei breiten Fragen** — leer lassen (`[]`), wenn die Antwort zu
+   offen für feste Teilstrings ist; `evaluate.py` prüft dann nur die Suche.
+5. **Bei Regelwerk-Fragen `expected_section` setzen**, sonst ist der Treffer nichtssagend.
+6. **Nach dem Hinzufügen laufen lassen.** Eine neue Frage, die schon jetzt verfehlt, ist ein
+   Verbesserungswunsch, kein Regressionstest — in `notes` vermerken.
+7. **Feedback-Fragen prüfen:** Aus 👎 übernommene Fragen haben leere `expected_sources` — die
+   richtige Quelle eintragen. Folgefragen („Und wer ist sein Vater?“) als eigenständige Frage
+   umformulieren, sonst sind sie ohne Verlauf sinnlos.

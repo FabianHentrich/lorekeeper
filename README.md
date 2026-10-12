@@ -3,143 +3,119 @@
 ![Status](https://img.shields.io/badge/status-beta-orange)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi)
-![ChromaDB](https://img.shields.io/badge/ChromaDB-embedded%20%7C%20client-blueviolet)
+![ChromaDB](https://img.shields.io/badge/ChromaDB-embedded-blueviolet)
 ![LLM](https://img.shields.io/badge/LLM-Ollama%20%7C%20Gemini-412991)
-![Tests](https://img.shields.io/badge/tests-220-brightgreen)
+![Tests](https://img.shields.io/badge/tests-537-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-**A production-grade RAG system for Obsidian-based tabletop-RPG worlds.**
+**RAG-System für Pen-and-Paper-Welten in Obsidian.**
 
-Ask natural-language questions about your campaign — NPCs, locations, rules,
-adventures, items, gods — and get grounded answers with source citations.
-Runs fully local via Ollama, or in the cloud via Google Gemini. Switch
-providers at runtime without a restart.
+Stell Fragen zu deiner Kampagne — NPCs, Orte, Regeln, Abenteuer, Gegenstände, Götter — und
+bekomm Antworten, die auf deinen Quellen beruhen, mit Quellenangabe. Läuft komplett lokal über
+Ollama oder in der Cloud über Google Gemini; der Provider lässt sich zur Laufzeit wechseln.
 
-<!-- TODO: replace with real screenshot/GIF -->
-<!-- ![LoreKeeper chat UI](docs/images/chat-demo.gif) -->
-
----
-
-## Why LoreKeeper?
-
-TTRPG groups accumulate hundreds of Markdown files in an Obsidian vault:
-NPCs, locations, factions, rules, session notes. Generic RAG tools treat
-these as flat text, miss the semantic structure Obsidian adds (wikilinks,
-aliases, callouts, tags), and happily mix a rulebook class with a lore NPC
-of the same name.
-
-LoreKeeper is built from the ground up for this workflow:
-
-- **Obsidian-native parsing** — wikilinks, `![[embeds]]`, `> [!callouts]`,
-  `#tags`, and YAML frontmatter aliases are all extracted into searchable
-  metadata.
-- **PDF OCR & structure** — PDFs are parsed with OCR support
-  (via RapidOCR), TOC-based heading hierarchy, embedded image extraction,
-  and layout-aware code block suppression. Configurable per
-  `ingestion.pdf` in `settings.yaml`.
-- **Semantic source filtering** — every chunk inherits a `group` tag (`lore` /
-  `adventure` / `rules` / `simulation`) from the source it was ingested from. The four UI
-  toggles (🗺️ Lore, 📖 Adventure, 📋 Rules, 📊 Simulation) restrict retrieval at the
-  vectorstore level. Ask "What can the time mage do?" and limit to Rules, and
-  you won't get the NPC named *Arkenfeld the Time Mage* polluting the context.
-- **Self-service source management** — sources are defined in
-  `config/sources.yaml` (folder OR single file), and the **⚙ Sources** UI page
-  lets you add, edit, reindex, recategorize, or remove them without touching
-  YAML. Recategorize rewrites only the metadata of existing chunks, so changing
-  category mappings is a sub-second operation, not a re-embedding.
-- **Two-stage retrieval with soft diversity cap** — multilingual E5
-  bi-encoder for recall, cross-encoder reranker for precision, plus a
-  per-source soft cap (`max_per_source`, default 3) that prevents one
-  dense document from filling all top-K slots and crowding out related
-  sources. The cap is two-pass: first fills with diversity preference,
-  then backfills cap-blocked chunks if `top_k_rerank` would otherwise not
-  be reached — diversity is a preference, never a slot-killer. Proper
-  production RAG, not naive top-k cosine.
-- **Honest chunking** — heading-aware splits with atomic Markdown tables,
-  and small chunks only get merged with neighbors that share the same
-  heading. No silent heading drift, no chunks lying about which section
-  they belong to.
-- **Identity-layer embedding** — filename stem + aliases are prepended to
-  every chunk before embedding. A stat table with no prose self-reference
-  still matches queries about its subject.
-- **Dual provider** — Ollama for privacy/cost, Gemini for quality/speed.
-  Switch live via a sidebar dropdown.
-- **Real streaming** — SSE token stream with sources attached to the
-  terminal event; multi-turn sessions with automatic GC.
-- **Telegram-style answers** — the system prompt enforces scannable,
-  chat-like formatting (short paragraphs, emoji headers like
-  `**⚔️ Fähigkeiten**`, bullet lists, source citations) instead of flat
-  prose blocks. Mobile-friendly and easy to skim during a session.
-- **Live token accounting** — every assistant message shows its own
-  `⬇ in · ⬆ out · 🧠 think` token usage, and the page header keeps a
-  running total for the current session. Backed by a Session GC that
-  resets the counter when sessions expire.
-
-Built for German-language TTRPG content (the retrieval and LLM prompts are
-in German), but the architecture is language-agnostic — swap the
-multilingual E5 model and prompts for any other language.
+<!-- TODO: echten Screenshot/GIF einfügen -->
+<!-- ![LoreKeeper Chat](docs/images/chat-demo.gif) -->
 
 ---
 
-## Features
+## Warum LoreKeeper?
+
+Pen-and-Paper-Runden sammeln Hunderte Markdown-Dateien in einem Obsidian-Vault: NPCs, Orte,
+Fraktionen, Regeln, Sitzungsnotizen. Allgemeine RAG-Tools behandeln das als flachen Text,
+übersehen die Struktur, die Obsidian hinzufügt (Wikilinks, Aliase, Callouts, Tags), und mischen
+munter eine Regelwerk-Klasse mit einem gleichnamigen Lore-NPC.
+
+LoreKeeper ist für genau diesen Ablauf gebaut:
+
+- **Obsidian-nativ** — Wikilinks, `![[Einbettungen]]`, `> [!Callouts]`, `#Tags` und Aliase aus
+  dem Frontmatter werden als durchsuchbare Metadaten erfasst.
+- **PDF mit OCR und Struktur** — OCR über RapidOCR, Überschriften aus dem Inhaltsverzeichnis,
+  Bildextraktion.
+- **Quellen nach Gruppen** — jeder Chunk erbt eine `group` (`lore` / `adventure` / `rules` /
+  `simulation`). Die Filter 🗺️ Lore, 📖 Abenteuer, 📋 Regelwerk und 📊 Simulation schränken die
+  Suche direkt in der Datenbank ein: Wer „Was kann der Zeitmagier?“ nur im Regelwerk sucht,
+  bekommt nicht den NPC *Arkenfeld, den Zeitmagier* in den Kontext.
+- **Spieler- und Spielleiter-Modus** — Spieler durchsuchen nur freigegebene Quellen (z.B. das
+  Regelwerk); das Backend erzwingt das selbst. Spielleiter-Geheimnisse bleiben verborgen.
+- **Mehrstufige Suche** — mehrsprachiger E5-Bi-Encoder für die Kandidaten, Cross-Encoder-Reranking
+  (auf der GPU, auch AMD) für die Reihenfolge, ein weicher Deckel pro Datei für Vielfalt, ein
+  Regelwerk-Platz für Fragen wie „Was bewirkt Ritterlichkeit bei Escanor?“ und das Nachladen
+  ganzer Abschnitte bei Aufzählungsfragen.
+- **Ehrliches Chunking** — Abschnitte entlang der Überschriften, Tabellen bleiben ganz, kleine
+  Chunks werden nur mit Nachbarn derselben Überschrift zusammengelegt.
+- **Identitäts-Schicht** — Dateiname und Aliase stehen vor jedem Chunk im Embedding; auch eine
+  Werte-Tabelle ohne Namensnennung wird zum richtigen NPC gefunden.
+- **Zwei Provider** — Ollama für Datenschutz und Kosten, Gemini als Ausweichlösung.
+- **Echtes Streaming und Folgefragen** — Antworten Token für Token, Folgefragen werden für die
+  Suche umgeschrieben, das letzte Frage/Antwort-Paar steht im Antwort-Prompt („fass das kürzer
+  zusammen“).
+- **Antworten im Telegram-Stil** — kurze Absätze, Emoji-Überschriften, Listen, Quellenangaben;
+  am Handy am Spieltisch gut lesbar.
+
+Gebaut für deutschsprachige Inhalte (Prompts und Kategorien sind deutsch); das mehrsprachige
+Embedding-Modell funktioniert aber auch mit anderen Sprachen.
+
+---
+
+## Funktionen
 
 | | |
 |---|---|
-| 🧠 **Hybrid retrieval** | E5-base bi-encoder + BM25 keyword index fused via Reciprocal Rank Fusion, then mMiniLMv2 cross-encoder rerank + soft per-source diversity cap (two-pass with backfill) |
-| 🔀 **Dual LLM providers** | Ollama (local) ↔ Gemini (cloud), switch at runtime |
-| 📜 **Obsidian-native** | Wikilinks, callouts, embeds, tags, aliases all parsed |
-| 📄 **PDF OCR + structure** | RapidOCR for scanned regions, TOC-based heading hierarchy, embedded image extraction |
-| 🎯 **Category filtering** | Lore / Adventure / Rules / Simulation filters restrict context; a rulebook slot keeps one rule chunk in mixed entity + rule questions |
-| 🎲 **Player / game-master mode** | Players only search sources released for them — enforced in the backend; sessions are bound to their role |
-| ⚡ **GPU reranking** | Cross-encoder on any DX12 GPU (AMD included) via ONNX Runtime + DirectML, CPU fallback |
-| 👍 **Answer feedback** | Rate answers in the chat; ratings become golden-set questions on the Evaluation page |
-| 🌊 **SSE streaming** | Token-by-token with source citations in the done event |
-| 📊 **Token accounting** | Per-message and per-session token usage (in / out / thinking), shown live in the UI |
-| 💬 **Multi-turn chat** | Sliding-window memory for follow-up rewriting, the last Q/A pair in the answer prompt ("fass das kürzer zusammen"), automatic session GC |
-| 💬 **Telegram-style answers** | Scannable chat-like formatting: short paragraphs, emoji headers, bullets — instead of flat 3-line prose |
-| 🔁 **Incremental indexing** | SHA-256 content hashing — only changed files re-embed; one click for "only changes" or a full re-index on the Sources page |
-| ✏ **Prompt management** | Edit active prompts, save/load/compare variants, Jinja2 preview — all from the UI with instant hot-reload |
-| 🛠 **Live settings** | Retrieval, LLM, conversation and chunking defaults editable via a 🛠 Settings page — persisted to `settings.local.yaml` and applied in place, no restart |
-| ⚙ **Self-service setup** | Sources (folder OR single file), provider switch, and Gemini API-key entry — all from the UI, no YAML required |
-| ✅ **220 tests** | Unit + integration coverage including the full HTTP layer |
+| 🧠 **Hybride Suche** | E5-Vektorsuche + optional BM25 (Reciprocal Rank Fusion), Cross-Encoder-Reranking, Deckel pro Datei, Regelwerk-Slot, Section Expansion |
+| ⚡ **Reranking auf der GPU** | ONNX Runtime + DirectML auf jeder DX12-Karte (auch AMD), CPU als Rückfall |
+| 🎲 **Spieler-/Spielleiter-Modus** | Spieler sehen nur freigegebene Quellen — im Backend erzwungen, Sessions je Rolle |
+| 🔀 **Zwei LLM-Provider** | Ollama (lokal) ↔ Gemini (Cloud), Wechsel zur Laufzeit |
+| 📜 **Obsidian-nativ** | Wikilinks, Callouts, Einbettungen, Tags, Aliase |
+| 📄 **PDF mit OCR** | RapidOCR, Überschriften aus dem Inhaltsverzeichnis, Bildextraktion |
+| 🎯 **Filter nach Gruppe** | Lore / Abenteuer / Regelwerk / Simulation |
+| 🌊 **SSE-Streaming** | Token für Token, Quellen im Abschluss-Event |
+| 💬 **Folgefragen** | Umschreiben für die Suche, letztes Frage/Antwort-Paar im Antwort-Prompt, automatische Session-Bereinigung |
+| 👍 **Antwort-Feedback** | Antworten im Chat bewerten; Bewertungen werden zu Golden-Set-Fragen |
+| 📊 **Token-Anzeige** | Pro Nachricht und pro Session (rein / raus / Denken) |
+| 🔁 **Inkrementelles Indizieren** | SHA-256-Hash pro Datei — nur Geändertes wird neu embedded |
+| ✏ **Prompt-Verwaltung** | Prompts bearbeiten, Varianten speichern und vergleichen, sofort wirksam |
+| 🛠 **Einstellungen live** | Retrieval-, LLM-, Gesprächs- und Chunking-Werte über die Settings-Seite, ohne Neustart |
+| 🎯 **Evaluation** | Golden Set (278 Fragen), Retrieval- und End-to-End-Eval, Chunk-Inspector |
+| ✅ **537 Tests** | Unit, API-Integration, UI (Streamlit AppTest), Sicherheit; dazu Performance- und Live-Prüfungen |
 
 ---
 
-## Architecture
+## Architektur
 
 ```mermaid
 flowchart TB
-    UI["🖥️ Streamlit Chat UI<br/>SSE client · source filter"]
+    UI["🖥️ Streamlit-Oberfläche<br/>Chat · Quellen · Evaluation · Prompts · Settings"]
 
-    subgraph API["⚡ FastAPI Backend"]
+    subgraph API["⚡ FastAPI-Backend"]
         direction TB
-        ROUTES["/query · /query/stream<br/>/ingest · /sources · /health<br/>/sessions · /provider · /prompts · /stats"]
-        CONV["💬 Conversation Manager<br/>sliding window · async GC"]
+        ROUTES["/query · /query/stream · /ingest · /sources<br/>/eval · /prompts · /provider · /config · /feedback"]
+        CONV["💬 Sessions je Rolle<br/>Sliding Window · GC"]
         ROUTES --- CONV
     end
 
-    subgraph RAG["🔍 Retrieval Pipeline"]
+    subgraph RAG["🔍 Retrieval"]
         direction TB
-        EMBED["E5 bi-encoder<br/>multilingual · 768-dim"]
-        RERANK["Cross-encoder rerank<br/>mmarco-mMiniLMv2"]
+        EMBED["E5-Bi-Encoder<br/>mehrsprachig · 768 Dim."]
+        RERANK["Cross-Encoder-Rerank<br/>GPU (DirectML)"]
         EMBED --> RERANK
     end
 
-    subgraph GEN["🧠 Generation (hot-swappable)"]
+    subgraph GEN["🧠 Generierung (wechselbar)"]
         direction LR
-        OLLAMA["🖥️ Ollama<br/>local · private"]
-        GEMINI["☁️ Gemini<br/>cloud · fast"]
+        OLLAMA["🖥️ Ollama<br/>lokal"]
+        GEMINI["☁️ Gemini<br/>Cloud"]
     end
 
     subgraph INGEST["📥 Ingestion"]
         direction TB
-        PARSE["Obsidian + PDF parser<br/>wikilinks · callouts · OCR"]
-        CHUNK["Heading-aware chunker<br/>atomic tables"]
+        PARSE["Obsidian- + PDF-Parser<br/>Wikilinks · Callouts · OCR"]
+        CHUNK["Chunking nach Überschriften<br/>Tabellen bleiben ganz"]
         PARSE --> CHUNK
     end
 
-    VAULT[("📚 Obsidian Vault<br/>.md · .pdf · images")]
-    CHROMA[("🗃️ ChromaDB<br/>embedded / HTTP client")]
+    VAULT[("📚 Quellen<br/>.md · .pdf · Bilder")]
+    CHROMA[("🗃️ ChromaDB<br/>embedded")]
 
     UI <-->|HTTP / SSE| API
     API --> RAG
@@ -156,125 +132,139 @@ flowchart TB
     class UI ui
 ```
 
-For a comprehensive deep dive into the system design, RAG pipeline, module boundaries, and config schemas, please read [**ARCHITECTURE.md**](ARCHITECTURE.md). 
-For the exact data flow of queries and ingestion, see [`docs/data-flow.md`](docs/data-flow.md).
+Komponenten, Abläufe und Entscheidungen: [**ARCHITECTURE.md**](ARCHITECTURE.md).
 
 ---
 
-## Quickstart (Local)
+## Schnellstart (lokal, Windows)
 
-1. **Virtual environment**
+Voraussetzungen: Windows, Python 3.11+ (`winget install Python.Python.3.12`),
+[Ollama für Windows](https://ollama.com/download) (startet mit Windows), Git.
+
+1. **Repository und virtuelle Umgebung**
    ```powershell
+   git clone https://github.com/FabianHentrich/lorekeeper.git
+   cd lorekeeper
    python -m venv .venv
    .venv\Scripts\activate
    pip install -r requirements.txt
-   # GPU reranker (DirectML): chromadb & co. also pull the plain onnxruntime, which shares the
-   # onnxruntime/ folder and hides DirectML — remove it, then restore the DirectML build:
+   # GPU-Reranker (DirectML): chromadb & Co. ziehen zusätzlich das normale onnxruntime, das
+   # denselben Ordner onnxruntime/ belegt und DirectML verdeckt — entfernen, dann DirectML zurückholen:
    pip uninstall -y onnxruntime
    pip install --force-reinstall --no-deps onnxruntime-directml
    ```
-   Check: `python -c "import onnxruntime; print(onnxruntime.get_available_providers())"` lists
-   `DmlExecutionProvider`. Repeat the two lines after every `pip install -r requirements.txt`.
+   Prüfen: `python -c "import onnxruntime; print(onnxruntime.get_available_providers())"` muss
+   `DmlExecutionProvider` enthalten. Die zwei Zeilen nach **jedem** `pip install -r requirements.txt`
+   wiederholen. Ohne DirectML läuft der Reranker mit einer Warnung im Log auf der CPU.
 
-2. **Pull the LLM model**
+2. **LLM-Modell holen**
    ```powershell
    ollama pull qwen3:14b
    ```
+   Empfohlen als Benutzer-Umgebungsvariablen für Ollama: `OLLAMA_CONTEXT_LENGTH=16384` (sonst wird
+   der Prompt bei großen Antworten abgeschnitten) und `OLLAMA_KEEP_ALIVE=1h` (kein Nachladen nach
+   5 Minuten Pause).
 
-3. **Configure**
+3. **Konfigurieren**
    ```powershell
    copy .env.example .env
    ```
-   *Note:* Set up your sources in the UI, or create a `config/sources.yaml` pointing at your vault(s). For full details on configuration, the `settings.yaml`, and managing multiple sources, see [docs/configuration.md](docs/configuration.md).
+   `GEMINI_API_KEY` nur für Gemini; `LOREKEEPER_ADMIN_PASSWORD` schützt die Admin-Seiten (Pflicht,
+   sobald andere im Heimnetz zugreifen). Quellen in der UI anlegen oder `config/sources.yaml`
+   schreiben (Vorlage `config/sources_example.yaml`). Alle Einstellungen:
+   [docs/configuration.md](docs/configuration.md).
 
-4. **Pre-download embedding models** *(recommended — avoids a slow download on first start)*
+4. **Modelle vorab laden** *(empfohlen — sonst lädt der erste Start ~1,6 GB herunter)*
    ```powershell
-   python -c "from sentence_transformers import SentenceTransformer, CrossEncoder; SentenceTransformer('intfloat/multilingual-e5-base'); CrossEncoder('cross-encoder/mmarco-mMiniLMv2-L12-H384-v1'); print('Done.')"
+   python -c "from sentence_transformers import SentenceTransformer, CrossEncoder; SentenceTransformer('intfloat/multilingual-e5-base'); CrossEncoder('cross-encoder/mmarco-mMiniLMv2-L12-H384-v1'); print('Fertig.')"
    ```
-   Models are cached in `~/.cache/huggingface/hub/` and reused on every subsequent start.
+   Der ONNX-Export des Rerankers (`onnx/model.onnx`, ~450 MB) wird beim ersten Start mit
+   `backend: directml` automatisch nachgeladen. Alles liegt danach in `~/.cache/huggingface/hub/`.
 
-5. **Start backend + UI**
+5. **Backend und UI starten**
    ```powershell
-   .\start.ps1
+   .\start.ps1            # Entwicklung: Auto-Reload, UI nur auf diesem PC
+   .\start.ps1 -Server    # Heimnetz: UI im LAN erreichbar, kein Auto-Reload (docs/operations.md)
    ```
-   The UI is then available at **http://localhost:8501**.
+   Die UI läuft dann unter **http://127.0.0.1:8501**. Ohne Skript: `uvicorn src.main:app --reload
+   --port 8000` und in einem zweiten Terminal `streamlit run ui/LoreKeeper.py`.
 
-6. **Index your vault**
-   In the UI open **⚙ Sources** and click **⚡ Nur Änderungen indizieren** — the
-   first run indexes everything, later runs only re-embed new or changed files.
-   **🔄 Alle Dokumente neu indizieren** re-processes every file (needed after
-   chunking changes).
+6. **Quellen indizieren**
+   In der UI **⚙ Sources** öffnen und **⚡ Nur Änderungen indizieren** klicken — der erste Lauf
+   indiziert alles, spätere nur Neues und Geändertes. **🔄 Alle Dokumente neu indizieren**
+   verarbeitet jede Datei (nötig nach Chunking-Änderungen).
 
-   The CLI does the same incremental run, but only while the backend is **stopped**
-   (embedded ChromaDB locks `chroma_data/`):
+   Die CLI macht dasselbe, aber nur bei **gestopptem** Backend (die eingebettete ChromaDB sperrt
+   `chroma_data/`):
    ```powershell
    python -m src.ingestion.orchestrator
    ```
 
-For instructions on using Google Gemini or handling advanced operations, see [docs/operations.md](docs/operations.md) and [docs/provider-strategy.md](docs/provider-strategy.md).
-
-For a complete walkthrough of the chat interface, token accounting, evaluation tabs, and prompt management pages, see the [UI/UX Documentation](docs/ui-ux.md).
+Weiter: Bedienung → [docs/ui-ux.md](docs/ui-ux.md) · Betrieb und Fehlersuche →
+[docs/operations.md](docs/operations.md) · Gemini → [docs/provider-strategy.md](docs/provider-strategy.md).
 
 ---
 
 ## Screenshots
 
-<!-- TODO: add screenshots to docs/images/ and uncomment -->
+<!-- TODO: Screenshots nach docs/images/ legen und einkommentieren -->
 <!--
-| Chat with streaming response | Source filter (Lore / Adventure / Rules) |
+| Chat mit Streaming | Quellenfilter |
 |---|---|
 | ![Chat](docs/images/chat.png) | ![Filter](docs/images/filter.png) |
 -->
 
 ---
 
-## Documentation
+## Dokumentation
 
-| Document | Contents |
-|----------|----------|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Entry point for system design, components, RAG setup |
-| [docs/ui-ux.md](docs/ui-ux.md) | **UI deep dive**: Sidebar, chat, ⚙ Sources page, ✏ Prompts page, 🛠 Settings page, Evaluation tab, usage metrics |
-| [docs/parsing.md](docs/parsing.md) | Markdown (Obsidian syntax), PDF (OCR, TOC headings, images), Image parsers |
-| [docs/data-flow.md](docs/data-flow.md) | Ingestion and query pipelines (Mermaid) |
-| [docs/embedding-strategy.md](docs/embedding-strategy.md) | E5 asymmetry, identity layer, reranking — and **why** |
-| [docs/provider-strategy.md](docs/provider-strategy.md) | Ollama vs. Gemini, runtime switching, fallback configuration |
-| [docs/configuration.md](docs/configuration.md) | Full `settings.yaml` reference, `sources.yaml` schema, env variables, runtime API key, UI allow-list |
-| [docs/prompts.md](docs/prompts.md) | Jinja2 templates, variables, UI editing, variant management |
-| [docs/operations.md](docs/operations.md) | Ingest flows, re-indexing, troubleshooting |
-| [docs/evaluation.md](docs/evaluation.md) | Golden Set, retrieval/end-to-end eval scripts, metrics, workflow |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Dev setup, coding conventions, PR process |
+| Dokument | Inhalt |
+|----------|--------|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Einstieg: Komponenten, Abläufe, API, Rollen, Hardware |
+| [docs/configuration.md](docs/configuration.md) | Alle Einstellungen, `sources.yaml`, Umgebungsvariablen, UI-Allow-List |
+| [docs/data-flow.md](docs/data-flow.md) | Ingestion- und Query-Pipeline als Diagramme |
+| [docs/embedding-strategy.md](docs/embedding-strategy.md) | Embedding, Reranking, Hybrid Search, Regelwerk-Slot — und **warum** |
+| [docs/parsing.md](docs/parsing.md) | Markdown (Obsidian), PDF (OCR, Überschriften, Bilder), Bild-Parser |
+| [docs/prompts.md](docs/prompts.md) | Prompt-Templates, Variablen, Varianten |
+| [docs/provider-strategy.md](docs/provider-strategy.md) | Ollama vs. Gemini, Wechsel, Fallback, Token-Zählung |
+| [docs/ui-ux.md](docs/ui-ux.md) | Alle Seiten der Oberfläche im Detail |
+| [docs/evaluation.md](docs/evaluation.md) | Golden Set, Eval-Skripte, Kennzahlen, Vorgehen |
+| [docs/operations.md](docs/operations.md) | Indizieren, Heimnetz-Betrieb, Fehlersuche, Logs |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Entwicklung, Tests, Sicherheits- und Performance-Prüfungen |
+| [plan roadmap.md](plan%20roadmap.md) | Geplante und erledigte Arbeit (ersetzt ein Changelog; Details in `git log`) |
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
+| Schicht | Technik |
+|---------|---------|
 | Backend | FastAPI + Pydantic v2 |
 | UI | Streamlit |
-| Embeddings | sentence-transformers (`intfloat/multilingual-e5-base`, 768-dim, asymmetric) |
-| Reranker | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` — ONNX Runtime + DirectML on the GPU, sentence-transformers CrossEncoder on the CPU as fallback |
-| Vector store | ChromaDB (embedded / HTTP client) |
-| LLM | Ollama (`qwen3:14b`) or Google Gemini (`gemini-2.5-flash`) |
+| Embeddings | sentence-transformers (`intfloat/multilingual-e5-base`, 768 Dim., asymmetrisch), CPU |
+| Reranker | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` — ONNX Runtime + DirectML auf der GPU, sentence-transformers auf der CPU als Rückfall |
+| Vektordatenbank | ChromaDB (embedded) + `rank_bm25` für Hybrid Search |
+| LLM | Ollama (`qwen3:14b`) oder Google Gemini (`gemini-2.5-flash`) |
 | Prompts | Jinja2 + YAML |
-| OCR | RapidOCR (via `rapidocr_onnxruntime`, pure Python) |
-| Tests | pytest + pytest-asyncio + httpx; unit, API integration and an end-to-end ingest → query test |
-| Code quality | ruff + mypy, run as part of `pytest` |
+| OCR | RapidOCR (`rapidocr_onnxruntime`) |
+| Tests | pytest, pytest-asyncio, httpx, Streamlit AppTest; ChromaDB `EphemeralClient` |
+| Code-Qualität | ruff + mypy, laufen als Teil von `pytest` |
 
 ---
 
-## Roadmap / Known Limitations
+## Grenzen
 
-- **German-first.** Prompts and category taxonomy are German. Multilingual
-  model handles the embedding side language-agnostically, but the prompt
-  templates in `config/prompts.yaml` would need translation for non-German
-  vaults.
-- **Single-user.** No auth, no per-user sessions beyond the in-memory
-  session manager. Designed for local / LAN use.
-- **`.tex` files are not parsed.** Only `.md`, `.pdf`, and images.
+- **Deutsch zuerst.** Prompts und Kategorien sind deutsch; für andere Sprachen müssten die
+  Templates in `config/prompts.yaml` übersetzt werden.
+- **Lokal, ein Haushalt.** Gedacht für einen PC im Heimnetz. Admin-Seiten sind per Passwort
+  geschützt, die Spieler-/Spielleiter-Wahl ist ein Spoiler-Schutz, keine Benutzerverwaltung.
+  Sessions liegen im Speicher und überleben keinen Neustart.
+- **Nur Windows**, kein Docker.
+- **Bilder** werden nur über Dateiname und Pfad gefunden, nicht über ihren Inhalt.
+- **`.tex`-Dateien** werden nicht gelesen — nur `.md`, `.pdf` und Bilder.
 
 ---
 
-## License
+## Lizenz
 
-[MIT](LICENSE) © 2026 Fabian Hentrich
+MIT © 2026 Fabian Hentrich

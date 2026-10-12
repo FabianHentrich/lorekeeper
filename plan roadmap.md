@@ -456,6 +456,8 @@ int8 verworfen (kaum schneller, anderes Ranking). Modell-Laden DirectML 1,3 s id
 
 **Aufwand**: Gering (umgesetzt).
 
+## 8.0 Was passiert wenn man an den Server mehrere Anfragen gleichzeitig bzw. nahe zu glecihzeitig schickt?
+- Relevant wenn ich einen Abend mache und sowohl ich als auch meine spieler Lorekeeper nutzen wollen.
 ---
 
 ## Priorisierungsvorschlag

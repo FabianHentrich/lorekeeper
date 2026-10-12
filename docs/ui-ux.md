@@ -1,44 +1,46 @@
-# UI / UX
+# Oberfläche (UI / UX)
 
-Das Benutzerinterface von LoreKeeper ist vollständig in Streamlit geschrieben. Dieses Dokument beschreibt den Aufbau der Seiten, die UX-Konzepte, die Integration mit der FastAPI-Backend-Schicht und den Umgang mit dem Session-State.
+Die Oberfläche von LoreKeeper ist komplett in Streamlit geschrieben. Dieses Dokument beschreibt
+die Seiten, ihre Bedienung, wie sie mit dem FastAPI-Backend sprechen und welchen Session-State sie
+nutzen. Die UI spricht nur über HTTP/SSE mit dem Backend und importiert keine Backend-Module.
 
 ## Inhaltsverzeichnis
-1. [Streamlit Chat Interface](#streamlit-chat-interface)
-   - [Role selection: player / game master](#role-selection-player--game-master)
-2. [Sidebar Elements](#sidebar-elements)
-3. [Header](#header)
-4. [Chat Area](#chat-area)
-5. [Sources Page (1_Sources.py)](#sources-page-uipages1_sourcespy)
-6. [Performance Characteristics](#performance-characteristics)
-7. [Prompts Page (3_Prompts.py)](#prompts-page-uipages3_promptspy)
-8. [Evaluation Page (2_Evaluation.py)](#evaluation-page-uipages2_evaluationpy)
-9. [Settings Page (4_Settings.py)](#settings-page-uipages4_settingspy)
-10. [Session State Overview](#session-state-overview)
+1. [Chat](#chat)
+   - [Rollenwahl: Spieler / Spielleiter](#rollenwahl-spieler--spielleiter)
+2. [Sidebar](#sidebar)
+3. [Kopfzeile](#kopfzeile)
+4. [Chatbereich](#chatbereich)
+5. [Sources-Seite (`ui/pages/1_Sources.py`)](#sources-seite-uipages1_sourcespy)
+6. [Evaluation-Seite (`ui/pages/2_Evaluation.py`)](#evaluation-seite-uipages2_evaluationpy)
+7. [Prompts-Seite (`ui/pages/3_Prompts.py`)](#prompts-seite-uipages3_promptspy)
+8. [Settings-Seite (`ui/pages/4_Settings.py`)](#settings-seite-uipages4_settingspy)
+9. [Antwortzeiten](#antwortzeiten)
+10. [Session-State](#session-state)
 
 ---
 
-## Streamlit Chat Interface
+## Chat
 
 ```mermaid
 flowchart LR
     subgraph SIDEBAR["📋 Sidebar"]
         direction TB
+        S0["🎲 Rolle · 🔄 Rolle wechseln"]
         S1["🔒 Admin-Login<br/><i>nur mit LOREKEEPER_ADMIN_PASSWORD</i>"]
-        S2["🔀 LLM Provider<br/>Ollama ↔ Gemini · live switch<br/><i>Active: qwen3:14b</i>"]
-        S3["💚 Status<br/>🟢 healthy · ChromaDB ✅ · LLM ✅<br/><i>cached 30s</i>"]
-        S4["🎯 Quellen-Filter<br/>☑ 🗺️ Lore<br/>☑ 📖 Abenteuer<br/>☑ 📋 Regelwerk<br/>☑ 📊 Simulation"]
-        S5["🔍 Hybrid Search<br/><i>BM25 + Vektor · Per-Session-Override</i>"]
-        S6["→ 🛠 Settings<br/><i>Retrieval · LLM · Conv · Chunking</i>"]
+        S2["🔀 LLM-Provider<br/>Ollama ↔ Gemini<br/><i>Aktiv: qwen3:14b</i>"]
+        S3["💚 Status<br/>🟢 healthy · ChromaDB ✅ · LLM ✅"]
+        S4["🎯 Quellen-Filter<br/>☑ 🗺️ Lore · ☑ 📖 Abenteuer<br/>☑ 📋 Regelwerk · ☑ 📊 Simulation"]
+        S5["🔍 Hybrid Search"]
         S7["🗑️ Neue Session"]
-        S1 --- S2 --- S3 --- S4 --- S5 --- S6 --- S7
+        S0 --- S1 --- S2 --- S3 --- S4 --- S5 --- S7
     end
 
-    subgraph CHAT["💬 Chat Area"]
+    subgraph CHAT["💬 Chatbereich"]
         direction TB
         C1["📜 <b>LoreKeeper</b> · <i>Frag deine Welt.</i><br/>┃ Session-Tokens: <b>4.812</b>"]
         C2["[user] Was ist Arkenfeld?"]
-        C3["[assistant] Arkenfeld ist eine<br/>Handelsstadt im Tiefland... ▌<br/>⬇ 1.842 in · ⬆ 312 out"]
-        C4["📎 Quellen ▼<br/>📄 Locations/Arkenfeld.md · Best 0.82 · 2 Chunks<br/>↳ Overview (0.82)<br/>↳ History (0.71)"]
+        C3["[assistant] Arkenfeld ist eine<br/>Handelsstadt im Tiefland... ▌<br/>⬇ 1.842 in · ⬆ 312 out<br/>⏱ 1. Token 1,1 s · gesamt 3,7 s · Suche 0,3 s · 8 Chunks<br/>👍 👎"]
+        C4["📎 Quellen ▼<br/>📄 Orte/Arkenfeld.md · Best 0.82 · 2 Chunks"]
         C5["[ Stelle eine Frage über deine Welt... ]"]
         C1 --> C2 --> C3 --> C4 --> C5
     end
@@ -47,631 +49,364 @@ flowchart LR
 
     classDef side fill:#ede9fe,stroke:#7c3aed,color:#4c1d95
     classDef chat fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
-    class S1,S2,S3,S4,S5,S6,S7 side
+    class S0,S1,S2,S3,S4,S5,S7 side
     class C1,C2,C3,C4,C5 chat
 ```
 
+### Rollenwahl: Spieler / Spielleiter
+
+Bevor der Chat öffnet, fragt `ui/LoreKeeper.py` **„Wer fragt?“** mit zwei Knöpfen (Logik in
+`ui/roles.py`):
+
+| Rolle | Durchsucht | Sidebar |
+|---|---|---|
+| **🎲 Spieler** | Nur Quellen mit **🎲 Spieler** auf der Sources-Seite (`player_visible`; z.B. Regelwerk + Charakterbogen) — keine Lore, keine Abenteuer, kein Spielleiter-Material | Rolle, „🔄 Rolle wechseln“, Status, Hybrid; **keine** Quellen-/Kategoriefilter |
+| **📜 Spielleiter** | Alles, mit den üblichen Filtern | Volle Sidebar |
+
+- Jede Frage trägt `role` (`player` / `game_master`). Für Spieler baut das **Backend** die
+  Einschränkung selbst aus `player_visible` (`src/api/access.py`) und verknüpft mitgeschickte
+  Filter per `$and` — sie können nur einengen. Keine freigegebene Quelle → `403`.
+- Als zweite Sicherung schickt die UI zusätzlich
+  `metadata_filters = {"source_id": {"$in": [<Spieler-Quellen>]}}` (aus `/sidebar-state` →
+  `player_source_ids`); Gruppen-/Kategoriefilter der Sidebar werden für Spieler ignoriert. Der
+  Browser spricht nie direkt mit dem Backend (`127.0.0.1`).
+- Backend-Sessions sind an die Rolle gebunden: eine Spieler-Anfrage mit Spielleiter-`session_id`
+  bekommt eine neue Session — kein Spielleiter-Verlauf in einer Folgefrage, auch außerhalb der UI.
+- **„🔄 Rolle wechseln“** führt zurück zur Auswahl und startet eine **neue Session** (Chat,
+  Backend-Session, Token-Zähler).
+- Ist keine Quelle für Spieler freigegeben, ist die Eingabe gesperrt, mit Hinweis auf die
+  Sources-Seite.
+- **Keine Zugangskontrolle:** Jeder kann „Spielleiter“ wählen — der Modus schützt vor
+  versehentlichen Spoilern, er sperrt niemanden aus. Admin-Seiten und Provider-Steuerung hängen
+  unabhängig von der Rolle am `LOREKEEPER_ADMIN_PASSWORD`.
+
 ---
 
-### Role selection: player / game master
+## Sidebar
 
-Before the chat opens, `ui/LoreKeeper.py` shows **"Wer fragt?"** with two buttons
-(logic in `ui/roles.py`):
+### Backend-URL und Zugriffsschutz (`ui/admin_gate.py`)
 
-| Role | Searches | Sidebar |
-|---|---|---|
-| **🎲 Spieler** | Only the sources marked **🎲 Spieler** on the Sources page (`player_visible` in `sources.yaml`; default: rulebook + Charakterbogen) — no lore, adventures or game-master material | Role, "🔄 Rolle wechseln", status, hybrid toggle; **no** source/category filters |
-| **📜 Spielleiter** | Everything, with the usual Lore/Abenteuer/Regelwerk and category filters | Full sidebar |
+Die Backend-URL ist nicht in der UI änderbar, sie kommt aus `LOREKEEPER_API_URL` (Standard
+`http://127.0.0.1:8000`; nicht `localhost` — unter Windows ~2 s pro Anfrage).
 
-- Every question carries `role` (`player` / `game_master`). For players the **backend**
-  builds the restriction itself from `player_visible` (`src/api/access.py`) and AND-s it
-  with any filter sent along — a filter can only narrow it, never widen it. No released
-  source → `403`.
-- As a second guard the UI also sends `metadata_filters = {"source_id": {"$in": [<player sources>]}}`
-  (from `/sidebar-state` → `player_source_ids`); the sidebar's group/category filters are
-  ignored for players. The browser never talks to the backend (`127.0.0.1` only).
-- Backend sessions are bound to their role: a player request with a game-master
-  `session_id` gets a fresh session (new id) — no game-master history in a condensed
-  follow-up, even outside the UI.
-- **"🔄 Rolle wechseln"** returns to the picker and starts a **new session** (chat, backend
-  session, token counter). Otherwise the chat history of a game-master conversation could
-  flow into a player's condensed follow-up question.
-- If no source is released for players, the chat input is disabled with a hint to the
-  Sources page.
-- **No access control:** anyone can pick "Spielleiter" — the mode keeps players from
-  accidentally reading spoilers, it does not lock them out. Admin pages and provider
-  controls stay behind `LOREKEEPER_ADMIN_PASSWORD` independently of the role.
+Mit `LOREKEEPER_ADMIN_PASSWORD` (Heimnetz-Server, siehe [operations.md](operations.md)):
+- zeigen die Admin-Seiten (Sources, Evaluation, Prompts, Settings) nur ein Login-Formular und
+  rufen das Backend erst nach dem Passwort auf;
+- bleibt der Chat offen, aber Provider-Auswahl und Gemini-Key-Eingabe werden durch das aktive
+  Modell und einen Ausklapper **🔒 Admin-Login** ersetzt;
+- gilt ein erfolgreicher Login für die Browser-Session und schaltet alle Seiten frei;
+- wird Raten serverweit gebremst: jedes falsche Passwort wartet 1 s, 5 Fehlversuche in 5 Minuten
+  sperren den Login (beide Formulare, alle Sessions) für 5 Minuten. Angemeldete Sessions arbeiten
+  weiter; ein UI-Neustart hebt die Sperre auf.
 
-## Sidebar Elements
+Ohne Passwort ist alles offen (lokaler Einzelbetrieb).
 
-### Backend URL and access protection (`ui/admin_gate.py`)
-The backend URL is no longer editable in the sidebar — it comes from `LOREKEEPER_API_URL`
-(default `http://127.0.0.1:8000`; not `localhost`: on Windows that resolves to IPv6 `::1`
-first while uvicorn listens on IPv4 only, adding ~2 s to every request).
+### LLM-Provider
 
-With `LOREKEEPER_ADMIN_PASSWORD` set (home-network server, see `docs/operations.md`):
-- the admin pages (Sources, Evaluation, Prompts, Settings) show only a login form and make
-  no backend calls until the password is entered;
-- the chat stays open, but the provider dropdown and the Gemini-key input are replaced by the
-  active model and a **🔒 Admin-Login** expander;
-- a successful login holds for the browser session and unlocks every page;
-- guessing is slowed down server-wide: each wrong password waits 1 s, and 5 wrong
-  attempts within 5 minutes lock the login (both forms, all sessions) for 5 minutes.
-  Sessions that are already logged in keep working. Restarting the UI resets the lock.
+Auswahlfeld zum Wechsel zwischen Ollama und Gemini zur Laufzeit (mit Passwort nur für Admins).
+Schlägt der Wechsel fehl, springt die Auswahl zurück und es erscheint eine Fehlermeldung.
 
-Without a password everything is open, as in the local single-user setup.
+**Gemini-Key:** Direkt darunter. `GET /provider/gemini/status` sagt nur, ob ein Key da ist
+(`{has_key, source: env|runtime|none}`), nie den Key selbst.
 
-### LLM Provider
-Dropdown for switching between Ollama and Gemini at runtime (admin only when a password is set).
-- Switch fails → dropdown reverts + error message
-- Successful switch → confirmation message
-
-#### Gemini API Key Input
-
-Directly below the provider selector. Calls `GET /provider/gemini/status` to
-ask the backend whether a key is currently available — the endpoint never
-returns the key itself, only `{has_key, source: env|runtime|none}`.
-
-| Backend state | Sidebar shows |
+| Zustand im Backend | Anzeige |
 |---|---|
-| Key from `os.environ` / `.env` | `🔑 Gemini-Key: ✅ (Umgebungsvariable)` plus an **Override** expander |
-| Key set via UI in this session | `🔑 Gemini-Key: ✅ (UI-Eingabe)` plus the same **Override** expander |
-| No key | Yellow warning + password input + **Key speichern** button |
+| Key aus Umgebung / `.env` | `🔑 Gemini-Key: ✅ (Umgebungsvariable)` + Ausklapper **Override** |
+| Key in dieser Laufzeit über die UI gesetzt | `🔑 Gemini-Key: ✅ (UI-Eingabe)` + **Override** |
+| Kein Key | Gelbe Warnung + Passwortfeld + **Key speichern** |
 
-The input is `type="password"` and submits to `POST /provider/gemini/key`. The
-backend stores the key in process memory only — it is **never written to disk**
-and is lost on backend restart. If Gemini is the active provider, the backend
-hot-rebuilds the provider + generator so the new key applies immediately;
-otherwise the key just sits in memory until the user switches to Gemini.
+Die Eingabe geht an `POST /provider/gemini/key`; das Backend hält den Key nur im Speicher (nie auf
+Platte, nach Neustart weg). Ist Gemini aktiv, wird der Provider sofort neu gebaut.
 
-This makes "start backend with no `.env` → paste key in UI → use Gemini" a
-one-step path without touching any config files.
+### Status
 
-### Status Display
-Result of the `/health` endpoint, **cached for 30 seconds** (no poll on every rerun).
-- 🟢 healthy: ChromaDB + LLM reachable
-- 🟡 degraded: One component unreachable
-- 🔴 API unreachable: Backend down
+Aus `/sidebar-state` (in der UI 30 s gecacht; das Backend prüft im Hintergrund alle 60 s):
+🟢 healthy (ChromaDB + LLM erreichbar) · 🟡 degraded (eine Komponente nicht erreichbar) ·
+🔴 API nicht erreichbar.
 
-### Hybrid Search Toggle
+### Hybrid Search
 
-A single `st.checkbox("🔍 Hybrid Search (BM25 + Vektor)")` under the **Suche**
-subheader. Sets the `hybrid_search` field on the next `QueryRequest` and
-overrides `retrieval.hybrid.enabled` **for this session only**. Useful when the
-chat uses the Settings-configured default most of the time but a given question
-benefits from keyword matching (exact names, rule IDs).
+Eine Checkbox „🔍 Hybrid Search (BM25 + Vektor)“ unter **Suche**. Setzt `hybrid_search` in der
+nächsten Anfrage und überschreibt `retrieval.hybrid.enabled` **nur für diese Session** — nützlich
+bei exakten Namen oder Regel-IDs. Die Standardwerte der Suche stehen auf der Settings-Seite,
+A/B-Läufe auf der Evaluation-Seite; die Sidebar bleibt bewusst schlank.
 
-Retrieval tuning sliders (top_k, top_k_rerank, max_per_source) used to live
-here but moved to two dedicated places:
-- **Defaults** for all queries → [Settings Page](#settings-page-uipages4_settingspy).
-- **Per-run overrides** for A/B testing against the Golden Set → Evaluation Page.
+### Quellen-Filter (Lore / Abenteuer / Regelwerk / Simulation)
 
-The sidebar intentionally stays minimal — provider, source filter, hybrid
-toggle, session reset. Everything else is one click away on the Settings page.
+Vier Checkboxen schränken die Suche über das Metadatum `group` ein, das jeder Chunk beim Indizieren
+von seiner Quelle erbt ([configuration.md](configuration.md#quellen--configsourcesyaml)):
 
-### Source Filter (Lore / Adventure / Rules / Simulation)
-Four checkboxes that restrict the vector search by the `group` metadata field
-attached to every chunk during ingestion. The mapping is **direct** (no
-hardcoded category lists in the UI):
-
-| Checkbox | `group` value |
+| Checkbox | `group` |
 |---|---|
 | 🗺️ **Lore** | `lore` |
 | 📖 **Abenteuer** | `adventure` |
 | 📋 **Regelwerk** | `rules` |
-| 📊 **Simulation** | `simulation` (balance-simulation reports — untick for pure rules questions) |
+| 📊 **Simulation** | `simulation` (Balance-Berichte — für reine Regelfragen abwählen) |
 
-A chunk's `group` is determined by which **source** it was ingested from
-(see `config/sources.yaml`, documented in [docs/configuration.md](configuration.md)).
-This is the structural fix for an earlier bug where the filter had to map
-to a hand-maintained list of `content_category` values — a single root-level
-file (the rulebook PDF) silently fell through the mapping and was unreachable.
+Das löst ein echtes Mehrdeutigkeitsproblem: „Was kann der Zeitmagier?“ passt auf die
+Regelwerk-Klasse **und** auf den NPC *Arkenfeld, den Zeitmagier*. Ohne 🗺️ Lore sucht LoreKeeper nur
+im Regelwerk.
 
-The filter solves a real disambiguation problem: a query like *"What can the
-time mage do?"* could match both the rulebook class **and** an NPC named
-*Arkenfeld the Time Mage*. Unchecking 🗺️ Lore restricts retrieval to the
-rulebook chunks at the vectorstore level, before the LLM ever sees them.
-
-**State semantics:**
-
-| Selection | Filter sent to backend |
+| Auswahl | Filter ans Backend |
 |---|---|
-| All three checked | `None` (no filter) |
-| Subset checked | `{"group": {"$in": [...selected groups...]}}` |
-| Nothing checked | Request blocked at chat input with `st.error` (no API call made) |
+| Alle vier | `None` (kein Filter) |
+| Teilmenge | `{"group": {"$in": [...]}}` + Hinweis „🔍 Suche eingeschränkt auf: …“ |
+| Keine | Eingabe blockiert mit Fehlermeldung (kein API-Aufruf) |
 
-When a subset is active, the sidebar shows a "🔍 Suche eingeschränkt auf: ..."
-caption listing the selected groups so the filter state stays visible während
-the conversation.
+Der Retriever verknüpft das mit dem festen Filter `document_type != "image"` per `$and`.
 
-The retriever combines this with the hard-coded `document_type != "image"`
-filter into a ChromaDB `$and` query (`src/retrieval/retriever.py`).
+### Links und Neue Session
 
-### Sources Link
-A caption pointing the user to the **⚙ Sources** page for chunk statistics,
-re-indexing (global and per-source), and source management. The chunk count
-metric and the re-index button have been moved from the sidebar to the Sources
-page to keep the sidebar focused on query-time settings.
-
-### Settings Link
-A caption pointing to the **🛠 Settings** page, where all runtime-tunable
-parameters (retrieval, LLM, conversation, chunking) are editable in one place.
-See [Settings Page](#settings-page-uipages4_settingspy) below.
-
-### New Session
-Clears `st.session_state.messages` and `session_id` — the next question starts
-without conversation history.
+Hinweise auf **⚙ Sources** (Chunk-Zahl, Indizieren, Quellen) und **🛠 Settings**. **🗑️ Neue
+Session** leert `messages` und `session_id` — die nächste Frage startet ohne Verlauf.
 
 ---
 
-## Header
+## Kopfzeile
 
-The page header is split into two columns:
-
-| Left | Right |
+| Links | Rechts |
 |---|---|
-| `📜 LoreKeeper` title + `Frag deine Welt.` caption | **Session-Tokens metric** — total tokens consumed in the current session |
-
-The metric on the right shows the cumulative `tokens_in + tokens_out + tokens_thinking`
-of the active session, formatted with thousand separators. Hovering reveals
-the breakdown via tooltip (`In: … · Out: … · Thinking: …`). The counter is
-reset by the **🗑️ Neue Session** sidebar button.
+| `📜 LoreKeeper` + `Frag deine Welt.` | **Session-Tokens** — Summe aus rein + raus + Denken der aktuellen Session, Tooltip mit Aufschlüsselung; „🗑️ Neue Session“ setzt zurück |
 
 ---
 
-## Chat Area
+## Chatbereich
 
-### Message Rendering
-- Past messages are rendered from `st.session_state.messages`
-- Each assistant message shows a token-usage caption directly below the
-  answer text (`⬇ N in · ⬆ N out · 🧠 N think`, the thinking part only
-  appears if non-zero)
-- Sources are displayed as a collapsible `st.expander("📎 Quellen")` and
-  **grouped by file** (see below)
-- Below every answer: 👍/👎 (`st.feedback("thumbs")`), for players and game
-  masters alike. A click posts `POST /feedback` with question, answer, source
-  files, model, role, session and timings; withdrawing the rating is sent as
-  `rating: null`. Error messages and the hidden older messages get no thumbs.
-  Rendering costs no backend request — only the click does.
+### Nachrichten
+
+- Frühere Nachrichten kommen aus `st.session_state.messages`.
+- Unter jeder Antwort:
+  - Tokens `⬇ N in · ⬆ N out · 🧠 N think` (Denken nur, wenn > 0),
+  - Zeiten `⏱ 1. Token … · gesamt … · Suche … · N Chunks` (aus `timings`),
+  - bei umgeschriebener Folgefrage „🔎 Gesucht nach: …“,
+  - 👍/👎 (`st.feedback("thumbs")`) für Spieler und Spielleiter. Ein Klick schickt
+    `POST /feedback` mit Frage, Antwort, Quelldateien, Modell, Rolle, Session und Zeiten;
+    Zurücknehmen als `rating: null`. Fehlermeldungen und ausgeblendete ältere Nachrichten haben
+    keine Daumen. Anzeigen kostet keinen Backend-Aufruf — nur der Klick.
+- Quellen im Ausklapper **📎 Quellen**, nach Datei gruppiert (siehe unten).
 
 ### Streaming
 
-Token-by-token via Server-Sent Events. A blinking `▌` cursor is appended to
-the placeholder until the `done` event arrives, at which point the sources
-expander is rendered and `session_id` is stored for follow-up questions.
+Token für Token per Server-Sent Events, mit blinkendem `▌` bis zum `done`-Event; dann werden
+Quellen, Tokens und Zeiten gerendert und die `session_id` für Folgefragen gespeichert.
 
 ```mermaid
 sequenceDiagram
-    participant UI as 🖥️ Streamlit UI
+    participant UI as 🖥️ Streamlit
     participant API as ⚡ FastAPI<br/>/query/stream
     participant RAG as 🔍 Retrieval
-    participant LLM as 🧠 LLM Provider
+    participant LLM as 🧠 LLM
 
-    UI->>API: POST /query/stream<br/>{question, session_id, metadata_filters}
+    UI->>API: POST /query/stream<br/>{question, session_id, role, metadata_filters}
     API->>RAG: retrieve(query, filters)
     RAG-->>API: chunks
     API->>LLM: generate_stream(prompt)
 
-    loop für jedes Token
+    loop je Token
         LLM-->>API: token
         API-->>UI: data: {"type":"token","content":"..."}
-        Note over UI: append to placeholder + ▌
+        Note over UI: an Platzhalter anhängen + ▌
     end
 
-    API-->>UI: data: {"type":"done","session_id":"...",<br/>"sources":[...],"model_used":"...",<br/>"usage":{...},"session_usage":{...}}
-    Note over UI: render sources (grouped)<br/>render token caption<br/>update session-tokens metric<br/>store session_id
+    API-->>UI: data: {"type":"done","session_id":"...",<br/>"sources":[...],"model_used":"...",<br/>"timings":{...},"usage":{...},"session_usage":{...}}
+    Note over UI: Quellen (gruppiert), Tokens, Zeiten<br/>Session-Tokens aktualisieren<br/>session_id speichern
 ```
 
-The `done` event carries two usage payloads:
-
-| Field | Meaning |
+| Feld im `done`-Event | Bedeutung |
 |---|---|
-| `usage` | Tokens consumed by **this single request** (`tokens_in`, `tokens_out`, `tokens_thinking`) |
-| `session_usage` | Cumulative session totals after this request, used to refresh the header metric |
+| `usage` | Tokens **dieser** Anfrage (`tokens_in`, `tokens_out`, `tokens_thinking`) |
+| `session_usage` | Session-Summe danach — für die Kopfzeile |
+| `timings` | Zeiten je Stufe — für die Zeile ⏱ |
 
-### Source Display (grouped by file)
+Das LLM-Timeout der Anfrage kommt aus dem gecachten `/sidebar-state` — eine Chat-Nachricht kostet
+genau eine Backend-Anfrage.
 
-Sources are **grouped per document** in the expander, so multiple chunks from
-the same file appear under one heading instead of looking like duplicates:
+### Quellen (nach Datei gruppiert)
 
 ```
-📄 Locations/Arkenfeld.md — Best Score: 0.82 · 2 Chunks
-    ↳ Arkenfeld > Overview (Score: 0.82)
-       Arkenfeld is a mid-sized trading city...
-    ↳ Arkenfeld > History (Score: 0.71)
-       Founded during the Salt Wars...
+📄 Orte/Arkenfeld.md — Best Score: 0.82 · 2 Chunks
+    ↳ Arkenfeld > Überblick (Score: 0.82)
+       Arkenfeld ist eine mittelgroße Handelsstadt...
+    ↳ Arkenfeld > Geschichte (Score: 0.71)
+       Gegründet während der Salzkriege...
 ```
 
-| Document Type | Rendering |
+| Typ | Darstellung |
 |---|---|
-| Markdown / PDF (single chunk) | `📄 [Filename](file:///...) — Best Score: 0.82` plus chunk preview |
-| Markdown / PDF (multiple chunks) | Same header with `· N Chunks` suffix; each chunk listed indented as `↳ Heading (Score)` + preview |
-| Image | `st.image(source_path)` with filename as caption (rendered separately, before grouped docs) |
+| Markdown / PDF (ein Chunk) | `📄 [Dateiname](file:///...) — Best Score` + Vorschau |
+| Markdown / PDF (mehrere) | Dieselbe Zeile mit `· N Chunks`; jeder Chunk eingerückt als `↳ Überschrift (Score)` + Vorschau |
+| Bild | `st.image(source_path)` mit Dateiname (vor den gruppierten Dokumenten) |
 
-Links open the original file locally (e.g. in Obsidian if `.md` is associated with it).
-If `source_path` does not exist, a warning is shown.
+Links öffnen die Originaldatei lokal (z.B. in Obsidian); fehlt `source_path`, erscheint eine Warnung.
 
-### Token Display
-
-| Location | Source | Format |
-|---|---|---|
-| Below each assistant message | `usage` field of the `done` event, persisted in `messages[*].usage` | `⬇ N in · ⬆ N out · 🧠 N think` (thinking only when > 0) |
-| Header metric (top right) | `session_usage` field of the `done` event, mirrored into `st.session_state.session_usage` | `Session-Tokens` metric with thousand separators and tooltip breakdown |
-
-`tokens_thinking` is populated by Gemini 2.5 (`thoughts_token_count`) when
-thinking is enabled. For Ollama with Qwen3, thinking is switched off
-(`reasoning_effort: "none"`), so the value is normally `0` and the icon is hidden.
+`tokens_thinking` füllt Gemini 2.5 (`thoughts_token_count`), wenn es denkt. Bei Ollama mit Qwen3
+ist das Denken abgeschaltet — der Wert ist normalerweise 0 und wird nicht angezeigt.
 
 ---
 
-## Sources Page (`ui/pages/1_Sources.py`)
+## Sources-Seite (`ui/pages/1_Sources.py`)
 
-A dedicated Streamlit page (auto-discovered via the `pages/` directory) for
-managing the ingestion sources defined in `config/sources.yaml` without ever
-opening a YAML file. Reachable via the page selector at the top of the
-sidebar.
+Quellen aus `config/sources.yaml` verwalten, ohne YAML zu öffnen. Seitenauswahl oben in der Sidebar.
 
-### Sections
+### 1. Indizierte Chunks + Indizieren
 
-#### 1. Indizierte Chunks (gesamt) + Ingest-Buttons
-
-| Button | Backend call | Notes |
+| Knopf | Backend | Hinweis |
 |---|---|---|
-| — (metric) | `GET /stats` | Global chunk count. Refreshed after every ingest, reindex, delete and wipe. |
-| ⚡ **Nur Änderungen indizieren** | `POST /ingest` | Incremental: files with an unchanged content hash are skipped. The default for "I edited some notes". |
-| 🔄 **Alle Dokumente neu indizieren** | `POST /ingest?full=true` | Re-chunks and re-embeds every file. Needed after chunking-setting changes (they don't change the file hash). |
+| — (Kennzahl) | `GET /stats` | Gesamtzahl der Chunks; nach jedem Indizieren/Löschen aktualisiert |
+| ⚡ **Nur Änderungen indizieren** | `POST /ingest` | Inkrementell, unveränderte Dateien werden übersprungen — der Normalfall |
+| 🔄 **Alle Dokumente neu indizieren** | `POST /ingest?full=true` | Jede Datei; nötig nach Chunking-Änderungen |
 
-The incremental button's tooltip explains when the full run (chunking changed)
-or Recategorize (`category_map` / group changed) is the right tool instead.
-Both moved here from the chat sidebar so all indexing concerns live on one page.
+Alle Indizier-Vorgänge zeigen **nicht-blockierenden Fortschritt**: die Job-ID steht in
+`st.session_state["_ingest_job"]`, das Fragment `_ingest_progress()`
+(`st.fragment(run_every=1.5)`) fragt `GET /ingest/status/{job_id}` ab und zeigt den Stand in einem
+`st.status`. Der Rest der Seite bleibt bedienbar, Klicks und Seitenwechsel verlieren den Job nicht;
+Indizier- und Reindex-Knöpfe sind solange gesperrt. Am Ende erscheint einmal das Ergebnis — „X
+Dokumente indiziert · Y unverändert übersprungen · N s“, erzeugte/aktualisierte/gelöschte Chunks,
+Fehler als Warnungen. Ist das Backend ~45 s am Stück nicht erreichbar, endet die Anzeige mit
+„Backend nicht erreichbar“ (der Job läuft im Backend weiter). Bei `409` (Job aus einer anderen
+Browser-Session) hängt sich die Seite über `GET /ingest/active` an.
 
-All ingest operations (global and per-source) show **non-blocking live progress**:
-the started job's id is kept in `st.session_state["_ingest_job"]`, and the
-fragment `_ingest_progress()` (`st.fragment(run_every=1.5)`) polls
-`GET /ingest/status/{job_id}` and shows the state in a `st.status` widget below the
-ingest buttons. The rest of the page stays rendered and usable; clicks and page
-changes don't lose the job. While a job is tracked, the ingest and Reindex buttons are
-disabled. When it ends, a full rerun shows the result once —
-"X Dokumente indiziert · Y unverändert übersprungen · Ns" plus chunks
-created / updated / deleted, errors as `st.warning` items — and refreshes the chunk
-count. If the backend is unreachable for ~45 s in a row, tracking stops with
-"Backend nicht erreichbar" (the job keeps running in the backend). A `409` (another
-job running, e.g. started from a different browser session) attaches to that job
-via `GET /ingest/active` and shows its progress.
+### 2. Konfigurierte Quellen
 
-#### 2. Konfigurierte Quellen
+Bearbeitbare Tabelle (`GET /sources`, Speichern über `PUT /sources`) mit *id, path, type, group,
+default_category, category_map, 🎲 Spieler* (`player_visible`, wirkt sofort).
 
-| Backend call | Notes |
+- `id` und `path` nur lesbar; `type` wird abgeleitet (`file` / `folder` / `missing`).
+- `category_map` als Kurztext: `Ordner→kategorie` (erbt die Gruppe) oder
+  `Ordner→kategorie:gruppe`. Beispiel: `NPCs→npc, Geschichte→story:adventure`.
+- **💾 Änderungen speichern**; nicht angezeigte Felder (`exclude_patterns`) bleiben erhalten.
+  Speichern leert den Streamlit-Cache, damit eine entzogene Spieler-Freigabe sofort wirkt.
+- **🔄 Neu laden** übernimmt Änderungen von außen.
+
+### 3. Aktionen pro Quelle
+
+Je Quelle ein Ausklapper (`📁 {id} — {path}`):
+
+| Knopf | Backend | Hinweis |
+|---|---|---|
+| 🔄 **Reindex** | `POST /sources/{id}/reindex` | Löscht und indiziert eine Quelle neu, mit Fortschritt; nötig bei geändertem Inhalt oder Pfad |
+| 🏷 **Recategorize (alle)** | `POST /sources/recategorize` | Schreibt nur `group` / `content_category` / `source_id` neu (Sekunden, kein Embedding) — für **alle** Quellen |
+| 🗑 **Source entfernen** | `DELETE /sources/{id}` | Entfernt Quelle **und** ihre Chunks; mit Bestätigungs-Checkbox |
+
+**Ordner-Zuordnung:** `GET /sources/{id}/folders` (60 s gecacht) liefert die Ordner; eine zweite
+Tabelle (*name, type, category, group*) ist mit der aktuellen `category_map` vorbelegt.
+**💾 Zuordnung speichern** baut daraus die neue `category_map` und speichert per `PUT /sources`;
+danach Recategorize.
+
+### 4. Neue Quelle hinzufügen
+
+| Schritt | UI | Backend |
+|---|---|---|
+| 1. Pfad eingeben und scannen | Textfeld + 🔍 Scannen | `POST /sources/scan` |
+| 2. Einstellungen | ID (vorgeschlagen aus dem Namen), Gruppe, Default-Kategorie | — |
+| 3. Ordner zuordnen (nur Ordner) | Tabelle mit den gescannten Ordnern | — |
+| 4. Hinzufügen | ➕ | `PUT /sources` |
+
+Das Scan-Ergebnis bleibt im Session-State über die Schritte erhalten. Die vorgeschlagene ID ist der
+Name in Kleinbuchstaben, alles außer Buchstaben, Ziffern, `_` und `-` wird zu `-`. Freie IDs sind
+erlaubt (nicht leer, eindeutig; das Backend lehnt `.`, `..` und Leerzeichen am Rand ab). Erfolgs-
+meldungen überleben das Neuladen über `st.session_state["_flash"]`; Fehler zeigen den `detail`-Text
+des Backends.
+
+### 5. ⚠ Danger Zone
+
+`POST /admin/wipe` (Body `{"confirm": "DELETE"}`) nach Eingabe von `DELETE` — leert die Collection.
+
+**Welche Aktion wann:** Tippfehler in `category_map` → Tabelle/Zuordnung speichern →
+Recategorize. Pfad oder Inhalt geändert → speichern → Reindex. Quelle überflüssig → Source
+entfernen. Neue Quelle → Schritte 1–4, dann Reindex. Datenbank kaputt (selten) → Danger Zone, dann
+„Alle Dokumente neu indizieren“.
+
+**Quellen-Identität:** Jeder Chunk trägt `source_id`; so kollidieren gleichnamige Dateien in
+verschiedenen Quellen nicht. Eine umbenannte `id` gilt als neue Quelle — vorher die alte entfernen.
+
+---
+
+## Evaluation-Seite (`ui/pages/2_Evaluation.py`)
+
+Golden Set pflegen, Suche testen, Evaluationen laufen lassen, Ergebnisse vergleichen. Sieben Tabs.
+Hintergrund und Kennzahlen: [evaluation.md](evaluation.md).
+
+| Tab | Inhalt |
 |---|---|
-| `GET /sources` (read), `PUT /sources` (save) | Editable `st.data_editor` table with columns *id, path, type, group, default_category, category_map, 🎲 Spieler* (`player_visible` — searchable in the chat's player mode, takes effect immediately without reindex). |
+| **1 Golden Set** | Bearbeitbare Tabelle aller Fragen aus `evaluation/qa_pairs.yaml` (ID, Frage, Typ, Kategorie, erwartete Quellen, Antwort-Stichwörter, Notizen); **💾 Golden Set speichern** über `PUT /eval/qa-pairs`, Zeilen ohne ID oder Frage werden übersprungen |
+| **2 Frage testen** | Eine Frage gegen den Retriever (`POST /eval/preview`, ohne LLM) mit einstellbaren Parametern; Tabelle der Chunks (Score, Quelle, Überschrift, Vorschau) + Latenz; die Frage lässt sich direkt ins Golden Set übernehmen (erwartete Quellen vorbelegt) |
+| **3 Retrieval Eval** | Ganzes Golden Set ohne LLM als Hintergrund-Job (`POST /eval/run`, `GET /eval/status/{id}`); Trefferquote, Abschnitt-Trefferquote, Aufschlüsselung nach Typ, Details je Frage (⚠️ = richtige Datei, falscher Abschnitt); **⚖ A/B starten (Vektor vs. Hybrid)** |
+| **4 End-to-End** | Golden Set mit LLM: Trefferquote, Answer-Contains-Quote, mittlere Latenz, Antworten je Frage. Langsam |
+| **5 Ergebnisse** | Gespeicherte Läufe (max. 3 je Typ) mit Kennzahlen und Config, löschen; zwei Läufe vergleichen (Differenz + Fragen, deren Treffer sich geändert hat) |
+| **6 Feedback** | Aktuelle 👍/👎 je Chat-Antwort (`GET /feedback`, letzte Bewertung je `message_id`, zurückgenommene ausgelassen). Standard nur 👎, 👍 per Schalter. Ausgewählte Zeilen werden zu Golden-Set-Fragen `f###` (`ui/feedback.py`): 👍 behält die Quellen der Antwort, 👎 bleibt leer mit Notiz zum Nachtragen; Fragen, die schon im Golden Set stehen, werden übersprungen |
+| **7 Chunks** | Chunk-Inspector: Quelle wählen (`GET /sources`, 60 s gecacht), dann Datei (`GET /eval/chunks/files`), dann alle Chunks der Datei in Dokumentreihenfolge (`GET /eval/chunks`). Anzahl und min/Ø/max-Länge (unter 100 Zeichen markiert), Tabelle (Index, Überschriftenpfad, Länge, Textanfang), voller Text + Metadaten eines gewählten Chunks. Dateien und Chunks werden erst nach der Auswahl geladen |
 
-- `id` and `path` are read-only in-line; `type` is auto-derived (`file` / `folder` / `missing`) from `Path.is_file/exists`.
-- `category_map` is edited as compact text: `key→category` (inherits source group) or `key→category:group` (overrides group). Example: `NPCs→npc, Geschichte→story:adventure`. Parsed back into string or dict entries on save.
-- **💾 Änderungen speichern** saves the edited table via `PUT /sources`. Fields the editor doesn't expose (`exclude_patterns`) are preserved from the original.
-- **🔄 Neu laden** clears the cache and reruns to pick up external changes.
+**Gemeinsame Bausteine:** `_render_tuning_sliders(prefix)` — drei gekoppelte Regler (Kandidaten,
+Finale Chunks, Max pro Quelle; `top_k_rerank ≤ top_k`, `max_per_source ≤ top_k_rerank`) für „Frage
+testen“ und „Retrieval Eval“, dazu die Auswahl Config / nur Vektor / Hybrid.
+`_poll_eval_job(job_id)` fragt `GET /eval/status/{id}` jede Sekunde in einem `st.status` ab.
 
-#### 3. Aktionen pro Quelle
+---
 
-Each source gets an expander (`📁 {id} — {path}`) with two sections:
+## Prompts-Seite (`ui/pages/3_Prompts.py`)
 
-**Action buttons** (three columns):
+Prompt-Templates bearbeiten, Varianten verwalten und vergleichen — ohne YAML. Details zu den
+Templates: [prompts.md](prompts.md).
 
-| Button | Backend call | Notes |
-|---|---|---|
-| 🔄 **Reindex** | `POST /sources/{id}/reindex` | Deletes + re-ingests one source. Shows live progress via `_ingest_progress()`. Required when content or path changed. |
-| 🏷 **Recategorize (alle)** | `POST /sources/recategorize` | Rewrites only `group` / `content_category` / `source_id` metadata of existing chunks (seconds, no embedding). Applies to **all** sources, not just the current one. |
-| 🗑 **Source entfernen** | `DELETE /sources/{id}` | Drops the source from the config **and** deletes its chunks. Gated behind a confirmation checkbox ("Wirklich löschen"). Shows deleted chunk count on success. |
-
-**Ordner-Zuordnung** (folder mapping):
-
-| Backend call | Notes |
+| Tab | Inhalt |
 |---|---|
-| `GET /sources/{id}/folders` | Fetches the folder tree for this source (cached 60 s, cleared on save) and renders a second `st.data_editor` with columns *name, type, category, group*. |
+| **Aktive Prompts** | Vier Textfelder (System, QA, Condense, No-Context) mit Variablen-Hilfe und **Vorschau** (`POST /prompts/preview`); **💾 Aktive Prompts speichern** schreibt `config/prompts.yaml` und lädt den `PromptManager` neu |
+| **Varianten** | Aktive Prompts als benannte Variante speichern; je Variante Textfelder, Beschreibung, **💾 Speichern**, **Aktivieren** (überschreibt `prompts.yaml` + Neuladen), **🗑 Löschen**. Aktive Variante mit ✅ — aktiv heißt: die vier Templates stimmen mit `prompts.yaml` überein |
+| **Vergleichen** | Zwei Varianten (oder „(Aktiv)“) nebeneinander; Templates mit ⚠ unterschiedlich / ✅ gleich |
 
-The table is pre-populated from the source's current `category_map` — unmapped
-folders fall back to the source-level `default_category` and `group`. The user
-edits category and group per folder directly in the table, then clicks
-**💾 Zuordnung speichern** which builds a new `category_map` (string entries
-when group matches the source default, dict entries when it differs) and saves
-all sources via `PUT /sources`. A hint reminds the user to run Recategorize
-afterwards so existing chunks pick up the new values.
+Alle Abrufe sind 10 s gecacht und werden nach Änderungen geleert.
 
-#### 4. Neue Source hinzufügen (scan-based workflow)
+---
 
-Adding a source is a multi-step process:
+## Settings-Seite (`ui/pages/4_Settings.py`)
 
-| Step | UI | Backend call |
+Zentrale Stelle für die zur Laufzeit änderbaren Werte. Liest über `GET /config`, schreibt nur
+Geändertes über `PUT /config` nach `config/settings.local.yaml` **und** in die laufenden Dienste —
+kein Neustart. Welche Schlüssel änderbar sind: [configuration.md](configuration.md#bearbeiten-über-die-ui).
+
+| Tab | Bereich | Wirkung |
 |---|---|---|
-| **1. Pfad eingeben und scannen** | Text input + 🔍 Scannen button | `POST /sources/scan` with `{"path": "..."}` |
-| **2. Source-Einstellungen** | ID (auto-suggested from folder/file name), Default-Group dropdown, Default-Kategorie input | — |
-| **3. Ordner zuordnen** (folder sources only) | `st.data_editor` with the scanned folder tree, pre-filled with the chosen defaults. User edits category/group per folder. | — |
-| **4. Source hinzufügen** | ➕ button | `PUT /sources` with the appended entry |
+| 🔎 **Retrieval** | Kandidaten (`top_k`, 1–50), Score-Schwelle (0–0,9; unter 0,3 nur Rauschen), Reranking an/aus, Finale Chunks, Max. Chunks pro Quelle (0 = unbegrenzt), Hybrid-Default, BM25-Anteil, BM25-Kandidaten | nächste Frage |
+| 🧠 **LLM** | Je Provider Temperatur, Top-p, Max Tokens, Timeout; Fallback an/aus. Das Modell wird nur angezeigt (Wechsel über `settings.yaml`) | nächste Frage |
+| 💬 **Conversation** | `window_size`, Condense an/aus, Session-Timeout | nächste Frage / nächster GC-Lauf |
+| 📥 **Ingestion** | Chunking-Strategie und -Größen | **erst nach Neu-Indizieren** (Warnbanner) |
+| Nur lesen | `embeddings.*`, `vectorstore.*` | Änderung über `.env`/`settings.yaml` + Neustart |
 
-The scan result (folder list, is-file flag) is persisted in `st.session_state`
-so it survives Streamlit reruns between steps. A failed scan or a non-existent
-path is shown as an error and the "Source hinzufügen" step is not offered.
-
-The suggested ID is the folder/file name, lower-cased, with everything except
-letters, digits, `_` and `-` replaced by `-` (fallback `source`). Any free-text ID
-is allowed; the UI checks non-empty and unique, the backend (`PUT /sources`)
-rejects new IDs that are `.`, `..` or have leading/trailing whitespace and the
-UI shows its error text. IDs are URL-encoded for the per-source calls, and
-IDs containing `/` work too. On success, the scan state is cleared and the page
-refreshes.
-
-**Messages across reloads:** save, mapping, add and delete reload the page
-(`st.rerun()`) to pick up the new source list. Their success message is stored
-in `st.session_state["_flash"]` and shown once after the reload. An
-`st.success()` rendered right before the rerun would be wiped immediately.
-Backend errors show the response's `detail` text, not just the HTTP status.
-
-File sources skip step 3 (no subfolders to map).
-
-#### 5. ⚠ Danger Zone
-
-| Backend call | Notes |
-|---|---|
-| `POST /admin/wipe` (body `{"confirm": "DELETE"}`) | Type `DELETE` into the input as confirmation. Drops and recreates the ChromaDB collection in both embedded and client mode. |
-
-### When to use which action
-
-- **Pure config edit** (e.g. fix a typo in `category_map`): edit the table or folder mapping → Save → click **Recategorize**. No re-embedding.
-- **Path changed / file moved / contents changed**: edit the table → Save → click **Reindex** for that source.
-- **Source no longer needed**: tick the confirmation → **Source entfernen**.
-- **New source**: use the scan-based workflow (step 1–4) to add and map folders, then **Reindex** the new source.
-- **DB schema gone bad** (rare, e.g. after a major refactor): use the Danger Zone, then click **Alle Dokumente neu indizieren** at the top of the Sources page.
-
-### Source identity
-
-Every chunk carries a `source_id` metadata field equal to the source's
-configured `id`. This is what makes per-source delete / reindex / recategorize
-safe in a multi-source setup — collisions on `source_file` (e.g. two vaults
-both containing `notes.md`) cannot cross-contaminate. Renaming the `id`
-counts as creating a new source. The chunks of the old ID are **not** removed
-by later ingests (ingest only looks at configured IDs) — remove the source via
-"Source entfernen" before re-adding it under a new ID, or wipe and re-ingest.
+Intern werden die verschachtelten Pydantic-Objekte **an Ort und Stelle** geändert — Dienste mit
+Referenzen darauf (Retriever, ConversationManager, Provider) sehen die neuen Werte beim nächsten
+Aufruf, eine laufende Anfrage bricht nicht ab. Jeder Speichern-Knopf schickt nur die Differenz;
+ohne Änderung erscheint **Keine Änderungen** und es gibt keinen Aufruf.
 
 ---
 
-## Performance Characteristics
+## Antwortzeiten
 
-| Action | Latency (typical) |
-|--------|------------------|
-| Sidebar rerun | <100ms (cached API calls) |
-| First query after server start | +2–4s (embedding model warm, ChromaDB connected) |
-| Query (Ollama qwen3:8b) | 8–30s total |
-| Query (Gemini 2.5 Flash) | 3–8s total |
-| Reranking (15 candidates) | ~50ms on the GPU (DirectML), ~800ms CPU fallback |
+| Aktion | Typisch |
+|--------|---------|
+| Rerun der Sidebar | < 0,1 s (gecachte Aufrufe) |
+| Frage mit Ollama qwen3:14b (warm) | erster Token ~1 s, gesamt ~3–4 s |
+| Erste Frage nach > 1 h Pause | +~16 s (Ollama lädt das Modell neu, `OLLAMA_KEEP_ALIVE`) |
+| Frage mit Gemini 2.5 Flash | 3–8 s gesamt |
+| Retrieval | Embedding ~0,08 s + Suche ~0,02 s + Reranking ~50 ms auf der GPU (CPU-Rückfall ~0,8 s); im laufenden Chat noch nicht nachgemessen |
+| Backend-Start | ~18 s bis `/health` |
 
-**Embedding model** is preloaded at server start (`warmup` in lifespan) —
-the first query is therefore no slower than subsequent ones.
-
----
-
-## Prompts Page (`ui/pages/3_Prompts.py`)
-
-A dedicated Streamlit page for editing prompt templates, managing variants,
-and comparing prompts side-by-side — no YAML editing required.
-
-### Tab 1: Aktive Prompts
-
-Four `st.text_area` widgets (height 300px) for the active templates: System,
-QA, Condense, No-Context. Each field shows a help tooltip listing the
-available Jinja2 variables for that template.
-
-Below each template, a **Preview** expander renders the template with sample
-data (via `POST /prompts/preview`), so you can verify the output before
-saving.
-
-**💾 Aktive Prompts speichern** writes to `config/prompts.yaml` and
-hot-reloads the `PromptManager` — the next query uses the updated templates
-immediately.
-
-### Tab 2: Varianten
-
-**Save active as variant:** A compact row (Name + Description + Button) saves
-a copy of the current active prompts as a named variant in `config/prompts/`.
-
-**Saved variants list:** Each variant renders as an `st.expander` containing:
-- Four editable `st.text_area` fields (height 250px) for all templates
-- An editable description field
-- Three action buttons:
-  - **💾 Speichern** — saves edits to the variant file
-  - **Aktivieren** — overwrites `prompts.yaml` with this variant and
-    hot-reloads the PromptManager
-  - **🗑 Löschen** — deletes the variant file
-
-Active variants are marked with ✅ in the list header (detected via MD5 hash
-comparison with `prompts.yaml`).
-
-### Tab 3: Vergleichen
-
-Two selectboxes choose variants (or "(Aktiv)" for the current prompts). For
-each of the four templates, a side-by-side `st.columns(2)` view shows both
-texts. Templates that differ are marked ⚠ unterschiedlich, identical ones ✅.
-
-### Caching
-
-All fetch functions use `@st.cache_data(ttl=10)` with `.clear()` after
-mutations. This means the page shows fresh data within 10 seconds of external
-changes, and immediately after in-page edits.
+Embedding-Modell und Reranker werden beim Start geladen — die erste Frage ist nicht langsamer als
+die folgenden. Die Zahl der Backend-Aufrufe pro Seite prüft `tests/ui/test_backend_calls.py`.
 
 ---
 
-## Evaluation Page (`ui/pages/2_Evaluation.py`)
+## Session-State
 
-A dedicated Streamlit page for managing the Golden Set, testing retrieval,
-running evaluations, and comparing results. Seven tabs:
-
-### Tab 1: Golden Set
-
-Editable `st.data_editor` table with all QA pairs from `evaluation/qa_pairs.yaml`.
-Columns: ID, Question, Source Type (markdown/pdf/image), Category, Expected
-Sources (comma-separated), Answer Contains (keywords for E2E), Notes.
-
-**💾 Golden Set speichern** writes via `PUT /eval/qa-pairs`. Rows without ID
-or question are silently skipped.
-
-### Tab 2: Frage testen
-
-Single-question retrieval preview. Enter a question, optionally adjust
-retrieval parameters (Top-K, Rerank, Max-per-Source via shared sliders), and
-click **🔍 Testen**. Shows the returned chunks as a table (Score, Source,
-Heading, Preview) with latency.
-
-Below the results, a convenience section lets you add the tested question
-directly to the Golden Set — the Expected Sources field is pre-filled with the
-top 3 retrieved files.
-
-### Tab 3: Retrieval Eval
-
-Runs the full Golden Set through the retriever (no LLM). Configurable
-retrieval parameters via the same shared sliders. Starts as a background job
-(`POST /eval/run` with `eval_type: retrieval`), polled via
-`GET /eval/status/{job_id}`.
-
-Results show: Hit Rate metric, breakdown by source type, and per-question
-expandable details (expected vs. retrieved sources, scores).
-
-### Tab 4: End-to-End
-
-Runs the full Golden Set through the complete pipeline including LLM. Shows
-Hit Rate, Answer Contains Rate, and average latency. Per-question details
-include the generated answer and source comparison.
-
-Warning: slow and consumes LLM tokens.
-
-### Tab 5: Ergebnisse
-
-Lists saved evaluation results (max 3 per type). Each result shows filename,
-type, hit rate, question count, and config. Delete button per result.
-
-**Ergebnisse vergleichen**: Select two results for a side-by-side comparison.
-Shows hit rate difference and lists all questions where the hit/miss status
-changed between runs.
-
-### Shared Components
-
-**`_render_tuning_sliders(prefix)`**: Three linked sliders (Kandidaten,
-Finale Chunks, Max pro Quelle) reused across the Frage testen and Retrieval
-Eval tabs. The sliders are bound: `top_k_rerank ≤ top_k` and
-`max_per_source ≤ top_k_rerank`.
-
-**`_poll_eval_job(job_id)`**: Polls `GET /eval/status/{job_id}` every 1s
-inside a `st.status` widget until done or error.
-
----
-
-### Tab 6: Feedback
-
-The current 👍/👎 per chat answer (`GET /feedback`, last rating per `message_id`, withdrawn ones left out). 👎 shown by default, 👍 via toggle. Selected rows go into the golden set as `f###` (`ui/feedback.py`): 👍 keeps the answer's sources as expected sources, 👎 leaves them empty with a note to enter the right source; questions already in the golden set are skipped.
-
-### Tab 7: Chunks (chunk inspector)
-
-Every stored chunk of one file, as the retriever sees it. Pick a source (`GET /sources`, cached 60 s), then a
-file (`GET /eval/chunks/files?source_id=…` — the indexed files), then `GET /eval/chunks?source_id=…&source_file=…`
-returns the chunks in document order. Shown: count and min/avg/max length (chunks under 100 characters are
-flagged), a table (index, heading path, length, start of the text), and the full text plus metadata of one
-selected chunk. Files and chunks are only fetched after a pick. Which chunks a *question* finds stays in
-Tab 2 "Frage testen".
-
-## Settings Page (`ui/pages/4_Settings.py`)
-
-Central place for editing the runtime-tunable parameters of LoreKeeper.
-Reads the current state via `GET /config` and sends diff-only updates via
-`PUT /config`. Every save is persisted to `config/settings.local.yaml` **and**
-applied in place to the running services — no restart, next query uses the new
-values.
-
-### Layout
-
-Four `st.tabs`, plus a read-only expander for infrastructure knobs:
-
-| Tab | Backend section | Live effect |
-|---|---|---|
-| 🔎 **Retrieval** | `retrieval.*` | Immediate on next query |
-| 🧠 **LLM** | `llm.ollama.*`, `llm.gemini.*`, `llm.fallback_enabled` | Immediate on next query |
-| 💬 **Conversation** | `conversation.*` | Immediate on next query (GC interval picks up on next wake) |
-| 📥 **Ingestion** | `chunking.*` | Persists, but takes effect on the **next reindex** (explicit warning banner) |
-| Read-only expander | `embeddings.*`, `vectorstore.*` | View only — change via `.env` / `settings.yaml` + restart |
-
-### Retrieval tab
-
-| Control | Maps to | Notes |
-|---|---|---|
-| Slider **Kandidaten (Top-K)** | `retrieval.top_k` | 1–50, how many chunks the vectorstore returns (bi-encoder recall pool). |
-| Slider **Score-Threshold (Cosine)** | `retrieval.score_threshold` | 0.0–0.9 · Under 0.3 floods the context with noise. |
-| Checkbox **Reranking aktiv** | `retrieval.reranking.enabled` | Disabling skips cross-encoder reranking. |
-| Slider **Finale Chunks** | `retrieval.reranking.top_k_rerank` | `max_value` bound to top_k. Disabled when reranking is off. |
-| Slider **Max. Chunks pro Quelle** | `retrieval.reranking.max_per_source` | Soft-Cap. `0` = unlimited. Disabled when reranking is off. |
-| Checkbox **Hybrid-Default aktiv** | `retrieval.hybrid.enabled` | Sets the server default. Sidebar checkbox still overrides per session. |
-| Slider **BM25-Anteil (RRF)** | `retrieval.hybrid.bm25_weight` | 0.0–1.0, only enabled when hybrid is on. |
-| Slider **BM25-Kandidaten** | `retrieval.hybrid.bm25_top_k` | Only enabled when hybrid is on. |
-
-### LLM tab
-
-Two sub-sections side-by-side, one per provider (Ollama / Gemini). For each:
-temperature, top-p, max tokens, timeout. A single global checkbox toggles
-`llm.fallback_enabled`. The active model name is displayed read-only — model
-selection stays in `settings.yaml` (swapping models has non-trivial startup
-costs and isn't worth a UI toggle).
-
-### Conversation tab
-
-Three controls: `conversation.window_size` (sliding-window size for condense
-history), `conversation.condense_question` (toggle condense step entirely),
-`conversation.session_timeout_minutes` (idle-session GC deadline). All three
-take effect on the next query; the GC interval refresh kicks in on the next
-GC wake-up.
-
-### Ingestion tab
-
-Chunking-only. A **warning banner** at the top makes clear that changes do
-**not** rewrite existing chunks — after saving, trigger **Alle Dokumente neu
-indizieren** on the Sources page. Controls: `chunking.strategy` (heading_aware
-/ recursive / fixed_size), `chunking.max_chunk_size`, `chunking.chunk_overlap`,
-`chunking.min_chunk_size`.
-
-### Allow-list and persistence
-
-Not every field from `settings.yaml` is editable here. The backend keeps a
-hard-coded allow-list in `src/config/manager.py:_EDITABLE_KEYS`; unknown or
-disallowed keys are silently dropped by `ConfigManager.save_settings()` before
-writing. Secrets (Gemini API key), infrastructure (`vectorstore.mode`,
-`embeddings.model`, `api.*`, `logging.*`), and already-elsewhere-editable
-fields (`llm.provider`, sources, prompts) never reach the Settings page.
-
-The editable snapshot returned by `GET /config` always mirrors what the
-`PUT /config` endpoint accepts plus the two read-only infrastructure blocks
-the UI displays for context.
-
-Internally, updates mutate the existing nested Pydantic model instances in
-place — services holding references (Retriever, Reranker, ConversationManager,
-LLM providers) keep working with the same objects and pick up new values on
-their next call. That's why a running query doesn't blow up mid-stream when
-you save a tuning change.
-
-### Diff-only saves
-
-Each tab's save button computes a dict diff between the loaded snapshot and
-the current widget state, then `PUT /config`s only the changed keys. If
-nothing changed, the button shows **Keine Änderungen** and makes no request.
-Cache invalidation clears the page's `@st.cache_data(ttl=5)` so the
-post-save view reflects disk state.
-
----
-
-## Session State Overview
-
-| Key | Type | Meaning |
-|-----|------|---------|
-| `messages` | `list[dict]` | Full chat history including `sources` and per-message `usage` |
-| `session_id` | `str \| None` | Backend session UUID for conversation context |
-| `session_usage` | `dict` | Cumulative `{tokens_in, tokens_out, tokens_thinking}` for the active session, displayed in the header metric |
-| `_role` | `"player" \| "game_master"` | Chat role picked before the chat opens; missing → role picker. Removing it (Rolle wechseln) also resets chat and session |
-| `_is_admin` | `bool` | Set by a successful admin login (`ui/admin_gate.py`); unlocks admin pages and provider controls for this browser session |
-| `_selected_provider` | `str` | Currently selected provider (widget state) |
-| `_provider_switch_ok` | `bool` | Temporary flag: switch succeeded |
-| `_provider_switch_error` | `str` | Temporary flag: error message on switch failure |
-| `_scan_result` | `dict \| None` | Sources page: cached response from `POST /sources/scan` (survives reruns between add-source steps) |
-| `_scanned_path` | `str` | Sources page: the path that was scanned (paired with `_scan_result`) |
+| Schlüssel | Typ | Bedeutung |
+|-----------|-----|-----------|
+| `messages` | `list[dict]` | Chatverlauf inkl. `sources`, `usage`, `timings` je Nachricht |
+| `session_id` | `str \| None` | UUID der Backend-Session für Folgefragen |
+| `session_usage` | `dict` | Session-Summe `{tokens_in, tokens_out, tokens_thinking}` für die Kopfzeile |
+| `_role` | `"player" \| "game_master"` | Gewählte Rolle; fehlt → Rollenauswahl. Entfernen (Rolle wechseln) setzt Chat und Session zurück |
+| `_is_admin` | `bool` | Nach erfolgreichem Admin-Login; schaltet Admin-Seiten und Provider-Steuerung frei |
+| `_selected_provider` | `str` | Gewählter Provider (Widget-State) |
+| `_provider_switch_ok` / `_provider_switch_error` | `bool` / `str` | Kurzzeit-Flags nach einem Provider-Wechsel |
+| `_ingest_job` | `dict \| None` | Sources-Seite: verfolgter Indizier-Job `{id, label, failures}` |
+| `_flash` | `str` | Sources-Seite: Erfolgsmeldung, die ein Neuladen überlebt |
+| `_scan_result` / `_scanned_path` | `dict \| None` / `str` | Sources-Seite: Ergebnis von `POST /sources/scan` und der gescannte Pfad |

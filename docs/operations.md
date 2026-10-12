@@ -1,260 +1,215 @@
-# Operations
+# Betrieb
 
-This document covers operational instructions for LoreKeeper: initial setup workflows, running ingestion manually or via API, and troubleshooting common issues.
+Alles für den laufenden Betrieb: Indizieren, Betrieb im Heimnetz, Fehlersuche und Logs. Die
+Ersteinrichtung steht im [README](../README.md#schnellstart-lokal-windows), alle Einstellungen
+und Umgebungsvariablen in [configuration.md](configuration.md).
 
-## Table of Contents
-1. [Initial Setup](#initial-setup)
-2. [Ingestion](#ingestion)
-   - [Normal Ingest (incremental)](#normal-ingest-incremental)
-   - [Full Re-ingest](#full-re-ingest)
-   - [Ingest via API (asynchronous)](#ingest-via-api-asynchronous)
-   - [Exclusion Patterns](#exclusion-patterns)
-3. [Home-network server (LAN)](#home-network-server-lan)
-4. [Configuration](#configuration)
-5. [Common Issues](#common-issues)
-   - [Ollama not responding](#ollama-not-responding)
-   - [ChromaDB file lock](#chromadb-file-lock)
-   - [Gemini 429 (rate limit)](#gemini-429-rate-limit)
-   - [Reranker model not found](#reranker-model-not-found)
-   - [Reranker runs on the CPU (DirectML warning)](#reranker-runs-on-the-cpu-directml-warning)
-   - [PDF OCR not working](#pdf-ocr-not-working)
-   - [Retrieval returns wrong document](#retrieval-returns-wrong-document)
-6. [Logs](#logs)
-
----
-
-## Initial Setup
-
-```powershell
-# 1. Create environment file
-copy .env.example .env
-# Enter GEMINI_API_KEY (optional, only for Gemini provider)
-
-# 2. Configure sources
-# config/sources.yaml — see docs/configuration.md "Sources sidecar"
-
-# 3. Pull Ollama model
-ollama pull qwen3:14b
-
-# 4. Start backend (loads embedding model + ChromaDB on first start)
-uvicorn src.main:app --reload --port 8000
-
-# 5. Index documents (first time)
-python -m src.ingestion.orchestrator
-# or in the UI: ⚙ Sources page → "⚡ Nur Änderungen indizieren"
-```
+## Inhaltsverzeichnis
+1. [Indizieren](#indizieren)
+   - [Inkrementell](#inkrementell)
+   - [Alles neu](#alles-neu)
+   - [Über die API](#über-die-api)
+2. [Server im Heimnetz (LAN)](#server-im-heimnetz-lan)
+3. [Häufige Probleme](#häufige-probleme)
+   - [Ollama antwortet nicht](#ollama-antwortet-nicht)
+   - [ChromaDB-Dateisperre](#chromadb-dateisperre)
+   - [Gemini 429 (Rate-Limit)](#gemini-429-rate-limit)
+   - [Modelle fehlen beim ersten Start](#modelle-fehlen-beim-ersten-start)
+   - [Reranker läuft auf der CPU (DirectML-Warnung)](#reranker-läuft-auf-der-cpu-directml-warnung)
+   - [PDF-OCR funktioniert nicht](#pdf-ocr-funktioniert-nicht)
+   - [Suche liefert das falsche Dokument](#suche-liefert-das-falsche-dokument)
+4. [Logs](#logs)
 
 ---
 
-## Ingestion
+## Indizieren
 
-### Normal Ingest (incremental)
+### Inkrementell
+
+In der UI: **⚙ Sources → ⚡ Nur Änderungen indizieren**. Dateien mit unverändertem
+`content_hash` (SHA-256 des Inhalts) werden übersprungen, neue und geänderte neu embedded,
+gelöschte aus ChromaDB entfernt. Die Ergebniszeile zeigt indizierte vs. übersprungene Dokumente
+und erzeugte/aktualisierte/gelöschte Chunks. Der Fortschritt blockiert die Seite nicht und
+übersteht Klicks und Seitenwechsel.
+
+Per CLI dasselbe — nur bei **gestopptem** Backend:
+
 ```powershell
 python -m src.ingestion.orchestrator
 ```
-Files with an unchanged `content_hash` (SHA-256 of file content) are skipped.
-New and modified files are re-embedded. Deleted files are removed from ChromaDB.
 
-In the UI: **⚙ Sources → ⚡ Nur Änderungen indizieren**. The result line shows
-how many documents were indexed vs. skipped as unchanged, plus chunks
-created / updated / deleted.
+### Alles neu
 
-### Full Re-ingest
-Required after changes to chunking settings or parser / embed-text logic — these
-don't change a file's hash, so the incremental run would skip everything:
+Nötig nach Änderungen an Chunking, Parsern oder Embed-Text — die ändern den Hash einer Datei
+nicht, der inkrementelle Lauf würde alles überspringen:
 
 - UI: **⚙ Sources → 🔄 Alle Dokumente neu indizieren**
 - API: `POST /ingest?full=true`
 
-After changing the **embedding model** (different vector dimension) the collection
-must be emptied first: **⚙ Sources → Danger Zone** (`POST /admin/wipe`), then a
-normal ingest. Alternatively, with the backend stopped:
+Nach einem **anderen Embedding-Modell** (andere Vektordimension) muss die Collection erst geleert
+werden: **⚙ Sources → Danger Zone** (`POST /admin/wipe`), dann normal indizieren. Oder bei
+gestopptem Backend:
 
 ```powershell
 Remove-Item -Recurse -Force .\chroma_data
 python -m src.ingestion.orchestrator
 ```
 
-Changed `category_map` / `group` only? Use **Recategorize** instead — it rewrites
-the metadata without re-embedding.
+Nur `category_map` / `group` geändert? Dann **Recategorize** — schreibt die Metadaten neu, ohne
+neu zu embedden. Welche Aktion wann: [configuration.md](configuration.md#quellen--configsourcesyaml).
 
-### Ingest via API (asynchronous)
-```bash
-curl -X POST http://localhost:8000/ingest              # incremental
-curl -X POST "http://localhost:8000/ingest?full=true"  # full re-ingest
-# → {"job_id": "abc123", "status": "queued"}
-# → 409 if another ingest/reindex job is still running
+### Über die API
 
-curl http://localhost:8000/ingest/active
-# → the queued/running job (same fields as /ingest/status), or null
+```powershell
+curl.exe -X POST http://127.0.0.1:8000/ingest               # inkrementell
+curl.exe -X POST "http://127.0.0.1:8000/ingest?full=true"   # alles
+# → {"job_id": "abc123", "status": "queued"}   (409, solange ein anderer Job läuft)
 
-curl http://localhost:8000/ingest/status/abc123
+curl.exe http://127.0.0.1:8000/ingest/active
+# → laufender/wartender Job (Felder wie /ingest/status) oder null
+
+curl.exe http://127.0.0.1:8000/ingest/status/abc123
 # → {"status": "done", "documents_processed": 42, "documents_total": 42,
 #    "documents_skipped": 39, "chunks_created": 5, "chunks_updated": 12, "chunks_deleted": 3, ...}
 ```
 
-`documents_processed` includes skipped files (it drives the progress display);
-`chunks_deleted` counts the deleted chunks of files that no longer exist.
-
-### Exclusion Patterns
-Configured in `settings.yaml` under `ingestion.exclude_patterns`:
-```yaml
-exclude_patterns:
-  - ".obsidian/*"    # Obsidian configuration
-  - ".trash/*"       # Obsidian trash
-  - "*alt.md"        # Backup versions
-  - "*(1).md"        # Duplicates
-  - "*.draft.*"      # Drafts
-```
+`documents_processed` zählt übersprungene Dateien mit (treibt die Fortschrittsanzeige);
+`chunks_deleted` zählt die Chunks nicht mehr vorhandener Dateien. Immer `127.0.0.1` statt
+`localhost` — unter Windows kostet `localhost` ~2 s pro neuer Verbindung.
 
 ---
 
-## Home-network server (LAN)
+## Server im Heimnetz (LAN)
 
-Run LoreKeeper on the gaming PC (Ollama + backend + UI) and use it from a laptop
-in the same network. Only the Streamlit UI (port 8501) is reachable; the backend
-stays on `127.0.0.1:8000` because the UI calls it server-side.
+LoreKeeper läuft auf dem Gaming-PC (Ollama + Backend + UI) und wird von Laptop oder Handy im selben
+Netz bedient. Erreichbar ist nur die Streamlit-UI (Port 8501); das Backend bleibt auf
+`127.0.0.1:8000`, weil die UI es serverseitig aufruft.
 
-**One-time setup on the gaming PC:**
+**Einmalige Einrichtung am Gaming-PC:**
 
-1. Set a password in `.env` — it protects the admin pages (Sources, Evaluation,
-   Prompts, Settings) and the provider/Gemini-key controls in the chat sidebar;
-   the chat itself stays open:
+1. Passwort in `.env` setzen — schützt die Admin-Seiten (Sources, Evaluation, Prompts, Settings)
+   und den Provider-/Gemini-Key-Wechsel in der Chat-Sidebar; der Chat selbst bleibt offen:
    ```
-   LOREKEEPER_ADMIN_PASSWORD=<your password>
+   LOREKEEPER_ADMIN_PASSWORD=<dein Passwort>
    ```
-2. Classify the home network as **Private** (Settings → Network & Internet →
-   network properties). The firewall rule only applies to the Private profile.
-3. Run the setup script once **as administrator** — it adds the firewall rule
-   (inbound TCP 8501, Private only) and warns if the network is Public or a Python
-   block rule would override the allow rule. There is deliberately no autostart —
-   start the server yourself with `.\start.ps1 -Server` when you need it:
+2. Heimnetz als **Privat** einstufen (Einstellungen → Netzwerk und Internet →
+   Netzwerkeigenschaften). Die Firewall-Regel gilt nur im Profil „Privat“.
+3. Das Einrichtungsskript einmal **als Administrator** ausführen — es legt die Firewall-Regel an
+   (eingehend TCP 8501, nur Privat) und warnt, wenn das Netz öffentlich ist oder eine
+   Python-Blockregel die Freigabe überstimmen würde. Bewusst **kein Autostart**:
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts\setup-lan.ps1
-   powershell -ExecutionPolicy Bypass -File scripts\setup-lan.ps1 -Uninstall   # undo
+   powershell -ExecutionPolicy Bypass -File scripts\setup-lan.ps1 -Uninstall   # rückgängig
    ```
-4. Reserve the PC's IP address in the router (DHCP reservation) so the URL
-   stays the same. Ollama settings for the server: `OLLAMA_CONTEXT_LENGTH=16384`,
-   `OLLAMA_KEEP_ALIVE=1h` (see `docs/provider-strategy.md`).
+4. Die IP des PCs im Router reservieren (DHCP-Reservierung), damit die URL gleich bleibt.
+   Ollama-Variablen für den Server: [configuration.md](configuration.md#llm) → `llm.ollama`.
 
-**Start modes (`start.ps1`):**
+**Startarten (`start.ps1`):**
 
-| Command | Backend | UI | Use |
+| Befehl | Backend | UI | Zweck |
 |---|---|---|---|
-| `.\start.ps1` | `127.0.0.1`, auto-reload | `127.0.0.1` only, opens browser | Development on this PC |
-| `.\start.ps1 -Server` | `127.0.0.1`, no reload | `0.0.0.0` (LAN), minimized windows | Home-network server; prints the LAN URLs |
+| `.\start.ps1` | `127.0.0.1`, Auto-Reload | nur `127.0.0.1`, öffnet den Browser | Entwicklung auf diesem PC |
+| `.\start.ps1 -Server` | `127.0.0.1`, kein Reload | `0.0.0.0` (LAN), minimierte Fenster | Heimnetz-Server; gibt die LAN-URLs aus |
 
-Then open `http://<gaming-pc-ip>:8501` on the laptop or phone (tested on a phone
-in the home Wi-Fi). If Windows asks whether Python may accept connections, allow
-**Private networks** only — "Cancel" creates a block rule that overrides the port rule.
+Dann am Laptop oder Handy `http://<ip-des-gaming-pcs>:8501` öffnen. Fragt Windows, ob Python
+Verbindungen annehmen darf, nur **Private Netzwerke** erlauben — „Abbrechen“ legt eine Blockregel
+an, die die Port-Freigabe überstimmt.
 
-**Day-to-day use:**
+**Im Alltag:**
 
-- **Start the server** (no autostart — on purpose): `.\start.ps1 -Server` in the
-  project folder. Backend and UI open as two minimized windows in the taskbar;
-  the console prints the LAN URLs.
-- **Stop**: close both LoreKeeper windows.
-- **Develop on the gaming PC**: stop the server, then `.\start.ps1` — auto-reload,
-  UI only on this PC. Server mode does **not** reload on code changes: after an
-  update, stop and start `.\start.ps1 -Server` again.
-- `start.ps1` skips a part whose port is already in use ("already running"), so a
-  leftover window from the other mode has to be closed first.
+- **Starten** (kein Autostart — Absicht): `.\start.ps1 -Server` im Projektordner. Backend und UI
+  öffnen sich als zwei minimierte Fenster, die Konsole zeigt die LAN-URLs.
+- **Stoppen**: beide LoreKeeper-Fenster schließen.
+- **Am Gaming-PC entwickeln**: Server stoppen, dann `.\start.ps1`. Der Server-Modus lädt Code-
+  Änderungen **nicht** nach: nach einem Update stoppen und neu starten.
+- `start.ps1` überspringt einen Teil, dessen Port schon belegt ist („already running“) — ein
+  übriges Fenster aus dem anderen Modus erst schließen.
 
-**Removing the old autostart task:** the first version of `setup-lan.ps1` registered
-a logon task "LoreKeeper Server". It needs admin rights to delete — either run
-`setup-lan.ps1` again as administrator (keeps the firewall rule, removes the task)
-or in an admin PowerShell:
+**Alte Autostart-Aufgabe entfernen:** Die erste Version von `setup-lan.ps1` legte eine
+Anmelde-Aufgabe „LoreKeeper Server“ an. Löschen braucht Admin-Rechte — `setup-lan.ps1` erneut als
+Administrator ausführen (behält die Firewall-Regel, entfernt die Aufgabe) oder in einer
+Admin-PowerShell:
 
 ```powershell
 Unregister-ScheduledTask -TaskName "LoreKeeper Server" -Confirm:$false
 ```
 
-**Why HTTP and not HTTPS:** inside the home network the traffic never leaves your
-own Wi-Fi/LAN, and Streamlit serves plain HTTP by default. HTTPS would need a
-certificate the browsers trust — a self-signed one triggers a warning on every
-device, a "real" one needs a domain name. The practical risk of HTTP at home is
-that someone **in your Wi-Fi** could read the traffic, including the admin
-password at login. For access from outside (4.2) the plan is Tailscale, which
-encrypts everything end-to-end, so plain HTTP inside the tunnel is fine there too.
+**Warum HTTP und nicht HTTPS:** Im Heimnetz verlässt der Verkehr nie das eigene WLAN/LAN, und
+Streamlit liefert standardmäßig HTTP. HTTPS bräuchte ein Zertifikat, dem die Browser trauen — ein
+selbstsigniertes warnt auf jedem Gerät, ein „echtes“ braucht eine Domain. Das praktische Risiko:
+Jemand **im eigenen WLAN** könnte mitlesen, auch das Admin-Passwort beim Login. Für den Zugriff
+von außen (Roadmap 4.2) ist Tailscale geplant, das alles Ende-zu-Ende verschlüsselt.
 
-**Players at the table:** on their phones, players pick **🎲 Spieler** — they can only
-search the sources released for players (Sources page → column "🎲 Spieler"; default:
-rulebook and Charakterbogen). The game master picks **📜 Spielleiter**. This is a
-spoiler guard, not a lock: anyone can choose either role (see `docs/ui-ux.md`). The
-backend enforces the player restriction itself (`role` on `/query`), so it holds even
-for a client other than the UI.
-
-Access from outside the home network (Tailscale) is planned as roadmap 4.2.
+**Spieler am Tisch:** Am Handy wählen Spieler **🎲 Spieler** — sie durchsuchen nur freigegebene
+Quellen (Sources-Seite → Spalte „🎲 Spieler“, z.B. Regelwerk und Charakterbogen). Die
+Spielleitung wählt **📜 Spielleiter**. Das ist ein Spoiler-Schutz, keine Sperre: jeder kann jede
+Rolle wählen. Das Backend erzwingt die Spieler-Einschränkung selbst
+([ARCHITECTURE.md](../ARCHITECTURE.md) → 4.8).
 
 ---
 
-## Configuration
+## Häufige Probleme
 
-### Override Order
-```
-Env variables  >  .env file  >  config/settings.local.yaml  >  config/settings.yaml  >  Pydantic defaults
-```
-
-### Key Env Variables
-| Variable | Effect |
-|----------|--------|
-| `GEMINI_API_KEY` | Enable Gemini provider |
-| `LLM__PROVIDER` | Provider at startup (`ollama` or `gemini`) |
-| `LLM__OLLAMA__MODEL` | Override Ollama model |
-| `CHROMA_MODE` | `embedded` (default) or `client` (external ChromaDB server, unused) |
-| `LOREKEEPER_ADMIN_PASSWORD` | UI: password for admin pages and provider controls (empty = open) |
-| `LOREKEEPER_API_URL` | UI: backend URL (default `http://127.0.0.1:8000`) |
-
----
-
-## Common Issues
-
-### Ollama not responding
-```powershell
-ollama serve          # start Ollama manually
-ollama list           # check available models
-ollama pull qwen3:14b  # pull model if missing
-```
-
-### ChromaDB file lock
-Occurs when the backend and ingestion script run simultaneously (embedded mode):
-→ Stop backend, run `python -m src.ingestion.orchestrator`, then restart backend.
-
-### Gemini 429 (rate limit)
-- Free Tier: 15 RPM; if `limit: 0`, quota is exhausted → enable billing
-- LoreKeeper retries automatically (max 3×, exponential backoff)
-
-### Reranker model not found
-On first start, LoreKeeper downloads `intfloat/multilingual-e5-base` (~1.1 GB) and `mmarco-mMiniLMv2-L12-H384-v1` (~120 MB) from HuggingFace.
-Afterwards it is cached at `~/.cache/huggingface/`. With `reranking.backend: directml`
-the reranker's ONNX export (`onnx/model.onnx`, ~450 MB) is downloaded on first start as well.
-
-### Reranker runs on the CPU (DirectML warning)
-Log line `DirectML reranker unavailable (…) — falling back to the CPU (torch)`: answers
-stay the same, only retrieval is slower (~0.8 s instead of ~0.05 s, much more while the
-CPU is busy). Usual cause: a `pip install -r requirements.txt` put the plain `onnxruntime`
-back over `onnxruntime-directml` (both share the `onnxruntime/` module). Check and fix:
+### Ollama antwortet nicht
 
 ```powershell
-python -c "import onnxruntime; print(onnxruntime.get_available_providers())"   # needs DmlExecutionProvider
+ollama serve            # Ollama von Hand starten
+ollama list             # vorhandene Modelle
+ollama pull qwen3:14b   # Modell holen, falls es fehlt
+ollama ps               # geladenes Modell, Kontextlänge, GPU-Anteil
+```
+
+### ChromaDB-Dateisperre
+
+Entsteht, wenn Backend und Ingestion-CLI gleichzeitig laufen (embedded): Backend stoppen,
+`python -m src.ingestion.orchestrator`, Backend wieder starten — oder gleich über die UI
+indizieren.
+
+### Gemini 429 (Rate-Limit)
+
+- Kontingent erschöpft (`limit: 0`) → Abrechnung aktivieren oder warten. Achtung: Budgets in Google
+  Cloud warnen nur, sie stoppen nicht.
+- LoreKeeper wiederholt automatisch (bis zu 3×, exponentielles Backoff).
+
+### Modelle fehlen beim ersten Start
+
+Beim ersten Start lädt LoreKeeper `intfloat/multilingual-e5-base` (~1,1 GB) und
+`mmarco-mMiniLMv2-L12-H384-v1` (~120 MB) von Hugging Face, mit `reranking.backend: directml` auch
+den ONNX-Export des Rerankers (`onnx/model.onnx`, ~450 MB). Danach liegt alles in
+`~/.cache/huggingface/`. Vorab laden: README → Schnellstart, Schritt 4.
+
+### Reranker läuft auf der CPU (DirectML-Warnung)
+
+Log-Zeile `DirectML reranker unavailable (…) — falling back to the CPU (torch)`: Die Antworten
+bleiben gleich, nur die Suche ist langsamer (~0,8 s statt ~0,05 s, unter CPU-Last viel mehr).
+Übliche Ursache: ein `pip install -r requirements.txt` hat das normale `onnxruntime` wieder über
+`onnxruntime-directml` gelegt (beide teilen das Modul `onnxruntime/`). Prüfen und beheben:
+
+```powershell
+python -c "import onnxruntime; print(onnxruntime.get_available_providers())"   # braucht DmlExecutionProvider
 pip uninstall -y onnxruntime
 pip install --force-reinstall --no-deps onnxruntime-directml
 ```
 
-`pip check` then reports that chromadb, pymupdf-layout and rapidocr miss `onnxruntime` —
-expected, the module is there. On success the log says `Reranker loaded on the GPU (DirectML)`.
+`pip check` meldet danach, dass chromadb, pymupdf-layout und rapidocr `onnxruntime` vermissen — das
+ist erwartet, das Modul ist da. Bei Erfolg steht im Log `Reranker loaded on the GPU (DirectML)`.
 
-### PDF OCR not working
-- Verify `rapidocr_onnxruntime` is installed: `pip show rapidocr_onnxruntime`
-- Check logs for `pymupdf4llm failed for ... retrying without OCR` — the parser falls back automatically
-- For non-German PDFs, change `ingestion.pdf.ocr_language` in `settings.yaml` (uses ISO 639-3 codes: `eng`, `fra`, `deu`, etc.)
-- OCR is CPU-intensive; large scanned PDFs may take significantly longer than text PDFs
+### PDF-OCR funktioniert nicht
 
-### Retrieval returns wrong document
-1. Check if a full re-ingest is needed (chunking changed → "🔄 Alle Dokumente neu indizieren")
-2. Check `score_threshold` in `settings.yaml` (default: 0.5)
-3. Increase `top_k` (more candidates for the reranker)
-4. Disable the category filter in the sidebar
+- Installiert? `pip show rapidocr_onnxruntime`
+- Log nach `pymupdf4llm failed for ... retrying without OCR` durchsuchen — der Parser fällt
+  automatisch auf „ohne OCR“ zurück.
+- Andere Sprache als Deutsch: `ingestion.pdf.ocr_language` (ISO 639-3: `eng`, `fra`, `deu`, …).
+- OCR ist CPU-lastig; große gescannte PDFs dauern deutlich länger als Text-PDFs.
+
+### Suche liefert das falsche Dokument
+
+1. Evaluation → **Frage testen**: Welche Chunks liefert die Frage, mit welchem Score?
+2. Evaluation → **Chunks**: Wie ist die erwartete Datei zerlegt — gibt es den Inhalt als eigenen
+   Chunk, stimmt die Überschrift?
+3. Nach Chunking-Änderungen alles neu indizieren („🔄 Alle Dokumente neu indizieren“).
+4. Filter in der Chat-Sidebar prüfen (Gruppe abgewählt? Spieler-Modus?).
+5. `top_k` erhöhen (mehr Kandidaten für den Reranker); `score_threshold` nicht unter 0,5 senken.
 
 ---
 
@@ -264,17 +219,16 @@ expected, the module is there. On success the log says `Reranker loaded on the G
 Get-Content logs\lorekeeper.log -Tail 50
 ```
 
-Answer ratings (👍/👎 in the chat) land in `logs/feedback.jsonl`, one JSON object
-per line. A changed or withdrawn rating is a new line with the same `message_id` —
-the last line per `message_id` counts (`rating: null` = withdrawn):
+Pro Anfrage steht eine Zeile `Query timings: …` im Log (Condense, Retrieval-Stufen, erster Token,
+gesamt, Chunks, Prompt-Größe). Den Log-Level setzt `logging.level` (`DEBUG` zeigt u.a. alle
+Rerank-Scores).
+
+Bewertungen (👍/👎 im Chat) landen in `logs/feedback.jsonl`, ein JSON-Objekt pro Zeile. Eine
+geänderte oder zurückgenommene Bewertung ist eine neue Zeile mit derselben `message_id` — die letzte
+Zeile je `message_id` gilt (`rating: null` = zurückgenommen). Auswerten geht am einfachsten über
+Evaluation → **Feedback**, oder:
 
 ```powershell
 Get-Content logs\feedback.jsonl | ConvertFrom-Json | Where-Object rating -eq 'down' |
   Select-Object ts, role, question, sources
-```
-
-Log level in `settings.yaml`:
-```yaml
-logging:
-  level: INFO   # DEBUG | INFO | WARNING | ERROR
 ```

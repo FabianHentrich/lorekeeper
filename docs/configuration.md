@@ -1,367 +1,339 @@
-# Configuration Reference
+# Konfiguration
 
-This document provides a comprehensive reference for configuring LoreKeeper. It details the setup for ingestion, chunking, embeddings, LLM providers, conversation settings, and how these values can be overridden using environment variables.
+Die vollständige Referenz aller Einstellungen und Umgebungsvariablen. Andere Dokumente verweisen
+hierher, statt Werte zu wiederholen; die Datei mit den aktuellen Werten ist `config/settings.yaml`.
 
-## Table of Contents
-1. [`ingestion`](#ingestion)
-   - [Sources sidecar — `config/sources.yaml`](#sources-sidecar--configsourcesyaml)
-   - [PDF parsing — `ingestion.pdf`](#pdf-parsing--ingestionpdf)
-2. [`chunking`](#chunking)
-3. [`embeddings`](#embeddings)
-4. [`vectorstore`](#vectorstore)
-5. [`retrieval`](#retrieval)
-6. [`llm`](#llm)
-   - [`llm.ollama`](#llmollama)
-   - [`llm.gemini`](#llmgemini)
-7. [`conversation`](#conversation)
-8. [`logging`](#logging)
-9. [`api`](#api)
-10. [Full Env Variable Reference](#full-env-variable-reference)
+## Inhaltsverzeichnis
+1. [Reihenfolge und Dateien](#reihenfolge-und-dateien)
+2. [Bearbeiten über die UI](#bearbeiten-über-die-ui)
+3. [`ingestion`](#ingestion)
+   - [Quellen — `config/sources.yaml`](#quellen--configsourcesyaml)
+   - [PDF — `ingestion.pdf`](#pdf--ingestionpdf)
+4. [`chunking`](#chunking)
+5. [`embeddings`](#embeddings)
+6. [`vectorstore`](#vectorstore)
+7. [`retrieval`](#retrieval)
+8. [`llm`](#llm)
+9. [`conversation`](#conversation)
+10. [`logging`](#logging)
+11. [`api` und `ui`](#api-und-ui)
+12. [Umgebungsvariablen](#umgebungsvariablen)
 
 ---
 
-All settings live in `config/settings.yaml`. Env variables and the `.env` file
-override YAML values (double underscore for nesting: `LLM__OLLAMA__MODEL`).
+## Reihenfolge und Dateien
 
-**Override order** (highest priority first):
+Höchste Priorität zuerst:
+
 ```
-Env variables  >  .env file  >  config/settings.local.yaml  >  config/settings.yaml  >  Pydantic defaults
+Umgebungsvariablen  >  .env  >  config/settings.local.yaml  >  config/settings.yaml  >  Code-Defaults
 ```
 
-### Editing via the UI
+| Datei | Versioniert | Inhalt |
+|-------|-------------|--------|
+| `config/settings.yaml` | ja | Basiswerte mit Kommentaren; wird nie von der App umgeschrieben |
+| `config/settings.local.yaml` | nein (gitignored) | Änderungen der Settings-Seite; löschen = zurück zu `settings.yaml` |
+| `config/sources.yaml` | nein (gitignored) | Quellen (Vorlage: `config/sources_example.yaml`) |
+| `config/prompts.yaml` | ja | Aktive Prompts ([prompts.md](prompts.md)) |
+| `config/prompts/` | nein (gitignored) | Gespeicherte Prompt-Varianten |
+| `.env` | nein (gitignored) | Geheimnisse und Overrides (Vorlage: `.env.example`) |
 
-A subset of these settings is editable live via the 🛠 **Settings** page
-(`ui/pages/4_Settings.py`) and the `GET /config` / `PUT /config` endpoints.
-Writes go to the gitignored sidecar `config/settings.local.yaml` (overrides
-`settings.yaml`, which is never rewritten and keeps its comments) **and** mutate
-the running services in place — no restart required. Delete the sidecar to
-reset to `settings.yaml`.
+Verschachtelte Schlüssel werden in Umgebungsvariablen mit doppeltem Unterstrich geschrieben:
+`llm.ollama.model` → `LLM__OLLAMA__MODEL`. Kurzformen wie `OLLAMA_MODEL` oder `CHROMA_MODE` gibt
+es **nicht**.
 
-| Section | Editable via UI | Live effect |
+---
+
+## Bearbeiten über die UI
+
+Ein Teil der Werte ist live über die Seite **🛠 Settings** bzw. `GET/PUT /config` änderbar.
+Gespeichert wird nach `config/settings.local.yaml`, zugleich werden die laufenden Dienste
+angepasst — kein Neustart.
+
+| Bereich | Über die UI | Wirkung |
 |---|---|---|
-| `retrieval.*` (incl. `hybrid.*`, `reranking.*`) | ✅ all fields except `section_expansion.*`, `rules_slot.*` and `reranking.backend` (YAML only) | next query |
-| `llm.ollama.{temperature,top_p,max_tokens,timeout}` | ✅ | next query |
-| `llm.gemini.{temperature,top_p,max_tokens,timeout}` | ✅ | next query |
-| `llm.fallback_enabled` | ✅ | next query |
-| `conversation.{window_size,condense_question,session_timeout_minutes}` | ✅ | next query / next GC wake |
-| `chunking.*` | ✅ | **next reindex only** (UI shows warning) |
-| `llm.provider` | via sidebar provider switch | hot-swap |
-| `ingestion.sources` | via Sources page | requires reindex |
-| prompts | via Prompts page | hot-reload |
-| `embeddings.*`, `vectorstore.*`, `api.*`, `logging.*`, secrets | ❌ read-only or `.env` only | restart |
+| `retrieval.top_k`, `score_threshold`, `reranking.{enabled,top_k_rerank,max_per_source}`, `hybrid.*` | ✅ | nächste Frage |
+| `retrieval.section_expansion.*`, `rules_slot.*`, `reranking.{model,backend}` | ❌ nur YAML | nächster Start |
+| `llm.ollama` / `llm.gemini`: `temperature`, `top_p`, `max_tokens`, `timeout` | ✅ | nächste Frage |
+| `llm.fallback_enabled` | ✅ | nächste Frage |
+| `conversation.{window_size,condense_question,session_timeout_minutes}` | ✅ | nächste Frage / nächster GC-Lauf |
+| `conversation.answer_history_*`, `condense_model` | ❌ nur YAML | nächster Start |
+| `chunking.*` | ✅ | **erst nach Neu-Indizierung** (die UI warnt) |
+| `llm.provider` | Provider-Wechsel in der Chat-Sidebar | sofort |
+| Quellen | Seite ⚙ Sources | Neu-Indizierung nötig (Freigabe `player_visible` sofort) |
+| Prompts | Seite ✏ Prompts | sofort |
+| `embeddings.*`, `vectorstore.*`, `logging.*`, Geheimnisse | ❌ | Neustart |
 
-The allow-list lives in `src/config/manager.py:_EDITABLE_KEYS`. Keys outside
-it are silently dropped by `ConfigManager.save_settings()`.
+Die Allow-List steht in `src/config/manager.py` (`_EDITABLE_KEYS`); andere Schlüssel verwirft
+`ConfigManager.save_settings()` stillschweigend.
 
 ---
 
 ## `ingestion`
 
-Controls which files are read.
+| Schlüssel | Typ | Default | Beschreibung |
+|-----------|-----|---------|--------------|
+| `supported_formats` | `list[str]` | `[".md", ".pdf", ".png", ".jpg", ".jpeg", ".webp"]` | Verarbeitete Dateiendungen |
+| `exclude_patterns` | `list[str]` | siehe unten | Glob-Muster für ausgeschlossene Dateien/Ordner |
+| `watch_for_changes` | `bool` | `false` | Nicht umgesetzt (reserviert für automatisches Neu-Indizieren) |
+| `document_paths` | `list[str]` | `[]` | **Veraltet.** Ohne `sources.yaml` wandelt der Loader die Pfade einmalig in Quellen mit `group: lore` um und warnt |
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `supported_formats` | `list[str]` | `[".md", ".pdf", ".png", ".jpg", ".jpeg", ".webp"]` | File extensions to process |
-| `exclude_patterns` | `list[str]` | see below | Glob patterns for files/folders to exclude |
-| `watch_for_changes` | `bool` | `false` | Not implemented (reserved for auto-reindex) |
-| `document_paths` | `list[str]` | `[]` | **Deprecated.** Replaced by `config/sources.yaml`. If set without a `sources.yaml`, the loader migrates them on the fly to sources with `group=lore` and warns. |
+Standard-Ausschlüsse: `.obsidian/*`, `.trash/*`, `*alt.md` (Sicherungskopien), `*(1).md`
+(Duplikate), `*.draft.*` (Entwürfe). `.tex`-Dateien werden ohnehin nicht gelesen.
 
-### Sources sidecar — `config/sources.yaml`
+### Quellen — `config/sources.yaml`
 
-Sources are configured in a separate sidecar file (gitignored, user-specific).
-A source is either a folder or a single file and belongs to one of the four
-filter groups `lore`, `adventure`, `rules`, `simulation`.
+Eine Quelle ist ein Ordner oder eine einzelne Datei und gehört zu einer der vier Gruppen `lore`,
+`adventure`, `rules`, `simulation`.
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `id` | `str` | yes | Stable identifier (used to scope reindex/delete and as `source_id` metadata on every chunk). Free text — spaces, `&`, `#`, `/` etc. are fine. New IDs must not be empty, `.`/`..` or have leading/trailing whitespace (checked by `PUT /sources`). Renaming = new source (see below). |
-| `path` | `str` | yes | Absolute or relative path. May point at a folder OR a single file. |
-| `group` | `lore`\|`adventure`\|`rules`\|`simulation` | yes | Default filter group for the four sidebar buttons. Can be overridden per folder in `category_map`. |
-| `default_category` | `str` | no (yes for file sources) | Fallback `content_category` when no entry of `category_map` matches. |
-| `category_map` | `dict[str, str\|dict]` | no | Top-level folder name → category (and optionally group). Values can be a plain string (`npc`) or a dict (`{category: story, group: adventure}`). String values inherit the source-level `group`. Case-insensitive lookup. Folder sources only. |
-| `exclude_patterns` | `list[str]` | no | Additive to global `ingestion.exclude_patterns`. |
-| `player_visible` | `bool` | no (default `false`) | Searchable in the chat's **player mode** (🎲 Spieler). Only release sources without game-master knowledge (rulebook, character sheet). Editable as the "🎲 Spieler" column on the Sources page; takes effect immediately, no reindex. |
+| Feld | Typ | Pflicht | Beschreibung |
+|------|-----|---------|--------------|
+| `id` | `str` | ja | Stabile ID; steht als `source_id` an jedem Chunk und begrenzt Reindex/Löschen. Freitext (Leerzeichen, `&`, `#`, `/` gehen). Neue IDs dürfen nicht leer, `.`/`..` sein oder mit Leerzeichen beginnen/enden. Umbenennen = neue Quelle (siehe unten) |
+| `path` | `str` | ja | Absoluter oder relativer Pfad zu Ordner **oder** Datei |
+| `group` | `lore`\|`adventure`\|`rules`\|`simulation` | ja | Gruppe für die Filter im Chat; pro Ordner über `category_map` überschreibbar |
+| `default_category` | `str` | nein (bei Datei-Quellen ja) | `content_category`, wenn kein `category_map`-Eintrag passt |
+| `category_map` | `dict[str, str\|dict]` | nein | Top-Level-Ordner → Kategorie, optional mit Gruppe: `npc` oder `{category: story, group: adventure}`. Groß-/Kleinschreibung egal. Nur bei Ordnern |
+| `exclude_patterns` | `list[str]` | nein | Zusätzlich zu den globalen Ausschlüssen |
+| `player_visible` | `bool` | nein (`false`) | Im **Spieler-Modus** durchsuchbar. Nur Quellen ohne Spielleiter-Wissen freigeben (Regelwerk, Charakterbogen). Spalte „🎲 Spieler“ auf der Sources-Seite; wirkt sofort, ohne Neu-Indizierung. Das Backend erzwingt die Freigabe ([ARCHITECTURE.md](../ARCHITECTURE.md) → 4.8) |
 
-**Example:**
 ```yaml
 # config/sources.yaml
 sources:
   - id: pnp-welt
-    path: C:/Users/you/Obsidian/PnP-Welt
-    group: lore                          # fallback for unmapped folders
+    path: C:/Users/du/Obsidian/PnP-Welt
+    group: lore                          # für Ordner ohne Eintrag
     default_category: misc
     category_map:
-      NPCs: npc                          # string shorthand → inherits group: lore
+      NPCs: npc                          # Kurzform → erbt group: lore
       Orte: location
       Gegner: enemy
-      Geschichte:                        # dict form → overrides group
+      Geschichte:                        # Langform → eigene Gruppe
         category: story
         group: adventure
       Regelwerk:
         category: rules
         group: rules
+  - id: pnp_regelbuch
+    path: C:/Users/du/Regeln/pnp_regelbuch.pdf
+    group: rules
+    default_category: rules
+    player_visible: true
 ```
 
-**Managing sources:**
-- Edit `config/sources.yaml` directly, or
-- Use the Streamlit page **⚙ Sources** (`ui/pages/1_Sources.py`) to add / edit / reindex / recategorize / remove sources, or
-- Use the REST endpoints: `GET/PUT /sources`, `POST /sources/{id}/reindex`, `DELETE /sources/{id}`, `POST /sources/recategorize`, `POST /admin/wipe`.
+**Quellen verwalten:** `config/sources.yaml` direkt bearbeiten, die Seite **⚙ Sources** nutzen
+oder die REST-Endpoints (`GET/PUT /sources`, `POST /sources/{id}/reindex`, `DELETE /sources/{id}`,
+`POST /sources/recategorize`, `POST /admin/wipe`).
 
-**Recategorize vs. Reindex:**
-- *Recategorize* — `python -m src.ingestion.recategorize` rewrites only the `group` / `content_category` / `source_id` metadata of existing chunks against the current `sources.yaml`. No re-embedding, runs in seconds.
-- *Reindex* — full delete + parse + chunk + embed for one source. Required when `path` changes.
-- *Incremental ingest* (`POST /ingest`, "⚡ Nur Änderungen indizieren") — all sources, only new / changed / deleted files. Enough after editing notes.
-- *Full ingest* (`POST /ingest?full=true`, "🔄 Alle Dokumente neu indizieren") — all sources, every file. Required after chunking or PDF-parsing changes.
+**Welche Aktion wann:**
+- *Recategorize* (`python -m src.ingestion.recategorize` oder Button) — schreibt nur `group` /
+  `content_category` / `source_id` der vorhandenen Chunks neu. Kein Embedding, Sekunden.
+- *Reindex einer Quelle* — löschen + parsen + chunken + embedden; nötig, wenn sich `path` ändert.
+- *Inkrementell* (`POST /ingest`, „⚡ Nur Änderungen indizieren“) — alle Quellen, nur neue,
+  geänderte und gelöschte Dateien. Reicht nach dem Bearbeiten von Notizen.
+- *Alles* (`POST /ingest?full=true`, „🔄 Alle Dokumente neu indizieren“) — jede Datei; nötig nach
+  Änderungen an Chunking oder PDF-Parsing.
 
-**Renaming a source `id`:** ingest only looks at chunks of *configured* IDs, so
-chunks stored under the old ID are never cleaned up automatically. Remove the
-source first (Sources page → "Source entfernen" deletes its chunks), then add it
-again under the new ID — or wipe the collection and re-ingest.
+**Eine `id` umbenennen:** Die Ingestion betrachtet nur Chunks *konfigurierter* IDs, Chunks unter
+der alten ID bleiben liegen. Erst die Quelle entfernen (Sources-Seite → „Source entfernen“ löscht
+ihre Chunks), dann unter neuer ID anlegen — oder die Collection leeren und neu indizieren.
 
-**Default excludes:**
-```yaml
-exclude_patterns:
-  - ".obsidian/*"   # Obsidian configuration
-  - ".trash/*"      # Obsidian trash
-  - "*alt.md"       # Backup versions
-  - "*(1).md"       # Duplicates
-  - "*.draft.*"     # Drafts
-```
+### PDF — `ingestion.pdf`
 
-### PDF parsing — `ingestion.pdf`
+Nicht in `settings.yaml` gesetzt, die Defaults gelten. OCR braucht `rapidocr_onnxruntime`
+(in `requirements.txt`).
 
-Controls OCR and image extraction for PDF files. Requires `rapidocr_onnxruntime`
-(installed via `requirements.txt`).
+| Schlüssel | Typ | Default | Beschreibung |
+|-----------|-----|---------|--------------|
+| `ocr_enabled` | `bool` | `true` | OCR für Bereiche ohne extrahierbaren Text |
+| `ocr_language` | `str` | `deu` | Sprachcode (ISO 639-3) |
+| `ocr_dpi` | `int` | `300` | Auflösung fürs OCR (höher = besser, langsamer) |
+| `extract_images` | `bool` | `true` | Eingebettete Bilder als eigene Einträge extrahieren |
+| `image_format` | `str` | `png` | Format der extrahierten Bilder |
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `ocr_enabled` | `bool` | `true` | Run OCR on text-less regions in PDFs |
-| `ocr_language` | `str` | `deu` | Language code for OCR engine (ISO 639-3) |
-| `ocr_dpi` | `int` | `300` | DPI for OCR rendering (higher = better quality, slower) |
-| `extract_images` | `bool` | `true` | Extract embedded images as separate index entries |
-| `image_format` | `str` | `png` | Image format for extraction (`png`, `jpg`) |
-
-**Example:**
-```yaml
-ingestion:
-  pdf:
-    ocr_enabled: true
-    ocr_language: "deu"
-    ocr_dpi: 300
-    extract_images: true
-    image_format: "png"
-```
-
-**How it works:**
-
-1. pymupdf4llm converts each PDF page to Markdown with `page_chunks=True`
-2. If `ocr_enabled`, RapidOCR runs on regions without extractable text
-3. Heading hierarchy is corrected using TOC data from the PDF (most reliable), with a numbered-heading regex as fallback
-4. `ignore_code=True` prevents monospace text in rulebooks from being misidentified as code blocks
-5. Extracted images become separate `ParsedDocument` entries with `document_type="image"`
-6. If OCR fails (engine not installed, corrupt page), the parser retries without OCR automatically
-
-> **Note:** Changes to `ingestion.pdf` require a re-ingest of affected PDFs.
-> The incremental ingest does **not** pick this up — the PDF's content hash is
-> unchanged, so it is skipped. Use a full re-ingest (Sources page → "🔄 Alle
-> Dokumente neu indizieren", or `POST /ingest?full=true`) or reindex the source.
+Ablauf und Fallbacks: [parsing.md](parsing.md). Änderungen hier ändern den Datei-Hash nicht —
+danach „🔄 Alle Dokumente neu indizieren“ oder die Quelle neu indizieren.
 
 ---
 
 ## `chunking`
 
-Controls how documents are split into chunks.
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
+| Schlüssel | Typ | Default | Beschreibung |
+|-----------|-----|---------|--------------|
 | `strategy` | `str` | `heading_aware` | `heading_aware` \| `recursive` \| `fixed_size` |
-| `max_chunk_size` | `int` | `256` | Max chunk size in estimated tokens (`len(text) / 3.5`); applies to prose only — tables are kept atomic |
-| `chunk_overlap` | `int` | `30` | Overlap in recursive prose splitting; tables never receive overlap |
-| `min_chunk_size` | `int` | `20` | Chunks below this size are merged with the previous chunk **only if both belong to the same `heading_hierarchy`** — merging across heading boundaries would make the chunk's heading metadata lie about half its content |
+| `max_chunk_size` | `int` | `256` | Höchstgröße in geschätzten Tokens (`len(text) / 3,5`, ≈ 900 Zeichen); gilt für Fließtext, Tabellen bleiben ganz |
+| `chunk_overlap` | `int` | `30` | Überlappung beim Teilen von Fließtext; Tabellen nie |
+| `min_chunk_size` | `int` | `20` | Kleinere Chunks werden mit dem Vorgänger zusammengelegt — **nur bei gleicher Überschrift**, sonst würden die Überschrift-Metadaten über den halben Inhalt lügen |
 
-**Strategies:**
+| Strategie | Verhalten | Geeignet für |
+|-----------|-----------|--------------|
+| `heading_aware` | Jede Überschrift ein Chunk, Tabellen atomar (Split nur an Zeilen, Kopf wird wiederholt), zu langer Text rekursiv geteilt | Obsidian-Vaults, PDFs |
+| `recursive` | Rekursiv an `\n\n`, `\n`, `. ` | Fließtext ohne Struktur |
+| `fixed_size` | Feste Wortfenster mit Überlappung | Unstrukturierter Text |
 
-| Strategy | Behavior | Best for |
-|----------|----------|---------|
-| `heading_aware` | Each Markdown/PDF heading = one chunk; Markdown tables kept atomic; oversized prose → recursive split | Obsidian vaults, structured docs, PDFs |
-| `recursive` | Recursive splitting on `\n\n`, `\n`, `. ` | Prose without clear structure |
-| `fixed_size` | Fixed word windows with overlap | Uniform chunks, unstructured text |
-
-> **Table-aware chunking (heading_aware only):** Lines starting with `|` are detected as
-> Markdown tables and treated as atomic units — no split mid-row, no overlap. Very large
-> tables are split at row boundaries with the header repeated in each part.
-
-> **Note:** Changes to `chunking` require a full re-ingest (Sources page →
-> "🔄 Alle Dokumente neu indizieren", or `POST /ingest?full=true`) — the incremental
-> ingest skips files whose content hash is unchanged. See [operations.md](operations.md).
+Änderungen wirken erst nach „🔄 Alle Dokumente neu indizieren“ (`POST /ingest?full=true`).
 
 ---
 
 ## `embeddings`
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `model` | `str` | `intfloat/multilingual-e5-base` | HuggingFace model ID. e5-models get automatic query/passage prefixes. |
-| `device` | `str` | `auto` | `auto` \| `cpu` \| `cuda` \| `mps` |
-| `batch_size` | `int` | `64` | Batch size during ingest embedding |
-| `normalize` | `bool` | `true` | L2 normalization of vectors (required for cosine similarity) |
+| Schlüssel | Typ | Default | Beschreibung |
+|-----------|-----|---------|--------------|
+| `model` | `str` | `intfloat/multilingual-e5-base` | Hugging-Face-Modell; e5-Modelle bekommen automatisch `query:`/`passage:`-Präfixe |
+| `device` | `str` | `auto` | `auto` \| `cpu` \| `cuda` \| `mps` (auf AMD unter Windows läuft es auf der CPU) |
+| `batch_size` | `int` | `64` | Batchgröße beim Indizieren |
+| `normalize` | `bool` | `true` | L2-Normalisierung (nötig für Cosine) |
 
-The model is preloaded at server start (`warmup` in `lifespan`), not on the first query.
+Das Modell wird beim Start geladen (Warm-up im Lifespan), nicht bei der ersten Frage. Ein
+Modellwechsel erfordert eine komplette Neu-Indizierung.
 
 ---
 
 ## `vectorstore`
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `mode` | `str` | `embedded` | `embedded` (local) \| `client` (external ChromaDB server, unused) |
-| `persist_directory` | `str` | `./chroma_data` | Storage location in embedded mode |
-| `chroma_host` | `str` | `chromadb` | Host in client mode |
-| `chroma_port` | `int` | `8000` | Port in client mode |
-| `collection_name` | `str` | `lorekeeper` | ChromaDB collection |
+| Schlüssel | Typ | Default | Beschreibung |
+|-----------|-----|---------|--------------|
+| `mode` | `str` | `embedded` | `embedded` (im Backend-Prozess) \| `client` (externer Server, ungenutzt) |
+| `persist_directory` | `str` | `./chroma_data` | Speicherort im Modus `embedded` |
+| `chroma_host` / `chroma_port` | `str` / `int` | `chromadb` / `8000` | Nur im Modus `client` |
+| `collection_name` | `str` | `lorekeeper` | ChromaDB-Collection |
 | `distance_metric` | `str` | `cosine` | `cosine` \| `l2` \| `ip` |
 
-> **Warning:** `persist_directory` and `chroma_host/port` are mutually exclusive.
-> Switch exclusively via `CHROMA_MODE`.
+Umschalten über `VECTORSTORE__MODE`. Im Modus `embedded` darf kein zweiter Prozess gleichzeitig auf
+`chroma_data/` zugreifen.
 
 ---
 
 ## `retrieval`
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `top_k` | `int` | `15` | Number of candidates from ChromaDB (before reranking) |
-| `score_threshold` | `float` | `0.5` | Minimum cosine similarity. 0.5 ≈ "similar"; 0.3 returns near-orthogonal noise |
-| `reranking.enabled` | `bool` | `true` | Enable cross-encoder reranking |
-| `reranking.model` | `str` | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` | Reranker model (multilingual) |
-| `reranking.backend` | `str` | `torch` (`settings.yaml`: `directml`) | `torch` = CPU. `directml` = GPU via `onnxruntime-directml` (any DX12 card, incl. AMD), using the model's published ONNX export (`onnx/model.onnx`) — same scores, 15 pairs in ~50 ms instead of ~840 ms, and unaffected by CPU load (~70 ms vs. ~14 s with a busy CPU). If DirectML is missing (plain `onnxruntime` installed over it) or the model has no ONNX export, a **warning** is logged and the CPU model is used. YAML only, applied at the next backend start |
-| `reranking.top_k_rerank` | `int` | `8` | Final chunk count after reranking → LLM context |
-| `reranking.max_per_source` | `int` | `3` | Soft cap on chunks coming from a single source file (0 = unlimited). Prevents one dense document from filling all `top_k_rerank` slots and crowding out other relevant sources. Two-pass: first fills with diversity preference, then backfills cap-blocked chunks if `top_k_rerank` would otherwise not be reached — so the cap never silently returns fewer chunks than requested. |
-| `hybrid.enabled` | `bool` | `false` | Enable hybrid retrieval: vector + BM25 run in parallel, results fused via Reciprocal Rank Fusion before reranking. Per-request override via the `hybrid_search` field on `QueryRequest` |
-| `hybrid.bm25_weight` | `float` | `0.3` | BM25 share in RRF (0.0 = pure vector, 1.0 = pure BM25) |
-| `hybrid.bm25_top_k` | `int` | `15` | How many BM25 candidates to fetch before fusion |
-| `section_expansion.enabled` | `bool` | `true` | After reranking: if ≥ 2 hits of one file share a parent heading with *different* sub-headings, the whole parent section is loaded and passed to the LLM in document order (fixes fragmentary answers to "which abilities / what does X contain" questions). Not editable via the UI |
-| `section_expansion.max_chunks` | `int` | `25` | Sections with more chunks are not expanded — protects the LLM context from whole chapters |
-| `rules_slot.enabled` | `bool` | `false` (`settings.yaml`: `true`) | Questions naming a vault entity *and* a rule term ("Was bewirkt Ritterlichkeit bei Escanor?") fill all vector candidates with the entity's file — the rulebook never reaches the reranker. With the slot, a separate vector search inside group `rules` (AND-ed with the request filter, so player mode holds) yields extra candidates; they are reranked but kept apart from the main pool. If no `rules` chunk made the final `top_k_rerank`, the best one scoring ≥ `min_score` replaces the weakest — never more than one. Not editable via the UI |
-| `rules_slot.candidates` | `int` | `5` | Size of the separate rules search |
-| `rules_slot.min_score` | `float` | `-4.0` | Minimum rerank score (raw logit) for the slot. Golden set (same process): off 132/153 sections, x001–x008 1/8 · `-3` 133, 2/8 · **`-4` 136, 5/8** · `-5`/`-6`/`-8` 136, 5/8 with more rules chunks in pure lore questions (64 → 91 → 119 → 136 of 138) |
-| `section_expansion.top_rank` | `int` | `3` | Only expand a section if one of its hits is among the first N reranked chunks (`0` = no limit). Stops two stray mid-ranking hits from pulling an unrelated section into the context. Golden set: Ø chunks 13.9 → 12.6, 25 questions lose junk expansion, section hit rate unchanged; `2`/`1` started cutting relevant overview chunks |
+Ablauf und Begründungen: [embedding-strategy.md](embedding-strategy.md).
 
-**Rules of thumb:**
-- `top_k` should be at least twice `top_k_rerank`
-- Only set `score_threshold > 0` when reranking is disabled; otherwise the reranker handles quality control
-- `score_threshold` is always evaluated on the **cosine** scores before RRF fusion — RRF scores max out around `1/(60+1) ≈ 0.016` and would be entirely wiped by a cosine-scale threshold
+| Schlüssel | Typ | Default | Beschreibung |
+|-----------|-----|---------|--------------|
+| `top_k` | `int` | `15` | Kandidaten aus ChromaDB vor dem Reranking |
+| `score_threshold` | `float` | `0.5` | Mindest-Cosine. 0,5 ≈ „ähnlich“; 0,3 liefert fast orthogonales Rauschen — nicht senken |
+| `reranking.enabled` | `bool` | `true` | Cross-Encoder-Reranking |
+| `reranking.model` | `str` | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` | Reranker (mehrsprachig) |
+| `reranking.backend` | `str` | `torch` (`settings.yaml`: `directml`) | `torch` = CPU. `directml` = GPU über `onnxruntime-directml` (jede DX12-Karte, auch AMD) mit dem veröffentlichten ONNX-Export des Modells (`onnx/model.onnx`) — gleiche Scores, 15 Paare in ~50 ms statt ~840 ms, unabhängig von CPU-Last (~70 ms statt ~14 s). Fehlt DirectML oder der ONNX-Export, **Warnung im Log** und CPU-Modell |
+| `reranking.top_k_rerank` | `int` | `8` | Chunks nach dem Reranking → LLM-Kontext |
+| `reranking.max_per_source` | `int` | `3` | Weicher Deckel je Datei (0 = keiner). Zwei Durchgänge: erst divers füllen, dann aus dem Überlauf nachfüllen — es kommen nie weniger als `top_k_rerank` Chunks zurück, solange Kandidaten da sind |
+| `hybrid.enabled` | `bool` | `false` | Vektor + BM25 parallel, Fusion per Reciprocal Rank Fusion. Pro Anfrage über `hybrid_search` |
+| `hybrid.bm25_weight` | `float` | `0.3` | BM25-Anteil in der Fusion (0 = nur Vektor, 1 = nur BM25) |
+| `hybrid.bm25_top_k` | `int` | `15` | BM25-Kandidaten vor der Fusion |
+| `section_expansion.enabled` | `bool` | `true` | Teilen sich ≥ 2 Treffer einer Datei eine Eltern-Überschrift mit verschiedenen Unter-Überschriften, wird die ganze Sektion in Dokumentreihenfolge übergeben (vollständige Antworten auf „welche Fähigkeiten …“) |
+| `section_expansion.max_chunks` | `int` | `25` | Größere Sektionen werden nicht expandiert |
+| `section_expansion.top_rank` | `int` | `3` | Nur expandieren, wenn ein Treffer der Sektion unter den ersten N liegt (0 = egal). Golden Set: Ø Chunks 13,9 → 12,6, Abschnitt-Treffer unverändert; 2/1 schnitten schon relevante Übersichten ab |
+| `rules_slot.enabled` | `bool` | `false` (`settings.yaml`: `true`) | Fragen mit Vault-Entität *und* Regelbegriff („Was bewirkt Ritterlichkeit bei Escanor?“) füllen alle Kandidaten mit der Datei der Entität. Der Slot sucht zusätzlich nur in Gruppe `rules` (mit demselben Filter wie die Anfrage, der Spieler-Modus bleibt dicht); diese Kandidaten werden mit gereranked, aber nicht in den Haupt-Pool gemischt. Fehlt in den Top-`top_k_rerank` ein `rules`-Chunk, ersetzt der beste mit Score ≥ `min_score` den schwächsten — höchstens einer |
+| `rules_slot.candidates` | `int` | `5` | Größe der Regelwerk-Suche |
+| `rules_slot.min_score` | `float` | `-4.0` | Mindest-Rerank-Score (roher Logit). Golden Set im selben Prozess: aus 132/153 Abschnitte, x001–x008 1/8 · −3: 133, 2/8 · **−4: 136, 5/8** · −5/−6/−8: 136, 5/8, aber mehr Regel-Chunks in reinen Lore-Fragen (64 → 91 → 119 → 136 von 138) |
+
+**Faustregeln:**
+- `top_k` mindestens doppelt so groß wie `top_k_rerank`.
+- `score_threshold` gilt immer auf die **Cosine**-Scores vor der Fusion — RRF-Scores liegen bei
+  höchstens ~0,016 und würden sonst komplett weggefiltert.
+- Pro Anfrage überschreibbar: `top_k`, `top_k_rerank`, `max_per_source`, `hybrid_search`.
 
 ---
 
 ## `llm`
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `provider` | `str` | `ollama` | Active provider at startup: `ollama` \| `gemini` |
-| `fallback_provider` | `str\|null` | `gemini` | Fallback on provider failure |
-| `fallback_enabled` | `bool` | `false` | Enable fallback |
+| Schlüssel | Typ | Default | Beschreibung |
+|-----------|-----|---------|--------------|
+| `provider` | `str` | `ollama` | Provider beim Start: `ollama` \| `gemini` |
+| `fallback_provider` | `str\|null` | `gemini` | Ausweich-Provider |
+| `fallback_enabled` | `bool` | `false` | Ausweichen aktivieren (greift, wenn der Hauptprovider vor dem ersten Token scheitert) |
 
-### `llm.ollama`
+**`llm.ollama`**
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `base_url` | `str` | `http://127.0.0.1:11434` | Ollama server URL — use `127.0.0.1`, not `localhost` (on Windows `localhost` resolves to IPv6 first and costs ~2 s per new connection) |
-| `model` | `str` | `qwen3:14b` | Model name (must be available via `ollama pull`) |
-| `temperature` | `float` | `0.3` | Creativity (0 = deterministic, 1 = creative) |
-| `top_p` | `float` | `0.9` | Nucleus sampling |
-| `max_tokens` | `int` | `2048` | Maximum output tokens |
-| `timeout` | `int` | `300` | Request timeout in seconds |
+| Schlüssel | Typ | Default | Beschreibung |
+|-----------|-----|---------|--------------|
+| `base_url` | `str` | `http://127.0.0.1:11434` | Ollama-Server — `127.0.0.1`, nicht `localhost` (unter Windows ~2 s pro neuer Verbindung) |
+| `model` | `str` | `qwen3:14b` | Modellname (vorher `ollama pull`) |
+| `temperature` | `float` | `0.3` | Kreativität (0 = deterministisch) |
+| `top_p` | `float` | `0.9` | Nucleus Sampling |
+| `max_tokens` | `int` | `2048` | Höchstzahl Ausgabe-Tokens |
+| `timeout` | `int` | `300` | Timeout in Sekunden |
 
-**Env override:**
-```bash
-LLM__OLLAMA__MODEL=qwen3:14b
-LLM__PROVIDER=ollama
-```
+Ollama selbst (Benutzer-Umgebungsvariablen, nicht LoreKeeper): `OLLAMA_CONTEXT_LENGTH=16384` — der
+OpenAI-kompatible Endpoint ignoriert `num_ctx` pro Anfrage, ohne die Variable wird der Prompt bei
+4096 Tokens still abgeschnitten; `OLLAMA_KEEP_ALIVE=1h` — sonst entlädt Ollama das Modell nach 5
+Minuten und die nächste Frage wartet ~16 s.
 
-### `llm.gemini`
+**`llm.gemini`**
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `model` | `str` | `gemini-2.5-flash` | Gemini model ID |
-| `api_key_env` | `str` | `GEMINI_API_KEY` | Name of the env variable containing the API key |
-| `temperature` | `float` | `0.3` | Creativity |
-| `top_p` | `float` | `0.9` | Nucleus sampling |
-| `max_tokens` | `int` | `1024` | Maximum output tokens |
-| `timeout` | `int` | `30` | Request timeout in seconds |
+| Schlüssel | Typ | Default | Beschreibung |
+|-----------|-----|---------|--------------|
+| `model` | `str` | `gemini-2.5-flash` | Gemini-Modell |
+| `api_key_env` | `str` | `GEMINI_API_KEY` | Name der Umgebungsvariable mit dem Key |
+| `temperature` | `float` | `0.3` | Kreativität |
+| `top_p` | `float` | `0.9` | Nucleus Sampling |
+| `max_tokens` | `int` | `1024` (`settings.yaml`: `8192`) | Höchstzahl Ausgabe-Tokens |
+| `timeout` | `int` | `30` | Timeout in Sekunden |
 
-**Env override:**
-```bash
-GEMINI_API_KEY=your-key-here   # in .env
-LLM__PROVIDER=gemini
-```
-
-**Runtime API key (no .env required):**
-
-The Gemini API key can also be supplied at runtime from the Streamlit sidebar
-("LLM Provider" section). It is held in process memory only — never written to
-disk — and is lost on backend restart. Resolution order at provider creation:
-
-1. Runtime override (set via `POST /provider/gemini/key`)
-2. `os.environ[api_key_env]`
-3. `.env` file
-
-Endpoints:
-- `GET /provider/gemini/status` → `{has_key, source: env|runtime|none}`. Never returns the key itself.
-- `POST /provider/gemini/key` body `{"api_key": "..."}` — stores the key. If Gemini is the active provider, the provider + generator are rebuilt immediately so the new key applies. Pass `null` or an empty string to clear the override.
-
-This makes "start program → enter key in UI → use Gemini" possible without touching `.env`.
+**Gemini-Key zur Laufzeit:** Der Key lässt sich auch in der Chat-Sidebar eintragen. Er liegt nur
+im Prozessspeicher, wird nie auf Platte geschrieben und ist nach einem Neustart weg. Reihenfolge:
+Laufzeit-Override (`POST /provider/gemini/key`, Body `{"api_key": "..."}`, `null`/leer löscht) →
+Umgebungsvariable → `.env`. `GET /provider/gemini/status` liefert nur
+`{has_key, source: env|runtime|none}`. Ist Gemini aktiv, werden Provider und Generator sofort
+neu gebaut.
 
 ---
 
 ## `conversation`
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `window_size` | `int` | `8` | Maximum number of messages in the context window (user + assistant) |
-| `max_context_tokens` | `int` | `4096` | Maximum tokens in conversation context |
-| `answer_history_pairs` | `int` | `1` | QA pairs the **answer** prompt sees, marked as "no source" (0 = off). Kept small on purpose — more history dilutes the sources and invites hallucination |
-| `answer_history_max_chars` | `int` | `1500` | Earlier answers in the answer prompt are cut here (`[…]`) |
-| `condense_question` | `bool` | `true` | Reformulate follow-up questions into standalone questions |
-| `condense_model` | `str\|null` | `null` | Separate Ollama model for condensing (null = use primary) |
-| `session_timeout_minutes` | `int` | `60` | Delete inactive sessions after N minutes |
-| `session_gc_interval_seconds` | `int` | `300` | How often the GC loop runs (5 minutes) |
+| Schlüssel | Typ | Default | Beschreibung |
+|-----------|-----|---------|--------------|
+| `window_size` | `int` | `8` | Frage/Antwort-**Paare** im Verlauf für das Umschreiben von Folgefragen |
+| `max_context_tokens` | `int` | `4096` | Harte Grenze für diesen Verlauf (ältere Paare fallen weg) |
+| `answer_history_pairs` | `int` | `1` | Paare, die der **Antwort**-Prompt sieht, als „keine Quelle“ markiert (0 = aus). Bewusst klein — mehr Verlauf verwässert die Quellen |
+| `answer_history_max_chars` | `int` | `1500` | Frühere Antworten im Antwort-Prompt werden hier gekürzt (`[…]`) |
+| `condense_question` | `bool` | `true` | Folgefragen mit Rückbezug für die Suche umschreiben |
+| `condense_model` | `str\|null` | `null` | Eigenes (schnelleres) Ollama-Modell fürs Umschreiben; `null` = Hauptmodell |
+| `session_timeout_minutes` | `int` | `60` | Inaktive Sessions nach N Minuten löschen |
+| `session_gc_interval_seconds` | `int` | `300` | Wie oft die Bereinigung läuft |
 
 ---
 
 ## `logging`
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
+| Schlüssel | Typ | Default | Beschreibung |
+|-----------|-----|---------|--------------|
 | `level` | `str` | `INFO` | `DEBUG` \| `INFO` \| `WARNING` \| `ERROR` |
-| `file` | `str\|null` | `logs/lorekeeper.log` | Log file; `null` = console only |
-| `max_bytes` | `int` | `10485760` | Max file size (10 MB) before rotation |
-| `backup_count` | `int` | `5` | Number of rotated log files |
-| `suppress` | `list[str]` | see YAML | Set third-party loggers to WARNING |
+| `file` | `str\|null` | `logs/lorekeeper.log` | Logdatei; `null` = nur Konsole |
+| `max_bytes` | `int` | `10485760` | Größe vor dem Rotieren (10 MB) |
+| `backup_count` | `int` | `5` | Anzahl rotierter Dateien |
+| `suppress` | `list[str]` | siehe YAML | Fremd-Logger auf WARNING setzen |
 
 ---
 
-## `api`
+## `api` und `ui`
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `host` | `str` | `0.0.0.0` | Bind address |
-| `port` | `int` | `8000` | Port (overridden by uvicorn if started differently) |
-| `reload` | `bool` | `true` | Hot reload (development only) |
+Beide Abschnitte stehen in `settings.yaml`, werden vom Code aber **nicht ausgewertet**: Host und
+Port des Backends bestimmt der `uvicorn`-Aufruf (`start.ps1` bindet immer an `127.0.0.1:8000`),
+die Backend-URL der UI kommt aus `LOREKEEPER_API_URL`.
 
 ---
 
-## Full Env Variable Reference
+## Umgebungsvariablen
 
-| Env Variable | YAML Equivalent | Example |
-|-------------|----------------|---------|
-| `GEMINI_API_KEY` | – (secret, env only) | `AIza...` |
+**LoreKeeper** (in `.env` oder als Umgebungsvariable):
+
+| Variable | Wirkung | Beispiel |
+|----------|---------|----------|
+| `GEMINI_API_KEY` | Gemini-Key (Geheimnis, nur Env) | `AIza...` |
+| `LOREKEEPER_ADMIN_PASSWORD` | Schützt Sources, Evaluation, Prompts, Settings und Provider-/Key-Wechsel; leer = alles offen | — |
+| `LOREKEEPER_API_URL` | Backend-URL für die UI | `http://127.0.0.1:8000` |
 | `LLM__PROVIDER` | `llm.provider` | `gemini` |
 | `LLM__OLLAMA__MODEL` | `llm.ollama.model` | `qwen3:14b` |
-| `LLM__OLLAMA__BASE_URL` | `llm.ollama.base_url` | `http://remote:11434` |
-| `LLM__GEMINI__MODEL` | `llm.gemini.model` | `gemini-2.0-flash` |
-| `CHROMA_MODE` | `vectorstore.mode` | `client` |
-| `VECTORSTORE__CHROMA_HOST` | `vectorstore.chroma_host` | `chromadb` |
+| `LLM__OLLAMA__BASE_URL` | `llm.ollama.base_url` | `http://127.0.0.1:11434` |
+| `LLM__GEMINI__MODEL` | `llm.gemini.model` | `gemini-2.5-flash` |
+| `VECTORSTORE__MODE` | `vectorstore.mode` | `embedded` |
 | `RETRIEVAL__TOP_K` | `retrieval.top_k` | `15` |
+| `RETRIEVAL__RERANKING__MAX_PER_SOURCE` | `retrieval.reranking.max_per_source` | `5` |
 | `CONVERSATION__WINDOW_SIZE` | `conversation.window_size` | `12` |
 | `LOGGING__LEVEL` | `logging.level` | `DEBUG` |
+| `PERF_UPDATE_BASELINE` | `pytest -m perf` übernimmt neue Werte als Baseline | `1` |
+
+Jeder andere Schlüssel geht nach demselben Muster (`ABSCHNITT__UNTERSCHLÜSSEL`).
+
+**Ollama** (Benutzer-Umgebungsvariablen von Windows): `OLLAMA_CONTEXT_LENGTH=16384`,
+`OLLAMA_KEEP_ALIVE=1h` — siehe `llm.ollama`.
