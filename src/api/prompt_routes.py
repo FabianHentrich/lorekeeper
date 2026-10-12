@@ -1,4 +1,3 @@
-import hashlib
 import logging
 from pathlib import Path
 
@@ -41,11 +40,6 @@ def _variant_path(name: str) -> Path:
     if not name or name in (".", "..") or Path(name).name != name:
         raise HTTPException(status_code=400, detail=f"Ungültiger Variantenname: {name!r}")
     return _variants_dir() / f"{name}.yaml"
-
-
-def _file_hash(path: Path) -> str:
-    """Compute the MD5 hash of a file for cheap 'is_active' equality checks."""
-    return hashlib.md5(path.read_bytes()).hexdigest()
 
 
 def _validate_templates(prompts: PromptSet):
@@ -113,12 +107,16 @@ async def update_active(variant: PromptVariant):
 async def list_variants():
     """List all available prompt variants discovered in the variants directory.
 
-    Dynamically checks which variant is currently active by comparing file hashes.
+    A variant is active when its four templates equal the active ones. File bytes can't
+    be compared: variants carry `_meta`, the active prompts.yaml never does.
     """
     if not _variants_dir().exists():
         return []
 
-    active_hash = _file_hash(_active_path()) if _active_path().exists() else ""
+    def templates(raw: dict) -> dict:
+        return {k: raw.get(k, "") for k in _TEMPLATE_KEYS}
+
+    active = templates(_read_variant_file(_active_path())) if _active_path().exists() else None
 
     summaries = []
     for f in sorted(_variants_dir().glob("*.yaml")):
@@ -127,7 +125,7 @@ async def list_variants():
         summaries.append(PromptVariantSummary(
             name=f.stem,
             description=meta.get("description", ""),
-            is_active=_file_hash(f) == active_hash if active_hash else False,
+            is_active=templates(raw) == active,
         ))
     return summaries
 

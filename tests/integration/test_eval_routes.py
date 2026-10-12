@@ -276,3 +276,115 @@ def test_result_paths_cannot_escape_results_dir(client, tmp_eval_dir, name):
     assert client.get(f"/eval/results/{name}").status_code == 400
     assert client.delete(f"/eval/results/{name}").status_code == 400
     assert outside.exists()
+
+
+# ─── Job start validation, e2e and error paths ──────────────────────────────────
+
+_PAIR = {"id": "t001", "question": "Was ist Arkenfeld?", "source_type": "markdown", "category": "location",
+         "expected_sources": ["Orte/Arkenfeld.md"], "expected_answer_contains": [], "notes": ""}
+
+
+def _write_pairs(tmp_eval_dir, pairs):
+    import yaml
+    tmp_eval_dir.qa_path.write_text(yaml.dump({"pairs": pairs}, allow_unicode=True), encoding="utf-8")
+
+
+def _wait(client, job_id: str) -> dict:
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        status = client.get(f"/eval/status/{job_id}").json()
+        if status["status"] in ("done", "error"):
+            return status
+        time.sleep(0.05)
+    pytest.fail(f"eval job {job_id} did not finish")
+
+
+def test_run_without_golden_set_is_404(client):
+    assert client.post("/eval/run", json={"eval_type": "retrieval"}).status_code == 404
+
+
+def test_run_with_empty_golden_set_is_400(client, tmp_eval_dir):
+    _write_pairs(tmp_eval_dir, [])
+    r = client.post("/eval/run", json={"eval_type": "retrieval"})
+    assert r.status_code == 400 and "empty" in r.json()["detail"]
+
+
+def test_run_with_unknown_eval_type_is_400(client, tmp_eval_dir):
+    _write_pairs(tmp_eval_dir, [_PAIR])
+    r = client.post("/eval/run", json={"eval_type": "bogus"})
+    assert r.status_code == 400 and "bogus" in r.json()["detail"]
+
+
+def test_unknown_job_status_is_404(client):
+    assert client.get("/eval/status/nope").status_code == 404
+
+
+def test_retrieval_eval_failure_marks_job_as_error(client, tmp_eval_dir, monkeypatch):
+    import evaluation.evaluate_retrieval as ev
+
+    async def boom(**kwargs):
+        raise RuntimeError("chroma locked")
+
+    monkeypatch.setattr(ev, "run_evaluation_with_retriever", boom)
+    _write_pairs(tmp_eval_dir, [_PAIR])
+
+    status = _wait(client, client.post("/eval/run", json={"eval_type": "retrieval"}).json()["job_id"])
+
+    assert (status["status"], status["error"]) == ("error", "chroma locked")
+    assert list(tmp_eval_dir.results_dir.iterdir()) == []
+
+
+def test_e2e_eval_saves_report_against_the_same_server(client, tmp_eval_dir, monkeypatch):
+    """The e2e evaluator gets this server's base URL and its report is listed as e2e."""
+    import evaluation.evaluate as ev
+    seen = {}
+
+    def fake_evaluate(api_url, qa_pairs):
+        seen["url"], seen["n"] = api_url, len(qa_pairs)
+        return {"timestamp": "t", "hit_rate": 0.5, "total_questions": 2, "config": {}}
+
+    monkeypatch.setattr(ev, "evaluate", fake_evaluate)
+    _write_pairs(tmp_eval_dir, [_PAIR, {**_PAIR, "id": "t002"}])
+
+    status = _wait(client, client.post("/eval/run", json={"eval_type": "e2e"}).json()["job_id"])
+
+    assert status["status"] == "done"
+    assert status["progress"] == status["total"] == 2
+    assert seen == {"url": "http://testserver", "n": 2}
+    assert status["result_file"].startswith("e2e_")
+    listed = client.get("/eval/results").json()
+    assert [(r["eval_type"], r["hit_rate"]) for r in listed] == [("e2e", 0.5)]
+
+
+def test_e2e_eval_failure_marks_job_as_error(client, tmp_eval_dir, monkeypatch):
+    import evaluation.evaluate as ev
+
+    def boom(api_url, qa_pairs):
+        raise ConnectionError("backend down")
+
+    monkeypatch.setattr(ev, "evaluate", boom)
+    _write_pairs(tmp_eval_dir, [_PAIR])
+
+    status = _wait(client, client.post("/eval/run", json={"eval_type": "e2e"}).json()["job_id"])
+
+    assert (status["status"], status["error"]) == ("error", "backend down")
+
+
+def test_list_results_skips_unreadable_files(client, tmp_eval_dir):
+    (tmp_eval_dir.results_dir / "retrieval_20261012_100000.json").write_text(
+        json.dumps({"timestamp": "t", "hit_rate": 0.9, "total_questions": 3}), encoding="utf-8")
+    (tmp_eval_dir.results_dir / "retrieval_20261012_090000.json").write_text("{kaputt", encoding="utf-8")
+
+    listed = client.get("/eval/results").json()
+
+    assert [(r["filename"], r["eval_type"], r["hit_rate"]) for r in listed] == \
+        [("retrieval_20261012_100000.json", "retrieval", 0.9)]
+
+
+def test_get_missing_result_is_404(client):
+    assert client.get("/eval/results/retrieval_nope.json").status_code == 404
+
+
+def test_list_results_without_results_dir(client, tmp_eval_dir):
+    tmp_eval_dir.results_dir.rmdir()
+    assert client.get("/eval/results").json() == []

@@ -372,19 +372,23 @@ Zeitbasierte Tests vergleichen gegen eine eingecheckte **Baseline-Datei** (`test
 
 ---
 
-## 7.0 Testlücken schließen
+## 7.0 Testlücken schließen — ✅ Erledigt
 
 **Problem**: Einzelne Module sind kaum durch Tests abgedeckt (Stand Coverage-Lauf 10.10.): `src/api/prompt_routes.py` ~54 %, `src/generation/providers/gemini.py` ~42 %, `src/api/eval_routes.py` ~77 %. Fehler dort (Prompt-Varianten speichern/aktivieren, Gemini-Streaming/Token-Usage/Fehlerpfade, Eval-Jobs) fallen erst im Betrieb auf.
 
 **Lösung**: Erst `pytest --cov=src --cov-report=term-missing` laufen lassen und die ungetesteten Zeilen ansehen, dann gezielt Tests ergänzen — Gemini mit gemocktem `google-genai`-Client (Streaming, Usage, Timeout, fehlender Key), Prompt-/Eval-Routes über `TestClient` wie die übrigen Integrationstests. Kein LLM- oder API-Aufruf in Tests.
 
-**Aufwand**: Gering-Mittel; wenig Last (nur Unit-/Integrationstests) → passt, während die Simulation läuft.
+**Umgesetzt (12.10.)**: alle drei Module auf 100 % — `gemini.py` 45 → 100 (Key-Herkunft, Generate, 429-Retry/Backoff, Rate-Limit, Streaming-Usage, Health-Check; gemockter Client), `prompt_routes.py` 54 → 100 (aktive Prompts, Varianten, Aktivieren, Vorschau gegen echten `ConfigManager` auf tmp-Dateien), `eval_routes.py` 77 → 100 (Start-Validierung, Fehlerpfade, E2E-Lauf, Ergebnisliste).
+
+**Dabei gefunden und behoben**: Die Prompts-Seite markierte eine aktivierte Variante **nie** als „✅ aktiv“ — `is_active` verglich Datei-Hashes, die Variante enthält aber `_meta`, die aktive `prompts.yaml` nie. Jetzt Vergleich der vier Templates.
+
+**Aufwand**: Gering-Mittel (umgesetzt).
 
 ---
 
 ## Priorisierungsvorschlag
 
-Erledigt: 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
+Erledigt: 3.8/3.9 Ingest-Fortschritt, 7.0 Testlücken, 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
 
 **Offen am Gaming-PC (Nutzer)**: alte Autostart-Aufgabe „LoreKeeper Server“ als Admin entfernen (`Unregister-ScheduledTask -TaskName "LoreKeeper Server" -Confirm:$false`); DHCP-Reservierung für `192.168.178.34` im Router.
 
@@ -392,15 +396,14 @@ Erledigt: 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz
 |---|---|---|---|---|
 | 1 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | Umgesetzt; wartet auf einen sauberen Simulationslauf, dann Re-Index, Eval, Spieler-Messung |
 | 2 | 3.10 Regelwerk-Slot im Retrieval | Mittel — SL-Fragen, die Vault und Regel mischen | Mittel | Mit Abschnittsprüfung messbar (x002–x008) |
-| 3 | 7.0 Testlücken (prompt_routes, gemini, eval_routes) | Gering-Mittel — Fehler früher finden | Gering-Mittel | Wenig Last, parallel zur Simulation möglich |
+| 3 | 5.2 Startup-Messung | Gering — Regressionsschutz für den Start | Gering | Test schreiben geht jederzeit; Baseline erst ohne laufende Simulation messen |
 | 4 | 5.3 Reranker/Embeddings auf GPU (AMD: ONNX Runtime + DirectML) | Mittel — ~0,5 s pro Frage, schnellere Indexierung, CPU frei für die Simulation | Mittel | Kein CUDA (AMD-Karte); neue Abhängigkeit — erst entscheiden; ROCm erst nach Bugfix |
-| 5 | 5.2 Startup-Messung | Gering — Regressionsschutz für den Start | Gering | Jetzt mit dem Server-Modus (4.1) möglich |
-| 6 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | Mit der Chunk-Prüfung aus 5.2 messbar |
-| 7 | 3.6 Chat-Verlauf im Antwort-Prompt | Mittel — bessere Folgefragen | Gering-Mittel | Kontext jetzt 16k; Spieler-Modus beachten (nur eigener Verlauf) |
-| 8 | 3.4 Antwort-Feedback | Gering-Mittel | Gering | Quick Win |
-| 9 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | |
-| 10 | 3.2 Session-History | Mittel | Mittel | Spieler-/SL-Sessions getrennt halten |
-| 11 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | Später; dann auch HTTPS-Frage erledigt. Vorher Spieler-Modus ins Backend, falls die API selbst erreichbar wird |
-| 12 | 3.5 Wikilink-Expansion | Mittel | Mittel | Experimentell; im Spieler-Modus darf sie keine SL-Quellen nachladen |
-| 13 | 3.3 Chunk-Inspector | Gering (Dev-Tool) | Gering-Mittel | Wenn nötig |
-| 14 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | Später |
+| 5 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | Mit der Chunk-Prüfung aus 5.2 messbar |
+| 6 | 3.6 Chat-Verlauf im Antwort-Prompt | Mittel — bessere Folgefragen | Gering-Mittel | Kontext jetzt 16k; Spieler-Modus beachten (nur eigener Verlauf) |
+| 7 | 3.4 Antwort-Feedback | Gering-Mittel | Gering | Quick Win |
+| 8 | 2 Bilder im Chat (Phase 1: Beschreibung) | Mittel — Karten/Handouts suchbar | Mittel | |
+| 9 | 3.2 Session-History | Mittel | Mittel | Spieler-/SL-Sessions getrennt halten |
+| 10 | 4.2 Internet-Zugriff (Tailscale) | Mittel | Gering | Später; dann auch HTTPS-Frage erledigt. Vorher Spieler-Modus ins Backend, falls die API selbst erreichbar wird |
+| 11 | 3.5 Wikilink-Expansion | Mittel | Mittel | Experimentell; im Spieler-Modus darf sie keine SL-Quellen nachladen |
+| 12 | 3.3 Chunk-Inspector | Gering (Dev-Tool) | Gering-Mittel | Wenn nötig |
+| 13 | 2 Bilder im Chat (Phase 2: Inline) | Nice-to-have | Mittel-Hoch | Später |
