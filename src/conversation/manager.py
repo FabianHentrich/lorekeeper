@@ -31,20 +31,43 @@ _LEADING_CONNECTORS = frozenset({"und", "aber", "oder", "auch", "sowie"})
 # "das"/"es" are articles or idioms ("Was ist das Schicksalsdeck?", "Gibt es...") — referential only at the end
 _TRAILING_REFERENCES = frozenset({"das", "es"})
 _WORD_RE = re.compile(r"[\wäöüß]+", re.IGNORECASE)
+# A request made only of these words has no topic of its own ("Fass das kürzer zusammen", "Gib mir ein
+# Beispiel", "Erklär das genauer") — it is about the previous answer. Function words plus words about the
+# answer's form; any other word counts as a topic word, so the list can only add follow-ups (roadmap 3.12).
+_NON_TOPIC_WORDS = frozenset({
+    # articles, pronouns, particles
+    "der", "die", "das", "den", "dem", "des", "ein", "eine", "einen", "einem", "einer", "eines",
+    "ich", "mir", "mich", "du", "dir", "dich", "wir", "uns", "es", "man",
+    "noch", "mal", "nochmal", "bitte", "etwas", "alles", "nur", "auch", "so", "ganz", "doch", "jetzt",
+    # prepositions, question words, auxiliaries
+    "in", "im", "zu", "zum", "zur", "mit", "für", "über", "von", "vom", "auf", "an", "am", "als", "wie",
+    "was", "wer", "welche", "welcher", "welches", "warum", "wieso", "weshalb",
+    "ist", "sind", "gibt", "kannst", "könntest", "kann",
+    # what to do with the answer
+    "fass", "fasse", "zusammen", "erklär", "erkläre", "erklären", "beschreib", "beschreibe", "nenn", "nenne",
+    "gib", "zeig", "zeige", "sag", "sage", "schreib", "schreibe", "formulier", "formuliere", "wiederhole",
+    "liste", "führ", "führe", "aus", "weiter", "mach", "mache",
+    "kürzer", "knapper", "kurz", "länger", "ausführlicher", "ausführlich", "genauer", "detaillierter",
+    "einfacher", "verständlicher", "mehr", "weniger", "details", "beispiel", "beispiele",
+    "stichpunkte", "stichpunkten", "punkte", "tabelle", "zusammenfassung", "anders", "andere", "weitere",
+})
 
 
 def needs_condense(question: str) -> bool:
     """Heuristic: does this question depend on the previous turn and need rewriting?
 
-    False positives only cost an extra LLM call; standalone questions skip the
-    rewrite so retrieval runs on exactly what the user typed.
+    Follow-up signals: very short, a leading connector, a trailing "das"/"es", a reference word, or no
+    topic word at all (only function words and words about the answer's form). False positives only cost
+    an extra LLM call; standalone questions skip the rewrite so retrieval runs on exactly what the user typed.
     """
     words = _WORD_RE.findall(question.lower())
     if len(words) <= 2:
         return True
     if words[0] in _LEADING_CONNECTORS or words[-1] in _TRAILING_REFERENCES:
         return True
-    return any(w in _REFERENCE_WORDS for w in words)
+    if any(w in _REFERENCE_WORDS for w in words):
+        return True
+    return all(w in _NON_TOPIC_WORDS for w in words)
 
 
 @dataclass

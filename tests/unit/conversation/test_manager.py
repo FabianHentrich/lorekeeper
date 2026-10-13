@@ -171,6 +171,30 @@ class TestNeedsCondense:
         """Pronouns, back-references, leading connectors and very short questions trigger the rewrite."""
         assert needs_condense(question) is True
 
+    @pytest.mark.parametrize("question", [
+        "Fass das kürzer zusammen",        # live test 13.10.: retrieval searched the literal words
+        "Erklär das bitte genauer",
+        "Gib mir ein Beispiel",
+        "Kannst du das ausführlicher erklären?",
+        "Welche gibt es noch?",
+        "Schreib das als Tabelle",
+        "Mach eine Zusammenfassung in Stichpunkten",
+    ])
+    def test_requests_without_a_topic_word_need_condense(self, question):
+        """Requests about the previous answer name no topic — searching their words finds nothing related."""
+        assert needs_condense(question) is True
+
+    @pytest.mark.parametrize("question", [
+        "Erkläre die Regeln für Überschaden",
+        "Fass die Geschichte von Arkenfeld zusammen",
+        "Gib mir ein Beispiel für eine Marke",
+        "Welche Waffen kann ein Krieger tragen?",
+        "Nenne alle Fähigkeiten des Waldläufers",
+    ])
+    def test_answer_verbs_with_a_topic_stay_standalone(self, question):
+        """The same verbs with a topic word are standalone — no extra LLM call, retrieval gets the wording."""
+        assert needs_condense(question) is False
+
 
 class TestSessionRoles:
     """Sessions never cross roles — no game-master history behind a player's follow-up."""

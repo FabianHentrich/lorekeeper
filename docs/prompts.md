@@ -131,8 +131,12 @@ qa: |
 
 Nur aufgerufen, wenn `conversation.condense_question: true`, ein Verlauf existiert **und** die
 Frage wie eine Folgefrage aussieht (`needs_condense()` in `src/conversation/manager.py` —
-Pronomen, Rückverweise, führendes „und/aber“, „das/es“ am Ende oder ≤ 2 Wörter). Eigenständige
-Fragen gehen unverändert in die Suche.
+Pronomen, Rückverweise, führendes „und/aber“, „das/es“ am Ende, ≤ 2 Wörter oder **kein eigenes
+Inhaltswort**: besteht die Frage nur aus Funktionswörtern und Wörtern über die Form der Antwort
+(„Fass das kürzer zusammen“, „Gib mir ein Beispiel“, „Erklär das genauer“), bezieht sie sich auf die
+vorige Antwort. Jedes andere Wort zählt als Inhaltswort — „Fass die Geschichte von Arkenfeld
+zusammen“ bleibt eigenständig. Eigenständige Fragen gehen unverändert in die Suche. Bekannte
+Fehlauslösung: „Welche Klassen gibt es?“ („es“ am Ende) — kostet nur einen Condense-Aufruf.
 
 | Variable | Typ | Inhalt |
 |----------|-----|--------|

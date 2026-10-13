@@ -20,9 +20,8 @@ mehrere Minuten, nicht parallel zur Simulation). Ein Golden-Set-Lauf dauert ~1 m
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
 | 1 | 5.6 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Antwortqualität und Prompt-Größe; mit der Chunk-Prüfung aus 5.2 messbar |
-| 2 | 3.12 Folgefragen ohne Rückbezugswort | Gering-Mittel — passende Quellen bei „fass das kürzer zusammen“ | Gering | 🟢 | Im Live-Test gefunden (13.10.) |
-| 3 | 3.10 Restliche Abschnitt-Misses | Gering-Mittel — Regelfragen präziser | Mittel | 🟡 | Einzelfälle, je Golden-Set-Lauf prüfbar |
-| 4 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf (extern) |
+| 2 | 3.10 Restliche Abschnitt-Misses | Gering-Mittel — Regelfragen präziser | Mittel | 🟡 | Einzelfälle, je Golden-Set-Lauf prüfbar |
+| 3 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf (extern) |
 | — | 3.2 Session-History ⏸ | Unklar | Mittel | 🟢 | Erst entscheiden, ob gespeicherte Sessions Nutzen haben |
 | — | 3.4 Kommentar zur Bewertung ⏸ | Gering | Gering | 🟢 | Feature |
 | — | 2 Bilder im Chat (Phase 1/2) ⏸ | Mittel / Nice-to-have | Mittel / Mittel-Hoch | 🔴/🟡 | Feature |
@@ -52,15 +51,6 @@ der Chunk-Prüfung aus 5.2 (Ø/max Chunks pro Golden-Frage), Abschnitt-Treffer d
 Stand 13.10.: Budget `retrieval.section_expansion.max_total_chunks` umgesetzt (Default 0 = aus,
 Unit-Tests); offen: Golden-Set-Sweep, Default wählen, Doku, README-Testzahl (707 → aktuell).
 Noch nicht gemessen: Kosten eines UI-Reruns mit langer Chat-Historie und vielen Quellen-Expandern.
-
-### 3.12 Folgefragen ohne Rückbezugswort
-
-Live-Test 13.10.: „Fass das kürzer zusammen“ nach „Wer ist Arkenfeld?“ — die Antwort stimmt (der
-Verlauf im Antwort-Prompt wirkt, 3.6), aber `needs_condense` erkennt die Frage nicht als Folgefrage
-(„das“ zählt nur am Satzende als Rückbezug), also sucht das Retrieval mit dem Wortlaut und die
-Quellenliste unter der Antwort hat keinen Bezug. Möglich: Imperative/Kurzbefehle ohne Inhaltswort
-(„fass … zusammen“, „erkläre genauer“, „mehr dazu“) als Folgefrage behandeln, oder bei Fragen ohne
-eigenes Inhaltswort die vorige Suchanfrage wiederverwenden. Unit-Tests für `needs_condense`.
 
 ### 3.10 Restliche Abschnitt-Misses
 
@@ -159,6 +149,7 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 | 3.8/3.9 | Ingest-Fortschritt ohne Blockieren, Anhängen an laufende Jobs | 12.10. | `docs/ui-ux.md` |
 | 3.10 | Regelwerk-Slot (eigene Suche in `rules`, Mindest-Score −4) | 13.10. | `docs/embedding-strategy.md`, `docs/configuration.md` |
 | 3.11 | Spieler-/Spielleiter-Modus inkl. Sicherheitstests (deterministisch, live, Spy-Test) | 11./12.10. | `ARCHITECTURE.md` 4.8, `docs/testing.md` |
+| 3.12 | Folgefragen ohne Inhaltswort („Fass das kürzer zusammen“, „Gib mir ein Beispiel“) gehen durch Condense — Suche und Quellenliste passen zum Thema; Wortliste nur ergänzend (unbekanntes Wort = Inhaltswort), Unit-Tests in beide Richtungen, mutationsgeprüft. Offen: einmal live prüfen, dass Condense das Thema einsetzt | 13.10. | `docs/prompts.md` |
 | 4.1 | Heimnetz-Betrieb (`start.ps1 -Server`, Firewall-Skript, kein Autostart) | 11.10. | `docs/operations.md` |
 | 4.2 (Teil) | Spieler-Filter im Backend erzwungen (`role`) | 12.10. | `ARCHITECTURE.md` 4.8 |
 | 4.3 | Sauberes Beenden: `stop.ps1` (Strg+C an beide Fenster, nach 20 s hart, samt Ollama; Sperre während Ingest) und **⏻ LoreKeeper beenden** in der Sidebar (Admin). Gemessen: Strg+C ist in allen Lagen sauber (Backend 1,3–1,6 s, UI 0,2 s, auch bei Stream/Eval) — 7 von 10 Starts endeten durch Fenster-Schließen ohne Shutdown; die verzögerte Strg+C-Reaktion war nicht reproduzierbar (Verdacht: markierter Text im Konsolenfenster hält den Prozess an) | 13.10. | `docs/operations.md`, `docs/ui-ux.md` |
