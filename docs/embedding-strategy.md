@@ -88,7 +88,10 @@ LoreKeeper führt beide **parallel** aus, nicht als Vorfilter:
 1. Die Vektorsuche holt die Top-K aus ChromaDB und wendet `score_threshold` auf die Cosine-Scores
    an — solange sie noch vergleichbar sind.
 2. BM25 fragt einen In-Memory-Index (`rank_bm25`), lazy aus derselben Collection gebaut und nach
-   jeder Ingestion verworfen. Metadaten-Filter werden nachträglich mit ChromaDB-kompatiblen
+   jeder Änderung der Collection verworfen (Ingestion, Quelle entfernen, Wipe, Recategorize — sonst
+   fände die Hybrid-Suche gelöschte Inhalte bzw. filterte auf alten Metadaten). Der Aufbau läuft unter
+   einer Sperre und wird auf einmal veröffentlicht: gleichzeitige erste Fragen hatten zwei Korpora
+   vermischt (Treffer auf falsche Dokumente, Roadmap 11.0). Metadaten-Filter werden nachträglich mit ChromaDB-kompatiblen
    Operatoren angewandt (`$eq`, `$ne`, `$in`, `$and`).
 3. Beide Listen werden per **Reciprocal Rank Fusion** zusammengeführt:
    `score = Gewicht / (k + Rang + 1)`, `bm25_weight` (0,3) steuert die Balance, `k=60` dämpft den

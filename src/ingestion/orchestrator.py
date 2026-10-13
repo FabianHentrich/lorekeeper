@@ -146,16 +146,17 @@ class IngestionOrchestrator:
                 return parser
         return None
 
-    def _discover_files(self, only_source_id: str | None = None) -> list[tuple[Path, SourceConfig]]:
+    def _discover_files(self, only_source_id: str | None = None,
+                        sources: list[SourceConfig] | None = None) -> list[tuple[Path, SourceConfig]]:
         """Returns list of (file_path, source) tuples.
 
         If only_source_id is given, restricts discovery to that single source —
-        used by per-source reindex from the UI.
+        used by per-source reindex from the UI. ``sources`` defaults to the configured list.
         """
         settings = self.config.settings
         files: list[tuple[Path, SourceConfig]] = []
 
-        for source in settings.ingestion.sources:
+        for source in (settings.ingestion.sources if sources is None else sources):
             if only_source_id and source.id != only_source_id:
                 continue
 
@@ -202,7 +203,10 @@ class IngestionOrchestrator:
             if progress_callback:
                 progress_callback(result)
 
-        files = self._discover_files(only_source_id=only_source_id)
+        # One snapshot of the source list for the whole run — discovery and the hash/orphan scope must
+        # agree even if the list is edited on the Sources page meanwhile
+        sources = list(settings.ingestion.sources)
+        files = self._discover_files(only_source_id=only_source_id, sources=sources)
         logger.info(f"Discovered {len(files)} files for ingestion")
 
         result.documents_total = len(files)
@@ -212,7 +216,7 @@ class IngestionOrchestrator:
         # Source-scoped existing-hash lookup — unchanged files are skipped before parsing
         existing: dict[tuple[str, str], str] = {}
         if vectorstore is not None:
-            scope_ids = [only_source_id] if only_source_id else [s.id for s in settings.ingestion.sources]
+            scope_ids = [only_source_id] if only_source_id else [s.id for s in sources]
             for sid in scope_ids:
                 for src_file, h in vectorstore.get_content_hashes_for_source(sid).items():
                     existing[(sid, src_file)] = h

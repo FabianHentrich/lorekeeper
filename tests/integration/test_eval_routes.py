@@ -459,3 +459,19 @@ def test_preview_rejects_malformed_filters_with_422(client, bad):
     resp = client.post("/eval/preview", json={"question": "x", "metadata_filters": bad})
     assert resp.status_code == 422
     assert "metadata_filters" in resp.json()["detail"]
+
+
+
+def test_eval_is_refused_while_an_ingest_runs(client, tmp_eval_dir):
+    """Numbers from a half-built index would be meaningless."""
+    from src.api import routes
+    from src.api.schemas import IngestStatusResponse
+    _write_pairs(tmp_eval_dir, [_PAIR])
+    routes._ingest_jobs["j"] = IngestStatusResponse(job_id="j", status="running")
+    try:
+        r = client.post("/eval/run", json={"eval_type": "retrieval"})
+    finally:
+        routes._ingest_jobs.clear()
+
+    assert r.status_code == 409 and "Indexierung" in r.json()["detail"]
+    assert not _eval_jobs

@@ -211,8 +211,9 @@ with col_reindex:
     )
     full_clicked = col_full.button("🔄 Alle Dokumente neu indizieren", disabled=_job_running)
     recat_clicked = col_recat.button(
-        "🏷 Recategorize", help="Schnell, kein Re-Embedding. Bringt bestehende Chunks aller Sources "
-                               "auf die aktuelle category_map / group.",
+        "🏷 Recategorize", disabled=_job_running,
+        help="Schnell, kein Re-Embedding. Bringt bestehende Chunks aller Sources "
+             "auf die aktuelle category_map / group.",
     )
     if incr_clicked:
         _start_ingest("/ingest", "Inkrementelle Indizierung")
@@ -343,12 +344,14 @@ for s in sources:
         col_a, col_c = st.columns(2)
         with col_a:
             if st.button("🔄 Reindex", key=f"reindex_{s['id']}", disabled=_job_running,
-                         help="Löscht alle Chunks dieser Source und liest sie neu ein. "
-                              "Pflicht, wenn sich Inhalte oder der Pfad geändert haben."):
+                         help="Liest alle Dateien dieser Source neu ein, auch unveränderte; die Source "
+                              "bleibt währenddessen durchsuchbar. Nötig nach geänderten Chunking-"
+                              "oder Parser-Einstellungen."):
                 _start_ingest(f"/sources/{sid_url}/reindex", f"Reindex '{s['id']}'")
         with col_c:
             confirm = st.checkbox("Wirklich löschen", key=f"confirm_del_{s['id']}")
-            if st.button("🗑 Source entfernen", key=f"del_{s['id']}", disabled=not confirm,
+            # Locked during an ingest: the running job would write the source's chunks back (backend: 409)
+            if st.button("🗑 Source entfernen", key=f"del_{s['id']}", disabled=not confirm or _job_running,
                          help="Entfernt die Source aus der Config UND löscht alle "
                               "zugehörigen Chunks aus der Datenbank."):
                 try:
@@ -536,7 +539,7 @@ st.subheader("⚠ Danger Zone")
 st.caption("Komplettes Leeren der Vector-Collection. Alle Embeddings sind danach weg "
            "und müssen via Ingest neu erzeugt werden.")
 confirm_text = st.text_input("Tippe DELETE zum Bestätigen", key="wipe_confirm")
-if st.button("🔥 Collection komplett leeren", type="secondary"):
+if st.button("🔥 Collection komplett leeren", type="secondary", disabled=_job_running):
     if confirm_text != "DELETE":
         st.error("Bestätigung fehlt.")
     else:

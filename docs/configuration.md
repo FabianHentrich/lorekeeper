@@ -124,7 +124,9 @@ oder die REST-Endpoints (`GET/PUT /sources`, `POST /sources/{id}/reindex`, `DELE
 **Welche Aktion wann:**
 - *Recategorize* (`python -m src.ingestion.recategorize` oder Button) — schreibt nur `group` /
   `content_category` / `source_id` der vorhandenen Chunks neu. Kein Embedding, Sekunden.
-- *Reindex einer Quelle* — löschen + parsen + chunken + embedden; nötig, wenn sich `path` ändert.
+- *Reindex einer Quelle* — alle Dateien der Quelle neu parsen + chunken + embedden, auch unveränderte;
+  nötig nach geänderten Chunking-/Parser-Einstellungen oder `path`. Die Quelle wird nicht vorher
+  gelöscht und bleibt während des Laufs durchsuchbar.
 - *Inkrementell* (`POST /ingest`, „⚡ Nur Änderungen indizieren“) — alle Quellen, nur neue,
   geänderte und gelöschte Dateien. Reicht nach dem Bearbeiten von Notizen.
 - *Alles* (`POST /ingest?full=true`, „🔄 Alle Dokumente neu indizieren“) — jede Datei; nötig nach

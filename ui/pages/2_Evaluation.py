@@ -99,9 +99,9 @@ def _csv(value) -> list[str]:
 
 
 def _show_eval_error(e: Exception):
-    """A 409 means another eval job is running — a warning, not an error."""
+    """A 409 means another eval job or an ingest is running — a warning with the backend's reason."""
     if isinstance(e, BackendError) and e.status_code == 409:
-        st.warning("Es läuft bereits eine Evaluation.")
+        st.warning(e.detail)
     else:
         st.error(f"Fehler: {e}")
 

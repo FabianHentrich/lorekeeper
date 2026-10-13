@@ -706,7 +706,7 @@ Offen: #17 (Umbenennen beim Tageswechsel unter Windows, wenn die Datei anderswo 
 
 **Aufwand**: A gering, B gering, C gering. Last 🟢.
 
-## 11.0 Architektur-Review: Passt der Aufbau noch, was sollte modularer werden? — 🔄 Umbau läuft (P1, P2 erledigt)
+## 11.0 Architektur-Review: Passt der Aufbau noch, was sollte modularer werden? — 🔄 Umbau läuft (P1–P3 erledigt)
 
 **Wann**: nach 10.0 und der Messung aus 8.0, **vor** 9.0 und vor dem Wiederaufnehmen der Features. Begründung:
 - 8.0 kann Umbauten erzwingen (z.B. atomarer Provider-Wechsel, Job-Verwaltung, Warteschlange fürs LLM) — die gehören in denselben Entwurf, nicht in einen zweiten Umbau danach.
@@ -776,6 +776,8 @@ Die Beobachtungen oben, bewertet:
 **P1 umgesetzt (13.10.)**: Die Recategorize-Route übergibt die laufende Config; `config` ist Pflichtparameter in `recategorize()` und `IngestionOrchestrator` — keine stille Ersatz-Instanz mehr, nur die beiden CLIs nutzen ausdrücklich die Standard-Config (die auch nicht mehr beim Import gebaut wird). Neuer Integrationstest: Ordner-Zuordnung über `PUT /sources` speichern → Recategorize → gespeicherter Chunk hat die neue Kategorie (echtes `recategorize`, mutationsgeprüft mit der alten Standard-Config). Suite: 660 grün.
 
 **P2 umgesetzt (13.10.)**: `ProviderFactory.build_all()` baut Provider, Condense-Provider und Generator (mit Fallback) zusammen; `install_llm()` in `src/api/routes.py` setzt alle drei auf einmal und frischt den LLM-Health-Status auf (#7). Genutzt von Lifespan (`build_all`), Provider-Wechsel, Gemini-Key (jetzt **immer** — der Key erreicht auch Gemini als Fallback) und `PUT /config`, wenn sich `llm.fallback_enabled` ändert (Sampling-Werte werden pro Aufruf gelesen, kein Neuaufbau). Ein nicht baubarer Fallback (z.B. Gemini ohne Key) steht jetzt als Warnung im Log statt still `None`. Tests: Fallback-Schalter über `/config` an und aus, kein Neuaufbau bei Temperatur, Key bei aktivem Ollama erreicht den Fallback, `build_all` mit Fallback, Warnung bei nicht baubarem Fallback — mutationsgeprüft. Doku: `configuration.md`, `ui-ux.md`, `provider-strategy.md`, `ARCHITECTURE.md`. Suite: 665 grün.
+
+**P3 umgesetzt (13.10.)** (inkl. #10 nach Entscheidung): BM25 als unveränderlicher Schnappschuss, Aufbau unter Lock (`ensure_built`), eine Abfrage liest den Schnappschuss einmal; `invalidate()` erhöht einen Generationszähler, ein Aufbau von vor der Invalidierung wird verworfen. `invalidate()` nach Quelle entfernen, Wipe und Recategorize. Während eines Ingests antworten Entfernen, Wipe, Recategorize und `/eval/run` mit 409 „Eine Indexierung läuft bereits“; die Sources-Seite sperrt die Knöpfe, die Evaluation-Seite zeigt bei 409 den Grund vom Backend. Der Orchestrator liest die Quellenliste einmal pro Lauf. **Reindex ohne Löschen vorab** (`full=True` auf die Quelle): die Quelle bleibt durchsuchbar; E2E-Test mit echter ChromaDB: unveränderter Reindex ohne Duplikate, geänderte Datei ersetzt, gelöschte entfernt, nie ein Löschen der ganzen Quelle. Tests: gleichzeitiger Aufbau (8 Threads, 1 Aufbau, richtiger Treffer), verworfener Aufbau, Invalidierung je Aktion, 409 je Endpoint, Reindex-Vertrag — alle sechs mutationsgeprüft. Doku: `ARCHITECTURE.md`, `configuration.md`, `embedding-strategy.md`, `ui-ux.md`. Suite: 673 grün.
 
 ---
 

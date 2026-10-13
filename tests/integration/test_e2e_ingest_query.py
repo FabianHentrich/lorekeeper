@@ -215,3 +215,46 @@ def test_incremental_reingest_skips_updates_and_deletes(app_env):
     assert set(app_env.vectorstore.get_content_hashes_for_source("vault")) == {"Arkenfeld.md"}
     # Chunk total matches what is actually left in the store
     assert client.get("/stats").json()["chunk_count"] == changed["chunks_updated"]
+
+
+
+def test_reindex_replaces_a_source_in_place(app_env, monkeypatch):
+    """Reindex without deleting the source first (roadmap 11.0 #10): the result must equal a fresh
+    ingest — changed file replaced, removed file gone, no duplicates — and the source is never
+    deleted as a whole (it stays searchable while the job runs)."""
+    client = app_env.client
+    _ingest(client)
+    before = client.get("/stats").json()["chunk_count"]
+    whole_source_deletes = []
+    monkeypatch.setattr(app_env.vectorstore, "delete_by_source_id", whole_source_deletes.append)
+
+    # Unchanged vault: every file re-processed, the chunk count stays (no duplicates)
+    same = _reindex(client, "vault")
+    assert same["documents_skipped"] == 0 and same["documents_processed"] == 2
+    assert client.get("/stats").json()["chunk_count"] == before
+
+    (app_env.vault / "Arkenfeld.md").write_text("# Arkenfeld\n\nNur noch ein kurzer Satz.\n", encoding="utf-8")
+    (app_env.vault / "NPCs" / "Aldric.md").unlink()
+    changed = _reindex(client, "vault")
+
+    assert set(app_env.vectorstore.get_content_hashes_for_source("vault")) == {"Arkenfeld.md"}
+    assert client.get("/stats").json()["chunk_count"] == changed["chunks_updated"]
+    assert whole_source_deletes == []
+    text, done = _stream(client, "Was steht über Arkenfeld?")
+    assert "kurzer Satz" in app_env.llm.prompts[-1]
+    assert "Aldric" not in app_env.llm.prompts[-1]
+
+
+def _reindex(client, source_id: str) -> dict:
+    """POST /sources/{id}/reindex and poll until the job is finished."""
+    r = client.post(f"/sources/{source_id}/reindex")
+    assert r.status_code == 200
+    job_id = r.json()["job_id"]
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        info = client.get(f"/ingest/status/{job_id}").json()
+        if info["status"] not in ("queued", "running"):
+            assert info["status"] == "done", info
+            return info
+        time.sleep(0.1)
+    pytest.fail("reindex job did not finish")

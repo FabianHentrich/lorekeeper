@@ -271,7 +271,8 @@ Alle Indizier-Vorgänge zeigen **nicht-blockierenden Fortschritt**: die Job-ID s
 `st.session_state["_ingest_job"]`, das Fragment `_ingest_progress()`
 (`st.fragment(run_every=1.5)`) fragt `GET /ingest/status/{job_id}` ab und zeigt den Stand in einem
 `st.status`. Der Rest der Seite bleibt bedienbar, Klicks und Seitenwechsel verlieren den Job nicht;
-Indizier- und Reindex-Knöpfe sind solange gesperrt. Am Ende erscheint einmal das Ergebnis — „X
+Indizier-, Reindex-, Recategorize-, Entfernen- und Leeren-Knöpfe sind solange gesperrt (das
+Backend lehnt diese Aktionen während eines Ingests ohnehin mit 409 ab). Am Ende erscheint einmal das Ergebnis — „X
 Dokumente indiziert · Y unverändert übersprungen · N s“, erzeugte/aktualisierte/gelöschte Chunks,
 Fehler als Warnungen. Ist das Backend ~45 s am Stück nicht erreichbar, endet die Anzeige mit
 „Backend nicht erreichbar“ (der Job läuft im Backend weiter). Bei `409` (Job aus einer anderen
@@ -295,7 +296,7 @@ Je Quelle ein Ausklapper (`📁 {id} — {path}`):
 
 | Knopf | Backend | Hinweis |
 |---|---|---|
-| 🔄 **Reindex** | `POST /sources/{id}/reindex` | Löscht und indiziert eine Quelle neu, mit Fortschritt; nötig bei geändertem Inhalt oder Pfad |
+| 🔄 **Reindex** | `POST /sources/{id}/reindex` | Liest alle Dateien der Quelle neu ein (auch unveränderte), mit Fortschritt; die Quelle bleibt währenddessen durchsuchbar. Nötig nach geänderten Chunking-/Parser-Einstellungen oder Pfad |
 | 🗑 **Source entfernen** | `DELETE /sources/{id}` | Entfernt Quelle **und** ihre Chunks; mit Bestätigungs-Checkbox |
 
 **Ordner-Zuordnung:** `GET /sources/{id}/folders` (60 s gecacht) liefert die Ordner; eine zweite

@@ -258,9 +258,7 @@ class Retriever:
             t0 = time.perf_counter()
             if not self.bm25_index.is_built:
                 logger.info("Building BM25 index from vectorstore (lazy init)...")
-                await run_in_threadpool(
-                    self.bm25_index.build_from_vectorstore, self.vectorstore
-                )
+            await run_in_threadpool(self.bm25_index.ensure_built, self.vectorstore)
 
             bm25_results = await run_in_threadpool(
                 self.bm25_index.query,

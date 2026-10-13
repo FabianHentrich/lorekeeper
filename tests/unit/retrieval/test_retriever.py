@@ -481,15 +481,11 @@ class TestHybridRetrieve:
 
     def _make_bm25(self, docs):
         """Build an in-memory BM25 index from inline dicts, skipping the vectorstore."""
-        from rank_bm25 import BM25Okapi
-
-        from src.retrieval.bm25_index import _tokenize
+        store = MagicMock()
+        store.get_all.return_value = {"ids": [d["id"] for d in docs], "documents": [d["content"] for d in docs],
+                                      "metadatas": [d["metadata"] for d in docs]}
         idx = BM25Index()
-        idx._documents = docs
-        corpus = [_tokenize(d["content"]) for d in docs]
-        idx._index = BM25Okapi(corpus) if corpus else None
-        idx._doc_token_sets = [set(toks) for toks in corpus]
-        idx._is_built = True
+        idx.ensure_built(store)
         return idx
 
     @pytest.mark.asyncio

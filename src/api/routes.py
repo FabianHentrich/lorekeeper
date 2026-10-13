@@ -349,6 +349,22 @@ async def query_stream(request: QueryRequest):
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
+_INGEST_BUSY = "Eine Indexierung läuft bereits"
+
+
+def ingest_running() -> bool:
+    """True while an ingest/reindex job is queued or running."""
+    return any(j.status in ("queued", "running") for j in _ingest_jobs.values())
+
+
+def refuse_during_ingest() -> None:
+    """409 for anything that writes or reads the whole index while a job is filling it: a source
+    deleted mid-run came back as orphans (the job upserted it again), a wipe left a silent partial
+    index, an eval measured a half-built index (roadmap 11.0 #5)."""
+    if ingest_running():
+        raise HTTPException(status_code=409, detail=_INGEST_BUSY)
+
+
 def _start_ingest_job(run_sync, label: str) -> str:
     """Create a job, launch the sync orchestrator run in a thread, and return the job_id.
 
@@ -358,8 +374,7 @@ def _start_ingest_job(run_sync, label: str) -> str:
     import src.main as main_module
 
     # Parallel runs race on delete/upsert of the same chunks
-    if any(j.status in ("queued", "running") for j in _ingest_jobs.values()):
-        raise HTTPException(status_code=409, detail="Eine Indexierung läuft bereits")
+    refuse_during_ingest()
 
     job_id = str(uuid.uuid4())
     _ingest_jobs[job_id] = IngestStatusResponse(job_id=job_id, status="queued")
@@ -658,7 +673,12 @@ async def update_sources(payload: dict):
 
 @router.post("/sources/{source_id:path}/reindex", response_model=IngestJobResponse)
 async def reindex_source(source_id: str):
-    """Delete + re-ingest a single source."""
+    """Re-ingest a single source: every file re-parsed and re-embedded (``full=True``).
+
+    No delete up front — the source stays searchable during the run: each file's old chunks are
+    replaced when its new ones are written, files gone from disk are removed at the end. (Deleting
+    first left the source missing from every answer for the whole reindex, roadmap 11.0 #10.)
+    """
     import src.main as main_module
     from src.ingestion.orchestrator import IngestionOrchestrator
     vs = main_module.vectorstore
@@ -667,10 +687,9 @@ async def reindex_source(source_id: str):
         raise HTTPException(status_code=404, detail=f"Unbekannte Quelle: {source_id}")
 
     def _run(progress_cb):
-        """Drop existing chunks for this source, then re-ingest just its files."""
-        vs.delete_by_source_id(source_id)
+        """Re-ingest just this source's files, unchanged ones included."""
         return IngestionOrchestrator(config=main_module.config).run(
-            vectorstore=vs, only_source_id=source_id, progress_callback=progress_cb,
+            vectorstore=vs, only_source_id=source_id, progress_callback=progress_cb, full=True,
         )
 
     return IngestJobResponse(job_id=_start_ingest_job(_run, f"reindex {source_id}"), status="queued")
@@ -685,8 +704,10 @@ async def delete_source(source_id: str):
     sources = main_module.config.settings.ingestion.sources
     if not any(s.id == source_id for s in sources):
         raise HTTPException(status_code=404, detail=f"Unbekannte Quelle: {source_id}")
+    refuse_during_ingest()
 
     deleted = vs.delete_by_source_id(source_id)
+    main_module.bm25_index.invalidate()  # else hybrid search keeps finding the deleted chunks
     main_module.config.settings.ingestion.sources = [s for s in sources if s.id != source_id]
     main_module.config.save_sources()
     logger.info("Source removed: %s (%d chunks deleted)", source_id, deleted)
@@ -698,7 +719,10 @@ async def recategorize_endpoint():
     """Trigger a recategorization task to update metadata for existing configurations."""
     import src.main as main_module
     from src.ingestion.recategorize import recategorize
-    return await run_in_threadpool(recategorize, config=main_module.config, vectorstore=main_module.vectorstore)
+    refuse_during_ingest()
+    stats = await run_in_threadpool(recategorize, config=main_module.config, vectorstore=main_module.vectorstore)
+    main_module.bm25_index.invalidate()  # BM25 holds its own copy of the metadata the filters check
+    return stats
 
 
 @router.get("/provider/gemini/status")
@@ -786,7 +810,9 @@ async def wipe_collection(payload: dict):
     if payload.get("confirm") != "DELETE":
         raise HTTPException(status_code=400, detail="Zum Löschen confirm='DELETE' mitschicken")
     import src.main as main_module
+    refuse_during_ingest()
     main_module.vectorstore.wipe_collection()
+    main_module.bm25_index.invalidate()
     return {"status": "wiped"}
 
 

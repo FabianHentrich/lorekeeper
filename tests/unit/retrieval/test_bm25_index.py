@@ -71,6 +71,20 @@ class TestMatchesFilter:
         assert _matches_filter(meta, {"category": "npc"}) is False
 
 
+class _FakeStore:
+    """Stand-in for VectorStoreService.get_all()."""
+
+    def __init__(self, docs, on_read=None):
+        self.docs, self.on_read, self.reads = docs, on_read, 0
+
+    def get_all(self, include):
+        self.reads += 1
+        if self.on_read:
+            self.on_read()
+        return {"ids": [d["id"] for d in self.docs], "documents": [d["content"] for d in self.docs],
+                "metadatas": [d["metadata"] for d in self.docs]}
+
+
 class TestBM25Index:
     """Test suite verifying lexical scoring indexes and background cache lifecycle models."""
 
@@ -80,20 +94,13 @@ class TestBM25Index:
         expensive vector database crawling tests.
         """
         idx = BM25Index()
-        # Simulate what build_from_vectorstore does, but with manual data
-        from rank_bm25 import BM25Okapi
-
         docs = [
             {"id": "1", "content": "Arkenfeld ist eine Stadt im Norden", "metadata": {"group": "lore", "document_type": "markdown", "source_file": "a.md"}},
             {"id": "2", "content": "Das Langschwert kostet 15 Gold", "metadata": {"group": "rules", "document_type": "markdown", "source_file": "b.md"}},
             {"id": "3", "content": "Ein Bild der Karte", "metadata": {"group": "lore", "document_type": "image", "source_file": "c.png"}},
             {"id": "4", "content": "Arkenfeld wurde von Elfen gegründet", "metadata": {"group": "lore", "document_type": "markdown", "source_file": "d.md"}},
         ]
-        idx._documents = docs
-        corpus = [_tokenize(d["content"]) for d in docs]
-        idx._index = BM25Okapi(corpus)
-        idx._doc_token_sets = [set(toks) for toks in corpus]
-        idx._is_built = True
+        idx.ensure_built(_FakeStore(docs))
         return idx
 
     def test_query_returns_results(self):
@@ -162,3 +169,38 @@ class TestBM25Index:
         assert "metadata" in r
         assert "score" in r
         assert isinstance(r["score"], float)
+
+
+class TestConcurrentBuild:
+    """Two first hybrid queries at once must not build into the same lists (roadmap 11.0 #4)."""
+
+    def test_parallel_first_queries_build_once_and_find_the_right_document(self):
+        import sys
+        import threading
+
+        docs = [{"id": f"id{i}", "content": f"wort{i} text", "metadata": {}} for i in range(300)]
+        store = _FakeStore(docs)
+        idx = BM25Index()
+        old = sys.getswitchinterval()
+        sys.setswitchinterval(1e-6)  # force thread switches inside the build — made the old race 20/20
+        try:
+            threads = [threading.Thread(target=idx.ensure_built, args=(store,)) for _ in range(8)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+        finally:
+            sys.setswitchinterval(old)
+
+        assert store.reads == 1
+        assert idx.query("wort7", top_k=1)[0]["id"] == "id7"
+
+    def test_build_running_during_invalidate_is_discarded(self):
+        """A build that read the collection before a delete/wipe must not publish the deleted chunks."""
+        idx = BM25Index()
+        store = _FakeStore([{"id": "gone", "content": "geloeschte Quelle", "metadata": {}}],
+                           on_read=idx.invalidate)  # the collection changes while the build runs
+        idx.ensure_built(store)
+
+        assert idx.is_built is False
+        assert idx.query("geloeschte") == []

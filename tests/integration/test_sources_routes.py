@@ -277,7 +277,6 @@ def test_reindex_with_slash_id(client, env, slash_source, monkeypatch):
     monkeypatch.setattr(IngestionOrchestrator, "run", lambda self, **kw: _fake_result())
     job_id = client.post(f"/sources/{slash_source}/reindex").json()["job_id"]
     assert _wait_for_job(client, job_id)["status"] == "done"
-    assert env.vectorstore.deleted_sources == ["Lore/NPCs"]
 
 
 def test_delete_with_slash_id(client, env, slash_source):
@@ -442,18 +441,18 @@ def test_ingest_active_reports_the_running_job(client, env, monkeypatch):
     assert client.get("/ingest/active").json() is None
 
 
-def test_reindex_source_deletes_then_ingests_only_that_source(client, env, monkeypatch):
+def test_reindex_reprocesses_only_that_source_without_deleting_it_first(client, env, monkeypatch):
+    """The source stays searchable during a reindex: no delete up front, every file re-processed."""
     seen = {}
 
     def fake_run(self, vectorstore=None, only_source_id=None, progress_callback=None, full=False):
-        seen["only"] = only_source_id
-        seen["deleted_before"] = list(env.vectorstore.deleted_sources)
+        seen.update(only=only_source_id, full=full, deleted_before=list(env.vectorstore.deleted_sources))
         return _fake_result()
 
     monkeypatch.setattr(IngestionOrchestrator, "run", fake_run)
     job_id = client.post(f"/sources/{quote('Pen & Paper', safe='')}/reindex").json()["job_id"]
     assert _wait_for_job(client, job_id)["status"] == "done"
-    assert seen == {"only": "Pen & Paper", "deleted_before": ["Pen & Paper"]}
+    assert seen == {"only": "Pen & Paper", "full": True, "deleted_before": []}
 
 
 def test_reindex_unknown_source_404(client, env):
@@ -470,3 +469,38 @@ def test_wipe_requires_confirmation(client, env):
 def test_wipe_with_confirmation(client, env):
     assert client.post("/admin/wipe", json={"confirm": "DELETE"}).json() == {"status": "wiped"}
     assert env.vectorstore.wiped is True
+
+
+
+# ─── Index consistency (roadmap 11.0 P3) ───────────────────────────────────────
+
+def test_admin_changes_invalidate_bm25(client, env, monkeypatch):
+    """BM25 keeps its own copy of the chunks — after delete, wipe and recategorize it must be rebuilt,
+    else hybrid search keeps returning deleted content / stale metadata."""
+    import src.ingestion.recategorize as recat_module
+    monkeypatch.setattr(recat_module, "recategorize", lambda config, vectorstore: {"chunks_updated": 0})
+
+    assert client.delete("/sources/vault").status_code == 200
+    assert env.bm25_index.invalidated == 1
+    assert client.post("/sources/recategorize").status_code == 200
+    assert env.bm25_index.invalidated == 2
+    assert client.post("/admin/wipe", json={"confirm": "DELETE"}).status_code == 200
+    assert env.bm25_index.invalidated == 3
+
+
+@pytest.mark.parametrize("method, path, body", [
+    ("DELETE", "/sources/vault", None),
+    ("POST", "/admin/wipe", {"confirm": "DELETE"}),
+    ("POST", "/sources/recategorize", None),
+])
+def test_index_changes_are_refused_while_an_ingest_runs(client, env, method, path, body):
+    """A source deleted mid-run came back as orphans (the job upserted it again); a wipe left a
+    silent partial index."""
+    from src.api.schemas import IngestStatusResponse
+    routes_module._ingest_jobs["j"] = IngestStatusResponse(job_id="j", status="running")
+
+    r = client.request(method, path, json=body)
+
+    assert r.status_code == 409 and r.json()["detail"] == "Eine Indexierung läuft bereits"
+    assert env.vectorstore.deleted_sources == [] and env.vectorstore.wiped is False
+    assert [s.id for s in env.config.settings.ingestion.sources] == ["vault", "Pen & Paper"]

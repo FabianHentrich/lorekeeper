@@ -314,8 +314,9 @@ Ablauf in `Retriever.retrieve()` — alle Parameter in [docs/configuration.md](d
 
 1. **Vektorsuche** (immer): Frage embedden, `top_k` (15) Kandidaten aus ChromaDB. Bilder sind
    ausgeschlossen. `score_threshold` (0,5) greift auf die Cosine-Scores **vor** einer Fusion.
-2. **BM25** (nur Hybrid): In-Memory-Index (`rank_bm25`), lazy aus der Collection gebaut, nach
-   Ingestion verworfen. Fusion mit der Vektorsuche über Reciprocal Rank Fusion.
+2. **BM25** (nur Hybrid): In-Memory-Index (`rank_bm25`), lazy aus der Collection gebaut (einmal,
+   auch wenn mehrere Fragen gleichzeitig kommen), nach jeder Änderung der Collection verworfen
+   (Ingest, Quelle entfernen, Wipe, Recategorize). Fusion mit der Vektorsuche über Reciprocal Rank Fusion.
 3. **Metadaten-Filter** (Gruppe, Quelle, Spieler-Freigabe) gehen an Vektorsuche und BM25.
 4. **Regelwerk-Slot** (`rules_slot`): eine zweite, kleine Vektorsuche nur in Gruppe `rules` (5
    Kandidaten, derselbe Filter) für Fragen wie „Was bewirkt Ritterlichkeit bei Escanor?“, bei denen
@@ -468,10 +469,11 @@ Das Backend lauscht nur auf `127.0.0.1:8000`; der Browser spricht ausschließlic
 | PUT    | `/sources`                  | Quellenliste ersetzen → `sources.yaml` |
 | POST   | `/sources/scan`             | Pfad scannen (für „Quelle hinzufügen“) |
 | GET    | `/sources/{id}/folders`     | Top-Level-Einträge einer Quelle |
-| POST   | `/sources/{id}/reindex`     | Quelle löschen + neu indizieren (Job) |
+| POST   | `/sources/{id}/reindex`     | Quelle komplett neu indizieren (Job, `full`, ohne vorheriges Löschen — bleibt durchsuchbar) |
 | DELETE | `/sources/{id}`             | Quelle und ihre Chunks entfernen |
 | POST   | `/sources/recategorize`     | `group`/`category` neu setzen (ohne Re-Embedding) |
 | POST   | `/admin/wipe`               | Collection leeren (Body `{"confirm": "DELETE"}`) |
+| —      | Sperre während eines Ingests | `DELETE /sources/{id}`, `/admin/wipe`, `/sources/recategorize` und `/eval/run` antworten mit 409 „Eine Indexierung läuft bereits“ |
 | GET/POST | `/provider`               | Aktiver Provider / zur Laufzeit wechseln (`provider`: `ollama` oder `gemini`, sonst 422) |
 | GET    | `/provider/gemini/status`   | Ob ein Gemini-Key da ist (ohne den Key) |
 | POST   | `/provider/gemini/key`      | Gemini-Key zur Laufzeit setzen (nur im Prozess) |

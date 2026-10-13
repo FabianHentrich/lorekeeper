@@ -7,6 +7,8 @@ that both paths return the same.
 """
 import logging
 import re
+import threading
+from dataclasses import dataclass
 from typing import Any
 
 from rank_bm25 import BM25Okapi
@@ -54,55 +56,68 @@ def _matches_filter(metadata: dict, where: dict | None) -> bool:
     return True
 
 
+@dataclass(frozen=True)
+class _Snapshot:
+    """One built index: documents, their token sets and the BM25 model — always replaced as a whole."""
+    documents: list[dict[str, Any]]
+    token_sets: list[set[str]]
+    index: BM25Okapi | None
+
+
 class BM25Index:
     """In-memory BM25 keyword index built lazily from the ChromaDB collection.
 
     Used as the lexical half of hybrid retrieval: results are merged with
     vector-search hits via Reciprocal Rank Fusion in ``Retriever``.
+
+    Thread safety (queries run in the threadpool): the built index is one immutable ``_Snapshot``,
+    published in a single assignment and read once per query. Building happens under a lock, so two
+    first hybrid queries don't build twice into the same lists — that used to mix two corpora and map
+    scores to the wrong documents (roadmap 11.0 #4). ``invalidate`` bumps a generation counter; a
+    build that started before it is not published (it would contain deleted chunks).
     """
 
     def __init__(self):
-        """Create an empty, not-yet-built index. Call build_from_vectorstore() to populate."""
-        self._index: BM25Okapi | None = None
-        self._documents: list[dict[str, Any]] = []
-        self._doc_token_sets: list[set[str]] = []
-        self._is_built = False
+        """Create an empty, not-yet-built index. ``ensure_built()`` populates it."""
+        self._snapshot: _Snapshot | None = None
+        self._generation = 0
+        self._build_lock = threading.Lock()
 
     @property
     def is_built(self) -> bool:
         """True once the index has been populated (or verified empty)."""
-        return self._is_built
+        return self._snapshot is not None
+
+    def ensure_built(self, vectorstore) -> None:
+        """Build the index unless a current one exists; concurrent callers wait for one build."""
+        if self._snapshot is not None:
+            return
+        with self._build_lock:
+            if self._snapshot is None:
+                self.build_from_vectorstore(vectorstore)
 
     def build_from_vectorstore(self, vectorstore) -> None:
-        """Load all documents from ChromaDB and build the BM25 index."""
+        """Load all documents from ChromaDB and build the BM25 index (prefer ``ensure_built``)."""
+        generation = self._generation
         data = vectorstore.get_all(include=["documents", "metadatas"])
 
-        if not data or not data.get("ids"):
-            self._index = None
-            self._documents = []
-            self._doc_token_sets = []
-            self._is_built = True
-            logger.info("BM25 index built (empty — no documents in vectorstore)")
-            return
-
-        self._documents = []
+        documents: list[dict[str, Any]] = []
         corpus: list[list[str]] = []
-
-        for i, doc_id in enumerate(data["ids"]):
+        for i, doc_id in enumerate((data or {}).get("ids") or []):
             content = data["documents"][i] or ""
-            metadata = data["metadatas"][i] or {}
-
-            self._documents.append({
-                "id": doc_id,
-                "content": content,
-                "metadata": metadata,
-            })
+            documents.append({"id": doc_id, "content": content, "metadata": data["metadatas"][i] or {}})
             corpus.append(_tokenize(content))
 
-        self._index = BM25Okapi(corpus)
-        self._doc_token_sets = [set(toks) for toks in corpus]
-        self._is_built = True
-        logger.info(f"BM25 index built: {len(self._documents)} documents")
+        snapshot = _Snapshot(
+            documents=documents,
+            token_sets=[set(toks) for toks in corpus],
+            index=BM25Okapi(corpus) if corpus else None,
+        )
+        if generation != self._generation:
+            logger.info("BM25 build discarded — the index was invalidated while it was built")
+            return
+        self._snapshot = snapshot
+        logger.info(f"BM25 index built: {len(documents)} documents")
 
     def query(
         self,
@@ -115,14 +130,15 @@ class BM25Index:
         Returns list[{id, content, metadata, score}] — same format as
         VectorStoreService.query() for easy merging.
         """
-        if not self._is_built or self._index is None or not self._documents:
+        snapshot = self._snapshot  # read once: invalidate() or a rebuild may replace it meanwhile
+        if snapshot is None or snapshot.index is None:
             return []
 
         tokens = _tokenize(query_text)
         if not tokens:
             return []
 
-        scores = self._index.get_scores(tokens)
+        scores = snapshot.index.get_scores(tokens)
         query_tokens = set(tokens)
 
         # Pair scores with documents, filter by metadata, sort by score desc.
@@ -131,9 +147,9 @@ class BM25Index:
         # count so exact matches are still retrievable.
         scored = []
         for idx, score in enumerate(scores):
-            doc = self._documents[idx]
+            doc = snapshot.documents[idx]
             if score <= 0:
-                overlap = len(query_tokens & self._doc_token_sets[idx])
+                overlap = len(query_tokens & snapshot.token_sets[idx])
                 if overlap == 0:
                     continue
                 score = float(overlap) * 1e-6  # positive but below any real BM25 score
@@ -154,8 +170,7 @@ class BM25Index:
         ]
 
     def invalidate(self) -> None:
-        """Mark index as stale. Next hybrid query will rebuild."""
-        self._is_built = False
-        self._index = None
-        self._documents = []
-        self._doc_token_sets = []
+        """Mark the index as stale (after anything that changed the collection). The next hybrid query
+        rebuilds it; a build already running is discarded."""
+        self._generation += 1
+        self._snapshot = None

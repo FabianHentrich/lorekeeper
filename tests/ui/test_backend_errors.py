@@ -34,7 +34,7 @@ def test_eval_already_running_is_a_warning(fake_backend):
     at = _ok(open_page("evaluation").run())
     _ok(at.button(key="ret_run").click().run())
 
-    assert "Es läuft bereits eine Evaluation." in [w.value for w in at.warning]
+    assert "Es läuft bereits eine Evaluation" in [w.value for w in at.warning]
     assert not at.error
 
 
