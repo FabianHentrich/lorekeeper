@@ -105,9 +105,12 @@ async def test_answer_lines_carry_session_role_and_model(fake_services, caplog):
 
 async def test_gemini_key_change_is_logged_without_the_key(monkeypatch, caplog):
     """Set/clear shows up in the log; the key itself never does."""
+    from src.generation.provider_factory import ProviderFactory
     from src.generation.providers import gemini
     monkeypatch.setattr(main_module, "config", SimpleNamespace(settings=SimpleNamespace(
         llm=SimpleNamespace(provider="ollama"))))
+    monkeypatch.setattr(ProviderFactory, "build_all", staticmethod(
+        lambda settings: (api.FakeProvider(), None, api.FakeGenerator())))
     try:
         with caplog.at_level(logging.INFO, logger="src.api.routes"):
             await routes.set_gemini_key({"api_key": "AIza-SECRET"})

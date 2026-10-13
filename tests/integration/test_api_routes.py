@@ -773,3 +773,59 @@ def test_query_rejects_malformed_filters_with_422(client, fake_services, bad):
     for path in ("/query", "/query/stream"):
         resp = client.post(path, json={"question": "x", "metadata_filters": bad})
         assert resp.status_code == 422, (path, resp.text)
+
+
+
+# ─── LLM rebuild (roadmap 11.0 P2) ─────────────────────────────────────────────
+
+@pytest.fixture
+def llm_builds(monkeypatch):
+    """Record every ProviderFactory.build_all call and hand out fresh fakes (fallback per settings)."""
+    from src.generation.provider_factory import ProviderFactory
+    calls = []
+    for name in ("provider", "condense_provider", "generator"):   # install_llm swaps these — restore after
+        monkeypatch.setattr(main_module, name, getattr(main_module, name))
+
+    def build_all(settings):
+        calls.append(settings.llm.fallback_enabled)
+        gen = FakeGenerator()
+        gen.fallback_provider = FakeProvider(provider_name="gemini") if settings.llm.fallback_enabled else None
+        return FakeProvider(provider_name=settings.llm.provider), None, gen
+
+    monkeypatch.setattr(ProviderFactory, "build_all", staticmethod(build_all))
+    return calls
+
+
+def test_fallback_toggle_on_the_settings_page_takes_effect(config_client, llm_builds, monkeypatch):
+    """The Generator fixes its fallback at construction — saving the toggle must rebuild it."""
+    client, _, _ = config_client
+    monkeypatch.setattr(main_module, "generator", FakeGenerator())
+
+    assert client.put("/config", json={"llm": {"fallback_enabled": True}}).status_code == 200
+    assert llm_builds == [True]
+    assert main_module.generator.fallback_provider is not None
+
+    assert client.put("/config", json={"llm": {"fallback_enabled": False}}).status_code == 200
+    assert main_module.generator.fallback_provider is None
+
+
+def test_sampling_changes_need_no_rebuild(config_client, llm_builds):
+    """Temperature & co. are read per call — no rebuild (and no health check) for them."""
+    client, _, _ = config_client
+    assert client.put("/config", json={"llm": {"ollama": {"temperature": 0.5}}}).status_code == 200
+    assert llm_builds == []
+
+
+def test_gemini_key_reaches_the_fallback_while_ollama_is_active(config_client, llm_builds, monkeypatch):
+    """Before, only an active Gemini was rebuilt — a fallback Gemini kept running without the key."""
+    from src.generation.providers import gemini
+    client, _, config = config_client
+    config.settings.llm.fallback_enabled = True
+    try:
+        assert client.post("/provider/gemini/key", json={"api_key": "AIza-test"}).status_code == 200
+    finally:
+        gemini.set_runtime_api_key(None)
+
+    assert llm_builds == [True]
+    assert main_module.provider.provider == "ollama"
+    assert main_module.generator.fallback_provider is not None

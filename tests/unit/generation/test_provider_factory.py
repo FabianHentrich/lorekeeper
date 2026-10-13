@@ -79,3 +79,30 @@ class TestFallback:
         assert ProviderFactory.create_fallback(
             LLMConfig(fallback_enabled=True, fallback_provider="openai")
         ) is None
+
+
+
+class TestBuildAll:
+    """Provider, condense provider and generator are built together (roadmap 11.0 #2)."""
+
+    def test_generator_gets_the_configured_fallback(self, fake_providers):
+        from src.config.manager import Settings
+        ollama, gemini = fake_providers
+        settings = Settings(llm=LLMConfig(provider="ollama", fallback_enabled=True, fallback_provider="gemini"))
+
+        provider, condense, generator = ProviderFactory.build_all(settings)
+
+        assert isinstance(provider, ollama) and condense is None
+        assert generator.provider is provider
+        assert isinstance(generator.fallback_provider, gemini)
+
+    def test_unbuildable_fallback_is_logged(self, monkeypatch, caplog):
+        """Enabling the fallback without a usable provider must not fail silently."""
+        def no_key(config):
+            raise ValueError("No Gemini API key")
+
+        monkeypatch.setattr(factory_module, "GeminiProvider", no_key)
+        fallback = ProviderFactory.create_fallback(LLMConfig(fallback_enabled=True, fallback_provider="gemini"))
+
+        assert fallback is None
+        assert "Fallback provider gemini unavailable: No Gemini API key" in caplog.text

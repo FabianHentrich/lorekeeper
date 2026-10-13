@@ -141,10 +141,7 @@ async def lifespan(app: FastAPI):
         retriever.get_reranker()  # pre-load reranker model at startup
 
     # LLM
-    provider = ProviderFactory.create(settings.llm)
-    condense_provider = ProviderFactory.create_condense_provider(settings.llm, settings.conversation)
-    fallback_provider = ProviderFactory.create_fallback(settings.llm)
-    generator = Generator(provider=provider, fallback_provider=fallback_provider)
+    provider, condense_provider, generator = ProviderFactory.build_all(settings)
 
     # Start session GC
     gc_task = asyncio.create_task(conversation_manager.start_gc())

@@ -37,13 +37,10 @@ def patched_lifespan():
          patch("src.main.VectorStoreService", return_value=fake_vs), \
          patch("src.main.Retriever", return_value=fake_retriever), \
          patch("src.main.ProviderFactory") as fake_factory, \
-         patch("src.main.Generator", return_value=fake_generator), \
          patch("src.main._ensure_ollama", new=AsyncMock(return_value=None)), \
          patch("src.logging_setup.setup_logging"):  # else the root logger writes all later test logs to logs/lorekeeper.log
 
-        fake_factory.create.return_value = fake_provider
-        fake_factory.create_condense_provider.return_value = None
-        fake_factory.create_fallback.return_value = None
+        fake_factory.build_all.return_value = (fake_provider, None, fake_generator)
 
         yield SimpleNamespace(
             embed=fake_embed,
@@ -87,8 +84,7 @@ def test_lifespan_preloads_reranker_when_enabled(patched_lifespan):
 
 
 def test_lifespan_creates_provider_via_factory(patched_lifespan):
-    """Ensure LLM factory is instructed to spin up context, condense, and fallback LLMs."""
+    """Provider, condense provider and generator (with fallback) come from one factory call."""
     with TestClient(main_module.app):
-        patched_lifespan.factory.create.assert_called_once()
-        patched_lifespan.factory.create_condense_provider.assert_called_once()
-        patched_lifespan.factory.create_fallback.assert_called_once()
+        patched_lifespan.factory.build_all.assert_called_once()
+        assert main_module.condense_provider is None

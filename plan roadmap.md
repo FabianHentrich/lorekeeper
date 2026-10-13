@@ -706,7 +706,7 @@ Offen: #17 (Umbenennen beim Tageswechsel unter Windows, wenn die Datei anderswo 
 
 **Aufwand**: A gering, B gering, C gering. Last 🟢.
 
-## 11.0 Architektur-Review: Passt der Aufbau noch, was sollte modularer werden? — 🔄 Umbau läuft (P1 erledigt)
+## 11.0 Architektur-Review: Passt der Aufbau noch, was sollte modularer werden? — 🔄 Umbau läuft (P1, P2 erledigt)
 
 **Wann**: nach 10.0 und der Messung aus 8.0, **vor** 9.0 und vor dem Wiederaufnehmen der Features. Begründung:
 - 8.0 kann Umbauten erzwingen (z.B. atomarer Provider-Wechsel, Job-Verwaltung, Warteschlange fürs LLM) — die gehören in denselben Entwurf, nicht in einen zweiten Umbau danach.
@@ -774,6 +774,8 @@ Die Beobachtungen oben, bewertet:
 **Entscheidungen (13.10.)**: Plan freigegeben. P7 (`routes.py` aufteilen) **ja**. #10 Reindex **ohne** Löschen vorab (`run(only_source_id, full=True)`), abgesichert gegen den E2E-Test — kommt mit P3 (Index-Konsistenz). P8 bleibt optional.
 
 **P1 umgesetzt (13.10.)**: Die Recategorize-Route übergibt die laufende Config; `config` ist Pflichtparameter in `recategorize()` und `IngestionOrchestrator` — keine stille Ersatz-Instanz mehr, nur die beiden CLIs nutzen ausdrücklich die Standard-Config (die auch nicht mehr beim Import gebaut wird). Neuer Integrationstest: Ordner-Zuordnung über `PUT /sources` speichern → Recategorize → gespeicherter Chunk hat die neue Kategorie (echtes `recategorize`, mutationsgeprüft mit der alten Standard-Config). Suite: 660 grün.
+
+**P2 umgesetzt (13.10.)**: `ProviderFactory.build_all()` baut Provider, Condense-Provider und Generator (mit Fallback) zusammen; `install_llm()` in `src/api/routes.py` setzt alle drei auf einmal und frischt den LLM-Health-Status auf (#7). Genutzt von Lifespan (`build_all`), Provider-Wechsel, Gemini-Key (jetzt **immer** — der Key erreicht auch Gemini als Fallback) und `PUT /config`, wenn sich `llm.fallback_enabled` ändert (Sampling-Werte werden pro Aufruf gelesen, kein Neuaufbau). Ein nicht baubarer Fallback (z.B. Gemini ohne Key) steht jetzt als Warnung im Log statt still `None`. Tests: Fallback-Schalter über `/config` an und aus, kein Neuaufbau bei Temperatur, Key bei aktivem Ollama erreicht den Fallback, `build_all` mit Fallback, Warnung bei nicht baubarem Fallback — mutationsgeprüft. Doku: `configuration.md`, `ui-ux.md`, `provider-strategy.md`, `ARCHITECTURE.md`. Suite: 665 grün.
 
 ---
 

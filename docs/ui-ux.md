@@ -120,8 +120,8 @@ Im Ausklapper: Passwortfeld + **Key setzen** → `POST /provider/gemini/key`. Le
 abgelehnt („Kein Key eingegeben.“) statt still den Key zu löschen; dafür gibt es **UI-Key
 entfernen** (`{"api_key": null}`), nur solange der Key aus der UI stammt — ein Key aus `.env` bleibt
 bis zur Änderung dort. Die Bestätigung erscheint nach dem Neuladen der Seite. Das Backend hält den
-Key nur im Speicher (nie auf Platte, nach Neustart weg). Ist Gemini aktiv, wird der Provider sofort
-neu gebaut.
+Key nur im Speicher (nie auf Platte, nach Neustart weg). Er wirkt sofort — für Gemini als aktiven
+Provider wie als Fallback.
 
 ### Status
 

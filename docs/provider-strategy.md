@@ -129,9 +129,13 @@ mit exponentiellem Backoff (bis zu 3×).
 curl.exe -X POST http://127.0.0.1:8000/provider -H "Content-Type: application/json" -d '{\"provider\": \"gemini\"}'
 ```
 
-Der Wechsel baut einen neuen Provider (`ProviderFactory.create()`), ggf. einen neuen
-Condense-Provider und einen neuen `Generator`; scheitert er (z.B. fehlender Key), bleibt der alte
-Provider. Der Wechsel gilt bis zum nächsten Neustart und schreibt nicht in `settings.yaml`.
+Der Wechsel baut Provider, Condense-Provider und `Generator` (mit Fallback) zusammen neu
+(`ProviderFactory.build_all()` über `install_llm()` in `src/api/routes.py`) und frischt danach den
+LLM-Health-Status auf; scheitert er (z.B. fehlender Key), bleibt der alte Satz. Derselbe Weg läuft
+beim Gemini-Key und beim Umschalten von `llm.fallback_enabled` auf der Settings-Seite — der
+`Generator` legt seinen Fallback beim Bau fest, ein bloßes Ändern der Einstellung erreichte ihn
+früher nicht (Roadmap 11.0). Der Wechsel gilt bis zum nächsten Neustart und schreibt nicht in
+`settings.yaml`.
 
 ---
 

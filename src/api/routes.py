@@ -35,8 +35,8 @@ from src.api.schemas import (
     StatsResponse,
     SwitchProviderRequest,
 )
+from src.config.manager import Settings
 from src.conversation.manager import needs_condense
-from src.generation.generator import Generator
 from src.generation.providers.base import StreamResult
 
 logger = logging.getLogger(__name__)
@@ -84,6 +84,30 @@ def _generating():
         yield
     finally:
         _active_generations -= 1
+
+
+# llm settings that change how the provider objects are built; the rest (temperature, timeout, ...) is
+# read per call and needs no rebuild
+_LLM_BUILD_KEYS = {"fallback_enabled"}
+
+
+async def install_llm(settings: Settings) -> None:
+    """Build provider, condense provider and generator from ``settings`` and swap all three in at once.
+
+    The one place for every change that affects how the LLM objects are built — provider switch, Gemini
+    key, fallback toggle. No ``await`` between the three assignments, so a request sees either the old or
+    the new set. The LLM health is refreshed right after, so the sidebar doesn't show the old provider's
+    state for up to a minute. Raises whatever building the active provider raises; nothing is swapped then.
+    """
+    import src.main as main_module
+    from src.generation.provider_factory import ProviderFactory
+
+    provider, condense, generator = ProviderFactory.build_all(settings)
+    main_module.provider, main_module.condense_provider, main_module.generator = provider, condense, generator
+    try:
+        update_health(_health_cache["chroma"], await provider.health_check())
+    except Exception as e:
+        logger.warning("Health check after the LLM rebuild failed (%s: %s)", type(e).__name__, e)
 
 
 def _queue_notice(provider_name: str) -> str | None:
@@ -690,11 +714,10 @@ async def set_gemini_key(payload: dict):
     """Set a runtime Gemini API key (process-local, not persisted to disk).
 
     Body: {"api_key": "..."}  — pass an empty string or null to clear.
-    If the active provider is currently Gemini, it is rebuilt so the new key
-    takes effect immediately.
+    The LLM objects are always rebuilt, so the key reaches Gemini as the active provider *and* as the
+    fallback (before, only an active Gemini was rebuilt — the fallback kept running without a key).
     """
     import src.main as main_module
-    from src.generation.provider_factory import ProviderFactory
     from src.generation.providers.gemini import set_runtime_api_key
 
     key = (payload or {}).get("api_key")
@@ -703,24 +726,16 @@ async def set_gemini_key(payload: dict):
 
     set_runtime_api_key(key.strip() if isinstance(key, str) else None)
 
-    # Hot-rebuild the active provider if it's Gemini, so the new key applies.
     settings = main_module.config.settings
-    rebuilt = False
-    if settings.llm.provider == "gemini":
-        try:
-            main_module.provider = ProviderFactory.create(settings.llm)
-            main_module.generator = Generator(
-                provider=main_module.provider,
-                fallback_provider=ProviderFactory.create_fallback(settings.llm),
-            )
-            rebuilt = True
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Key vom Provider abgelehnt: {e}") from e
+    try:
+        await install_llm(settings)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Key vom Provider abgelehnt: {e}") from e
 
     # Never the key itself
-    logger.info("Gemini runtime key %s (active provider rebuilt: %s)",
-                "set" if key and key.strip() else "cleared", rebuilt)
-    return {"status": "ok", "rebuilt_active_provider": rebuilt}
+    logger.info("Gemini runtime key %s (LLM rebuilt, active provider: %s)",
+                "set" if key and key.strip() else "cleared", settings.llm.provider)
+    return {"status": "ok", "rebuilt_active_provider": settings.llm.provider == "gemini"}
 
 
 @router.get("/config")
@@ -756,6 +771,12 @@ async def update_config(request: ConfigUpdateRequest):
 
     # Values are safe to log: the allow-list (_EDITABLE_KEYS) holds no secrets and no paths
     logger.info("Settings updated: %s", updates)
+    if _LLM_BUILD_KEYS & set(updates.get("llm") or {}):
+        try:
+            await install_llm(main_module.config.settings)
+        except Exception as e:
+            logger.exception("LLM rebuild after the settings change failed")
+            raise HTTPException(status_code=500, detail=f"Gespeichert, aber LLM-Neuaufbau fehlgeschlagen: {e}") from e
     return snapshot
 
 
@@ -771,27 +792,15 @@ async def wipe_collection(payload: dict):
 
 @router.post("/provider", response_model=ProviderInfo)
 async def switch_provider(request: SwitchProviderRequest):
-    """Dynamically switch the active LLM provider at runtime."""
+    """Dynamically switch the active LLM provider at runtime (all LLM objects rebuilt via ``install_llm``)."""
     import src.main as main_module
-    from src.generation.provider_factory import ProviderFactory
 
     settings = main_module.config.settings
 
     previous_provider = settings.llm.provider
     try:
         settings.llm.provider = request.provider
-        new_provider = ProviderFactory.create(settings.llm)
-        new_condense = ProviderFactory.create_condense_provider(
-            settings.llm, settings.conversation,
-        )
-        new_generator = Generator(
-            provider=new_provider,
-            fallback_provider=ProviderFactory.create_fallback(settings.llm),
-        )
-        # All created successfully — commit the switch
-        main_module.provider = new_provider
-        main_module.condense_provider = new_condense
-        main_module.generator = new_generator
+        await install_llm(settings)
         logger.info(f"Provider switched to: {request.provider}")
     except Exception as e:
         settings.llm.provider = previous_provider

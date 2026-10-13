@@ -54,7 +54,7 @@ angepasst — kein Neustart.
 | `retrieval.top_k`, `score_threshold`, `reranking.{enabled,top_k_rerank,max_per_source}`, `hybrid.*` | ✅ | nächste Frage |
 | `retrieval.section_expansion.*`, `rules_slot.*`, `reranking.{model,backend}` | ❌ nur YAML | nächster Start |
 | `llm.ollama` / `llm.gemini`: `temperature`, `top_p`, `max_tokens`, `timeout` | ✅ | nächste Frage |
-| `llm.fallback_enabled` | ✅ | nächste Frage |
+| `llm.fallback_enabled` | ✅ | nächste Frage (Provider, Condense-Provider und Generator werden beim Speichern neu gebaut) |
 | `conversation.{window_size,condense_question,session_timeout_minutes}` | ✅ | nächste Frage / nächster GC-Lauf |
 | `conversation.answer_history_*`, `condense_model` | ❌ nur YAML | nächster Start |
 | `chunking.*` | ✅ | **erst nach Neu-Indizierung** (die UI warnt) |
@@ -279,8 +279,10 @@ Begründung in [provider-strategy.md](provider-strategy.md)).
 im Prozessspeicher, wird nie auf Platte geschrieben und ist nach einem Neustart weg. Reihenfolge:
 Laufzeit-Override (`POST /provider/gemini/key`, Body `{"api_key": "..."}`, `null`/leer löscht) →
 Umgebungsvariable → `.env`. `GET /provider/gemini/status` liefert nur
-`{has_key, source: env|runtime|none}`. Ist Gemini aktiv, werden Provider und Generator sofort
-neu gebaut.
+`{has_key, source: env|runtime|none}`. Nach jedem Setzen/Löschen werden Provider, Condense-Provider
+und Generator neu gebaut — der Key wirkt sofort für ein aktives Gemini **und** für Gemini als
+Fallback. Lässt sich der Fallback nicht bauen (z.B. kein Key), steht `Fallback provider gemini
+unavailable` im Log.
 
 ---
 

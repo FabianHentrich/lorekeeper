@@ -368,7 +368,9 @@ Fallback-Modell).
 - **Gemini** über das `google-genai`-SDK. API-Key-Reihenfolge: Laufzeit-Override aus der UI
   (`POST /provider/gemini/key`, nur im Prozess, nie auf Platte) → Umgebungsvariable → `.env`.
   `GET /provider/gemini/status` verrät nie den Key selbst.
-- **ProviderFactory** baut aus der Config den Provider; Wechsel zur Laufzeit über `POST /provider`.
+- **ProviderFactory** baut aus der Config Provider, Condense-Provider und Generator zusammen (`build_all`);
+  Wechsel zur Laufzeit über `POST /provider`, Gemini-Key und Fallback-Schalter bauen über denselben
+  Weg (`install_llm`) alle drei neu.
 - **Fallback** (`llm.fallback_enabled`): schlägt der Hauptprovider vor dem ersten Token fehl,
   antwortet der Fallback-Provider.
 - **`condense_model`**: optional ein zweites, schnelleres Ollama-Modell nur für das Umschreiben von
