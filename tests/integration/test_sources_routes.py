@@ -504,3 +504,15 @@ def test_index_changes_are_refused_while_an_ingest_runs(client, env, method, pat
     assert r.status_code == 409 and r.json()["detail"] == "Eine Indexierung läuft bereits"
     assert env.vectorstore.deleted_sources == [] and env.vectorstore.wiped is False
     assert [s.id for s in env.config.settings.ingestion.sources] == ["vault", "Pen & Paper"]
+
+
+
+def test_sidebar_categories_come_from_defaults_and_folder_mappings(client, env, monkeypatch):
+    """The chat's category filter lists every default category and every category_map target,
+    plain strings and {category, group} entries alike."""
+    monkeypatch.setattr(main_module, "provider", SimpleNamespace(provider="ollama", model="qwen3:14b"))
+    vault = env.config.settings.ingestion.sources[0]
+    monkeypatch.setattr(vault, "default_category", "misc")
+    monkeypatch.setattr(vault, "category_map", {"NPCs": "npc", "Regeln": {"category": "regel", "group": "rules"}})
+
+    assert client.get("/sidebar-state").json()["available_categories"] == ["misc", "npc", "regel"]

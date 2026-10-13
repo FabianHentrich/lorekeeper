@@ -830,3 +830,62 @@ def test_gemini_key_reaches_the_fallback_while_ollama_is_active(config_client, l
     assert llm_builds == [True]
     assert main_module.provider.provider == "ollama"
     assert main_module.generator.fallback_provider is not None
+
+
+
+# ─── Provider switch (roadmap 9.0) ─────────────────────────────────────────────
+
+@pytest.fixture
+def switch_env(fake_services, monkeypatch):
+    """Real-looking LLM settings on the fake config; install_llm builds fakes per provider name."""
+    from src.generation.provider_factory import ProviderFactory
+    main_module.config.settings.llm = SimpleNamespace(provider="ollama", fallback_enabled=False)
+    for name in ("provider", "condense_provider", "generator"):
+        monkeypatch.setattr(main_module, name, getattr(main_module, name))
+    built = []
+
+    def build_all(settings):
+        built.append(settings.llm.provider)
+        if settings.llm.provider == "gemini" and getattr(settings, "gemini_broken", False):
+            raise ValueError("No Gemini API key")
+        return FakeProvider(provider_name=settings.llm.provider), None, FakeGenerator()
+
+    monkeypatch.setattr(ProviderFactory, "build_all", staticmethod(build_all))
+    return built
+
+
+def test_switch_provider_installs_the_new_provider(client, switch_env):
+    r = client.post("/provider", json={"provider": "gemini"})
+
+    assert r.status_code == 200 and r.json()["provider"] == "gemini"
+    assert main_module.provider.provider == "gemini"
+    assert main_module.config.settings.llm.provider == "gemini"
+
+
+def test_failed_switch_keeps_the_old_provider_and_setting(client, switch_env):
+    """A switch that can't build (e.g. no Gemini key) must leave the running provider untouched."""
+    main_module.config.settings.gemini_broken = True
+    before = main_module.provider
+
+    r = client.post("/provider", json={"provider": "gemini"})
+
+    assert r.status_code == 500 and "Provider-Wechsel fehlgeschlagen" in r.json()["detail"]
+    assert main_module.provider is before
+    assert main_module.config.settings.llm.provider == "ollama"
+
+
+def test_gemini_key_rejected_while_gemini_is_active(client, switch_env):
+    from src.generation.providers import gemini
+    main_module.config.settings.llm.provider = "gemini"
+    main_module.config.settings.gemini_broken = True
+    try:
+        r = client.post("/provider/gemini/key", json={"api_key": ""})
+    finally:
+        gemini.set_runtime_api_key(None)
+
+    assert r.status_code == 400 and "Key vom Provider abgelehnt" in r.json()["detail"]
+
+
+def test_gemini_key_must_be_a_string(client, switch_env):
+    assert client.post("/provider/gemini/key", json={"api_key": 123}).status_code == 400
+    assert switch_env == []

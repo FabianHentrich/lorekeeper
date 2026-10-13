@@ -77,7 +77,7 @@ Embedding-Modell funktioniert aber auch mit anderen Sprachen.
 | ✏ **Prompt-Verwaltung** | Prompts bearbeiten, Varianten speichern und vergleichen, sofort wirksam |
 | 🛠 **Einstellungen live** | Retrieval-, LLM-, Gesprächs- und Chunking-Werte über die Settings-Seite, ohne Neustart |
 | 🎯 **Evaluation** | Golden Set (278 Fragen), Retrieval- und End-to-End-Eval, Chunk-Inspector |
-| ✅ **659 Tests** (13.10.) | Unit, API-Integration, UI (Streamlit AppTest), Sicherheit; dazu Performance- und Live-Prüfungen |
+| ✅ **707 Tests**, 93 % Abdeckung (13.10.) | Unit, API-Integration, UI (Streamlit AppTest), Sicherheit; dazu Performance- und Live-Prüfungen |
 
 ---
 

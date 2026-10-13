@@ -25,12 +25,14 @@ def evaluate(api_url: str, qa_pairs: list[dict]) -> dict:
 
     Sends each question as a POST request to `/query`, measuring latency and
     testing if the retrieved sources and generated answer match the expected
-    values defined in the evaluation dataset.
+    values defined in the evaluation dataset. A failed request counts as a miss (it stays in the
+    denominator of both rates) and is listed with its error.
     """
     results = []
     hits = 0
     answer_matches = 0
     total_latency = 0.0
+    answered = 0
 
     for pair in qa_pairs:
         question = pair["question"]
@@ -52,6 +54,7 @@ def evaluate(api_url: str, qa_pairs: list[dict]) -> dict:
 
         latency = (time.time() - start) * 1000
         total_latency += latency
+        answered += 1
 
         answer = data.get("answer", "")
         sources = [s["file"].replace("\\", "/") for s in data.get("sources", [])]
@@ -81,7 +84,8 @@ def evaluate(api_url: str, qa_pairs: list[dict]) -> dict:
         "total_questions": total,
         "hit_rate": hits / total if total else 0,
         "answer_contains_rate": answer_matches / total if total else 0,
-        "avg_latency_ms": total_latency / total if total else 0,
+        # Over answered questions only — a failed request has no latency and used to pull the mean down
+        "avg_latency_ms": total_latency / answered if answered else 0,
         "details": results,
     }
 

@@ -647,13 +647,24 @@ Befunde:
 - **`OLLAMA_MODELS` als Benutzer-Umgebungsvariable** auf `D:\Users\iQ_3_\.ollama\models` setzen (Nutzer), dann sehen Tray-App und LoreKeepers Autostart dieselben Modelle; in `docs/operations.md` dokumentieren. Dazu im Code: Sieht Ollama **gar kein** Modell, nennt die Warnung `OLLAMA_MODELS` als wahrscheinliche Ursache statt nur `ollama pull`.
 - Optional (eher Feature): Hinweis im Chat, wenn eine Antwort auf das LLM wartet („beantwortet gerade eine andere Frage“) — das Backend kennt die Zahl laufender Generierungen.
 
-## 9.0 Testabdeckung prüfen
+## 9.0 Testabdeckung prüfen — ✅ Erledigt
 
 **Messung (13.10., `pytest --cov=src --cov=ui --cov=evaluation`)**: gesamt 85 %. `src/` fast überall ≥ 88 %, Eval- und Prompt-Routen 100 %. Lücken: `evaluation/evaluate.py` 15 % (E2E-Skript), `ui/pages/3_Prompts.py` 53 %, `ui/pages/2_Evaluation.py` 55 %, `ui/pages/1_Sources.py` 69 %, `src/main.py` 71 % (Lifespan), `ui/LoreKeeper.py` 78 %.
 
 **Vorgehen**: Nicht auf eine Prozentzahl optimieren, sondern die ungetesteten Pfade der Admin-Seiten ansehen und die mit echtem Fehlerrisiko testen (Speichern/Aktivieren von Varianten, A/B-Lauf, E2E-Tab, Ergebnisvergleich); `evaluate.py` mit gemocktem HTTP. Lifespan nur, wo Logik steckt (Seed des Health-Caches, Aufräumen beim Beenden).
 
 **Aufwand**: Gering-Mittel. Last 🟢.
+
+**Umgesetzt (13.10.)** — nach Fehlerrisiko, nicht nach Prozent. Gesamt **86 % → 93 %** (`pytest --cov=src --cov=ui --cov=evaluation`), Suite 681 → 707:
+- `evaluation/evaluate.py` 15 → 72 % (`tests/unit/test_evaluate.py`, `/query` gemockt): Treffer- und Stichwort-Quote, Windows-Pfade, fehlgeschlagene Anfragen. **Dabei behoben**: die mittlere Latenz teilte auch durch fehlgeschlagene Fragen (ohne Latenz) und fiel dadurch zu niedrig aus. Rest: das CLI-`main()`.
+- `system_routes` 80 → 92 %: **Provider-Wechsel war komplett ungetestet** — jetzt Erfolg und Rückfall bei Fehler (alter Provider und alte Einstellung bleiben), Gemini-Key abgelehnt bei aktivem Gemini, Key kein String, Kategorien der Sidebar aus `default_category` und `category_map`.
+- Prompts-Seite 53 → 85 % (`tests/ui/test_prompts_page.py`): aktive Prompts speichern, Vorschau mit Beispieldaten, Kopie als Variante (Name Pflicht), Variante bearbeiten/aktivieren/löschen, Vergleich markiert Unterschiede.
+- Evaluation-Seite 56 → 85 % (`tests/ui/test_evaluation_page.py`): Golden Set speichern (Listen-Felder überstehen die Komma-Zellen), Retrieval-Lauf mit Kennzahlen, ⚠️/❌-Details und Fehlern, A/B schickt Vektor dann Hybrid, E2E-Tab, zwei Ergebnisse vergleichen.
+- Sources-Seite 69 → 83 % (`tests/ui/test_sources_page.py`): unveränderte Tabelle speichern gibt exakt die gespeicherte Config zurück (`category_map`-Text ↔ Dict, `exclude_patterns`, `player_visible`), Quelle scannen und hinzufügen (ID-Vorschlag), vorhandene ID abgelehnt, Scan-Fehler.
+- Chat 78 → 88 % (`tests/ui/test_chat_sources.py`): Quellen je Datei gruppiert mit `file:///`-Link (Leerzeichen kodiert) und bestem Score, fehlendes Bild als Warnung, Token- und Zeitzeile.
+- Stichprobenhaft mutationsgeprüft (Rückfall beim Provider-Wechsel, Latenzmittel, `category_map` mit Gruppe, gespeicherter Prompt-Text, Link-Kodierung) — alle schlagen fehl.
+
+Bewusst offen: `main.py` 87 % (Ollama-Autostart-Pfade, brauchen echte Prozesse), Feedback-Übernahme per Häkchen im Data-Editor (AppTest kann Zellen nicht anklicken; die Logik `ui/feedback.py` ist getestet), CLI-Einstiegspunkte.
 
 ## 10.0 Logging prüfen und wenn nötig erweitern — ✅ Erledigt
 - sind alle wichtigen events geloggt
@@ -793,7 +804,7 @@ Die Beobachtungen oben, bewertet:
 
 ## Priorisierungsvorschlag
 
-Erledigt: 11.0 Architektur-Review + Umbau P1–P7, 8.0 Gleichzeitige Anfragen (Messung + Warte-Hinweis), 10.0 Logging (Pakete A–C), 7.3 Inline-Doku, 7.4 Pakete A–D (Fehler, toter Code, Vereinfachung, Clean Code), 7.2 Code-Review + Nachbesserung, 3.10 Regelwerk-Slot, 5.4 Reranker auf der GPU (DirectML), 5.2 Startup-Baseline, 3.3 Chunk-Inspector, 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
+Erledigt: 9.0 Testabdeckung (86 → 93 %), 11.0 Architektur-Review + Umbau P1–P7, 8.0 Gleichzeitige Anfragen (Messung + Warte-Hinweis), 10.0 Logging (Pakete A–C), 7.3 Inline-Doku, 7.4 Pakete A–D (Fehler, toter Code, Vereinfachung, Clean Code), 7.2 Code-Review + Nachbesserung, 3.10 Regelwerk-Slot, 5.4 Reranker auf der GPU (DirectML), 5.2 Startup-Baseline, 3.3 Chunk-Inspector, 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
 
 **Offen am Gaming-PC (Nutzer)**: alte Autostart-Aufgabe „LoreKeeper Server“ als Admin entfernen (`Unregister-ScheduledTask -TaskName "LoreKeeper Server" -Confirm:$false`); DHCP-Reservierung für `192.168.178.34` im Router.
 
@@ -803,11 +814,10 @@ Erledigt: 11.0 Architektur-Review + Umbau P1–P7, 8.0 Gleichzeitige Anfragen (M
 
 | Reihenfolge | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 1 | 9.0 Testabdeckung | Gering-Mittel — Lücken in den Admin-Seiten und `evaluate.py` | Gering-Mittel | 🟢 | 85 % gesamt; gezielt Pfade mit Fehlerrisiko, keine Prozentjagd |
-| 2 | Offene Prüfungen im laufenden Betrieb | Mittel — bestätigt, dass die Neuerungen im echten Chat wirken | Gering | 🟡 | Mit gestartetem LoreKeeper: 3.6 Folgefragen, 👍/👎 + Tabs „Feedback“/„Chunks“, Rerank-Timings (5.4), Regelwerk-Slot an x002/x005 (3.10), `pytest -m live`; gut mit 8.0 kombinierbar |
-| 3 | 5.5 Vektorsuche reproduzierbar machen | Gering-Mittel — verlässliche Eval-Vergleiche | Gering-Mittel | 🟡 | ±2 Abschnitte Schwankung zwischen Prozessen; `ef_search` erhöhen oder exakt suchen |
-| 4 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Antwortqualität/Prompt-Größe; mit der Chunk-Prüfung aus 5.2 messbar |
-| 5 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf (extern); dann Re-Index, Eval, Spieler-Messung |
+| 1 | Offene Prüfungen im laufenden Betrieb | Mittel — bestätigt, dass die Neuerungen im echten Chat wirken | Gering | 🟡 | Mit gestartetem LoreKeeper: 3.6 Folgefragen, 👍/👎 + Tabs „Feedback“/„Chunks“, Rerank-Timings (5.4), Regelwerk-Slot an x002/x005 (3.10), `pytest -m live`; gut mit 8.0 kombinierbar |
+| 2 | 5.5 Vektorsuche reproduzierbar machen | Gering-Mittel — verlässliche Eval-Vergleiche | Gering-Mittel | 🟡 | ±2 Abschnitte Schwankung zwischen Prozessen; `ef_search` erhöhen oder exakt suchen |
+| 3 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Antwortqualität/Prompt-Größe; mit der Chunk-Prüfung aus 5.2 messbar |
+| 4 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf (extern); dann Re-Index, Eval, Spieler-Messung |
 | — | 3.2 Session-History — ⏸ | Unklar | Mittel | 🟢 | Feature, ruht; erst entscheiden, ob gespeicherte Sessions Nutzen haben |
 | — | 2 Bilder im Chat (Phase 1/2) — ⏸ | Mittel / Nice-to-have | Mittel / Mittel-Hoch | 🔴/🟡 | Feature, ruht |
 | — | 4.2 Internet-Zugriff (Tailscale) — ⏸ | Mittel | Gering | 🟢 | Feature, ruht; sinnvoll erst nach 8.0 |
