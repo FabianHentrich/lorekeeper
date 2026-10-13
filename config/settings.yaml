@@ -93,10 +93,14 @@ logging:
   file: logs/lorekeeper.log         # null = nur Console
   max_bytes: 10485760               # 10 MB pro Logfile
   backup_count: 5                   # Anzahl rotierter Logfiles
-  suppress:                         # Third-Party Logger auf ERROR setzen
+  suppress:                         # Third-Party Logger auf ERROR setzen (ersetzt die Liste im Code)
     - httpx
+    - httpx2                        # HTTP-Client des openai-SDK: eine Zeile pro Ollama-Aufruf
     - httpcore
+    - openai
+    - google_genai                  # "AFC is enabled" bei jedem Gemini-Aufruf
     - chromadb
     - huggingface_hub
     - sentence_transformers
-    - openai
+    - safetensors
+    - model_utils

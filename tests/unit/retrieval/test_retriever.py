@@ -648,13 +648,19 @@ class TestSectionExpansion:
         return Retriever(config=config, embedding_service=embed_service, vectorstore=vs), vs
 
     @pytest.mark.asyncio
-    async def test_sibling_hits_expand_to_whole_section_in_document_order(self, embed_service):
-        """Verify two sibling hits pull in every chunk under their parent, in chunk_index order, once."""
+    async def test_sibling_hits_expand_to_whole_section_in_document_order(self, embed_service, caplog):
+        """Verify two sibling hits pull in every chunk under their parent, in chunk_index order, once —
+        logged as one INFO summary (the per-section detail is DEBUG)."""
         hits = [_hit("Waldläufer > Mehrfachschuss", 14, 0.9), _hit("Waldläufer > Kurzprofil", 11, 0.8),
                 _hit("Arkenfeld", 0, 0.7, source_file="Arkenfeld.md")]
         retriever, vs = self._retriever(embed_service, hits)
 
-        results = await retriever.retrieve("fähigkeiten waldläufer")
+        with caplog.at_level("INFO", logger="src.retrieval.retriever"):
+            results = await retriever.retrieve("fähigkeiten waldläufer")
+
+        infos = [r.getMessage() for r in caplog.records if r.levelname == "INFO"]
+        assert infos.count("Section expansion: 'Waldläufer' (regelbuch.pdf, 5 chunks)") == 1
+        assert not any(m.startswith(("Expanded section", "Retrieved")) for m in infos)
 
         assert [r.metadata["chunk_index"] for r in results[:5]] == [10, 11, 12, 13, 14]
         assert results[5].source_file == "Arkenfeld.md"           # unrelated hit keeps its place after

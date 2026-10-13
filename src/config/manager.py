@@ -252,8 +252,11 @@ class LoggingConfig(BaseModel):
     max_bytes: int = 10_485_760  # 10 MB
     backup_count: int = 5            # rotated files kept
     format: str = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-    suppress: list[str] = [  # set to ERROR
-        "httpx", "httpcore", "chromadb", "huggingface_hub", "sentence_transformers", "safetensors", "model_utils",
+    # Set to ERROR. Keep in sync with config/settings.yaml — the YAML list replaces this one, it doesn't add to it.
+    # httpx2: the HTTP client of the openai SDK (one line per Ollama call); google_genai: "AFC is enabled" per call
+    suppress: list[str] = [
+        "httpx", "httpx2", "httpcore", "openai", "google_genai", "chromadb", "huggingface_hub",
+        "sentence_transformers", "safetensors", "model_utils",
     ]
 
 

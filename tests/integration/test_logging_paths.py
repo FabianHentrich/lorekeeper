@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 import src.main as main_module
@@ -118,3 +119,107 @@ async def test_gemini_key_change_is_logged_without_the_key(monkeypatch, caplog):
     assert any(m.startswith("Gemini runtime key set") for m in messages)
     assert any(m.startswith("Gemini runtime key cleared") for m in messages)
     assert not any("SECRET" in m for m in messages)
+
+
+# ─── Package C: noise, the question once ───────────────────────────────────────
+
+def _question_lines(caplog) -> list[str]:
+    return [r.getMessage() for r in caplog.records
+            if r.levelno == logging.INFO and r.getMessage().startswith("Question (")]
+
+
+async def test_the_question_is_logged_once_at_info(fake_services, caplog):
+    """One line carries the question — the anchor for the retrieval, timings and error lines after it."""
+    with caplog.at_level(logging.INFO):
+        await routes.query(QueryRequest(question="Was ist Arkenfeld?"))
+
+    assert _question_lines(caplog) == ["Question (session=test-ses role=game_master): 'Was ist Arkenfeld?'"]
+    assert sum("Was ist Arkenfeld?" in r.getMessage() for r in caplog.records if r.levelno >= logging.INFO) == 1
+
+
+async def test_a_condensed_follow_up_shows_both_forms_in_one_line(fake_services, monkeypatch, caplog):
+    cm, gen = main_module.conversation_manager, main_module.generator
+    monkeypatch.setattr(cm, "config", SimpleNamespace(condense_question=True))
+    monkeypatch.setattr(cm, "get_history_for_condense", lambda sid: [{"role": "user", "content": "Wer ist Arkenfeld?"}],
+                        raising=False)
+
+    async def condense(prompt, provider):
+        return "Wer ist der Vater von Arkenfeld?"
+
+    monkeypatch.setattr(gen, "condense_question", condense)
+    with caplog.at_level(logging.INFO):
+        await routes.query(QueryRequest(question="Wer ist sein Vater?"))
+
+    assert _question_lines(caplog) == [
+        "Question (session=test-ses role=game_master): 'Wer ist sein Vater?' → condensed 'Wer ist der Vater von Arkenfeld?'"
+    ]
+
+
+@pytest.mark.parametrize("method, path, status, level", [
+    ("GET", "/ingest/status/x", 200, logging.DEBUG),    # polled every 1.5 s
+    ("POST", "/ingest", 200, logging.INFO),
+    ("GET", "/eval/results/x", 404, logging.INFO),
+    ("POST", "/query", 503, logging.WARNING),
+])
+def test_request_log_level(method, path, status, level, caplog):
+    """Successful GETs (page loads, job polling) go to DEBUG; changes and errors stay visible."""
+    app = FastAPI()
+    app.middleware("http")(main_module.request_logging)
+    app.add_api_route(path, lambda: JSONResponse({}, status_code=status), methods=[method])
+
+    with caplog.at_level(logging.DEBUG, logger="src.main"):
+        TestClient(app).request(method, path)
+
+    line = next(r for r in caplog.records if r.getMessage().startswith(f"{method} {path}"))
+    assert line.levelno == level
+
+
+def test_stream_request_line_says_it_only_measures_the_start(caplog):
+    """/query/stream returns before the answer is generated — the line must not look like the answer time."""
+    app = FastAPI()
+    app.middleware("http")(main_module.request_logging)
+    app.add_api_route("/query/stream", lambda: {}, methods=["POST"])
+
+    with caplog.at_level(logging.INFO, logger="src.main"):
+        TestClient(app).post("/query/stream")
+
+    assert any("→ 200 (stream started after" in r.getMessage() for r in caplog.records)
+
+
+async def test_started_ollama_writes_into_its_log_file(tmp_path, monkeypatch):
+    """Ollama's own output (crash reason) goes to logs/ollama.log instead of DEVNULL."""
+    log = tmp_path / "ollama.log"
+    monkeypatch.setattr(main_module, "_OLLAMA_LOG", log)
+    monkeypatch.setattr(main_module.shutil, "which", lambda name: "ollama.exe")
+    started = {}
+
+    class FakePopen:
+        pid = 1
+
+        def __init__(self, args, stdout, stderr):
+            started.update(stdout=stdout, stderr=stderr)
+
+    calls = []
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def get(self, url, timeout):
+            calls.append(url)
+            if len(calls) == 1:
+                raise ConnectionError("not running yet")
+            return SimpleNamespace(status_code=200)
+
+    monkeypatch.setattr(main_module.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(main_module.httpx, "AsyncClient", FakeClient)
+
+    proc = await main_module._ensure_ollama("http://127.0.0.1:11434")
+
+    assert isinstance(proc, FakePopen)
+    assert started["stdout"].name == str(log)
+    assert started["stderr"] == main_module.subprocess.STDOUT
+    assert log.exists()

@@ -68,3 +68,14 @@ def test_no_extra_handler_when_uvicorn_errors_reach_the_root(tmp_path, restore_r
     logging.getLogger("uvicorn.error").error("only once")
 
     assert sum("only once" in line for line in _file_lines(log)) == 1
+
+
+def test_suppress_list_in_code_matches_settings_yaml():
+    """The YAML list replaces the code default — two lists that drift apart left loggers unsuppressed."""
+    from pathlib import Path
+
+    import yaml
+
+    shipped = yaml.safe_load((Path(__file__).resolve().parents[2] / "config" / "settings.yaml").read_text(
+        encoding="utf-8"))["logging"]["suppress"]
+    assert shipped == LoggingConfig().suppress

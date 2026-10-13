@@ -119,13 +119,20 @@ async def _prepare_query(request: QueryRequest, timings: dict):
             t0 = time.perf_counter()
             try:
                 question = await gen.condense_question(condense_prompt, main_module.condense_provider)
-                logger.info(f"Condensed question: {request.question!r} → {question!r}")
             except Exception as e:
                 logger.warning("Condense failed (%s: %s); retrieving with the original question",
                                type(e).__name__, e)
             timings["condense_ms"] = _ms(t0)
         else:
-            logger.info(f"Condense skipped (standalone question): {question!r}")
+            logger.debug("Condense skipped (standalone question)")
+
+    # The one line per query that carries the question — the anchor for the lines that follow
+    # (decision roadmap 10.0 #11). A follow-up shows the rewritten form used for retrieval too.
+    who = _who(session.session_id, request.role)
+    if question != request.question:
+        logger.info("Question (%s): %r → condensed %r", who, request.question, question)
+    else:
+        logger.info("Question (%s): %r", who, question)
 
     stages: dict[str, float] = {}
     t0 = time.perf_counter()

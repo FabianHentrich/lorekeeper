@@ -271,7 +271,7 @@ class Retriever:
 
             vector_ids = {v["id"] for v in vector_results}
             bm25_only = sum(1 for r in bm25_results if r["id"] not in vector_ids)
-            logger.info(
+            logger.debug(
                 f"Hybrid search: {len(vector_results)} vector + {len(bm25_results)} bm25 "
                 f"candidates ({bm25_only} bm25-only)"
             )
@@ -297,7 +297,7 @@ class Retriever:
             chunks = await self._expand_sections(chunks)
             stage_ms["expand"] = (time.perf_counter() - t0) * 1000
 
-        logger.info(f"Retrieved {len(chunks)} chunks (query: {query[:60]}...)")
+        logger.debug("Retrieved %d chunks", len(chunks))  # the count is in the Query timings line
         return chunks
 
     async def _expand_sections(self, chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
@@ -327,7 +327,7 @@ class Retriever:
             if len(headings) < 2:
                 continue
             if top_rank and best_rank[(source_id, source_file, parent)] >= top_rank:
-                logger.info(
+                logger.debug(
                     f"Section '{parent}' ({source_file}) not expanded — best hit at rank "
                     f"{best_rank[(source_id, source_file, parent)] + 1} > {top_rank}"
                 )
@@ -338,16 +338,19 @@ class Retriever:
                 if (h := it["metadata"].get("heading_hierarchy", "")) == parent or h.startswith(parent + " > ")
             ]
             if len(section) > self.config.section_expansion.max_chunks:
-                logger.info(f"Section '{parent}' ({source_file}) has {len(section)} chunks — not expanded")
+                logger.debug(f"Section '{parent}' ({source_file}) has {len(section)} chunks — not expanded")
                 continue
             section.sort(key=lambda it: it["metadata"].get("chunk_index", 0))
             score = max(c.score for c in chunks if c.source_file == source_file and c.heading in headings)
             # The section's chunks inherit the score of its best hit
             expanded[(source_id, source_file, parent)] = [_to_chunk({**it, "score": score}) for it in section]
-            logger.info(f"Expanded section '{parent}' ({source_file}): {len(headings)} hits → {len(section)} chunks")
+            logger.debug(f"Expanded section '{parent}' ({source_file}): {len(headings)} hits → {len(section)} chunks")
 
         if not expanded:
             return chunks
+        logger.info("Section expansion: %s", ", ".join(
+            f"'{parent}' ({source_file}, {len(section)} chunks)"
+            for (_, source_file, parent), section in expanded.items()))
 
         # The first (best-ranked) hit of a section inserts the whole section; dedupe by
         # chunk identity so siblings and deeper hits already inside it aren't repeated.

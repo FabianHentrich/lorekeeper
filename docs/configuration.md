@@ -304,7 +304,7 @@ neu gebaut.
 | `file` | `str\|null` | `logs/lorekeeper.log` | Logdatei; `null` = nur Konsole |
 | `max_bytes` | `int` | `10485760` | Größe vor dem Rotieren (10 MB) |
 | `backup_count` | `int` | `5` | Anzahl rotierter Dateien |
-| `suppress` | `list[str]` | siehe YAML | Fremd-Logger auf ERROR setzen (der uvicorn-Zugriffslog steht fest auf WARNING) |
+| `suppress` | `list[str]` | siehe YAML | Fremd-Logger auf ERROR setzen (der uvicorn-Zugriffslog steht fest auf WARNING). Die YAML-Liste **ersetzt** die im Code — beide gleich halten (ein Test prüft das) |
 
 ---
 

@@ -48,6 +48,11 @@ generator: Generator = None  # type: ignore
 
 _ollama_process: subprocess.Popen | None = None
 
+# Output of an Ollama started by LoreKeeper — the only trace when it crashes (VRAM full, driver reset).
+# Appended across starts; moved to .1 once it passes _OLLAMA_LOG_MAX_BYTES (Ollama logs every request).
+_OLLAMA_LOG = Path("logs/ollama.log")
+_OLLAMA_LOG_MAX_BYTES = 10_485_760
+
 
 async def _ensure_ollama(base_url: str, timeout: float = 30.0) -> subprocess.Popen | None:
     """Start Ollama if it's not already running. Returns the process if we started it."""
@@ -67,12 +72,13 @@ async def _ensure_ollama(base_url: str, timeout: float = 30.0) -> subprocess.Pop
         logger.warning("Ollama binary not found in PATH — skipping auto-start")
         return None
 
-    logger.info("Starting Ollama...")
-    proc = subprocess.Popen(
-        [ollama_bin, "serve"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    logger.info("Starting Ollama (output: %s)...", _OLLAMA_LOG)
+    _OLLAMA_LOG.parent.mkdir(parents=True, exist_ok=True)
+    if _OLLAMA_LOG.exists() and _OLLAMA_LOG.stat().st_size > _OLLAMA_LOG_MAX_BYTES:
+        _OLLAMA_LOG.replace(_OLLAMA_LOG.with_name(_OLLAMA_LOG.name + ".1"))
+    # The child keeps its own handle — ours can be closed right after the start
+    with _OLLAMA_LOG.open("ab") as out:
+        proc = subprocess.Popen([ollama_bin, "serve"], stdout=out, stderr=subprocess.STDOUT)
 
     # Wait until it's ready
     deadline = time.monotonic() + timeout
@@ -176,11 +182,16 @@ app = FastAPI(
 
 
 _QUIET_PATHS = {"/health", "/sidebar-state"}
+# The response starts before the answer is generated — its duration is only the time to the headers.
+# The real total is in the "Query timings" line.
+_STREAMING_PATHS = {"/query/stream"}
 
 
 @app.middleware("http")
 async def request_logging(request, call_next):
     """Log incoming HTTP requests and their processing times, ignoring specific paths.
+
+    Successful GETs (page loads, job polling every 1–1.5 s) go to DEBUG; changes and errors stay visible.
 
     An unhandled exception gets its own line here; the traceback follows from uvicorn on ``uvicorn.error``,
     which ``setup_logging`` routes into the log file.
@@ -195,9 +206,15 @@ async def request_logging(request, call_next):
     if request.url.path in _QUIET_PATHS:
         return response
     duration_ms = (time.time() - start) * 1000
-    logger.info(
-        f"{request.method} {request.url.path} → {response.status_code} ({duration_ms:.0f}ms)"
-    )
+    if response.status_code >= 500:
+        level = logging.WARNING
+    elif request.method == "GET" and response.status_code < 400:
+        level = logging.DEBUG
+    else:
+        level = logging.INFO
+    timing = "stream started after" if request.url.path in _STREAMING_PATHS else "in"
+    logger.log(level, "%s %s → %d (%s %.0fms)", request.method, request.url.path, response.status_code,
+               timing, duration_ms)
     return response
 
 

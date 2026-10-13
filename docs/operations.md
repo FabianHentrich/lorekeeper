@@ -225,9 +225,19 @@ der GPU.
 Get-Content logs\lorekeeper.log -Tail 50
 ```
 
-Pro Anfrage steht eine Zeile `Query timings: …` im Log (Condense, Retrieval-Stufen, erster Token,
-gesamt, Chunks, Prompt-Größe). Den Log-Level setzt `logging.level` (`DEBUG` zeigt u.a. alle
-Rerank-Scores).
+Pro Frage stehen auf INFO: `Question (session=… role=…): '…'` (bei Folgefragen mit `→ condensed
+'…'`, die Fassung, mit der gesucht wurde), die Rerank-Zusammenfassung, ggf. `Section expansion: …`
+und `Query timings: …` (Modell, Condense, Retrieval-Stufen, erster Token, gesamt, Chunks,
+Prompt-Größe). Die Frage steht nur in der ersten dieser Zeilen; die anderen ordnet man über
+`session=` bzw. die Reihenfolge zu. Erfolgreiche GET-Anfragen (Seitenaufrufe, Job-Polling) stehen
+nur auf DEBUG; die Zeile von `/query/stream` misst nur den Start des Streams. Den Log-Level setzt
+`logging.level` (`DEBUG` zeigt u.a. alle Rerank-Scores, jede expandierte oder verworfene Sektion
+und den Grund fehlgeschlagener Health-Checks).
+
+Ein von LoreKeeper gestartetes Ollama schreibt seine eigene Ausgabe nach `logs/ollama.log`
+(angehängt, ab 10 MB nach `ollama.log.1` verschoben) — dort steht der Grund, wenn Ollama abstürzt.
+Läuft Ollama schon vorher (Tray-App), hat es sein eigenes Log unter
+`%LOCALAPPDATA%\Ollama\server.log`.
 
 **Fehler suchen** — `Select-String -Path logs\lorekeeper.log -Pattern 'ERROR|Traceback' -Context 0,20`.
 Was im Log steht:

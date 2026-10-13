@@ -626,7 +626,7 @@ Offen: `recategorize` importiert weiterhin das private `_resolve_category` aus d
 
 **Aufwand**: Gering-Mittel. Last 🟢.
 
-## 10.0 Logging prüfen und wenn nötig erweitern — 🔄 Pakete A und B erledigt, C offen
+## 10.0 Logging prüfen und wenn nötig erweitern — ✅ Erledigt
 - sind alle wichtigen events geloggt
 - sind alle wichtigen fehler geloggt
 - sind unnötige dinge geloggt
@@ -667,6 +667,10 @@ Offen: `recategorize` importiert weiterhin das private `_resolve_category` aus d
 
 **Paket B umgesetzt (13.10.)**: #5 `update_health()` loggt nur Wechsel (WARNING bei Ausfall, INFO bei Erholung, auch der Startzustand); Grund eines fehlgeschlagenen Checks auf DEBUG (Ollama, Gemini); „model not pulled“ einmal pro Ausfall statt alle 60 s. #6 `Sources saved: … player_visible=[…]`, `Source removed: … (N chunks deleted)`, `Settings updated: {Werte}` (Allow-Liste enthält keine Secrets), `Gemini runtime key set/cleared` ohne den Key. #7 Abgelehnte Spieler-Anfragen in `/query*` und `/eval/preview` mit Grund (WARNING); Admin-Login-Fehlversuche und Sperre in `ui/admin_gate.py` (Streamlit-Konsole, die UI hat keine Logdatei). #8 `session=<8> role=<rolle>` an Timings, LLM-Fehlern und Stream-Abbruch, `model=` an der Timings-Zeile. #13 Beide CLIs nutzen `setup_logging` statt `basicConfig`. Tests: Health-Wechsel, Session/Rolle/Modell, Gemini-Key ohne Key im Log, `player_visible` beim Speichern, Ablehnungsgrund (Spieler-Sicherheitstest erweitert), „not pulled“ einmal, Admin-Login — alle sieben mutationsgeprüft. Doku: `docs/operations.md` → Logs. Suite: 644 grün.
 
+**Paket C umgesetzt (13.10.)**: #11 Eine Zeile `Question (session=… role=…): '…'` pro Anfrage auf INFO, bei Folgefragen mit `→ condensed '…'`; die alten Zeilen „Condensed question“/„Condense skipped“ und der 60-Zeichen-Fragetext im Retriever sind weg. #9 Retriever: Hybrid-Kandidaten, „Retrieved N chunks“ und jede einzelne Sektion auf DEBUG, dafür eine `Section expansion: …`-Zusammenfassung auf INFO (die Rerank-Zusammenfassung bleibt); erfolgreiche GETs (Seitenaufrufe, Job-Polling alle 1–1,5 s) auf DEBUG, 5xx als WARNING; eine `suppress`-Liste in Code und `settings.yaml` (neu: `httpx2` — der HTTP-Client des openai-SDK, `google_genai`; vorher griffen `safetensors`/`model_utils` nicht, weil die YAML-Liste die im Code ersetzt), Test hält beide gleich. #10 Zeile von `/query/stream` heißt „stream started after … ms“. #12 Von LoreKeeper gestartetes Ollama schreibt nach `logs/ollama.log` (angehängt, ab 10 MB nach `.1`). Geschätzt (nicht gemessen): ~2–3 statt 5–8 INFO-Zeilen pro Chat-Frage. Tests: Frage einmal, Folgefrage in einer Zeile, Level je Request-Art, Stream-Zeile, `ollama.log`, Expansion-Zusammenfassung, `suppress`-Gleichstand — alle mutationsgeprüft. Doku: `docs/operations.md` → Logs, `docs/configuration.md` → `suppress`. Suite: 653 grün.
+
+Offen: #17 (Rotation unter Windows bei geöffneter Datei) nur beobachten. Hinweis bleibt: altes `logs/lorekeeper.log` mit Testausgaben vom 10.10. einmal löschen/rotieren.
+
 **Hinweis**: `logs/lorekeeper.log` enthält bis Zeile ~1.225 noch Testausgaben vom 10.10. (Ursache seit 03f5c36 behoben) — einmal rotieren/löschen, damit `grep ERROR` nicht in die Irre führt.
 
 **Aufwand**: A gering, B gering, C gering. Last 🟢.
@@ -697,7 +701,7 @@ Offen: `recategorize` importiert weiterhin das private `_resolve_category` aus d
 
 ## Priorisierungsvorschlag
 
-Erledigt: 7.3 Inline-Doku, 7.4 Pakete A–D (Fehler, toter Code, Vereinfachung, Clean Code), 7.2 Code-Review + Nachbesserung, 3.10 Regelwerk-Slot, 5.4 Reranker auf der GPU (DirectML), 5.2 Startup-Baseline, 3.3 Chunk-Inspector, 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
+Erledigt: 10.0 Logging (Pakete A–C), 7.3 Inline-Doku, 7.4 Pakete A–D (Fehler, toter Code, Vereinfachung, Clean Code), 7.2 Code-Review + Nachbesserung, 3.10 Regelwerk-Slot, 5.4 Reranker auf der GPU (DirectML), 5.2 Startup-Baseline, 3.3 Chunk-Inspector, 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
 
 **Offen am Gaming-PC (Nutzer)**: alte Autostart-Aufgabe „LoreKeeper Server“ als Admin entfernen (`Unregister-ScheduledTask -TaskName "LoreKeeper Server" -Confirm:$false`); DHCP-Reservierung für `192.168.178.34` im Router.
 
@@ -707,14 +711,13 @@ Erledigt: 7.3 Inline-Doku, 7.4 Pakete A–D (Fehler, toter Code, Vereinfachung, 
 
 | Reihenfolge | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 1 | 10.0 Logging prüfen | Mittel — Fehler am Spielabend hinterher nachvollziehbar | Gering | 🟢 | Fehler ohne Traceback, Ingest-Fehler nicht im Log; Review mit Fokus „error handling“ |
-| 2 | 8.0 Gleichzeitige Anfragen | Mittel-Hoch — Spielabend mit mehreren Nutzern | Gering-Mittel | 🟡 | Ungetestet; erst messen (2–4 parallele Streams), dann entscheiden |
-| 3 | 11.0 Architektur-Review | Mittel — Grundlage für 9.0 und die ruhenden Features | Gering (Review), Umbau Mittel | 🟢 | Nach 8.0 (dessen Befunde fließen ein), vor 9.0 (keine Tests für Code, der gleich umgebaut wird) und vor neuen Suchwegen |
-| 4 | 9.0 Testabdeckung | Gering-Mittel — Lücken in den Admin-Seiten und `evaluate.py` | Gering-Mittel | 🟢 | 85 % gesamt; gezielt Pfade mit Fehlerrisiko, keine Prozentjagd |
-| 5 | Offene Prüfungen im laufenden Betrieb | Mittel — bestätigt, dass die Neuerungen im echten Chat wirken | Gering | 🟡 | Mit gestartetem LoreKeeper: 3.6 Folgefragen, 👍/👎 + Tabs „Feedback“/„Chunks“, Rerank-Timings (5.4), Regelwerk-Slot an x002/x005 (3.10), `pytest -m live`; gut mit 8.0 kombinierbar |
-| 6 | 5.5 Vektorsuche reproduzierbar machen | Gering-Mittel — verlässliche Eval-Vergleiche | Gering-Mittel | 🟡 | ±2 Abschnitte Schwankung zwischen Prozessen; `ef_search` erhöhen oder exakt suchen |
-| 7 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Antwortqualität/Prompt-Größe; mit der Chunk-Prüfung aus 5.2 messbar |
-| 8 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf (extern); dann Re-Index, Eval, Spieler-Messung |
+| 1 | 8.0 Gleichzeitige Anfragen | Mittel-Hoch — Spielabend mit mehreren Nutzern | Gering-Mittel | 🟡 | Ungetestet; erst messen (2–4 parallele Streams), dann entscheiden |
+| 2 | 11.0 Architektur-Review | Mittel — Grundlage für 9.0 und die ruhenden Features | Gering (Review), Umbau Mittel | 🟢 | Nach 8.0 (dessen Befunde fließen ein), vor 9.0 (keine Tests für Code, der gleich umgebaut wird) und vor neuen Suchwegen |
+| 3 | 9.0 Testabdeckung | Gering-Mittel — Lücken in den Admin-Seiten und `evaluate.py` | Gering-Mittel | 🟢 | 85 % gesamt; gezielt Pfade mit Fehlerrisiko, keine Prozentjagd |
+| 4 | Offene Prüfungen im laufenden Betrieb | Mittel — bestätigt, dass die Neuerungen im echten Chat wirken | Gering | 🟡 | Mit gestartetem LoreKeeper: 3.6 Folgefragen, 👍/👎 + Tabs „Feedback“/„Chunks“, Rerank-Timings (5.4), Regelwerk-Slot an x002/x005 (3.10), `pytest -m live`; gut mit 8.0 kombinierbar |
+| 5 | 5.5 Vektorsuche reproduzierbar machen | Gering-Mittel — verlässliche Eval-Vergleiche | Gering-Mittel | 🟡 | ±2 Abschnitte Schwankung zwischen Prozessen; `ef_search` erhöhen oder exakt suchen |
+| 6 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Antwortqualität/Prompt-Größe; mit der Chunk-Prüfung aus 5.2 messbar |
+| 7 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf (extern); dann Re-Index, Eval, Spieler-Messung |
 | — | 3.2 Session-History — ⏸ | Unklar | Mittel | 🟢 | Feature, ruht; erst entscheiden, ob gespeicherte Sessions Nutzen haben |
 | — | 2 Bilder im Chat (Phase 1/2) — ⏸ | Mittel / Nice-to-have | Mittel / Mittel-Hoch | 🔴/🟡 | Feature, ruht |
 | — | 4.2 Internet-Zugriff (Tailscale) — ⏸ | Mittel | Gering | 🟢 | Feature, ruht; sinnvoll erst nach 8.0 |
