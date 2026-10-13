@@ -281,6 +281,14 @@ def _render_sidebar():
         st.markdown(f"{status_emoji} **Status:** {health.get('status', '?')}")
         st.markdown(f"ChromaDB: {'✅' if health.get('chromadb') else '❌'}")
         st.markdown(f"LLM: {'✅' if health.get('llm') else '❌'}")
+        reranker = health.get("reranker", "")
+        if reranker == "cpu_fallback":
+            # The silent slow path: DirectML configured, but the reranker fell back to the CPU
+            st.warning("Reranker läuft auf der CPU statt der GPU — Antworten langsamer. Ursache steht im Log "
+                       "(`DirectML reranker …`).")
+        elif reranker:
+            labels = {"gpu": "GPU ✅", "cpu": "CPU", "not_loaded": "noch nicht geladen", "off": "aus"}
+            st.markdown(f"Reranker: {labels.get(reranker, reranker)}")
         if not health.get("sources_configured", True):
             st.warning(
                 "Keine Quellen konfiguriert. Lege unter **Sources** "

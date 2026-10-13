@@ -44,3 +44,20 @@ def test_token_and_timing_caption_under_the_answer(fake_backend, monkeypatch):
 
     assert "⬇ 10 in · ⬆ 5 out · 🧠 3 think" in captions
     assert "⏱ 1. Token 1.1 s · gesamt 3.0 s · Umformulieren 0.8 s · Suche 0.5 s · 8 Chunks" in captions
+
+
+def test_sidebar_shows_where_the_reranker_runs(fake_backend, monkeypatch):
+    state = {**conftest.PAYLOADS["/sidebar-state"]}
+    state["health"] = {**state["health"], "reranker": "gpu"}
+    monkeypatch.setitem(conftest.PAYLOADS, "/sidebar-state", state)
+    at = open_page("chat").run()
+    assert "Reranker: GPU ✅" in [m.value for m in at.sidebar.markdown]
+
+
+def test_sidebar_warns_when_the_reranker_fell_back_to_the_cpu(fake_backend, monkeypatch):
+    """DirectML configured, reranker on the CPU: answers still right but slower — must not stay unnoticed."""
+    state = {**conftest.PAYLOADS["/sidebar-state"]}
+    state["health"] = {**state["health"], "reranker": "cpu_fallback"}
+    monkeypatch.setitem(conftest.PAYLOADS, "/sidebar-state", state)
+    at = open_page("chat").run()
+    assert any("Reranker läuft auf der CPU" in w.value for w in at.sidebar.warning)

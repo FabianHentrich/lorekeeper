@@ -487,7 +487,7 @@ Das Backend lauscht nur auf `127.0.0.1:8000`; der Browser spricht ausschließlic
 | GET    | `/provider/gemini/status`   | Ob ein Gemini-Key da ist (ohne den Key) |
 | POST   | `/provider/gemini/key`      | Gemini-Key zur Laufzeit setzen (nur im Prozess) |
 | GET    | `/sidebar-state`            | Gebündelter Status für die Chat-Sidebar |
-| GET    | `/health`                   | API + ChromaDB + LLM |
+| GET    | `/health`                   | API + ChromaDB + LLM, dazu `reranker`: `gpu` · `cpu` · `cpu_fallback` (DirectML konfiguriert, läuft aber auf der CPU) · `not_loaded` · `off` |
 | GET/DELETE | `/sessions/{id}`        | Session-Verlauf lesen / löschen |
 | GET    | `/stats`                    | Chunk-Anzahl |
 | GET/PUT | `/config`                  | UI-editierbare Settings lesen / Teil-Update (→ `settings.local.yaml`, live angewendet) |

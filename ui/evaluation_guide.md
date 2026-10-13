@@ -16,6 +16,9 @@ jede Änderung an Suche, Chunking oder Prompts an Zahlen statt am Bauchgefühl e
 - **Hit Rate**: Anteil der Fragen, bei denen die erwartete Datei unter den gefundenen Chunks ist.
 - **Abschnitt-Treffer**: zusätzlich der richtige Abschnitt (wichtig beim Regelbuch, wo fast jeder
   Treffer aus derselben Datei kommt). ⚠️ in den Details = richtige Datei, falscher Abschnitt.
+- **Latenz p50/p95 · Chunks pro Frage** (Zeile unter den Kennzahlen): wie schnell die Suche ist und
+  wie viele Chunks das LLM pro Frage bekommt (inkl. ganzer Abschnitte). Steigt Ø oder max deutlich,
+  wird der Prompt größer und die Antwort langsamer.
 - **Answer Contains** (End-to-End): Anteil der Antworten, die alle erwarteten Stichwörter enthalten.
 - **A/B (Vektor vs. Hybrid)**: zwei Läufe hintereinander; die Tabelle zeigt nur die Fragen, deren
   Ergebnis kippt.

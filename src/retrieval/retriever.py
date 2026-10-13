@@ -117,6 +117,18 @@ class Retriever:
         self._reranker_on_gpu = False
         self._fallback_lock = asyncio.Lock()  # one GPU→CPU switch even if several queries fail at once
 
+    @property
+    def reranker_device(self) -> str:
+        """Where the cross-encoder runs: ``gpu``, ``cpu``, ``cpu_fallback`` (configured for DirectML but on
+        the CPU — the silent slow path the sidebar warns about), ``not_loaded`` or ``off``."""
+        if not self.config.reranking.enabled:
+            return "off"
+        if self._reranker is None:
+            return "not_loaded"
+        if self._reranker_on_gpu:
+            return "gpu"
+        return "cpu_fallback" if self.config.reranking.backend == "directml" else "cpu"
+
     def get_reranker(self):
         """Lazy-load and cache the cross-encoder reranking model.
 

@@ -195,6 +195,7 @@ den ONNX-Export des Rerankers (`onnx/model.onnx`, ~450 MB). Danach liegt alles i
 
 ### Reranker läuft auf der CPU (DirectML-Warnung)
 
+Sichtbar als Warnung in der Chat-Sidebar („Reranker läuft auf der CPU statt der GPU“) und als
 Log-Zeile `DirectML reranker unavailable (…) — falling back to the CPU (torch)`: Die Antworten
 bleiben gleich, nur die Suche ist langsamer (~0,8 s statt ~0,05 s, unter CPU-Last viel mehr).
 Übliche Ursache: ein `pip install -r requirements.txt` hat das normale `onnxruntime` wieder über

@@ -738,3 +738,22 @@ class TestSectionExpansion:
 
         assert len(results) == 2
         vs.get_chunks_for_file.assert_not_called()
+
+
+class TestRerankerDevice:
+    """Where the reranker runs — shown in the chat sidebar; cpu_fallback is the silent slow path."""
+
+    @pytest.mark.parametrize("enabled, backend, loaded, on_gpu, expected", [
+        (False, "directml", True, True, "off"),
+        (True, "directml", False, False, "not_loaded"),
+        (True, "directml", True, True, "gpu"),
+        (True, "directml", True, False, "cpu_fallback"),
+        (True, "torch", True, False, "cpu"),
+    ])
+    def test_device(self, embed_service, enabled, backend, loaded, on_gpu, expected):
+        from src.config.manager import RerankingConfig, RetrievalConfig
+        config = RetrievalConfig(reranking=RerankingConfig(enabled=enabled, backend=backend))
+        retriever = Retriever(config=config, embedding_service=embed_service, vectorstore=MagicMock())
+        retriever._reranker = object() if loaded else None
+        retriever._reranker_on_gpu = on_gpu
+        assert retriever.reranker_device == expected

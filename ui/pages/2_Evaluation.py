@@ -5,6 +5,7 @@ end-to-end eval, and result comparison — all from the UI.
 """
 
 import hashlib
+import math
 import time
 from pathlib import Path
 
@@ -179,6 +180,23 @@ def _poll_eval_job(job_id: str, label: str = "Evaluation"):
                 return None
 
 
+def _load_stats(details: list[dict]) -> str:
+    """p50/p95 latency and Ø/max chunks per question — what `pytest -m perf` watches against its baseline.
+
+    Computed from the per-question details (also works for reports saved before these numbers existed).
+    Chunks = everything handed to the LLM, section expansion included — the number roadmap 5.3 is about.
+    """
+    answered = [d for d in details if "error" not in d]
+    if not answered:
+        return ""
+    latencies = sorted(d.get("latency_ms", 0) for d in answered)
+    p50 = latencies[len(latencies) // 2]
+    p95 = latencies[math.ceil(len(latencies) * 0.95) - 1]   # nearest rank
+    chunks = [len(d.get("retrieved_files", [])) for d in answered]
+    return (f"Latenz p50 {p50} ms · p95 {p95} ms · Chunks pro Frage Ø {sum(chunks) / len(chunks):.1f} / "
+            f"max {max(chunks)}")
+
+
 def _render_retrieval_result(result: dict):
     """
     Render a retrieval eval result containing metrics, taxonomic breakdowns,
@@ -200,6 +218,8 @@ def _render_retrieval_result(result: dict):
         f"K={config.get('top_k', '?')} R={config.get('top_k_rerank', '?')} "
         f"C={config.get('max_per_source', '?')} H={_hybrid_label(config.get('hybrid'))}",
     )
+    if stats := _load_stats(details):
+        st.caption(stats)
     if result.get("section_total"):
         sec_rate = result.get("section_hit_rate") or 0
         st.caption(

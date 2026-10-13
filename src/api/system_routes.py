@@ -124,7 +124,8 @@ async def health():
     import src.main as main_module
     has_sources = bool(main_module.config.settings.ingestion.sources)
     status = "healthy" if (chroma_ok and llm_ok) else "degraded"
-    return HealthResponse(status=status, chromadb=chroma_ok, llm=llm_ok, sources_configured=has_sources)
+    return HealthResponse(status=status, chromadb=chroma_ok, llm=llm_ok, sources_configured=has_sources,
+                          reranker=main_module.retriever.reranker_device)
 
 
 @router.get("/sidebar-state", response_model=SidebarState)

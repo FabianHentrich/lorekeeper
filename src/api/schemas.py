@@ -85,6 +85,7 @@ class HealthResponse(BaseModel):
     chromadb: bool
     llm: bool
     sources_configured: bool = True
+    reranker: str = ""  # gpu | cpu | cpu_fallback | not_loaded | off (Retriever.reranker_device)
 
 
 class StatsResponse(BaseModel):

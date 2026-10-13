@@ -115,6 +115,7 @@ class FakePromptManager:
 
 class FakeRetriever:
     """Mock stub returning hardcoded relevance context."""
+    reranker_device = "gpu"
     def __init__(self, chunks: list[RetrievedChunk] | None = None) -> None:
         self._chunks = chunks or [
             RetrievedChunk(
@@ -503,14 +504,16 @@ def test_health_healthy(client, fake_services):
     response = client.get("/health")
     assert response.status_code == 200
     body = response.json()
-    assert body == {"status": "healthy", "chromadb": True, "llm": True, "sources_configured": True}
+    assert body == {"status": "healthy", "chromadb": True, "llm": True, "sources_configured": True,
+                    "reranker": "gpu"}
 
 
 def test_health_degraded_when_llm_down(client, fake_services):
     from src.api import system_routes as system_routes_module
     system_routes_module._health_cache["llm"] = False
     response = client.get("/health")
-    assert response.json() == {"status": "degraded", "chromadb": True, "llm": False, "sources_configured": True}
+    assert response.json() == {"status": "degraded", "chromadb": True, "llm": False, "sources_configured": True,
+                               "reranker": "gpu"}
 
 
 # ─── /sessions ─────────────────────────────────────────────────────────────────

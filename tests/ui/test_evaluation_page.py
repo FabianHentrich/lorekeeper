@@ -130,3 +130,15 @@ def test_guide_explains_every_tab(fake_backend):
     text = " ".join(m.value for m in guide.markdown)
     for tab in ("Golden Set", "Frage testen", "Retrieval Eval", "End-to-End", "Ergebnisse", "Feedback", "Chunks"):
         assert f"**{tab}**" in text
+
+
+def test_retrieval_result_shows_latency_percentiles_and_chunks_per_question(jobs, monkeypatch):
+    report = {**RETRIEVAL_REPORT, "details": [
+        {**RETRIEVAL_REPORT["details"][0], "latency_ms": 40, "retrieved_files": ["a"] * 8},
+        {**RETRIEVAL_REPORT["details"][1], "latency_ms": 60, "retrieved_files": ["b"] * 20},
+    ]}
+    monkeypatch.setitem(conftest.PAYLOADS, "/eval/results/retrieval_1.json", report)
+    at = _ok(open_page("evaluation").run())
+    _ok(at.button(key="ret_run").click().run())
+
+    assert "Latenz p50 60 ms · p95 60 ms · Chunks pro Frage Ø 14.0 / max 20" in [c.value for c in at.caption]

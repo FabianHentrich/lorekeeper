@@ -70,10 +70,11 @@ def env(tmp_path):
         SourceConfig(id="Pen & Paper", path=str(single), group="rules"),
     ]
 
-    names = ("config", "vectorstore", "bm25_index")
+    names = ("config", "vectorstore", "bm25_index", "retriever")
     originals = {n: getattr(main_module, n) for n in names}
     fakes = SimpleNamespace(
         config=config, vectorstore=FakeVectorStore(), bm25_index=FakeBM25(),
+        retriever=SimpleNamespace(reranker_device="gpu"),
         vault=vault, single=single, sources_path=sources_path,
     )
     for n in names:
