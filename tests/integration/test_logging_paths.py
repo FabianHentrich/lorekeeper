@@ -223,3 +223,37 @@ async def test_started_ollama_writes_into_its_log_file(tmp_path, monkeypatch):
     assert started["stdout"].name == str(log)
     assert started["stderr"] == main_module.subprocess.STDOUT
     assert log.exists()
+
+
+# ─── Roadmap 8.0: waiting notice ───────────────────────────────────────────────
+
+async def _events(request) -> list[dict]:
+    import json
+    response = await routes.query_stream(request)
+    return [json.loads(chunk[6:]) async for chunk in response.body_iterator]
+
+
+async def test_answer_waiting_for_another_gets_a_notice_first(fake_services, monkeypatch):
+    """Ollama answers one question at a time — the chat says why the answer hasn't started yet."""
+    monkeypatch.setattr(routes, "_active_generations", 1)
+    events = await _events(QueryRequest(question="Was ist Arkenfeld?"))
+
+    assert events[0] == {"type": "status", "content": "Das LLM beantwortet gerade eine andere Frage — deine kommt danach."}
+    assert events[1]["type"] == "token" and events[-1]["type"] == "done"
+    assert routes._active_generations == 1  # back to the other answer's count after this one finished
+
+
+async def test_no_notice_when_the_llm_is_free(fake_services):
+    events = await _events(QueryRequest(question="Was ist Arkenfeld?"))
+    assert [e["type"] for e in events if e["type"] == "status"] == []
+    assert routes._active_generations == 0
+
+
+async def test_count_drops_when_the_client_leaves(fake_services):
+    """An aborted stream must not leave a phantom generation — every later question would show the notice."""
+    response = await routes.query_stream(QueryRequest(question="Was ist Arkenfeld?"))
+    events = response.body_iterator
+    await events.__anext__()
+    assert routes._active_generations == 1
+    await events.aclose()
+    assert routes._active_generations == 0

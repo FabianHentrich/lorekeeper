@@ -611,7 +611,7 @@ Offen: `recategorize` importiert weiterhin das private `_resolve_category` aus d
 
 **Aufwand**: Paket A gering-mittel, B gering, C mittel, D gering. Last 🟢 (nur Code + Tests).
 
-## 8.0 Was passiert wenn man an den Server mehrere Anfragen gleichzeitig bzw. nahe zu glecihzeitig schickt? — 🔄 Gemessen, Entscheidungen offen
+## 8.0 Was passiert wenn man an den Server mehrere Anfragen gleichzeitig bzw. nahe zu glecihzeitig schickt? — ✅ Erledigt
 - Relevant wenn ich einen Abend mache und sowohl ich als auch meine spieler Lorekeeper nutzen wollen.
 
 **Bewertung (13.10.)**: Impact Mittel-Hoch — das ist der Einsatzfall am Spielabend, und bisher testet nichts gleichzeitige Anfragen. Aus dem Code bekannt: Ingest- und Eval-Jobs sind gegen Parallelstart gesperrt (409); Embedding und Rerank laufen im Threadpool; ein Ingest-Job läuft in einem Thread **neben** laufenden Fragen auf derselben ChromaDB; ein Provider-Wechsel ersetzt `main_module.provider/generator` mitten in laufenden Anfragen. Zu prüfen: (1) Antwortzeit bei 2–4 gleichzeitigen Fragen — arbeitet Ollama Anfragen nacheinander ab (`OLLAMA_NUM_PARALLEL`), wartet die zweite Frage die ganze erste Generierung; (2) Rerank gleichzeitig auf einer DirectML-Session; (3) Fragen während eines Ingests (BM25 wird erst am Jobende invalidiert); (4) Sessions zweier Rollen gleichzeitig. Vorgehen: Lasttest mit 2–4 parallelen Streams gegen das laufende Backend (eigener `perf`-Test), Messwerte festhalten, erst dann entscheiden, ob z.B. eine Warteschlange oder ein Hinweis in der UI nötig ist.
@@ -638,7 +638,9 @@ Befunde:
 4. **Nebenbefund — Autostart von Ollama findet keine Modelle**: Die Ollama-Tray-App nutzt `OLLAMA_MODELS=D:\Users\iQ_3_\.ollama\models` (eigene App-Einstellung, keine Umgebungsvariable). Startet LoreKeeper `ollama serve` selbst, sucht es in `C:\Users\iQ_3_\.ollama\models` (leer) → „model not pulled“, LLM down. Sichtbar erst durch `logs/ollama.log` (vorher DEVNULL). Für die Messung `OLLAMA_MODELS` nur für den Prozess gesetzt.
 5. Nicht gemessen: Fragen während eines laufenden Ingests (🔴, Index-Schreibzugriff) und Provider-Wechsel mitten in Anfragen.
 
-**Entscheidungen (13.10.)**: `OLLAMA_NUM_PARALLEL` bleibt **1**. `OLLAMA_MODELS` setzt der Nutzer vorerst nicht (Ollama wird ohnehin vorher manuell gestartet) — dafür eine klare Warnung im Code. Der Warte-Hinweis im Chat wird eingebaut.
+**Entscheidungen (13.10.)**: `OLLAMA_NUM_PARALLEL` bleibt **1**. `OLLAMA_MODELS` setzt der Nutzer als Benutzer-Umgebungsvariable auf den Ordner der Ollama-App (dann findet auch LoreKeepers Autostart die Modelle, Ollama muss nicht mehr vorher von Hand gestartet werden) — zusätzlich eine klare Warnung im Code. Der Warte-Hinweis im Chat wird eingebaut.
+
+**Umgesetzt (13.10.)**: Warte-Hinweis — das Backend zählt laufende Generierungen (`_generating()` in `src/api/routes.py`, auch `/query`, damit ein E2E-Eval-Lauf mitzählt); läuft schon eine und der Provider ist Ollama, kommt vor dem ersten Token ein SSE-Event `status` („Das LLM beantwortet gerade eine andere Frage — deine kommt danach.“), die Chat-Seite zeigt es bis zum ersten Token. Der Zähler sinkt auch bei Fehler und Abbruch durch den Client. Ollama-Warnung: Sieht Ollama gar kein Modell, nennt die Warnung den Modellordner (`OLLAMA_MODELS`) statt `ollama pull`. Tests: Hinweis bei laufender Generierung, keiner bei freiem LLM, Zähler nach Abbruch, beide Ollama-Warnungen — mutationsgeprüft. Doku: SSE-Format in `ARCHITECTURE.md`, `docs/ui-ux.md` → Streaming, `docs/operations.md` → Ollama antwortet nicht. Offen: Fragen während eines Ingests und Provider-Wechsel mitten in Anfragen sind ungemessen — fließen in 11.0 ein (atomarer Wechsel der Dienste). Nach dem Setzen von `OLLAMA_MODELS` einmal den Autostart prüfen (Ollama beenden, `start.ps1`, `logs/ollama.log` muss das Modell finden).
 
 **Vorschlag (vor der Entscheidung)**:
 - **`OLLAMA_NUM_PARALLEL` bei 1 lassen** (Empfehlung): Der häufige Fall (einer fragt) bleibt 27 % schneller, der VRAM hat Luft. Am Spielabend warten Gleichzeitige dafür einige Sekunden.
@@ -730,7 +732,7 @@ Offen: #17 (Umbenennen beim Tageswechsel unter Windows, wenn die Datei anderswo 
 
 ## Priorisierungsvorschlag
 
-Erledigt: 10.0 Logging (Pakete A–C), 7.3 Inline-Doku, 7.4 Pakete A–D (Fehler, toter Code, Vereinfachung, Clean Code), 7.2 Code-Review + Nachbesserung, 3.10 Regelwerk-Slot, 5.4 Reranker auf der GPU (DirectML), 5.2 Startup-Baseline, 3.3 Chunk-Inspector, 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
+Erledigt: 8.0 Gleichzeitige Anfragen (Messung + Warte-Hinweis), 10.0 Logging (Pakete A–C), 7.3 Inline-Doku, 7.4 Pakete A–D (Fehler, toter Code, Vereinfachung, Clean Code), 7.2 Code-Review + Nachbesserung, 3.10 Regelwerk-Slot, 5.4 Reranker auf der GPU (DirectML), 5.2 Startup-Baseline, 3.3 Chunk-Inspector, 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
 
 **Offen am Gaming-PC (Nutzer)**: alte Autostart-Aufgabe „LoreKeeper Server“ als Admin entfernen (`Unregister-ScheduledTask -TaskName "LoreKeeper Server" -Confirm:$false`); DHCP-Reservierung für `192.168.178.34` im Router.
 
@@ -740,13 +742,12 @@ Erledigt: 10.0 Logging (Pakete A–C), 7.3 Inline-Doku, 7.4 Pakete A–D (Fehler
 
 | Reihenfolge | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 1 | 8.0 Gleichzeitige Anfragen | Mittel-Hoch — Spielabend mit mehreren Nutzern | Gering-Mittel | 🟡 | Ungetestet; erst messen (2–4 parallele Streams), dann entscheiden |
-| 2 | 11.0 Architektur-Review | Mittel — Grundlage für 9.0 und die ruhenden Features | Gering (Review), Umbau Mittel | 🟢 | Nach 8.0 (dessen Befunde fließen ein), vor 9.0 (keine Tests für Code, der gleich umgebaut wird) und vor neuen Suchwegen |
-| 3 | 9.0 Testabdeckung | Gering-Mittel — Lücken in den Admin-Seiten und `evaluate.py` | Gering-Mittel | 🟢 | 85 % gesamt; gezielt Pfade mit Fehlerrisiko, keine Prozentjagd |
-| 4 | Offene Prüfungen im laufenden Betrieb | Mittel — bestätigt, dass die Neuerungen im echten Chat wirken | Gering | 🟡 | Mit gestartetem LoreKeeper: 3.6 Folgefragen, 👍/👎 + Tabs „Feedback“/„Chunks“, Rerank-Timings (5.4), Regelwerk-Slot an x002/x005 (3.10), `pytest -m live`; gut mit 8.0 kombinierbar |
-| 5 | 5.5 Vektorsuche reproduzierbar machen | Gering-Mittel — verlässliche Eval-Vergleiche | Gering-Mittel | 🟡 | ±2 Abschnitte Schwankung zwischen Prozessen; `ef_search` erhöhen oder exakt suchen |
-| 6 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Antwortqualität/Prompt-Größe; mit der Chunk-Prüfung aus 5.2 messbar |
-| 7 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf (extern); dann Re-Index, Eval, Spieler-Messung |
+| 1 | 11.0 Architektur-Review | Mittel — Grundlage für 9.0 und die ruhenden Features | Gering (Review), Umbau Mittel | 🟢 | Nach 8.0 (dessen Befunde fließen ein), vor 9.0 (keine Tests für Code, der gleich umgebaut wird) und vor neuen Suchwegen |
+| 2 | 9.0 Testabdeckung | Gering-Mittel — Lücken in den Admin-Seiten und `evaluate.py` | Gering-Mittel | 🟢 | 85 % gesamt; gezielt Pfade mit Fehlerrisiko, keine Prozentjagd |
+| 3 | Offene Prüfungen im laufenden Betrieb | Mittel — bestätigt, dass die Neuerungen im echten Chat wirken | Gering | 🟡 | Mit gestartetem LoreKeeper: 3.6 Folgefragen, 👍/👎 + Tabs „Feedback“/„Chunks“, Rerank-Timings (5.4), Regelwerk-Slot an x002/x005 (3.10), `pytest -m live`; gut mit 8.0 kombinierbar |
+| 4 | 5.5 Vektorsuche reproduzierbar machen | Gering-Mittel — verlässliche Eval-Vergleiche | Gering-Mittel | 🟡 | ±2 Abschnitte Schwankung zwischen Prozessen; `ef_search` erhöhen oder exakt suchen |
+| 5 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Antwortqualität/Prompt-Größe; mit der Chunk-Prüfung aus 5.2 messbar |
+| 6 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf (extern); dann Re-Index, Eval, Spieler-Messung |
 | — | 3.2 Session-History — ⏸ | Unklar | Mittel | 🟢 | Feature, ruht; erst entscheiden, ob gespeicherte Sessions Nutzen haben |
 | — | 2 Bilder im Chat (Phase 1/2) — ⏸ | Mittel / Nice-to-have | Mittel / Mittel-Hoch | 🔴/🟡 | Feature, ruht |
 | — | 4.2 Internet-Zugriff (Tailscale) — ⏸ | Mittel | Gering | 🟢 | Feature, ruht; sinnvoll erst nach 8.0 |

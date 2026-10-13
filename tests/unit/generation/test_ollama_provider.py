@@ -126,12 +126,18 @@ class TestOllamaProvider:
             assert await provider.health_check() is expected
 
     @pytest.mark.asyncio
-    async def test_missing_model_is_warned_once_not_every_check(self, caplog):
-        """The health loop runs every 60 s — the hint to pull the model belongs in the log once per outage."""
+    @pytest.mark.parametrize("pulled, hint", [
+        (["llama3:latest"], "is not pulled"),
+        # The Ollama app keeps its models in its own folder; a bare "ollama serve" sees none at all (13.10.)
+        ([], "OLLAMA_MODELS"),
+    ])
+    async def test_missing_model_is_warned_once_not_every_check(self, pulled, hint, caplog):
+        """The health loop runs every 60 s — the hint belongs in the log once per outage, and an empty model
+        list points at the models folder instead of suggesting a pull."""
         provider = OllamaProvider(config=OllamaConfig(model="qwen3:8b"))
         with patch("httpx.AsyncClient") as mock_client_cls:
             mock_resp = MagicMock(status_code=200)
-            mock_resp.json.return_value = {"models": []}
+            mock_resp.json.return_value = {"models": [{"name": n} for n in pulled]}
             mock_client = AsyncMock()
             mock_client.get = AsyncMock(return_value=mock_resp)
             mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
@@ -139,7 +145,8 @@ class TestOllamaProvider:
             for _ in range(3):
                 await provider.health_check()
 
-        assert sum("is not pulled" in r.getMessage() for r in caplog.records) == 1
+        warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+        assert len(warnings) == 1 and hint in warnings[0]
 
     @pytest.mark.asyncio
     async def test_health_check_failure(self):

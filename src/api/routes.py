@@ -12,6 +12,7 @@ import json
 import logging
 import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -67,6 +68,31 @@ _health_cache: dict = {"chroma": False, "llm": False}
 _HEALTH_INTERVAL_S = 60.0
 
 _SOURCE_PREVIEW_CHARS = 100  # chunk text shown under a chat answer
+
+
+# Answers the LLM is generating right now. Ollama runs with OLLAMA_NUM_PARALLEL=1 — a further question
+# waits for these to finish (roadmap 8.0: up to ~17 s with four at once), so the chat says so.
+_active_generations = 0
+
+
+@contextmanager
+def _generating():
+    """Count one running generation; the count drops on finish, error and client abort alike."""
+    global _active_generations
+    _active_generations += 1
+    try:
+        yield
+    finally:
+        _active_generations -= 1
+
+
+def _queue_notice(provider_name: str) -> str | None:
+    """German chat notice when this answer has to wait for others (Ollama only — Gemini runs in parallel)."""
+    ahead = _active_generations if provider_name == "ollama" else 0
+    if not ahead:
+        return None
+    others = "eine andere Frage" if ahead == 1 else f"{ahead} andere Fragen"
+    return f"Das LLM beantwortet gerade {others} — deine kommt danach."
 
 
 def _ms(since: float) -> int:
@@ -192,7 +218,8 @@ async def query(request: QueryRequest):
 
     if qa_prompt is not None:
         try:
-            response = await gen.generate(system_prompt=system_prompt, qa_prompt=qa_prompt)
+            with _generating():
+                response = await gen.generate(system_prompt=system_prompt, qa_prompt=qa_prompt)
             answer = response.content
             model_used = response.model
         except Exception as e:
@@ -235,6 +262,9 @@ async def query_stream(request: QueryRequest):
     async def event_stream():
         """Yield SSE 'token' events during generation and a final 'done' event with metadata.
 
+        If other answers are being generated, a 'status' event with a German notice comes first —
+        the UI shows it until the first token arrives.
+
         A client that leaves mid-answer (page closed, UI read timeout) cancels the generator at a yield;
         that is logged — otherwise the log just stops after the retrieval lines.
         """
@@ -243,16 +273,19 @@ async def query_stream(request: QueryRequest):
 
         try:
             if qa_prompt is not None:
-                async for token in gen.generate_stream(
-                    system_prompt=system_prompt,
-                    qa_prompt=qa_prompt,
-                    stream_result=stream_ctx,
-                ):
-                    if not full_answer:
-                        timings["first_token_ms"] = _ms(t_start)
-                    full_answer += token
-                    event = json.dumps({"type": "token", "content": token})
-                    yield f"data: {event}\n\n"
+                if notice := _queue_notice(prov.provider):
+                    yield f"data: {json.dumps({'type': 'status', 'content': notice})}\n\n"
+                with _generating():
+                    async for token in gen.generate_stream(
+                        system_prompt=system_prompt,
+                        qa_prompt=qa_prompt,
+                        stream_result=stream_ctx,
+                    ):
+                        if not full_answer:
+                            timings["first_token_ms"] = _ms(t_start)
+                        full_answer += token
+                        event = json.dumps({"type": "token", "content": token})
+                        yield f"data: {event}\n\n"
             else:
                 full_answer = pm.render_no_context(question=request.question)
                 timings["first_token_ms"] = _ms(t_start)

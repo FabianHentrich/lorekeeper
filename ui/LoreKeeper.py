@@ -503,6 +503,10 @@ if prompt := st.chat_input(_placeholder, disabled=_chat_blocked):
                     full_response += data["content"]
                     placeholder.markdown(full_response + "▌")
 
+                elif data["type"] == "status":
+                    # e.g. "the LLM is answering another question" — replaced by the first token
+                    placeholder.info(f"⏳ {data.get('content', '')}")
+
                 elif data["type"] == "error":
                     error_message = data.get("content", "Unbekannter Fehler")
                     break

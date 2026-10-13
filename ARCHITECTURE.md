@@ -495,12 +495,15 @@ Ungültige Werte in Feldern mit fester Auswahl (`role`, `provider`, `eval_type`)
 **SSE-Format von `/query/stream`:**
 
 ```
+data: {"type": "status", "content": "..."}                      (optional, vor dem ersten Token)
 data: {"type": "token", "content": "..."}                       (je Token)
 data: {"type": "done", "session_id": "...", "sources": [...], "model_used": "...",
        "search_query": "...", "timings": {...}, "usage": {...}, "session_usage": {...}}
 data: {"type": "error", "content": "..."}                       (bei Abbruch)
 ```
 
+- `status`: deutscher Hinweis, wenn die Antwort auf andere warten muss (Ollama beantwortet eine Frage
+  nach der anderen, `OLLAMA_NUM_PARALLEL=1`; Messung und Entscheidung: Roadmap 8.0). Nur bei Ollama.
 - `session_id` kommt im `done`-Event — ohne sie kann der Client keine Folgefrage zuordnen.
 - `model_used` ist das Modell, das tatsächlich geantwortet hat (nach Fallback das Fallback-Modell).
 - `timings`: Dauer je Stufe in ms (`condense_ms`, `retrieval_ms` mit Stufen embed/search/bm25/rerank/expand,

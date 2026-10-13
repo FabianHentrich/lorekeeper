@@ -202,6 +202,15 @@ class OllamaProvider(BaseLLMProvider):
         # Ollama stores an untagged name ("qwen3") as "qwen3:latest"
         available = self.model in names or f"{self.model}:latest" in names
         if not available and not self._warned_not_pulled:  # once, not on every 60-s health check
-            logger.warning(f"Ollama model '{self.model}' is not pulled — run: ollama pull {self.model}")
+            if not names:
+                # Seen on 13.10.: the Ollama app keeps its models in its own folder setting; an
+                # "ollama serve" started without OLLAMA_MODELS looks in ~/.ollama/models and finds none
+                logger.warning(
+                    f"Ollama lists no models at all — if '{self.model}' was pulled with the Ollama app, this "
+                    "server uses a different models folder: start the Ollama app before LoreKeeper or set "
+                    "OLLAMA_MODELS to the app's folder (docs/operations.md)"
+                )
+            else:
+                logger.warning(f"Ollama model '{self.model}' is not pulled — run: ollama pull {self.model}")
         self._warned_not_pulled = not available
         return available

@@ -159,6 +159,20 @@ ollama pull qwen3:14b   # Modell holen, falls es fehlt
 ollama ps               # geladenes Modell, Kontextlänge, GPU-Anteil
 ```
 
+**„Ollama lists no models at all“ im Log**, obwohl die Modelle da sind: LoreKeeper hat Ollama selbst
+gestartet (`Starting Ollama` im Log), und dieses `ollama serve` sucht die Modelle in
+`%USERPROFILE%\.ollama\models`. Die Ollama-App kann einen anderen Ordner nutzen (Einstellung der
+App — steht in `%LOCALAPPDATA%\Ollama\server.log` als `OLLAMA_MODELS`). Abhilfe: `OLLAMA_MODELS`
+als Benutzer-Umgebungsvariable auf denselben Ordner setzen —
+`[Environment]::SetEnvironmentVariable('OLLAMA_MODELS', '<Ordner der App>', 'User')`, wirkt für neu
+gestartete Programme (Terminal neu öffnen); die App ändert sich dadurch nicht, es wird nichts
+verschoben. Oder die Ollama-App vor LoreKeeper starten. Die Ausgabe des selbst gestarteten Ollama
+steht in `logs/ollama.log`.
+
+**Mehrere Fragen gleichzeitig**: Ollama beantwortet sie nacheinander (`OLLAMA_NUM_PARALLEL=1`,
+bewusst so gelassen). `OLLAMA_NUM_PARALLEL=2` wurde gemessen: Das erste Token kommt bei Gleichzeitigen
+schneller, aber jede Antwort läuft langsamer — auch allein (−27 %), bei ~2,6 GB mehr VRAM (Roadmap 8.0).
+
 ### ChromaDB-Dateisperre
 
 Entsteht, wenn Backend und Ingestion-CLI gleichzeitig laufen (embedded): Backend stoppen,
