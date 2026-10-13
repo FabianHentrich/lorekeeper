@@ -60,6 +60,9 @@ gegen gewählt; Skript-Muster: Rang in den Top 200 + `_predict` je Paar):
   (p108, Rang 22).
 - **Entität + Regel** — x003 (Mordlust bei Malek), x004 (Phönixfeder bei Thalion).
 - **Simulation** — z003, z006, z009, z012 (Fragen zu Berichtsabschnitten).
+- **Name in fremder Identität** — „Wer ist Arkenfeld?“ (live 13.10.): 12 Chunks von „Bargrun
+  ‚Zwerg‘ Erkenbrandt“ („Der Armdrücker von Arkenfeld“), nur 5 von `Orte/Arkenfeld.md`. Die
+  Identitäts-Schicht macht den Ortsnamen zum Suchsignal für die NPC-Datei; Antwort trotzdem richtig.
 - Die 22-Chunk-Sektion „7.3 Legendäre Artefakte > Monolith“ landet bei fremden Regelfragen in den
   Top 3 („Ass-Regel“ p011, „Zauberspeicher“ p101); das Budget aus 5.6 streicht sie nur.
 
@@ -132,7 +135,7 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 | 3.8/3.9 | Ingest-Fortschritt ohne Blockieren, Anhängen an laufende Jobs | 12.10. | `docs/ui-ux.md` |
 | 3.10 | Regelwerk-Slot (eigene Suche in `rules`, Mindest-Score −4) | 13.10. | `docs/embedding-strategy.md`, `docs/configuration.md` |
 | 3.11 | Spieler-/Spielleiter-Modus inkl. Sicherheitstests (deterministisch, live, Spy-Test) | 11./12.10. | `ARCHITECTURE.md` 4.8, `docs/testing.md` |
-| 3.12 | Folgefragen ohne Inhaltswort („Fass das kürzer zusammen“, „Gib mir ein Beispiel“) gehen durch Condense — Suche und Quellenliste passen zum Thema; Wortliste nur ergänzend (unbekanntes Wort = Inhaltswort), Unit-Tests in beide Richtungen, mutationsgeprüft. Offen: einmal live prüfen, dass Condense das Thema einsetzt | 13.10. | `docs/prompts.md` |
+| 3.12 | Folgefragen ohne Inhaltswort („Fass das kürzer zusammen“, „Gib mir ein Beispiel“) gehen durch Condense — Suche und Quellenliste passen zum Thema; Wortliste nur ergänzend (unbekanntes Wort = Inhaltswort), Unit-Tests in beide Richtungen, mutationsgeprüft. Live 13.10.: „Fass das kürzer zusammen“ → „Fasse die Beschreibung von Arkenfeld kurz zusammen.“ (1,2 s), Quellen `Orte/Arkenfeld.md` statt Venthir/Regelbuch | 13.10. | `docs/prompts.md` |
 | 3.10 (Teil) | `top_k` 20 (+2 Abschnitte, Hybrid verworfen), `ingestion.skip_sections` gegen „Alte Vault-Werte“ (Full-Reindex, 4419 Chunks), `ef_search` 1000 → 2000 (nach den Re-Index-Läufen wieder exakt), verwaiste Chunks entfernt, Golden Set 274 Fragen — Datei 272/274, Abschnitt 137/149 | 13.10. | `docs/embedding-strategy.md`, `docs/parsing.md`, `docs/configuration.md`, `docs/evaluation.md` |
 | 12.1 | Ingest-Lücke: Ein Lauf über alle Quellen löscht Chunks von Quellen, die nicht mehr in `sources.yaml` stehen (vorher blieben sie durchsuchbar, 13.10.: 36 Chunks); nie bei leerer Quellenliste, nicht bei Einzel-Reindex; beide Schutzbedingungen mutationsgeprüft | 13.10. | `ARCHITECTURE.md` 4, `docs/data-flow.md`, `docs/configuration.md` |
 | 4.1 | Heimnetz-Betrieb (`start.ps1 -Server`, Firewall-Skript, kein Autostart) | 11.10. | `docs/operations.md` |
