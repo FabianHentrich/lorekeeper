@@ -117,6 +117,14 @@ sources:
     player_visible: true
 ```
 
+**Simulation (Roadmap 6.0, Stand 13.10.):** Aus `PnP_Simulation` sind nur drei Markdown-Dateien
+Einzeldatei-Quellen der Gruppe `simulation`: Begegnungsbericht (`sim-begegnungen-bericht`),
+Begegnungsbaukasten (`sim-begegnungsbaukasten`) und Fähigkeitsbericht (`sim-faehigkeiten-bericht`).
+HTML, JSON, CSV und die übrige Entwickler-Doku bleiben draußen. Für Spieler freigegeben ist nur der
+Fähigkeitsbericht (Charakterbau); Begegnungsbericht und Baukasten nicht — sie enthalten Gegnerwerte
+und Kampagnen-Kämpfe. Spieler haben keinen Quellenfilter: Bei 47 von 124 reinen Regelfragen bekommen
+sie im Schnitt 2,3 von 8 Chunks aus dem Fähigkeitsbericht (selten in den Top 3).
+
 **Quellen verwalten:** `config/sources.yaml` direkt bearbeiten, die Seite **⚙ Sources** nutzen
 oder die REST-Endpoints (`GET/PUT /sources`, `POST /sources/{id}/reindex`, `DELETE /sources/{id}`,
 `POST /sources/recategorize`, `POST /admin/wipe`).
@@ -207,7 +215,7 @@ Ablauf und Begründungen: [embedding-strategy.md](embedding-strategy.md).
 
 | Schlüssel | Typ | Default | Beschreibung |
 |-----------|-----|---------|--------------|
-| `top_k` | `int` | `15` | Kandidaten aus ChromaDB vor dem Reranking |
+| `top_k` | `int` | `20` | Kandidaten aus ChromaDB vor dem Reranking. 15 → 20 am 13.10. (Messung: [embedding-strategy.md](embedding-strategy.md#warum-top_k-20)) |
 | `score_threshold` | `float` | `0.5` | Mindest-Cosine. 0,5 ≈ „ähnlich“; 0,3 liefert fast orthogonales Rauschen — nicht senken |
 | `reranking.enabled` | `bool` | `true` | Cross-Encoder-Reranking |
 | `reranking.model` | `str` | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` | Reranker (mehrsprachig) |

@@ -228,7 +228,7 @@ class TestSettings:
         s = Settings()
         assert s.llm.provider == "ollama"
         assert s.vectorstore.persist_directory == "./chroma_data"
-        assert s.retrieval.top_k == 15
+        assert s.retrieval.top_k == 20
 
     def test_env_override(self, monkeypatch):
         """

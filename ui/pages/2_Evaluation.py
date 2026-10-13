@@ -31,7 +31,7 @@ API_URL = api_url()
 
 _TOP_K_MAX = 50
 # Only when /config can't be read — the sliders normally start at the values from settings.yaml
-_FALLBACK_RETRIEVAL = {"top_k": 15, "reranking": {"top_k_rerank": 8, "max_per_source": 3}}
+_FALLBACK_RETRIEVAL = {"top_k": 20, "reranking": {"top_k_rerank": 8, "max_per_source": 3}}
 
 
 @st.cache_data(ttl=60, show_spinner=False)

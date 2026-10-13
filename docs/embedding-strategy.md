@@ -11,10 +11,12 @@ Datei, Regelwerk-Slot, Section Expansion und der Aufbau der Embed-Texte. Die Par
    - [Warum `multilingual-e5-base`?](#warum-multilingual-e5-base)
    - [Warum ein Cross-Encoder-Reranking?](#warum-ein-cross-encoder-reranking)
    - [Warum BM25-Hybrid-Suche?](#warum-bm25-hybrid-suche)
+   - [Warum `top_k` 20?](#warum-top_k-20)
    - [Warum ein Deckel pro Datei?](#warum-ein-deckel-pro-datei)
    - [Warum ein Regelwerk-Slot?](#warum-ein-regelwerk-slot)
    - [Warum Section Expansion?](#warum-section-expansion)
    - [Warum die Identitäts-Schicht?](#warum-die-identitäts-schicht-dateiname--aliase)
+   - [Warum `ef_search: 1000`?](#warum-ef_search-1000)
    - [Warum Chunking nach Überschriften?](#warum-chunking-nach-überschriften)
    - [Warum SHA-256 fürs Neu-Indizieren?](#warum-sha-256-fürs-neu-indizieren)
    - [Warum Bilder ausschließen?](#warum-bilder-aus-der-suche-ausschließen)
@@ -124,6 +126,37 @@ Fusion, nie auf dem fusionierten Score. Für BM25 gibt es keine vergleichbare ab
 
 Hybrid ist pro Anfrage schaltbar (`hybrid_search`); die Evaluation-Seite hat eine Auswahl
 (Config / nur Vektor / Hybrid) und einen A/B-Lauf über das Golden Set.
+
+**Standard: aus.** Golden-Set-Sweep 13.10. (Index nach dem Simulations-Update, 4733 Chunks, alle
+Varianten in einem Prozess): Hybrid war bei jedem `top_k` schlechter als reine Vektorsuche — bei
+15 Datei 274 statt 276/278 und Abschnitt 134 statt 136/153 (verliert p009, p088, i002, z010), bei
+20 und 25 je drei Abschnitte weniger; dazu ~80–100 ms mehr pro Frage. Die BM25-Treffer drängen
+richtige Kandidaten aus dem Pool, bevor der Reranker sie sieht. Die Fälle, für die BM25 gedacht
+war (Waffentabelle mit „Langschwert“), löst Hybrid ebenfalls nicht.
+
+### Warum `top_k` 20?
+
+`top_k` ist die Zahl der Vektor-Kandidaten, aus denen der Reranker die `top_k_rerank` (8) wählt. Bei
+den Abschnitt-Misses aus Roadmap 3.10 lag der richtige Chunk oft knapp außerhalb: „Vorteil und
+Nachteil“ (k002) auf Vektor-Rang 18 — der Reranker hätte ihn klar vorn gesehen (−0,5 gegen −5,8).
+Sweep 13.10. (reine Vektorsuche, gleicher Index, ein Prozess):
+
+| `top_k` | Datei | Abschnitt | gewonnen / verloren | Latenz p50 |
+|---|---|---|---|---|
+| 15 | 276/278 | 136/153 | — | 255 ms |
+| **20** | 275 | 138 | + k002, x008 / Datei z010 | 271 ms |
+| 25 | 275 | 139 | + k002, x008, z010 / Datei z014 | 320 ms |
+| 30 | 275 | 136 | + k002, x008, z010 / − p009, p061, p083, Datei z014 | 354 ms |
+
+20 holt beide klaren Regelwerk-Gewinne (Vorteil/Nachteil, Heimkehrpfennig) ohne Abschnitt-Verlust;
+25 tauscht nur eine Simulationsfrage gegen eine andere und kostet +50 ms; ab 30 gewinnt das
+Rauschen — mehr Kandidaten heißt auch mehr plausible falsche für den Reranker. Die Latenzen sind
+unter Last gemessen (ein Spiel lief parallel), die Abstände gelten trotzdem.
+
+Was mehr Kandidaten **nicht** lösen: Treffer, die tief liegen (Waffentabelle für „Langschwert“ auf
+Rang 37, „Armbrust“ auf Rang 50 hinter „Armdrücker“) und Fälle, in denen der Reranker den richtigen
+Chunk schon sieht, aber anders gewichtet (Würfelsystem, Erlernen von Zaubern, Verbände) — offen in
+Roadmap 3.10.
 
 ### Warum ein Deckel pro Datei?
 
@@ -292,7 +325,7 @@ Roadmap 2.
 ```mermaid
 flowchart LR
     Q([Frage]) --> BE["Bi-Encoder\ne5-base 'query: '+Text\n~20–80 ms"]
-    BE -->|"768-dim.\nFrage-Vektor"| CS["ChromaDB\nCosine-Suche\ntop_k=15\n~5 ms"]
+    BE -->|"768-dim.\nFrage-Vektor"| CS["ChromaDB\nCosine-Suche\ntop_k=20\n~5 ms"]
     CS -->|"15 Kandidaten\n(Score = 1 − Cosine-Distanz)"| CE["Cross-Encoder\nmmarco-mMiniLMv2\n~50 ms GPU (DirectML)\n~800 ms CPU-Rückfall"]
     CE -->|"top_k_rerank=8\nnach Relevanz"| LLM([LLM-Kontext])
 
@@ -309,7 +342,7 @@ Vollständiger Ablauf mit BM25, Regelwerk-Slot und Section Expansion:
 | **Funktionsweise** | Frage und Dokument getrennt → Cosine | Frage + Dokument zusammen → direkte Bewertung |
 | **Vorteil** | Vektoren vorberechnet → sehr schnell | Versteht die Beziehung zwischen Frage und Text |
 | **Nachteil** | Kein Zusammenspiel | Zu langsam für den ganzen Index |
-| **Rolle** | Kandidaten finden (Top 15) | Kandidaten ordnen (Top 8) |
+| **Rolle** | Kandidaten finden (Top 20) | Kandidaten ordnen (Top 8) |
 
 ---
 

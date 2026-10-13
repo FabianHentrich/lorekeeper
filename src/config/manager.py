@@ -205,7 +205,9 @@ class RulesSlotConfig(BaseModel):
 
 class RetrievalConfig(BaseModel):
     """Search parameters; ``top_k``/``top_k_rerank``/``max_per_source``/hybrid can be overridden per request."""
-    top_k: int = 15                  # vector candidates before the rerank (keep ≥ 2 × top_k_rerank)
+    # Vector candidates before the rerank (keep ≥ 2 × top_k_rerank). 20: right chunks at vector rank 16–20
+    # reach the reranker (+2 sections); 30 let noise win again — golden-set sweep 13.10., roadmap 3.10
+    top_k: int = 20
     score_threshold: float = 0.5     # minimum cosine score — 0.3 lets near-orthogonal chunks in, don't lower
     reranking: RerankingConfig = RerankingConfig()
     hybrid: HybridSearchConfig = HybridSearchConfig()

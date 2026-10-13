@@ -36,7 +36,7 @@ vectorstore:
 
 # Retrieval
 retrieval:
-  top_k: 15          # fetch candidates; reranker selects best 8
+  top_k: 20          # fetch candidates; reranker selects best 8 (15 → 20: golden-set sweep 13.10., roadmap 3.10)
   score_threshold: 0.5
   hybrid:
     enabled: false            # vector + BM25 fused via RRF; per-request override via hybrid_search
