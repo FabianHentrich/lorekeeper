@@ -580,14 +580,12 @@ class TestHybridRetrieve:
         """Verify the BM25 index is built on first hybrid call if not already built."""
         vs = MagicMock()
         vs.query.return_value = []
-        # Minimal fake collection for build_from_vectorstore.
-        collection = MagicMock()
-        collection.get.return_value = {
+        # Minimal fake corpus for build_from_vectorstore.
+        vs.get_all.return_value = {
             "ids": ["b1"],
             "documents": ["keyword content"],
             "metadatas": [{"source_file": "kw.md", "document_type": "markdown"}],
         }
-        vs._get_collection.return_value = collection
 
         bm25 = BM25Index()
         assert bm25.is_built is False

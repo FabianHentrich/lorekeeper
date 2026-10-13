@@ -14,6 +14,7 @@ from src.retrieval.vectorstore import VectorStoreService
 logger = logging.getLogger(__name__)
 
 RULES_GROUP = "rules"
+_RERANK_MAX_TOKENS = 512  # cross-encoder input limit (query + chunk); longer pairs are truncated
 _SLOT_MIN_PLACES = 3  # with fewer final chunks one rules chunk would push out most of the answer's context
 
 
@@ -114,7 +115,7 @@ class Retriever:
             if self.config.reranking.backend == "directml":
                 from src.retrieval.onnx_reranker import DirectMLCrossEncoder
                 try:
-                    self._reranker = DirectMLCrossEncoder(model, max_length=512)
+                    self._reranker = DirectMLCrossEncoder(model, max_length=_RERANK_MAX_TOKENS)
                     self._reranker_on_gpu = True
                     logger.info(f"Reranker loaded on the GPU (DirectML): {model}")
                 except Exception as e:
@@ -128,7 +129,7 @@ class Retriever:
         from sentence_transformers import CrossEncoder
         model = self.config.reranking.model
         logger.info(f"Loading reranker model: {model}")
-        reranker = CrossEncoder(model, max_length=512)
+        reranker = CrossEncoder(model, max_length=_RERANK_MAX_TOKENS)
         logger.info("Reranker loaded (CPU, torch)")
         return reranker
 

@@ -51,6 +51,13 @@ def _resolve_category(file_path: Path, source: SourceConfig) -> tuple[str, str]:
     return fallback_cat, fallback_group
 
 
+def source_base(source: SourceConfig) -> Path:
+    """Base path that stored ``source_file`` values are relative to: the folder, or a file source's parent.
+    Shared with recategorize, which resolves stored chunks back to files."""
+    p = Path(source.path).resolve()
+    return p.parent if p.is_file() else p
+
+
 def _compute_content_hash(file_path: Path) -> str:
     """SHA-256 of file bytes; used to skip re-embedding unchanged files across runs."""
     content = file_path.read_bytes()
@@ -161,12 +168,6 @@ class IngestionOrchestrator:
 
         return files
 
-    @staticmethod
-    def _source_base(source: SourceConfig) -> Path:
-        """Effective base path for relative_to(): file's parent for file sources."""
-        p = Path(source.path).resolve()
-        return p.parent if p.is_file() else p
-
     def run(self, vectorstore=None, only_source_id: str | None = None,
             progress_callback=None, full: bool = False) -> IngestionResult:
         """Execute the ingestion pipeline.
@@ -232,7 +233,7 @@ class IngestionOrchestrator:
             if parser is None:
                 continue
 
-            base = self._source_base(source)
+            base = source_base(source)
             relative_path = str(file_path.relative_to(base))
             key = (source.id, relative_path)
 

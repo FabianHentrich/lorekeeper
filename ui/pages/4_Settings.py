@@ -11,6 +11,7 @@ reindex — the UI renders an explicit warning for that tab.
 import requests
 import streamlit as st
 from admin_gate import api_url, require_admin
+from backend import raise_for_status
 
 st.set_page_config(page_title="Settings — LoreKeeper", page_icon="🛠", layout="wide")
 
@@ -31,21 +32,14 @@ st.caption(
 def _fetch_config(api_url: str) -> dict:
     """Retrieve the current editable settings snapshot from the backend."""
     r = requests.get(f"{api_url}/config", timeout=5)
-    r.raise_for_status()
+    raise_for_status(r)
     return r.json()
 
 
 def _put_config(updates: dict) -> dict:
     """Persist a partial update. Raises with the backend's readable reason on non-2xx."""
     r = requests.put(f"{API_URL}/config", json=updates, timeout=10)
-    if not r.ok:
-        try:
-            detail = r.json().get("detail", r.text)
-        except ValueError:
-            detail = r.text
-        if isinstance(detail, list):   # Pydantic validation errors → just their messages
-            detail = "; ".join(str(err.get("msg", err)) for err in detail)
-        raise RuntimeError(f"{r.status_code}: {detail}")
+    raise_for_status(r)
     return r.json()
 
 

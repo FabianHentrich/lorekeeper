@@ -374,6 +374,11 @@ class ConfigManager:
         """Raw prompts dict as loaded from config/prompts.yaml."""
         return self._prompts_raw
 
+    @property
+    def prompts_path(self) -> Path:
+        """The active prompts file — the prompt routes keep their variants next to it."""
+        return self._prompts_path
+
 
 def _read_yaml(path: Path) -> dict:
     """Load a YAML mapping, or {} if the file is missing or empty."""

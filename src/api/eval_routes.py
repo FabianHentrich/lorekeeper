@@ -37,6 +37,7 @@ _RESULTS_DIR = _BASE_DIR / "results"
 # In-memory eval job storage (single job at a time)
 _eval_jobs: dict[str, EvalJobStatus] = {}
 _MAX_RESULTS = 3
+_PREVIEW_CHARS = 200  # chunk text per hit in the single-question preview
 
 # Guards the check-then-create window in start_eval so two concurrent POSTs
 # can't both slip past _has_running_job().
@@ -99,7 +100,7 @@ async def retrieval_preview(req: RetrievalPreviewRequest):
                 document_type=c.document_type,
                 heading=c.heading,
                 score=round(c.score, 4),
-                content_preview=c.content[:200],
+                content_preview=c.content[:_PREVIEW_CHARS],
             )
             for c in chunks
         ],
@@ -165,25 +166,22 @@ def _cleanup_results(eval_type: str):
 async def start_eval(req: EvalJobRequest, request: Request):
     """Start an asynchronous evaluation job processing the entire golden set."""
     if not _QA_PATH.exists():
-        raise HTTPException(status_code=404, detail="No qa_pairs.yaml found")
+        raise HTTPException(status_code=404, detail="qa_pairs.yaml nicht gefunden")
 
     qa_pairs = load_qa_pairs(_QA_PATH)
     if not qa_pairs:
-        raise HTTPException(status_code=400, detail="Golden Set is empty")
-
-    if req.eval_type not in ("retrieval", "e2e"):
-        raise HTTPException(status_code=400, detail=f"Unknown eval_type: {req.eval_type}")
+        raise HTTPException(status_code=400, detail="Golden Set ist leer")
 
     async with _eval_start_lock:
         if _has_running_job():
-            raise HTTPException(status_code=409, detail="An evaluation is already running")
+            raise HTTPException(status_code=409, detail="Es läuft bereits eine Evaluation")
 
         job_id = str(uuid.uuid4())
         job = EvalJobStatus(job_id=job_id, status="queued", total=len(qa_pairs))
         _eval_jobs[job_id] = job
 
         logger.info(
-            "Eval job started: job_id=%s, type=%s, questions=%d, top_k=%d, top_k_rerank=%d, max_per_source=%d",
+            "Eval job started: job_id=%s, type=%s, questions=%d, top_k=%s, top_k_rerank=%s, max_per_source=%s",
             job_id, req.eval_type, len(qa_pairs), req.top_k, req.top_k_rerank, req.max_per_source,
         )
 
@@ -260,7 +258,7 @@ async def _run_e2e_eval(job: EvalJobStatus, qa_pairs: list[dict], api_url: str):
 async def eval_status(job_id: str):
     """Get the current state and progress of an active evaluation job."""
     if job_id not in _eval_jobs:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise HTTPException(status_code=404, detail="Job nicht gefunden")
     return _eval_jobs[job_id]
 
 
@@ -294,7 +292,7 @@ async def list_results():
 def _result_path(filename: str) -> Path:
     """Resolve a result file, rejecting names that would escape the results dir (e.g. '..' + backslash on Windows)."""
     if not filename or filename in (".", "..") or Path(filename).name != filename:
-        raise HTTPException(status_code=400, detail=f"Invalid result filename: {filename!r}")
+        raise HTTPException(status_code=400, detail=f"Ungültiger Ergebnis-Dateiname: {filename!r}")
     return _RESULTS_DIR / filename
 
 
@@ -303,7 +301,7 @@ async def get_result(filename: str):
     """Download the full JSON report for a specific evaluation run."""
     path = _result_path(filename)
     if not path.exists() or not path.is_file():
-        raise HTTPException(status_code=404, detail="Result not found")
+        raise HTTPException(status_code=404, detail="Ergebnis nicht gefunden")
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -312,6 +310,6 @@ async def delete_result(filename: str):
     """Delete a specific evaluation report file."""
     path = _result_path(filename)
     if not path.exists():
-        raise HTTPException(status_code=404, detail="Result not found")
+        raise HTTPException(status_code=404, detail="Ergebnis nicht gefunden")
     path.unlink()
     return {"deleted": filename}

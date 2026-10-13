@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from src.config.manager import ConversationConfig
+from src.ingestion.chunking import CHARS_PER_TOKEN
 
 logger = logging.getLogger(__name__)
 
@@ -114,8 +115,8 @@ class ConversationManager:
         if len(messages) > window:
             messages = messages[-window:]
 
-        # Hard token limit: drop oldest pairs until the history fits (~3.5 chars/token for German)
-        while messages and sum(len(m.content) for m in messages) / 3.5 > self.config.max_context_tokens:
+        # Hard token limit: drop oldest pairs until the history fits
+        while messages and sum(len(m.content) for m in messages) / CHARS_PER_TOKEN > self.config.max_context_tokens:
             messages = messages[2:]
 
         return messages

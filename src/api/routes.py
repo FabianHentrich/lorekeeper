@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 
-from src.api.access import InvalidFilter, NoPlayerSources, effective_filters
+from src.api.access import InvalidFilter, NoPlayerSources, effective_filters, player_source_ids
 from src.api.schemas import (
     ConfigUpdateRequest,
     FeedbackRequest,
@@ -53,8 +53,11 @@ def _spawn_background(coro) -> asyncio.Task:
     task.add_done_callback(_background_tasks.discard)
     return task
 
-# Health state, refreshed by _health_loop every 60 s; /health and /sidebar-state only read it
+# Health state, refreshed by _health_loop; /health and /sidebar-state only read it
 _health_cache: dict = {"chroma": False, "llm": False}
+_HEALTH_INTERVAL_S = 60.0
+
+_SOURCE_PREVIEW_CHARS = 100  # chunk text shown under a chat answer
 
 
 def _ms(since: float) -> int:
@@ -147,7 +150,7 @@ def _chunk_to_source_dict(c) -> dict:
         "source_path": c.metadata.get("source_path", ""),
         "document_type": c.document_type,
         "heading": c.heading,
-        "chunk_preview": c.content[:100],
+        "chunk_preview": c.content[:_SOURCE_PREVIEW_CHARS],
         "score": c.score,
     }
 
@@ -348,11 +351,11 @@ async def ingest_active():
 async def ingest_status(job_id: str):
     """Get the current progress and status of an ingestion job."""
     if job_id not in _ingest_jobs:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise HTTPException(status_code=404, detail="Job nicht gefunden")
     return _ingest_jobs[job_id]
 
 
-async def _health_loop(interval: float = 60.0):
+async def _health_loop(interval: float = _HEALTH_INTERVAL_S):
     """Background loop that refreshes the health cache periodically."""
     while True:
         try:
@@ -383,13 +386,6 @@ async def sidebar_state():
     import src.main as main_module
     from src.generation.providers.gemini import get_api_key_status
 
-    # Health (from background cache)
-    chroma_ok = _health_cache["chroma"]
-    llm_ok = _health_cache["llm"]
-    has_sources = bool(main_module.config.settings.ingestion.sources)
-    h_status = "healthy" if (chroma_ok and llm_ok) else "degraded"
-    health = HealthResponse(status=h_status, chromadb=chroma_ok, llm=llm_ok, sources_configured=has_sources)
-
     # Provider info
     prov = main_module.provider
     provider = ProviderInfo(provider=prov.provider, model=prov.model)
@@ -410,11 +406,11 @@ async def sidebar_state():
                 cats.add(v)
 
     return SidebarState(
-        health=health,
+        health=await health(),
         provider=provider,
         gemini_status=gemini_status,
         available_categories=sorted(cats),
-        player_source_ids=[s.id for s in main_module.config.settings.ingestion.sources if s.player_visible],
+        player_source_ids=player_source_ids(main_module.config.settings.ingestion.sources),
         llm_timeout=getattr(main_module.config.settings.llm, prov.provider).timeout,
     )
 
@@ -426,7 +422,7 @@ async def get_session(session_id: str):
     cm = main_module.conversation_manager
     session = cm.get_session(session_id)
     if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="Session nicht gefunden")
     return {
         "session_id": session.session_id,
         "messages": [{"role": m.role, "content": m.content} for m in session.messages],
@@ -439,7 +435,7 @@ async def delete_session(session_id: str):
     import src.main as main_module
     cm = main_module.conversation_manager
     if not cm.delete_session(session_id):
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="Session nicht gefunden")
     return {"status": "deleted"}
 
 
@@ -488,14 +484,14 @@ async def list_source_folders(source_id: str):
     )
     if source is None:
         logger.warning(f"list_source_folders: unknown source_id={source_id}")
-        raise HTTPException(status_code=404, detail=f"Unknown source_id: {source_id}")
+        raise HTTPException(status_code=404, detail=f"Unbekannte Quelle: {source_id}")
 
     src_path = Path(source.path).resolve()
     if not src_path.exists():
         logger.warning(f"list_source_folders: path does not exist: {src_path} (source={source_id})")
-        return {"folders": [], "error": f"Path does not exist: {src_path}"}
+        return {"folders": [], "error": f"Pfad existiert nicht: {src_path}"}
     if src_path.is_file():
-        return {"folders": [], "note": "File source — no subfolders"}
+        return {"folders": [], "note": "Dateiquelle — keine Unterordner"}
 
     supported = set(main_module.config.settings.ingestion.supported_formats)
     return {"folders": _scan_path(src_path, supported)}
@@ -507,13 +503,13 @@ async def scan_path(payload: dict):
     import src.main as main_module
     raw_path = (payload or {}).get("path", "")
     if not raw_path:
-        raise HTTPException(status_code=400, detail="Missing 'path' field")
+        raise HTTPException(status_code=400, detail="Feld 'path' fehlt")
 
     p = Path(raw_path).resolve()
     logger.info(f"Scanning path: {p}")
     if not p.exists():
         logger.warning(f"Scan: path does not exist: {p}")
-        return {"folders": [], "is_file": False, "error": f"Path does not exist: {p}"}
+        return {"folders": [], "is_file": False, "error": f"Pfad existiert nicht: {p}"}
     if p.is_file():
         logger.info(f"Scan: path is a single file: {p}")
         return {"folders": [], "is_file": True}
@@ -529,11 +525,11 @@ async def update_sources(payload: dict):
     from src.config.manager import SourceConfig
     raw_sources = payload.get("sources")
     if raw_sources is None:
-        raise HTTPException(status_code=400, detail="Missing 'sources' field")
+        raise HTTPException(status_code=400, detail="Feld 'sources' fehlt")
     try:
         new_sources = [SourceConfig(**s) for s in raw_sources]
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid source config: {e}") from e
+        raise HTTPException(status_code=400, detail=f"Ungültige Quellen-Konfiguration: {e}") from e
     ids = [s.id for s in new_sources]
     # Only new ids are checked — an existing (legacy) id must never block saving the list.
     # '.'/'..' get normalized away by HTTP clients, so /sources/{id}/... could not reach them.
@@ -541,10 +537,10 @@ async def update_sources(payload: dict):
     bad = [i for i in ids if i not in existing
            and (not i.strip() or i != i.strip() or i in (".", ".."))]
     if bad:
-        raise HTTPException(status_code=400, detail=f"Invalid source id(s): {bad} — must not be "
-                            "empty, '.', '..' or have leading/trailing whitespace")
+        raise HTTPException(status_code=400, detail=f"Ungültige Quellen-ID(s): {bad} — nicht leer, nicht "
+                            "'.' oder '..', ohne Leerzeichen am Anfang oder Ende")
     if len(ids) != len(set(ids)):
-        raise HTTPException(status_code=400, detail="Duplicate source ids")
+        raise HTTPException(status_code=400, detail="Doppelte Quellen-IDs")
     main_module.config.settings.ingestion.sources = new_sources
     main_module.config.save_sources()
     return {"sources": [s.model_dump() for s in new_sources]}
@@ -558,7 +554,7 @@ async def reindex_source(source_id: str):
     vs = main_module.vectorstore
 
     if not any(s.id == source_id for s in main_module.config.settings.ingestion.sources):
-        raise HTTPException(status_code=404, detail=f"Unknown source_id: {source_id}")
+        raise HTTPException(status_code=404, detail=f"Unbekannte Quelle: {source_id}")
 
     def _run(progress_cb):
         """Drop existing chunks for this source, then re-ingest just its files."""
@@ -578,7 +574,7 @@ async def delete_source(source_id: str):
 
     sources = main_module.config.settings.ingestion.sources
     if not any(s.id == source_id for s in sources):
-        raise HTTPException(status_code=404, detail=f"Unknown source_id: {source_id}")
+        raise HTTPException(status_code=404, detail=f"Unbekannte Quelle: {source_id}")
 
     deleted = vs.delete_by_source_id(source_id)
     main_module.config.settings.ingestion.sources = [s for s in sources if s.id != source_id]
@@ -616,7 +612,7 @@ async def set_gemini_key(payload: dict):
 
     key = (payload or {}).get("api_key")
     if key is not None and not isinstance(key, str):
-        raise HTTPException(status_code=400, detail="api_key must be a string")
+        raise HTTPException(status_code=400, detail="api_key muss ein String sein")
 
     set_runtime_api_key(key.strip() if isinstance(key, str) else None)
 
@@ -632,7 +628,7 @@ async def set_gemini_key(payload: dict):
             )
             rebuilt = True
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Key rejected by provider: {e}") from e
+            raise HTTPException(status_code=400, detail=f"Key vom Provider abgelehnt: {e}") from e
 
     return {"status": "ok", "rebuilt_active_provider": rebuilt}
 
@@ -676,7 +672,7 @@ async def update_config(request: ConfigUpdateRequest):
 async def wipe_collection(payload: dict):
     """Drop the entire ChromaDB collection. Requires confirm='DELETE' in body."""
     if payload.get("confirm") != "DELETE":
-        raise HTTPException(status_code=400, detail="Set confirm='DELETE' to proceed")
+        raise HTTPException(status_code=400, detail="Zum Löschen confirm='DELETE' mitschicken")
     import src.main as main_module
     main_module.vectorstore.wipe_collection()
     return {"status": "wiped"}
@@ -689,9 +685,6 @@ async def switch_provider(request: SwitchProviderRequest):
     from src.generation.provider_factory import ProviderFactory
 
     settings = main_module.config.settings
-
-    if request.provider not in ("ollama", "gemini"):
-        raise HTTPException(status_code=400, detail=f"Unbekannter Provider: {request.provider}")
 
     previous_provider = settings.llm.provider
     try:

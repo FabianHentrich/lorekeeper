@@ -230,7 +230,7 @@ def test_put_sources_invalid_group_400(client, env):
 def test_put_sources_duplicate_ids_400(client, env):
     r = client.put("/sources", json={"sources": [_src("a", env), _src("a", env)]})
     assert r.status_code == 400
-    assert "Duplicate" in r.json()["detail"]
+    assert "Doppelte" in r.json()["detail"]
 
 
 @pytest.mark.parametrize("bad_id", ["", "  ", ".", "..", " vault", "vault "])
@@ -238,7 +238,7 @@ def test_put_sources_rejects_unroutable_ids(client, env, bad_id):
     """Verify new ids the /sources/{id}/... routes can't serve are rejected, config untouched."""
     r = client.put("/sources", json={"sources": [_src(bad_id, env)]})
     assert r.status_code == 400
-    assert "Invalid source id" in r.json()["detail"]
+    assert "Ungültige Quellen-ID" in r.json()["detail"]
     assert [s.id for s in env.config.settings.ingestion.sources] == ["vault", "Pen & Paper"]
 
 

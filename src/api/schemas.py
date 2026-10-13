@@ -2,13 +2,15 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from src.api.access import Role
+
 
 class QueryRequest(BaseModel):
     """Payload for submitting a question to the RAG pipeline."""
     question: str
     session_id: str | None = None
     # "player": the backend restricts the search to player_visible sources itself (metadata_filters can only narrow)
-    role: Literal["player", "game_master"] = "game_master"
+    role: Role = "game_master"
     metadata_filters: dict | None = None
     top_k: int | None = None
     top_k_rerank: int | None = None
@@ -43,7 +45,7 @@ class FeedbackRequest(BaseModel):
     message_id — the last entry per message_id counts."""
     message_id: str
     rating: Literal["up", "down"] | None  # None = rating withdrawn
-    role: str = ""  # "player" | "game_master"
+    role: Role = "game_master"
     question: str = ""
     answer: str = ""
     sources: list[str] = []  # file names shown under the answer
@@ -111,7 +113,7 @@ class SidebarState(BaseModel):
 
 class SwitchProviderRequest(BaseModel):
     """Payload for changing the active LLM provider at runtime."""
-    provider: str  # "ollama" | "gemini"
+    provider: Literal["ollama", "gemini"]  # anything else → 422
 
 
 class ConfigUpdateRequest(BaseModel):

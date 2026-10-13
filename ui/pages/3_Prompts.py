@@ -3,9 +3,12 @@
 Edit active prompts, save/load/delete variants, compare side-by-side.
 """
 
+from urllib.parse import quote
+
 import requests
 import streamlit as st
 from admin_gate import api_url, require_admin
+from backend import raise_for_status
 
 st.set_page_config(page_title="Prompts — LoreKeeper", page_icon="✏", layout="wide")
 
@@ -76,7 +79,7 @@ def _fetch_variant(api_url: str, name: str):
     Returns:
         dict: The full variant data including the actual template strings.
     """
-    return requests.get(f"{api_url}/prompts/variants/{name}", timeout=5).json()
+    return requests.get(f"{api_url}/prompts/variants/{quote(name, safe='')}", timeout=5).json()
 
 
 # ─── Page ─────────────────────────────────────────────────────────────
@@ -142,7 +145,7 @@ with tab_active:
                             json={"template_text": edited[key], "sample_data": sample},
                             timeout=5,
                         )
-                        resp.raise_for_status()
+                        raise_for_status(resp)
                         st.code(resp.json()["rendered"], language=None)
                     except Exception as e:
                         st.error(f"Fehler: {e}")
@@ -158,7 +161,7 @@ with tab_active:
                     },
                     timeout=10,
                 )
-                resp.raise_for_status()
+                raise_for_status(resp)
                 _fetch_active.clear()
                 st.success("Prompts gespeichert und neu geladen.")
             except Exception as e:
@@ -191,7 +194,7 @@ with tab_variants:
                 try:
                     current = _fetch_active(API_URL)
                     resp = requests.put(
-                        f"{API_URL}/prompts/variants/{var_name.strip()}",
+                        f"{API_URL}/prompts/variants/{quote(var_name.strip(), safe='')}",
                         json={
                             "name": var_name.strip(),
                             "description": var_desc.strip(),
@@ -199,7 +202,7 @@ with tab_variants:
                         },
                         timeout=10,
                     )
-                    resp.raise_for_status()
+                    raise_for_status(resp)
                     _fetch_variants.clear()
                     _fetch_variant.clear()
                     st.success(f"Variante '{var_name}' gespeichert.")
@@ -254,7 +257,7 @@ with tab_variants:
                     if st.button("💾 Speichern", key=f"save_{v['name']}", type="primary"):
                         try:
                             resp = requests.put(
-                                f"{API_URL}/prompts/variants/{v['name']}",
+                                f"{API_URL}/prompts/variants/{quote(v['name'], safe='')}",
                                 json={
                                     "name": v["name"],
                                     "description": edited_desc.strip(),
@@ -262,7 +265,7 @@ with tab_variants:
                                 },
                                 timeout=10,
                             )
-                            resp.raise_for_status()
+                            raise_for_status(resp)
                             _fetch_variants.clear()
                             _fetch_variant.clear()
                             st.success("Variante gespeichert.")
@@ -272,10 +275,10 @@ with tab_variants:
                     if st.button("Aktivieren", key=f"activate_{v['name']}"):
                         try:
                             resp = requests.post(
-                                f"{API_URL}/prompts/activate/{v['name']}",
+                                f"{API_URL}/prompts/activate/{quote(v['name'], safe='')}",
                                 timeout=10,
                             )
-                            resp.raise_for_status()
+                            raise_for_status(resp)
                             _fetch_active.clear()
                             _fetch_variants.clear()
                             st.success(f"Variante '{v['name']}' aktiviert.")
@@ -285,10 +288,11 @@ with tab_variants:
                 with col_del:
                     if st.button("🗑 Löschen", key=f"del_{v['name']}"):
                         try:
-                            requests.delete(
-                                f"{API_URL}/prompts/variants/{v['name']}",
+                            resp = requests.delete(
+                                f"{API_URL}/prompts/variants/{quote(v['name'], safe='')}",
                                 timeout=5,
                             )
+                            raise_for_status(resp)
                             _fetch_variants.clear()
                             _fetch_variant.clear()
                             st.rerun()

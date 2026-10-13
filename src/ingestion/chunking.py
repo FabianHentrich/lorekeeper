@@ -198,9 +198,12 @@ def _get_overlap_text(text: str, overlap_tokens: int) -> str:
     return " ".join(words[-overlap_tokens:])
 
 
+CHARS_PER_TOKEN = 3.5  # German average — also bounds the chat history (conversation manager)
+
+
 def _estimate_tokens(text: str) -> int:
-    """Estimate tokens via character count. German averages ~3.5 chars per token."""
-    return max(1, int(len(text) / 3.5))
+    """Estimate tokens via character count (``CHARS_PER_TOKEN``)."""
+    return max(1, int(len(text) / CHARS_PER_TOKEN))
 
 
 def _doc_to_chunk(doc: ParsedDocument, content: str) -> Chunk:

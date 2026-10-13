@@ -7,6 +7,7 @@ import requests
 import roles
 import streamlit as st
 from admin_gate import admin_login_form, api_url, is_admin
+from backend import raise_for_status
 
 
 def _render_sources(sources: list[dict]):
@@ -198,7 +199,7 @@ def _render_sidebar():
                     json={"provider": new_provider},
                     timeout=10,
                 )
-                resp.raise_for_status()
+                raise_for_status(resp)
                 st.session_state["_provider_switch_ok"] = True
                 _fetch_sidebar_state.clear()
             except Exception as e:
@@ -235,7 +236,7 @@ def _render_sidebar():
         def _post_gemini_key(key: str | None, done: str):
             try:
                 r = requests.post(f"{API_URL}/provider/gemini/key", json={"api_key": key}, timeout=10)
-                r.raise_for_status()
+                raise_for_status(r)
             except Exception as e:
                 st.error(f"Fehler: {e}")
                 return
@@ -389,7 +390,7 @@ def _send_feedback(msg: dict):
             "session_id": st.session_state.get("session_id"),
             "timings": msg.get("timings", {}),
         }, timeout=5)
-        r.raise_for_status()
+        raise_for_status(r)
         if rating:
             st.toast("Danke für die Bewertung!")
     except Exception as e:
@@ -472,7 +473,7 @@ if prompt := st.chat_input(_placeholder, disabled=_chat_blocked):
                 stream=True,
                 timeout=(10, 2 * _llm_timeout + 60),
             )
-            response.raise_for_status()
+            raise_for_status(response)
 
             full_response = ""
             sources = []

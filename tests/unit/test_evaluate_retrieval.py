@@ -11,6 +11,7 @@ from evaluation.evaluate_retrieval import (
     section_hit,
     source_hit,
 )
+from src.config.manager import RetrievalConfig
 
 
 class TestSectionHit:
@@ -48,8 +49,11 @@ class TestSectionHit:
 class _FakeRetriever:
     def __init__(self, chunks):
         self.chunks = chunks
+        self.config = RetrievalConfig()
+        self.calls: list[dict] = []
 
     async def retrieve(self, **kwargs):
+        self.calls.append(kwargs)
         return self.chunks
 
 
@@ -132,3 +136,28 @@ class TestSharedHelpers:
         assert path.name.startswith(f"{eval_type}_") and path.suffix == ".json"
         assert json.loads(path.read_text(encoding="utf-8"))["frage"] == "Überschaden"
 
+
+
+class TestParameterDefaults:
+    """Parameters left at None take the retriever's config — the report shows what was really used."""
+
+    PAIR = {"id": "d1", "question": "?", "expected_sources": ["a.md"]}
+
+    def test_none_takes_config_values(self):
+        retriever = _FakeRetriever([_chunk("a.md", "vault")])
+        retriever.config.top_k = 21
+        retriever.config.reranking.top_k_rerank = 6
+        retriever.config.reranking.max_per_source = 0  # 0 = no cap, must not fall back to a default
+
+        report = asyncio.run(run_evaluation_with_retriever([self.PAIR], retriever))
+
+        assert report["config"] == {"top_k": 21, "top_k_rerank": 6, "max_per_source": 0, "hybrid": None}
+        assert retriever.calls[0]["top_k"] == 21
+        assert retriever.calls[0]["max_per_source"] == 0
+
+    def test_explicit_values_win(self):
+        retriever = _FakeRetriever([_chunk("a.md", "vault")])
+        report = asyncio.run(run_evaluation_with_retriever([self.PAIR], retriever, 10, 4, 2))
+        assert report["config"]["top_k"] == 10
+        assert report["config"]["top_k_rerank"] == 4
+        assert report["config"]["max_per_source"] == 2

@@ -43,9 +43,7 @@ class TestRecategorize:
         Helper to cleanly mock a vectorstore collection and its document retrieval interfaces.
         """
         vs = MagicMock()
-        collection = MagicMock()
-        vs._get_collection.return_value = collection
-        collection.get.return_value = {"ids": ids, "metadatas": metadatas}
+        vs.get_all.return_value = {"ids": ids, "metadatas": metadatas}
         return vs
 
     def test_updates_changed_metadata(self, tmp_path):

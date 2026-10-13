@@ -13,6 +13,7 @@ import pandas as pd
 import requests
 import streamlit as st
 from admin_gate import api_url, require_admin
+from backend import raise_for_status
 
 _POLL_MAX_FAILURES = 30  # ~45 s of unreachable backend before giving up
 _POLL_INTERVAL_S = 1.5
@@ -85,24 +86,12 @@ def _cmap_from_rows(rows: pd.DataFrame, default_cat: str, default_group: str) ->
     return cmap
 
 
-def _raise_for_status(resp: requests.Response):
-    """Like resp.raise_for_status(), but surfaces the backend's `detail` message."""
-    if resp.ok:
-        return
-    try:
-        body = resp.json()
-        detail = body.get("detail", resp.text) if isinstance(body, dict) else resp.text
-    except ValueError:
-        detail = resp.text
-    raise RuntimeError(f"{resp.status_code}: {detail}")
-
-
 @st.cache_data(ttl=60, show_spinner=False)
 def _fetch_folders(api_url: str, sid_url: str) -> dict:
     """Top-level folders of one source — cached, every rerun used to refetch them once per source.
     Saving on this page clears all caches (`_refresh`); errors are not cached."""
     r = requests.get(f"{api_url}/sources/{sid_url}/folders", timeout=5)
-    _raise_for_status(r)
+    raise_for_status(r)
     return r.json()
 
 
@@ -133,7 +122,7 @@ def _start_ingest(endpoint: str, label: str, params: dict | None = None):
                 return
             job_id, label = active["job_id"], "Bereits laufende Indizierung"
         else:
-            _raise_for_status(r)
+            raise_for_status(r)
             job_id = r.json()["job_id"]
     except Exception as e:
         st.error(f"Start fehlgeschlagen: {e}")
@@ -232,7 +221,7 @@ with col_reindex:
     elif recat_clicked:
         try:
             r = requests.post(f"{API_URL}/sources/recategorize", timeout=60)
-            _raise_for_status(r)
+            raise_for_status(r)
             st.success(f"Recategorize: {r.json()}")
         except Exception as e:
             st.error(f"Fehler: {e}")
@@ -329,7 +318,7 @@ if sources:
 
             try:
                 resp = requests.put(f"{API_URL}/sources", json={"sources": new_sources}, timeout=10)
-                _raise_for_status(resp)
+                raise_for_status(resp)
                 _refresh("Gespeichert. Du musst u.U. Recategorize oder Reindex anwerfen, "
                          "damit bestehende Chunks die neuen Werte übernehmen.")
             except Exception as e:
@@ -364,7 +353,7 @@ for s in sources:
                               "zugehörigen Chunks aus der Datenbank."):
                 try:
                     r = requests.delete(f"{API_URL}/sources/{sid_url}", timeout=10)
-                    _raise_for_status(r)
+                    raise_for_status(r)
                     _refresh(f"Source '{s['id']}' entfernt. Gelöschte Chunks: {r.json()['deleted_chunks']}")
                 except Exception as e:
                     st.error(f"Fehler: {e}")
@@ -424,7 +413,7 @@ for s in sources:
                     resp = requests.put(
                         f"{API_URL}/sources", json={"sources": updated_sources}, timeout=10,
                     )
-                    _raise_for_status(resp)
+                    raise_for_status(resp)
                     _refresh("Zuordnung gespeichert. Recategorize starten, "
                              "damit bestehende Chunks aktualisiert werden.")
                 except Exception as e:
@@ -452,7 +441,7 @@ if scan_clicked and new_path.strip():
         r = requests.post(
             f"{API_URL}/sources/scan", json={"path": new_path.strip()}, timeout=10,
         )
-        _raise_for_status(r)
+        raise_for_status(r)
         st.session_state["_scan_result"] = r.json()
         st.session_state["_scanned_path"] = new_path.strip()
     except Exception as e:
@@ -532,7 +521,7 @@ if scan_result is not None and scan_source_path:
                 try:
                     r = requests.put(f"{API_URL}/sources",
                                      json={"sources": updated}, timeout=10)
-                    _raise_for_status(r)
+                    raise_for_status(r)
                     st.session_state.pop("_scan_result", None)
                     st.session_state.pop("_scanned_path", None)
                     _refresh(f"Source '{new_id}' hinzugefügt. Starte jetzt Reindex "
@@ -553,7 +542,7 @@ if st.button("🔥 Collection komplett leeren", type="secondary"):
     else:
         try:
             r = requests.post(f"{API_URL}/admin/wipe", json={"confirm": "DELETE"}, timeout=10)
-            _raise_for_status(r)
+            raise_for_status(r)
             st.success("Collection geleert.")
             _fetch_stats.clear()
             _render_chunk_metric()

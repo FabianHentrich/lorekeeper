@@ -83,17 +83,24 @@ def save_report(report: dict, output_dir: str | Path, eval_type: str) -> Path:
 async def run_evaluation_with_retriever(
     qa_pairs: list[dict],
     retriever,
-    top_k: int,
-    top_k_rerank: int,
-    max_per_source: int = 3,
+    top_k: int | None = None,
+    top_k_rerank: int | None = None,
+    max_per_source: int | None = None,
     hybrid: bool | None = None,
     progress_callback=None,
 ) -> dict:
     """Run retrieval evaluation using an existing Retriever instance.
 
     Called by the API route (shared retriever) and by run_evaluation() (own retriever).
+    A parameter left at None takes the retriever's config value — resolved here the same way the
+    retriever does, so the report's ``config`` shows the values that were really used.
     progress_callback(current, total) is called after each question.
     """
+    cfg = retriever.config
+    top_k = top_k or cfg.top_k
+    top_k_rerank = top_k_rerank or cfg.reranking.top_k_rerank
+    if max_per_source is None:
+        max_per_source = cfg.reranking.max_per_source
     results = []
     hits = 0
     section_hits = 0
@@ -221,8 +228,8 @@ async def run_evaluation_with_retriever(
     }
 
 
-def run_evaluation(qa_pairs: list[dict], top_k: int, top_k_rerank: int,
-                   max_per_source: int = 3, hybrid: bool | None = None) -> dict:
+def run_evaluation(qa_pairs: list[dict], top_k: int | None = None, top_k_rerank: int | None = None,
+                   max_per_source: int | None = None, hybrid: bool | None = None) -> dict:
     """CLI-compatible sync wrapper that instantiates its own Retriever.
 
     Loads configuration settings, creates the necessary Embedding and VectorStore dependencies,

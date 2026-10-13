@@ -172,5 +172,5 @@ def fake_backend():
     backend = FakeBackend()
     with patch.object(requests, "get", backend._handler("GET")), \
             patch.object(requests, "post", backend._handler("POST")), \
-            patch.object(requests, "put", backend._handler("PUT")):
+            patch.object(requests, "put", backend._handler("PUT")),             patch.object(requests, "delete", backend._handler("DELETE")):
         yield backend

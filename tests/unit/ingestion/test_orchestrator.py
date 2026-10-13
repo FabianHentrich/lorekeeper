@@ -8,6 +8,7 @@ from src.ingestion.orchestrator import (
     _compute_content_hash,
     _is_excluded,
     _resolve_category,
+    source_base,
 )
 
 
@@ -386,14 +387,14 @@ class TestSourceBase:
     def test_folder_source_base_is_folder(self, tmp_path):
         """Verify that directory configurations use themselves directly as the root."""
         src = SourceConfig(id="x", path=str(tmp_path), group="lore", default_category="misc")
-        assert IngestionOrchestrator._source_base(src) == tmp_path.resolve()
+        assert source_base(src) == tmp_path.resolve()
 
     def test_file_source_base_is_parent(self, tmp_path):
         """Verify that file configurations anchor their relativity to their host folder."""
         f = tmp_path / "x.pdf"
         f.write_text("x")
         src = SourceConfig(id="x", path=str(f), group="rules", default_category="rules")
-        assert IngestionOrchestrator._source_base(src) == tmp_path.resolve()
+        assert source_base(src) == tmp_path.resolve()
 
 
 class TestContentHash:

@@ -25,7 +25,7 @@ def _active_path() -> Path:
     """Resolve the active prompts path from the running ConfigManager so both
     subsystems agree on the same file regardless of CWD."""
     import src.main as main_module
-    return main_module.config._prompts_path
+    return main_module.config.prompts_path
 
 
 def _variants_dir() -> Path:
@@ -87,7 +87,7 @@ def _variant_from_raw(raw: dict, default_name: str) -> PromptVariant:
 async def get_active():
     """Retrieve the currently active prompt configuration from disk."""
     if not _active_path().exists():
-        raise HTTPException(status_code=404, detail="config/prompts.yaml not found")
+        raise HTTPException(status_code=404, detail="config/prompts.yaml nicht gefunden")
     return _variant_from_raw(_read_variant_file(_active_path()), "active")
 
 

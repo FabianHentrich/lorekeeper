@@ -333,6 +333,10 @@ verschiedenen Quellen nicht. Eine umbenannte `id` gilt als neue Quelle — vorhe
 Golden Set pflegen, Suche testen, Evaluationen laufen lassen, Ergebnisse vergleichen. Sieben Tabs.
 Hintergrund und Kennzahlen: [evaluation.md](evaluation.md).
 
+Die Parameter-Regler (Kandidaten, finale Chunks, Max. pro Quelle) in „Frage testen“ und „Retrieval
+Eval“ starten bei den Werten aus `settings.yaml` (`GET /config`, 60 s gecacht) — ein Lauf mit
+unberührten Reglern misst also, was der Chat nutzt. Ist `/config` nicht erreichbar, gelten 15/8/3.
+
 | Tab | Inhalt |
 |---|---|
 | **1 Golden Set** | Bearbeitbare Tabelle aller Fragen aus `evaluation/qa_pairs.yaml` (ID, Frage, Typ, Kategorie, erwartete Quellen, Antwort-Stichwörter, Notizen); **💾 Golden Set speichern** über `PUT /eval/qa-pairs`, Zeilen ohne ID oder Frage werden übersprungen |
@@ -403,6 +407,11 @@ Caches, weil der Chat das LLM-Timeout aus dem gecachten `/sidebar-state` liest.
 
 Embedding-Modell und Reranker werden beim Start geladen — die erste Frage ist nicht langsamer als
 die folgenden. Die Zahl der Backend-Aufrufe pro Seite prüft `tests/ui/test_backend_calls.py`.
+
+**Fehler vom Backend** zeigen alle Seiten gleich: `ui/backend.py:raise_for_status` macht aus einer
+Nicht-2xx-Antwort `BackendError` mit Statuscode und dem `detail`-Text des Backends (bei 422 nur die
+Meldungen). Auch Löschaufrufe (Varianten, Eval-Ergebnisse) prüfen den Status; Variantennamen gehen
+URL-kodiert in den Pfad.
 
 ---
 

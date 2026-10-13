@@ -68,8 +68,7 @@ class BM25Index:
 
     def build_from_vectorstore(self, vectorstore) -> None:
         """Load all documents from ChromaDB and build the BM25 index."""
-        collection = vectorstore._get_collection()
-        data = collection.get(include=["documents", "metadatas"])
+        data = vectorstore.get_all(include=["documents", "metadatas"])
 
         if not data or not data.get("ids"):
             self._index = None

@@ -556,11 +556,13 @@ def test_get_provider(client, fake_services):
     assert body["model"] == "qwen3:8b"
 
 
-def test_switch_provider_unknown_returns_400(client, fake_services):
-    """Ensure trying to switch to an unimplemented provider model returns a 400 Bad Request."""
+def test_switch_provider_unknown_returns_422(client, fake_services):
+    """An unknown provider is rejected by the schema (Literal) before anything is rebuilt."""
+    before = main_module.provider
     response = client.post("/provider", json={"provider": "openai"})
-    assert response.status_code == 400
-    assert "Unbekannter Provider" in response.json()["detail"]
+    assert response.status_code == 422
+    assert "openai" in str(response.json()["detail"])
+    assert main_module.provider is before
 
 
 # ─── /ingest ───────────────────────────────────────────────────────────────────

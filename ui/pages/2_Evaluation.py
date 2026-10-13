@@ -11,6 +11,7 @@ import pandas as pd
 import requests
 import streamlit as st
 from admin_gate import api_url, require_admin
+from backend import BackendError, raise_for_status
 from feedback import pairs_from_feedback
 
 st.set_page_config(page_title="Evaluation — LoreKeeper", page_icon="🎯", layout="wide")
@@ -22,23 +23,41 @@ API_URL = api_url()
 
 # ─── Helpers ──────────────────────────────────────────────────────────
 
+_TOP_K_MAX = 50
+# Only when /config can't be read — the sliders normally start at the values from settings.yaml
+_FALLBACK_RETRIEVAL = {"top_k": 15, "reranking": {"top_k_rerank": 8, "max_per_source": 3}}
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _fetch_retrieval_config(api_url: str) -> dict:
+    """The retrieval part of /config — the sliders' start values. Errors are not cached."""
+    r = requests.get(f"{api_url}/config", timeout=5)
+    raise_for_status(r)
+    return r.json()["retrieval"]
+
+
 def _render_tuning_sliders(prefix: str) -> tuple[int, int, int]:
-    """Shared retrieval-parameter sliders, reused across tabs."""
+    """Shared retrieval-parameter sliders, reused across tabs; they start at the configured values,
+    so a run with untouched sliders measures what the chat uses."""
+    try:
+        cfg = _fetch_retrieval_config(API_URL)
+    except Exception:
+        cfg = _FALLBACK_RETRIEVAL
     top_k = st.slider(
         "Kandidaten (Top-K)",
-        min_value=1, max_value=50, value=15,
+        min_value=1, max_value=_TOP_K_MAX, value=min(cfg["top_k"], _TOP_K_MAX),
         help="Wie viele Chunks der Vectorstore liefert (Bi-Encoder Recall).",
         key=f"{prefix}_top_k",
     )
     top_k_rerank = st.slider(
         "Finale Chunks (nach Reranking)",
-        min_value=1, max_value=top_k, value=min(8, top_k),
+        min_value=1, max_value=top_k, value=min(cfg["reranking"]["top_k_rerank"], top_k),
         help="Wie viele Chunks der Cross-Encoder am Ende auswählt.",
         key=f"{prefix}_top_k_rerank",
     )
     max_per_source = st.slider(
         "Max. Chunks pro Quelle (Soft-Cap)",
-        min_value=0, max_value=top_k_rerank, value=min(3, top_k_rerank),
+        min_value=0, max_value=top_k_rerank, value=min(cfg["reranking"]["max_per_source"], top_k_rerank),
         help="Soft-Cap pro Datei. 0 = kein Cap.",
         key=f"{prefix}_max_per_source",
     )
@@ -81,7 +100,7 @@ def _csv(value) -> list[str]:
 
 def _show_eval_error(e: Exception):
     """A 409 means another eval job is running — a warning, not an error."""
-    if isinstance(e, requests.exceptions.HTTPError) and e.response is not None and e.response.status_code == 409:
+    if isinstance(e, BackendError) and e.status_code == 409:
         st.warning("Es läuft bereits eine Evaluation.")
     else:
         st.error(f"Fehler: {e}")
@@ -340,7 +359,7 @@ with tab_gs:
                 json={"pairs": save_pairs},
                 timeout=10,
             )
-            resp.raise_for_status()
+            raise_for_status(resp)
             _fetch_qa_pairs.clear()
             st.success(f"{len(save_pairs)} QA-Paare gespeichert.")
         except Exception as e:
@@ -374,7 +393,7 @@ with tab_test:
                 },
                 timeout=30,
             )
-            resp.raise_for_status()
+            raise_for_status(resp)
             st.session_state["_preview"] = {
                 "question": test_question.strip(),
                 "result": resp.json(),
@@ -435,7 +454,7 @@ with tab_test:
                             })
                             resp = requests.put(f"{API_URL}/eval/qa-pairs",
                                                 json={"pairs": existing_pairs}, timeout=10)
-                            resp.raise_for_status()
+                            raise_for_status(resp)
                             _fetch_qa_pairs.clear()
                             st.success(f"'{add_id.strip()}' zum Golden Set hinzugefügt.")
                     except Exception as e:
@@ -459,7 +478,7 @@ def _start_retrieval_eval(top_k, top_k_rerank, max_per_source, hybrid, label):
         },
         timeout=10,
     )
-    resp.raise_for_status()
+    raise_for_status(resp)
     job_id = resp.json()["job_id"]
     return _poll_eval_job(job_id, label=label)
 
@@ -562,7 +581,7 @@ with tab_e2e:
                 json={"eval_type": "e2e"},
                 timeout=10,
             )
-            resp.raise_for_status()
+            raise_for_status(resp)
             job_id = resp.json()["job_id"]
             result_file = _poll_eval_job(job_id, label="End-to-End Evaluation")
             _fetch_eval_results.clear()
@@ -628,7 +647,8 @@ with tab_results:
             with col_del:
                 if st.button("🗑", key=f"del_{r['filename']}"):
                     try:
-                        requests.delete(f"{API_URL}/eval/results/{r['filename']}", timeout=5)
+                        resp = requests.delete(f"{API_URL}/eval/results/{r['filename']}", timeout=5)
+                        raise_for_status(resp)
                         _fetch_eval_results.clear()
                         st.rerun()
                     except Exception as e:
@@ -744,7 +764,7 @@ with tab_fb:
                     else:
                         resp = requests.put(f"{API_URL}/eval/qa-pairs",
                                             json={"pairs": existing + new_pairs}, timeout=10)
-                        resp.raise_for_status()
+                        raise_for_status(resp)
                         _fetch_qa_pairs.clear()
                         down = sum(1 for p in new_pairs if not p["expected_sources"])
                         st.success(f"{len(new_pairs)} Fragen übernommen ({', '.join(p['id'] for p in new_pairs)})."
@@ -767,7 +787,7 @@ def _fetch_sources(api_url: str):
 @st.cache_data(ttl=30, show_spinner=False)
 def _fetch_chunk_files(api_url: str, source_id: str):
     resp = requests.get(f"{api_url}/eval/chunks/files", params={"source_id": source_id}, timeout=10)
-    resp.raise_for_status()
+    raise_for_status(resp)
     return resp.json().get("files", [])
 
 
@@ -775,7 +795,7 @@ def _fetch_chunk_files(api_url: str, source_id: str):
 def _fetch_file_chunks(api_url: str, source_id: str, source_file: str):
     resp = requests.get(f"{api_url}/eval/chunks", params={"source_id": source_id, "source_file": source_file},
                         timeout=10)
-    resp.raise_for_status()
+    raise_for_status(resp)
     return resp.json()["chunks"]
 
 

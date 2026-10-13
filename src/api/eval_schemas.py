@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from src.api.access import Role
+
 
 class QAPair(BaseModel):
     id: str
@@ -21,12 +23,13 @@ class QAPairList(BaseModel):
 
 class RetrievalPreviewRequest(BaseModel):
     question: str
-    top_k: int = 15
-    top_k_rerank: int = 8
-    max_per_source: int = 3
+    # None = the value from settings.yaml (retrieval.top_k / reranking.top_k_rerank / reranking.max_per_source)
+    top_k: int | None = None
+    top_k_rerank: int | None = None
+    max_per_source: int | None = None
     hybrid: bool | None = None
     metadata_filters: dict | None = None  # same as /query — e.g. the player-mode source filter
-    role: Literal["player", "game_master"] = "game_master"  # same as /query
+    role: Role = "game_master"  # same as /query
 
 
 class RetrievedChunkResponse(BaseModel):
@@ -59,10 +62,11 @@ class ChunkListResponse(BaseModel):
 
 
 class EvalJobRequest(BaseModel):
-    top_k: int = 15
-    top_k_rerank: int = 8
-    max_per_source: int = 3
-    eval_type: str = "retrieval"
+    # None = the value from settings.yaml, as in RetrievalPreviewRequest
+    top_k: int | None = None
+    top_k_rerank: int | None = None
+    max_per_source: int | None = None
+    eval_type: Literal["retrieval", "e2e"] = "retrieval"  # anything else → 422
     hybrid: bool | None = None
 
 

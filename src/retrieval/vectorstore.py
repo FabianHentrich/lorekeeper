@@ -11,6 +11,9 @@ from src.retrieval.embeddings import EmbeddingService
 
 logger = logging.getLogger(__name__)
 
+# Chunks per upsert/update call — ChromaDB rejects batches above the client's max_batch_size
+_CHROMA_BATCH = 5000
+
 
 class VectorStoreService:
     """ChromaDB wrapper — embedded (``PersistentClient``) inside the backend process.
@@ -143,10 +146,8 @@ class VectorStoreService:
 
             metadatas.append(meta)
 
-        # ChromaDB has a batch limit, process in batches of 5000
-        batch_size = 5000
-        for i in range(0, len(ids), batch_size):
-            end = i + batch_size
+        for i in range(0, len(ids), _CHROMA_BATCH):
+            end = i + _CHROMA_BATCH
             collection.upsert(
                 ids=ids[i:end],
                 documents=documents[i:end],
@@ -213,6 +214,11 @@ class VectorStoreService:
         ``content_hash``, so the hash lookup lists them all; database errors are raised."""
         return sorted(self.get_content_hashes_for_source(source_id))
 
+    def get_all(self, include: list[str]) -> dict[str, Any]:
+        """Every stored chunk as ChromaDB's column dict (``ids`` plus the ``include`` fields) —
+        for the full scans of the BM25 build and recategorize."""
+        return self._get_collection().get(include=include)
+
     def get_chunks_for_file(self, source_id: str, source_file: str) -> list[dict[str, Any]]:
         """Return every chunk of one file as ``{id, content, metadata}`` (used for section expansion)."""
         collection = self._get_collection()
@@ -253,13 +259,12 @@ class VectorStoreService:
         return count
 
     def update_metadata_batch(self, ids: list[str], metadatas: list[dict]) -> None:
-        """Update metadata for existing chunks in batches of 5000, without re-embedding."""
+        """Update metadata for existing chunks in batches, without re-embedding."""
         if not ids:
             return
         collection = self._get_collection()
-        batch = 5000
-        for i in range(0, len(ids), batch):
-            collection.update(ids=ids[i:i+batch], metadatas=metadatas[i:i+batch])
+        for i in range(0, len(ids), _CHROMA_BATCH):
+            collection.update(ids=ids[i:i + _CHROMA_BATCH], metadatas=metadatas[i:i + _CHROMA_BATCH])
         logger.info(f"Updated metadata for {len(ids)} chunks")
 
     def wipe_collection(self) -> None:

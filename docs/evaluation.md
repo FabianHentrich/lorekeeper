@@ -131,7 +131,9 @@ python -m evaluation.evaluate_retrieval --qa-pairs evaluation/qa_pairs.yaml --ou
 | `--output` | `evaluation/results/` | Zielordner des JSON-Berichts |
 
 `max_per_source` ist (noch) kein Flag — zum Durchprobieren `RETRIEVAL__RERANKING__MAX_PER_SOURCE=N`
-setzen. Pro Anfrage lässt es sich über API und UI überschreiben.
+setzen (bis 13.10. war im Skript fest 3 hinterlegt, die Variable wirkte nicht). Pro Anfrage lässt es
+sich über API und UI überschreiben; ohne Angabe gilt überall der Wert aus `settings.yaml`, und der
+Bericht (`config`) nennt die tatsächlich benutzten Werte.
 
 A/B-Vergleich: zweimal laufen lassen und die Berichte vergleichen (z.B. `--no-hybrid` vs.
 `--hybrid`). Die Evaluation-Seite hat dafür den Knopf **⚖ A/B starten (Vektor vs. Hybrid)** mit

@@ -8,7 +8,7 @@ without paying for a full re-embed. This rewrites only metadata.
 import logging
 
 from src.config.manager import ConfigManager, SourceConfig, config_manager
-from src.ingestion.orchestrator import IngestionOrchestrator, _resolve_category
+from src.ingestion.orchestrator import _resolve_category, source_base
 from src.retrieval.vectorstore import VectorStoreService
 
 logger = logging.getLogger(__name__)
@@ -39,8 +39,7 @@ def recategorize(config: ConfigManager | None = None, vectorstore: VectorStoreSe
     sources = list(config.settings.ingestion.sources)
     stats = {"chunks_updated": 0, "chunks_skipped": 0, "chunks_unmatched": 0}
 
-    collection = vectorstore._get_collection()
-    all_data = collection.get(include=["metadatas"])
+    all_data = vectorstore.get_all(include=["metadatas"])
     ids = all_data.get("ids") or []
     metas = all_data.get("metadatas") or []
 
@@ -53,7 +52,7 @@ def recategorize(config: ConfigManager | None = None, vectorstore: VectorStoreSe
             stats["chunks_unmatched"] += 1
             continue
 
-        base = IngestionOrchestrator._source_base(source)
+        base = source_base(source)
         try:
             file_path = (base / meta.get("source_file", "")).resolve()
         except Exception:

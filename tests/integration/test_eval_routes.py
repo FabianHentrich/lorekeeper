@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 import src.main as main_module
 from src.api.eval_routes import _eval_jobs, eval_router
+from src.config.manager import RetrievalConfig
 
 # ─── Fakes ──────────────────────────────────────────────────────────────────────
 
@@ -37,6 +38,7 @@ class FakeRetrievedChunk:
 class FakeRetriever:
     """Mock stub intercepting similarity searches."""
     last_filters: dict | None = None
+    config = RetrievalConfig()
 
     async def retrieve(self, query, top_k=None, metadata_filters=None,
                        top_k_rerank=None, max_per_source=None, hybrid=None):
@@ -312,13 +314,15 @@ def test_run_without_golden_set_is_404(client):
 def test_run_with_empty_golden_set_is_400(client, tmp_eval_dir):
     _write_pairs(tmp_eval_dir, [])
     r = client.post("/eval/run", json={"eval_type": "retrieval"})
-    assert r.status_code == 400 and "empty" in r.json()["detail"]
+    assert r.status_code == 400 and "leer" in r.json()["detail"]
 
 
-def test_run_with_unknown_eval_type_is_400(client, tmp_eval_dir):
+def test_run_with_unknown_eval_type_is_422(client, tmp_eval_dir):
+    """eval_type is a Literal — the schema rejects it before a job is created."""
     _write_pairs(tmp_eval_dir, [_PAIR])
     r = client.post("/eval/run", json={"eval_type": "bogus"})
-    assert r.status_code == 400 and "bogus" in r.json()["detail"]
+    assert r.status_code == 422 and "bogus" in str(r.json()["detail"])
+    assert not _eval_jobs
 
 
 def test_unknown_job_status_is_404(client):
