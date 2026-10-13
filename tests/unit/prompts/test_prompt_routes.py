@@ -3,9 +3,10 @@ import yaml
 from fastapi import HTTPException
 
 from src.api.prompt_routes import (
-    _prompts_dict_from_set,
     _read_variant_file,
+    _templates,
     _validate_templates,
+    _variant_from_raw,
 )
 from src.api.prompt_schemas import PromptSet
 
@@ -48,14 +49,18 @@ class TestValidateTemplates:
         _validate_templates(ps)
 
 
-class TestPromptsDictFromSet:
-    """Test suite evaluating the schema conversions from robust objects back into base dictionaries."""
+class TestTemplatesAndVariants:
+    """Loaded prompts files → the four templates / a PromptVariant."""
 
-    def test_returns_all_keys(self):
-        """Verify mapping covers all discrete template elements sequentially."""
-        result = _prompts_dict_from_set(_SAMPLE)
-        assert set(result.keys()) == {"system", "qa", "condense", "no_context"}
-        assert result["system"] == "System prompt"
+    def test_templates_fill_missing_keys_and_drop_meta(self):
+        result = _templates({"_meta": {"name": "x"}, "system": "S", "qa": "Q"})
+        assert result == {"system": "S", "qa": "Q", "condense": "", "no_context": ""}
+
+    def test_variant_takes_name_from_meta_or_default(self):
+        raw = {**_SAMPLE.model_dump(), "_meta": {"name": "Knapp", "description": "kurz"}}
+        v = _variant_from_raw(raw, "datei")
+        assert (v.name, v.description, v.prompts) == ("Knapp", "kurz", _SAMPLE)
+        assert _variant_from_raw(_SAMPLE.model_dump(), "datei").name == "datei"
 
 
 class TestReadVariantFile:

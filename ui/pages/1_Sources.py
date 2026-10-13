@@ -64,6 +64,27 @@ def _fetch_stats(api_url: str):
     return requests.get(f"{api_url}/stats", timeout=5).json()
 
 
+_FOLDER_MAP_COLUMNS = {
+    "name": st.column_config.TextColumn("Ordner / Datei", disabled=True),
+    "type": st.column_config.TextColumn("Typ", disabled=True, width="small"),
+    "category": st.column_config.TextColumn("Kategorie", width="small"),
+    "group": st.column_config.SelectboxColumn("Group", options=_GROUPS, required=True, width="small"),
+}
+
+
+def _cmap_from_rows(rows: pd.DataFrame, default_cat: str, default_group: str) -> dict:
+    """category_map from a folder table: only rows that differ from the source defaults get an
+    entry (unmapped folders fall back to them anyway), a different group as {category, group}."""
+    cmap: dict = {}
+    for _, row in rows.iterrows():
+        cat = (row["category"] or default_cat).strip()
+        if row["group"] != default_group:
+            cmap[row["name"]] = {"category": cat, "group": row["group"]}
+        elif cat != default_cat:
+            cmap[row["name"]] = cat
+    return cmap
+
+
 def _raise_for_status(resp: requests.Response):
     """Like resp.raise_for_status(), but surfaces the backend's `detail` message."""
     if resp.ok:
@@ -191,7 +212,7 @@ with col_stat:
     _render_chunk_metric()
 with col_reindex:
     st.caption("Nur geänderte/neue Dateien einlesen, oder alle Sources komplett neu:")
-    col_incr, col_full = st.columns(2)
+    col_incr, col_full, col_recat = st.columns(3)
     _job_running = _JOB_KEY in st.session_state
     incr_clicked = col_incr.button(
         "⚡ Nur Änderungen indizieren", disabled=_job_running,
@@ -200,10 +221,21 @@ with col_reindex:
              "indizieren'; nach geänderter category_map/group → 'Recategorize'.",
     )
     full_clicked = col_full.button("🔄 Alle Dokumente neu indizieren", disabled=_job_running)
+    recat_clicked = col_recat.button(
+        "🏷 Recategorize", help="Schnell, kein Re-Embedding. Bringt bestehende Chunks aller Sources "
+                               "auf die aktuelle category_map / group.",
+    )
     if incr_clicked:
         _start_ingest("/ingest", "Inkrementelle Indizierung")
     elif full_clicked:
         _start_ingest("/ingest", "Vollständige Indizierung", params={"full": "true"})
+    elif recat_clicked:
+        try:
+            r = requests.post(f"{API_URL}/sources/recategorize", timeout=60)
+            _raise_for_status(r)
+            st.success(f"Recategorize: {r.json()}")
+        except Exception as e:
+            st.error(f"Fehler: {e}")
     st.caption(
         "⏱ Dauer hängt stark von Anzahl und Größe der Dokumente ab "
         "(Richtwert: ~220 Markdown-Dateien ≈ 5 Minuten; PDFs mit OCR deutlich länger)."
@@ -319,22 +351,12 @@ for s in sources:
     sid_url = quote(s["id"], safe="")  # ids are free text — encode for URL paths
     with st.expander(f"📁 {s['id']} — {s['path']}"):
         # ── Action buttons ──
-        col_a, col_b, col_c = st.columns(3)
+        col_a, col_c = st.columns(2)
         with col_a:
             if st.button("🔄 Reindex", key=f"reindex_{s['id']}", disabled=_job_running,
                          help="Löscht alle Chunks dieser Source und liest sie neu ein. "
                               "Pflicht, wenn sich Inhalte oder der Pfad geändert haben."):
                 _start_ingest(f"/sources/{sid_url}/reindex", f"Reindex '{s['id']}'")
-        with col_b:
-            if st.button("🏷 Recategorize (alle)", key=f"recat_{s['id']}",
-                         help="Schnell, kein Re-Embedding. Bringt bestehende Chunks "
-                              "auf die aktuelle category_map / group. Wirkt auf alle Sources."):
-                try:
-                    r = requests.post(f"{API_URL}/sources/recategorize", timeout=60)
-                    _raise_for_status(r)
-                    st.success(f"Recategorize: {r.json()}")
-                except Exception as e:
-                    st.error(f"Fehler: {e}")
         with col_c:
             confirm = st.checkbox("Wirklich löschen", key=f"confirm_del_{s['id']}")
             if st.button("🗑 Source entfernen", key=f"del_{s['id']}", disabled=not confirm,
@@ -388,38 +410,16 @@ for s in sources:
             map_df = pd.DataFrame(mapping_rows)
             edited_map = st.data_editor(
                 map_df,
-                column_config={
-                    "name": st.column_config.TextColumn("Ordner / Datei", disabled=True),
-                    "type": st.column_config.TextColumn("Typ", disabled=True, width="small"),
-                    "category": st.column_config.TextColumn("Kategorie", width="small"),
-                    "group": st.column_config.SelectboxColumn(
-                        "Group", options=_GROUPS, required=True, width="small",
-                    ),
-                },
+                column_config=_FOLDER_MAP_COLUMNS,
                 hide_index=True,
                 width="stretch",
                 key=f"foldermap_{s['id']}",
             )
 
             if st.button("💾 Zuordnung speichern", key=f"savemap_{s['id']}", type="primary"):
-                new_cmap = {}
-                for _, row in edited_map.iterrows():
-                    cat = (row["category"] or src_default_cat).strip()
-                    grp = row["group"]
-                    if grp != src_group:
-                        new_cmap[row["name"]] = {"category": cat, "group": grp}
-                    else:
-                        new_cmap[row["name"]] = cat
-
-                # Update this source's category_map and save
-                updated_sources = []
-                for src in sources:
-                    if src["id"] == s["id"]:
-                        updated_src = dict(src)
-                        updated_src["category_map"] = new_cmap
-                        updated_sources.append(updated_src)
-                    else:
-                        updated_sources.append(src)
+                new_cmap = _cmap_from_rows(edited_map, src_default_cat, src_group)
+                updated_sources = [{**src, "category_map": new_cmap} if src["id"] == s["id"] else src
+                                   for src in sources]
                 try:
                     resp = requests.put(
                         f"{API_URL}/sources", json={"sources": updated_sources}, timeout=10,
@@ -502,27 +502,13 @@ if scan_result is not None and scan_source_path:
             scan_df = pd.DataFrame(scan_rows)
             edited_scan = st.data_editor(
                 scan_df,
-                column_config={
-                    "name": st.column_config.TextColumn("Ordner / Datei", disabled=True),
-                    "type": st.column_config.TextColumn("Typ", disabled=True, width="small"),
-                    "category": st.column_config.TextColumn("Kategorie", width="small"),
-                    "group": st.column_config.SelectboxColumn(
-                        "Group", options=_GROUPS, required=True, width="small",
-                    ),
-                },
+                column_config=_FOLDER_MAP_COLUMNS,
                 hide_index=True,
                 width="stretch",
                 key="_new_source_foldermap",
             )
 
-            # Build category_map from edited table
-            for _, row in edited_scan.iterrows():
-                cat = (row["category"] or new_default or "misc").strip()
-                grp = row["group"]
-                if grp != new_group:
-                    new_cmap[row["name"]] = {"category": cat, "group": grp}
-                elif cat != (new_default or "misc"):
-                    new_cmap[row["name"]] = cat
+            new_cmap = _cmap_from_rows(edited_scan, new_default or "misc", new_group)
         else:
             st.caption("Keine Unterordner oder unterstützten Dateien gefunden.")
 

@@ -34,6 +34,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Ingestion job storage (in-memory)
+# IngestionResult fields mirrored onto the job status while a job runs
+_PROGRESS_FIELDS = ("phase", "documents_processed", "documents_total", "documents_skipped",
+                    "chunks_created", "chunks_updated", "chunks_deleted", "duration_seconds")
 _ingest_jobs: dict[str, IngestStatusResponse] = {}
 
 # Answer ratings from the chat, one JSON object per line (gitignored like the logs)
@@ -52,20 +55,6 @@ def _spawn_background(coro) -> asyncio.Task:
 
 # Health state, refreshed by _health_loop every 60 s; /health and /sidebar-state only read it
 _health_cache: dict = {"chroma": False, "llm": False}
-
-
-def _get_services():
-    """Lazy import to avoid circular imports at module level."""
-    from src.main import (
-        condense_provider,
-        conversation_manager,
-        generator,
-        prompt_manager,
-        provider,
-        retriever,
-        vectorstore,
-    )
-    return conversation_manager, generator, condense_provider, prompt_manager, retriever, vectorstore, provider
 
 
 def _ms(since: float) -> int:
@@ -90,7 +79,7 @@ async def _prepare_query(request: QueryRequest, timings: dict):
     threshold; search_query is the (possibly condensed) question used for retrieval.
     Condense/retrieval durations, chunk count and prompt size are written into ``timings``."""
     import src.main as main_module
-    cm, gen, condense_prov, pm, ret, _vs, _prov = _get_services()
+    cm, gen, pm = main_module.conversation_manager, main_module.generator, main_module.prompt_manager
 
     try:
         filters = effective_filters(request.role, main_module.config.settings.ingestion.sources,
@@ -109,7 +98,7 @@ async def _prepare_query(request: QueryRequest, timings: dict):
             condense_prompt = pm.render_condense(history=history, question=question)
             t0 = time.perf_counter()
             try:
-                question = await gen.condense_question(condense_prompt, condense_prov)
+                question = await gen.condense_question(condense_prompt, main_module.condense_provider)
                 logger.info(f"Condensed question: {request.question!r} → {question!r}")
             except Exception as e:
                 logger.warning(f"Condense failed ({e}); retrieving with the original question")
@@ -119,7 +108,7 @@ async def _prepare_query(request: QueryRequest, timings: dict):
 
     stages: dict[str, float] = {}
     t0 = time.perf_counter()
-    chunks = await ret.retrieve(
+    chunks = await main_module.retriever.retrieve(
         query=question,
         top_k=request.top_k,
         metadata_filters=filters,
@@ -168,7 +157,8 @@ async def query(request: QueryRequest):
     """Execute a query against the knowledge base and return the generated answer and sources."""
     start = time.time()
     t_start = time.perf_counter()
-    _, gen, _, pm, _, _, _ = _get_services()
+    import src.main as main_module
+    gen, pm = main_module.generator, main_module.prompt_manager
     timings: dict = {}
     session, chunks, system_prompt, qa_prompt, search_query = await _prepare_query(request, timings)
 
@@ -208,7 +198,8 @@ async def query(request: QueryRequest):
 async def query_stream(request: QueryRequest):
     """Execute a query and stream the generated answer tokens over server-sent events (SSE)."""
     t_start = time.perf_counter()
-    _, gen, _, pm, _, _, prov = _get_services()
+    import src.main as main_module
+    gen, pm, prov = main_module.generator, main_module.prompt_manager, main_module.provider
     timings: dict = {}
     session, chunks, system_prompt, qa_prompt, search_query = await _prepare_query(request, timings)
     sources = [_chunk_to_source_dict(c) for c in chunks]
@@ -279,22 +270,15 @@ def _start_ingest_job(run_sync) -> str:
     def _update_progress(result):
         """Copy orchestrator progress fields onto the tracked job status."""
         job = _ingest_jobs[job_id]
-        job.phase = result.phase
-        job.documents_processed = result.documents_processed
-        job.documents_total = result.documents_total
-        job.documents_skipped = result.documents_skipped
-        job.chunks_created = result.chunks_created
-        job.chunks_updated = result.chunks_updated
-        job.chunks_deleted = result.chunks_deleted
-        job.duration_seconds = result.duration_seconds
+        for name in _PROGRESS_FIELDS:
+            setattr(job, name, getattr(result, name))
 
     async def _runner():
         """Run the sync orchestrator off-thread and update job state on success/error."""
         _ingest_jobs[job_id].status = "running"
         try:
-            result = await asyncio.get_event_loop().run_in_executor(
-                None, run_sync, _update_progress
-            )
+            # asyncio.to_thread, not run_in_threadpool: the job outlives the request that started it
+            result = await asyncio.to_thread(run_sync, _update_progress)
             _update_progress(result)
             _ingest_jobs[job_id].status = "done"
             _ingest_jobs[job_id].errors = result.errors
@@ -316,7 +300,7 @@ async def ingest(full: bool = False):
     """
     import src.main as main_module
     from src.ingestion.orchestrator import IngestionOrchestrator
-    _, _, _, _, _, vs, _ = _get_services()
+    vs = main_module.vectorstore
 
     def _run(progress_cb):
         """Run ingestion across all configured sources."""
@@ -372,9 +356,9 @@ async def _health_loop(interval: float = 60.0):
     """Background loop that refreshes the health cache periodically."""
     while True:
         try:
-            _, _, _, _, _, vs, prov = _get_services()
-            chroma_ok = await run_in_threadpool(vs.health_check)
-            llm_ok = await prov.health_check()
+            import src.main as main_module
+            chroma_ok = await run_in_threadpool(main_module.vectorstore.health_check)
+            llm_ok = await main_module.provider.health_check()
             _health_cache.update({"chroma": chroma_ok, "llm": llm_ok})
         except Exception as e:
             logger.warning("Background health check failed: %s", e)
@@ -407,7 +391,7 @@ async def sidebar_state():
     health = HealthResponse(status=h_status, chromadb=chroma_ok, llm=llm_ok, sources_configured=has_sources)
 
     # Provider info
-    _, _, _, _, _, _, prov = _get_services()
+    prov = main_module.provider
     provider = ProviderInfo(provider=prov.provider, model=prov.model)
 
     # Gemini key status
@@ -438,7 +422,8 @@ async def sidebar_state():
 @router.get("/sessions/{session_id}")
 async def get_session(session_id: str):
     """Retrieve the chat history and details for a specific session."""
-    cm, *_ = _get_services()
+    import src.main as main_module
+    cm = main_module.conversation_manager
     session = cm.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -451,7 +436,8 @@ async def get_session(session_id: str):
 @router.delete("/sessions/{session_id}")
 async def delete_session(session_id: str):
     """Delete a specific session and its history from the manager."""
-    cm, *_ = _get_services()
+    import src.main as main_module
+    cm = main_module.conversation_manager
     if not cm.delete_session(session_id):
         raise HTTPException(status_code=404, detail="Session not found")
     return {"status": "deleted"}
@@ -460,15 +446,15 @@ async def delete_session(session_id: str):
 @router.get("/stats", response_model=StatsResponse)
 async def stats():
     """Get statistics about the vector store, like total chunk count."""
-    _, _, _, _, _, vs, _ = _get_services()
-    return StatsResponse(chunk_count=vs.count())
+    import src.main as main_module
+    return StatsResponse(chunk_count=main_module.vectorstore.count())
 
 
 @router.get("/provider", response_model=ProviderInfo)
 async def get_provider():
     """Get information about the currently active LLM provider and model."""
-    _, _, _, _, _, _, prov = _get_services()
-    return ProviderInfo(provider=prov.provider, model=prov.model)
+    import src.main as main_module
+    return ProviderInfo(provider=main_module.provider.provider, model=main_module.provider.model)
 
 
 @router.get("/sources")
@@ -569,7 +555,7 @@ async def reindex_source(source_id: str):
     """Delete + re-ingest a single source."""
     import src.main as main_module
     from src.ingestion.orchestrator import IngestionOrchestrator
-    _, _, _, _, _, vs, _ = _get_services()
+    vs = main_module.vectorstore
 
     if not any(s.id == source_id for s in main_module.config.settings.ingestion.sources):
         raise HTTPException(status_code=404, detail=f"Unknown source_id: {source_id}")
@@ -588,7 +574,7 @@ async def reindex_source(source_id: str):
 async def delete_source(source_id: str):
     """Remove a source from config and delete all its chunks."""
     import src.main as main_module
-    _, _, _, _, _, vs, _ = _get_services()
+    vs = main_module.vectorstore
 
     sources = main_module.config.settings.ingestion.sources
     if not any(s.id == source_id for s in sources):
@@ -603,9 +589,9 @@ async def delete_source(source_id: str):
 @router.post("/sources/recategorize")
 async def recategorize_endpoint():
     """Trigger a recategorization task to update metadata for existing configurations."""
+    import src.main as main_module
     from src.ingestion.recategorize import recategorize
-    _, _, _, _, _, vs, _ = _get_services()
-    return await run_in_threadpool(recategorize, vectorstore=vs)
+    return await run_in_threadpool(recategorize, vectorstore=main_module.vectorstore)
 
 
 @router.get("/provider/gemini/status")
@@ -691,8 +677,8 @@ async def wipe_collection(payload: dict):
     """Drop the entire ChromaDB collection. Requires confirm='DELETE' in body."""
     if payload.get("confirm") != "DELETE":
         raise HTTPException(status_code=400, detail="Set confirm='DELETE' to proceed")
-    _, _, _, _, _, vs, _ = _get_services()
-    vs.wipe_collection()
+    import src.main as main_module
+    main_module.vectorstore.wipe_collection()
     return {"status": "wiped"}
 
 

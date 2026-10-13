@@ -1,6 +1,7 @@
 import fnmatch
 import hashlib
 import logging
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -80,22 +81,21 @@ def _is_excluded(file_path: Path, base_path: Path, exclude_patterns: list[str]) 
     return False
 
 
+@dataclass
 class IngestionResult:
     """Tracks the progress and statistics of an ongoing or completed
     ingestion job, including document and chunk counts and timing.
     """
-    def __init__(self):
-        """Start an empty result bag with the current UTC start timestamp."""
-        self.documents_processed: int = 0
-        self.documents_total: int = 0
-        self.documents_skipped: int = 0
-        self.chunks_created: int = 0
-        self.chunks_updated: int = 0
-        self.chunks_deleted: int = 0
-        self.phase: str = "starting"
-        self.errors: list[str] = []
-        self.start_time: datetime = datetime.now(UTC)
-        self.end_time: datetime | None = None
+    documents_processed: int = 0
+    documents_total: int = 0
+    documents_skipped: int = 0
+    chunks_created: int = 0
+    chunks_updated: int = 0
+    chunks_deleted: int = 0
+    phase: str = "starting"
+    errors: list[str] = field(default_factory=list)
+    start_time: datetime = field(default_factory=lambda: datetime.now(UTC))
+    end_time: datetime | None = None
 
     @property
     def duration_seconds(self) -> float:

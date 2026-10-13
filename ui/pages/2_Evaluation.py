@@ -74,6 +74,35 @@ def _hybrid_label(value) -> str:
     return "default"
 
 
+def _csv(value) -> list[str]:
+    """A comma-separated editor cell as a list (empty entries dropped)."""
+    return [part.strip() for part in (value or "").split(",") if part.strip()]
+
+
+def _show_eval_error(e: Exception):
+    """A 409 means another eval job is running — a warning, not an error."""
+    if isinstance(e, requests.exceptions.HTTPError) and e.response is not None and e.response.status_code == 409:
+        st.warning("Es läuft bereits eine Evaluation.")
+    else:
+        st.error(f"Fehler: {e}")
+
+
+def _flipped(res_a: dict, res_b: dict, label_a: str, label_b: str) -> list[dict]:
+    """Questions whose hit/miss differs between two eval results (matched by id, else question)."""
+    details_a = {d.get("id", d.get("question", "")): d for d in res_a.get("details", [])}
+    details_b = {d.get("id", d.get("question", "")): d for d in res_b.get("details", [])}
+    return [
+        {
+            "ID": qid,
+            "Frage": (details_a[qid].get("question") or "")[:60],
+            label_a: "✅" if details_a[qid].get("hit") else "❌",
+            label_b: "✅" if details_b[qid].get("hit") else "❌",
+        }
+        for qid in sorted(details_a.keys() & details_b.keys())
+        if details_a[qid].get("hit") != details_b[qid].get("hit")
+    ]
+
+
 _POLL_MAX_FAILURES = 45  # ~45 s of unreachable backend before giving up (like the Sources page)
 
 
@@ -299,16 +328,10 @@ with tab_gs:
                 "question": pq,
                 "source_type": row.get("source_type") or "markdown",
                 "category": (row.get("category") or "").strip(),
-                "expected_sources": [
-                    s.strip() for s in (row.get("expected_sources") or "").split(",") if s.strip()
-                ],
-                "expected_answer_contains": [
-                    s.strip() for s in (row.get("expected_answer_contains") or "").split(",") if s.strip()
-                ],
+                "expected_sources": _csv(row.get("expected_sources")),
+                "expected_answer_contains": _csv(row.get("expected_answer_contains")),
                 "expected_section": (row.get("expected_section") or "").strip(),
-                "expected_source_ids": [
-                    s.strip() for s in (row.get("expected_source_ids") or "").split(",") if s.strip()
-                ],
+                "expected_source_ids": _csv(row.get("expected_source_ids")),
                 "notes": (row.get("notes") or "").strip(),
             })
         try:
@@ -406,7 +429,7 @@ with tab_test:
                                 "question": preview["question"],
                                 "source_type": add_type,
                                 "category": (add_cat or "").strip(),
-                                "expected_sources": [s.strip() for s in add_sources.split(",") if s.strip()],
+                                "expected_sources": _csv(add_sources),
                                 "expected_answer_contains": [],
                                 "notes": "",
                             })
@@ -471,13 +494,8 @@ with tab_ret:
             if result_file:
                 result = requests.get(f"{API_URL}/eval/results/{result_file}", timeout=10).json()
                 _render_retrieval_result(result)
-        except requests.exceptions.HTTPError as e:
-            if e.response is not None and e.response.status_code == 409:
-                st.warning("Es läuft bereits eine Evaluation.")
-            else:
-                st.error(f"Fehler: {e}")
         except Exception as e:
-            st.error(f"Fehler: {e}")
+            _show_eval_error(e)
 
     if run_ab:
         try:
@@ -507,19 +525,7 @@ with tab_ret:
                 mc2.metric("Hybrid", f"{hr_b:.1%}", delta=f"{(hr_b - hr_a):+.1%}")
                 mc3.metric("Fragen", res_a.get("total_questions", 0))
 
-                details_a = {d.get("id", d.get("question", "")): d for d in res_a.get("details", [])}
-                details_b = {d.get("id", d.get("question", "")): d for d in res_b.get("details", [])}
-                flipped = []
-                for qid in sorted(set(details_a.keys()) | set(details_b.keys())):
-                    da = details_a.get(qid)
-                    db = details_b.get(qid)
-                    if da and db and da.get("hit") != db.get("hit"):
-                        flipped.append({
-                            "ID": qid,
-                            "Frage": (da.get("question") or "")[:60],
-                            "Vektor": "✅" if da.get("hit") else "❌",
-                            "Hybrid": "✅" if db.get("hit") else "❌",
-                        })
+                flipped = _flipped(res_a, res_b, "Vektor", "Hybrid")
 
                 if flipped:
                     wins = sum(1 for f in flipped if f["Hybrid"] == "✅")
@@ -539,13 +545,8 @@ with tab_ret:
                     st.markdown("**Hybrid**")
                     _render_retrieval_result(res_b)
 
-        except requests.exceptions.HTTPError as e:
-            if e.response is not None and e.response.status_code == 409:
-                st.warning("Es läuft bereits eine Evaluation.")
-            else:
-                st.error(f"Fehler: {e}")
         except Exception as e:
-            st.error(f"Fehler: {e}")
+            _show_eval_error(e)
 
 
 # ═══ Tab 4: End-to-End ═══════════════════════════════════════════════
@@ -598,13 +599,8 @@ with tab_e2e:
                                 for s in d.get("sources_retrieved", [])[:5]:
                                     st.code(s, language=None)
 
-        except requests.exceptions.HTTPError as e:
-            if e.response is not None and e.response.status_code == 409:
-                st.warning("Es läuft bereits eine Evaluation.")
-            else:
-                st.error(f"Fehler: {e}")
         except Exception as e:
-            st.error(f"Fehler: {e}")
+            _show_eval_error(e)
 
 
 # ═══ Tab 5: Ergebnisse ═══════════════════════════════════════════════
@@ -669,22 +665,7 @@ with tab_results:
                         diff = hr_b - hr_a
                         mc3.metric("Differenz", f"{diff:+.1%}")
 
-                        # Per-question diff
-                        details_a = {d.get("id", d.get("question", "")): d for d in res_a.get("details", [])}
-                        details_b = {d.get("id", d.get("question", "")): d for d in res_b.get("details", [])}
-
-                        flipped = []
-                        all_ids = sorted(set(details_a.keys()) | set(details_b.keys()))
-                        for qid in all_ids:
-                            da = details_a.get(qid)
-                            db = details_b.get(qid)
-                            if da and db and da.get("hit") != db.get("hit"):
-                                flipped.append({
-                                    "ID": qid,
-                                    "Frage": (da.get("question") or "")[:60],
-                                    "A": "✅" if da.get("hit") else "❌",
-                                    "B": "✅" if db.get("hit") else "❌",
-                                })
+                        flipped = _flipped(res_a, res_b, "A", "B")
 
                         if flipped:
                             st.markdown(f"**{len(flipped)} Fragen mit geändertem Ergebnis:**")

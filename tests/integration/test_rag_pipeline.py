@@ -10,7 +10,6 @@ import chromadb
 import pytest
 
 from src.config.manager import (
-    EmbeddingsConfig,
     RerankingConfig,
     RetrievalConfig,
     VectorStoreConfig,
@@ -18,25 +17,12 @@ from src.config.manager import (
 from src.generation.generator import Generator
 from src.generation.providers.base import LLMResponse
 from src.ingestion.chunking import Chunk
-from src.retrieval.embeddings import EmbeddingService
 from src.retrieval.retriever import Retriever
 from src.retrieval.vectorstore import VectorStoreService
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-
-@pytest.fixture(scope="module")
-def embed_service():
-    """Real embedding service — loads the multilingual MiniLM model once."""
-    config = EmbeddingsConfig(
-        model="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-        device="cpu",
-        batch_size=32,
-        normalize=True,
-    )
-    return EmbeddingService(config)
-
 
 @pytest.fixture(scope="module")
 def vectorstore(embed_service):

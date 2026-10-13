@@ -8,7 +8,6 @@ records the prompt it received.
 """
 from __future__ import annotations
 
-import json
 import time
 import uuid
 from pathlib import Path
@@ -24,7 +23,6 @@ from src.api import routes as routes_module
 from src.api.routes import router
 from src.config.manager import (
     ConfigManager,
-    EmbeddingsConfig,
     RerankingConfig,
     RetrievalConfig,
     SourceConfig,
@@ -34,9 +32,9 @@ from src.conversation.manager import ConversationManager
 from src.generation.generator import Generator
 from src.prompts.manager import PromptManager
 from src.retrieval.bm25_index import BM25Index
-from src.retrieval.embeddings import EmbeddingService
 from src.retrieval.retriever import Retriever
 from src.retrieval.vectorstore import VectorStoreService
+from tests.integration.conftest import parse_sse
 
 _REPO = Path(__file__).resolve().parents[2]
 
@@ -75,15 +73,6 @@ class FakeLLM:
 
     async def health_check(self) -> bool:
         return True
-
-
-@pytest.fixture(scope="module")
-def embed_service():
-    """Real embedding model, loaded once (same small model as test_rag_pipeline)."""
-    return EmbeddingService(EmbeddingsConfig(
-        model="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-        device="cpu", batch_size=32, normalize=True,
-    ))
 
 
 @pytest.fixture
@@ -168,7 +157,7 @@ def _stream(client, question: str, session_id: str | None = None) -> tuple[str, 
         body["session_id"] = session_id
     r = client.post("/query/stream", json=body)
     assert r.status_code == 200
-    events = [json.loads(line[6:]) for line in r.text.splitlines() if line.startswith("data: ")]
+    events = parse_sse(r.text)
     assert not [e for e in events if e["type"] == "error"], events
     text = "".join(e["content"] for e in events if e["type"] == "token")
     assert events[-1]["type"] == "done"

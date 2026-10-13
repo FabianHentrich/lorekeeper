@@ -20,6 +20,15 @@ def _strip_thinking(text: str) -> str:
     return THINK_PATTERN.sub("", text).strip()
 
 
+def _messages(prompt: str, system_prompt: str) -> list[ChatCompletionMessageParam]:
+    """Chat messages for one request: optional system prompt, then the user prompt."""
+    messages: list[ChatCompletionMessageParam] = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+    return messages
+
+
 class OllamaProvider(BaseLLMProvider):
     """LLM provider talking to a local Ollama daemon via its OpenAI-compatible API."""
 
@@ -58,14 +67,9 @@ class OllamaProvider(BaseLLMProvider):
 
     async def generate(self, prompt: str, system_prompt: str = "", **kwargs) -> LLMResponse:
         """Produce a complete, non-streamed response and return it wrapped in an LLMResponse."""
-        messages: list[ChatCompletionMessageParam] = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
-
         response = await self._client.chat.completions.create(
             model=self.model,
-            messages=messages,
+            messages=_messages(prompt, system_prompt),
             temperature=self.config.temperature,   # read per call: Settings-page edits apply live
             top_p=self.config.top_p,
             max_tokens=self.config.max_tokens,
@@ -102,14 +106,9 @@ class OllamaProvider(BaseLLMProvider):
         (e.g. "<th" + "ink>") are still detected. Token-usage data from the final
         chunk is written back into ``stream_result`` when provided.
         """
-        messages: list[ChatCompletionMessageParam] = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
-
         stream = await self._client.chat.completions.create(
             model=self.model,
-            messages=messages,
+            messages=_messages(prompt, system_prompt),
             temperature=self.config.temperature,
             top_p=self.config.top_p,
             max_tokens=self.config.max_tokens,

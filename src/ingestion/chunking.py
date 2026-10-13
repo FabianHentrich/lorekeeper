@@ -1,3 +1,9 @@
+"""Chunking: parsed documents → chunks for embedding.
+
+Every chunk starts with its heading path (so a section without the entity's name still matches
+questions about it). Sizes are estimated tokens (``len(text) / 3.5``); ``max_chunk_size`` keeps the
+embed text under the 512-token limit of e5 and the reranker.
+"""
 from dataclasses import dataclass, field
 
 from src.config.manager import ChunkingConfig
@@ -18,87 +24,71 @@ class Chunk:
 
 
 def chunk_documents(documents: list[ParsedDocument], config: ChunkingConfig) -> list[Chunk]:
-    """Route a list of parsed documents through the configured chunking strategy.
+    """Split parsed documents into chunks with the configured strategy.
 
-    Available strategies: 'heading_aware', 'recursive', or 'fixed_size'.
+    Strategies: 'heading_aware' (default — one section per chunk, tables atomic, long prose
+    split recursively), 'recursive' (paragraph → line → sentence → word) and 'fixed_size' (word
+    windows). Afterwards tiny chunks are merged within their heading and indices are set per file.
     """
-    strategy = config.strategy
-    if strategy == "heading_aware":
-        return _heading_aware_chunking(documents, config)
-    elif strategy == "recursive":
-        return _recursive_chunking(documents, config)
-    elif strategy == "fixed_size":
-        return _fixed_size_chunking(documents, config)
-    else:
-        raise ValueError(f"Unknown chunking strategy: {strategy}")
+    split = _STRATEGIES.get(config.strategy)
+    if split is None:
+        raise ValueError(f"Unknown chunking strategy: {config.strategy}")
+    chunks = [
+        _doc_to_chunk(doc, piece)
+        for doc in documents
+        if (text := doc.content.strip())
+        for piece in split(text, config)
+    ]
+    chunks = _merge_small_chunks(chunks, config.min_chunk_size)
+    _set_indices(chunks)
+    return chunks
 
 
-def _heading_aware_chunking(documents: list[ParsedDocument], config: ChunkingConfig) -> list[Chunk]:
-    """Preferred strategy: one chunk per heading section. Tables stay atomic; oversized prose splits recursively."""
-    chunks = []
-    for doc in documents:
-        text = doc.content.strip()
-        if not text:
-            continue
-
-        for block_text, is_table in _split_into_blocks(text):
-            if is_table:
-                # Tables are atomic — split only at row boundaries if very large.
-                # 1.5x keeps table + heading/identity prefix under the 512-token
-                # limit of e5 and the reranker; beyond it the tail is silently truncated.
-                if _estimate_tokens(block_text) <= config.max_chunk_size * 1.5:
-                    chunks.append(_doc_to_chunk(doc, block_text))
-                else:
-                    for sub in _split_table_by_rows(block_text, config.max_chunk_size):
-                        chunks.append(_doc_to_chunk(doc, sub))
+def _heading_aware_split(text: str, config: ChunkingConfig) -> list[str]:
+    """One piece per prose/table block of a section. Tables stay atomic (split only at rows when
+    very large); oversized prose is split recursively."""
+    pieces: list[str] = []
+    for block_text, is_table in _split_into_blocks(text):
+        if is_table:
+            # 1.5x keeps table + heading/identity prefix under the 512-token limit of e5 and the
+            # reranker; beyond it the tail is silently truncated.
+            if _estimate_tokens(block_text) <= config.max_chunk_size * 1.5:
+                pieces.append(block_text)
             else:
-                if _estimate_tokens(block_text) <= config.max_chunk_size:
-                    chunks.append(_doc_to_chunk(doc, block_text))
-                else:
-                    for sub in _recursive_split(block_text, config.max_chunk_size, config.chunk_overlap):
-                        chunks.append(_doc_to_chunk(doc, sub))
-
-    chunks = _merge_small_chunks(chunks, config.min_chunk_size)
-    _set_indices(chunks)
-    return chunks
+                pieces.extend(_split_table_by_rows(block_text, config.max_chunk_size))
+        else:
+            pieces.extend(_split_prose(block_text, config.max_chunk_size, config.chunk_overlap))
+    return pieces
 
 
-def _recursive_chunking(documents: list[ParsedDocument], config: ChunkingConfig) -> list[Chunk]:
-    """Split by paragraph → line → sentence → word until each piece fits ``max_chunk_size``, with overlap."""
-    chunks = []
-    for doc in documents:
-        text = doc.content.strip()
-        if not text:
-            continue
-        sub_texts = _recursive_split(text, config.max_chunk_size, config.chunk_overlap)
-        for sub in sub_texts:
-            chunks.append(_doc_to_chunk(doc, sub))
-
-    chunks = _merge_small_chunks(chunks, config.min_chunk_size)
-    _set_indices(chunks)
-    return chunks
+def _recursive_split(text: str, config: ChunkingConfig) -> list[str]:
+    """The whole text split paragraph → line → sentence → word until each piece fits."""
+    return _split_prose(text, config.max_chunk_size, config.chunk_overlap)
 
 
-def _fixed_size_chunking(documents: list[ParsedDocument], config: ChunkingConfig) -> list[Chunk]:
-    """A naive fallback strategy that splits text strictly by a fixed word count and overlaps."""
-    chunks = []
-    for doc in documents:
-        text = doc.content.strip()
-        if not text:
-            continue
-        words = text.split()
-        size = config.max_chunk_size
-        overlap = config.chunk_overlap
-        step = max(1, size - overlap)  # config validation forbids overlap >= size; never loop in place anyway
-        i = 0
-        while i < len(words):
-            chunk_words = words[i:i + size]
-            chunks.append(_doc_to_chunk(doc, " ".join(chunk_words)))
-            i += step
+def _fixed_size_split(text: str, config: ChunkingConfig) -> list[str]:
+    """Naive fallback: fixed word windows with overlap."""
+    return _word_split(text, config.max_chunk_size, config.chunk_overlap)
 
-    chunks = _merge_small_chunks(chunks, config.min_chunk_size)
-    _set_indices(chunks)
-    return chunks
+
+_STRATEGIES = {
+    "heading_aware": _heading_aware_split,
+    "recursive": _recursive_split,
+    "fixed_size": _fixed_size_split,
+}
+
+_SEPARATORS = ["\n\n", "\n", ". ", " "]
+
+
+def _word_split(text: str, size: int, overlap: int) -> list[str]:
+    """Windows of ``size`` words, each starting ``size - overlap`` words after the previous one.
+
+    The config rejects overlap >= size; the step is still at least one word, so an invalid
+    config (e.g. an old settings.local.yaml) can't make the loop stand still.
+    """
+    words = text.split()
+    step = max(1, size - overlap)
+    return [" ".join(words[i:i + size]) for i in range(0, len(words), step)]
 
 
 def _split_into_blocks(text: str) -> list[tuple[str, bool]]:
@@ -113,7 +103,7 @@ def _split_into_blocks(text: str) -> list[tuple[str, bool]]:
     in_table = False
 
     for line in lines:
-        line_is_table = bool(line.strip()) and line.strip().startswith("|")
+        line_is_table = line.strip().startswith("|")
 
         if line_is_table != in_table and current:
             block = "\n".join(current).strip()
@@ -164,27 +154,14 @@ def _split_table_by_rows(text: str, max_size: int) -> list[str]:
     return [p for p in parts if p.strip()]
 
 
-def _recursive_split(text: str, max_size: int, overlap: int) -> list[str]:
-    """Split long text by trying paragraph → line → sentence → word separators in order."""
-    separators = ["\n\n", "\n", ". ", " "]
-    return _split_with_separators(text, max_size, overlap, separators)
-
-
-def _split_with_separators(text: str, max_size: int, overlap: int, separators: list[str]) -> list[str]:
-    """Recursively split by the first separator that keeps every piece under max_size."""
+def _split_prose(text: str, max_size: int, overlap: int, separators: list[str] = _SEPARATORS) -> list[str]:
+    """Recursively split by the first separator that keeps every piece under max_size;
+    words are the last resort."""
     if _estimate_tokens(text) <= max_size:
         return [text]
 
     if not separators:
-        # Hard split by words as last resort
-        words = text.split()
-        parts = []
-        step = max(1, max_size - overlap)  # see fixed_size: never loop in place
-        i = 0
-        while i < len(words):
-            parts.append(" ".join(words[i:i + max_size]))
-            i += step
-        return parts
+        return _word_split(text, max_size, overlap)
 
     sep = separators[0]
     segments = text.split(sep)
@@ -206,7 +183,7 @@ def _split_with_separators(text: str, max_size: int, overlap: int, separators: l
     result = []
     for part in parts:
         if _estimate_tokens(part) > max_size:
-            result.extend(_split_with_separators(part, max_size, overlap, separators[1:]))
+            result.extend(_split_prose(part, max_size, overlap, separators[1:]))
         else:
             result.append(part)
 

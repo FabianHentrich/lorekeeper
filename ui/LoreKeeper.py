@@ -86,8 +86,9 @@ def _fmt_usage(u: dict) -> str:
 
 st.set_page_config(page_title="LoreKeeper", page_icon="📜", layout="wide")
 
+_EMPTY_USAGE = {"tokens_in": 0, "tokens_out": 0, "tokens_thinking": 0}
 if "session_usage" not in st.session_state:
-    st.session_state.session_usage = {"tokens_in": 0, "tokens_out": 0, "tokens_thinking": 0}
+    st.session_state.session_usage = dict(_EMPTY_USAGE)
 
 _title_col, _usage_col = st.columns([4, 1])
 with _title_col:
@@ -108,7 +109,7 @@ def _reset_chat():
     condensed follow-ups) from the game-master world into player mode."""
     st.session_state.messages = []
     st.session_state.session_id = None
-    st.session_state.session_usage = {"tokens_in": 0, "tokens_out": 0, "tokens_thinking": 0}
+    st.session_state.session_usage = dict(_EMPTY_USAGE)
 
 
 def _render_role_picker():
@@ -138,11 +139,20 @@ _ROLE = st.session_state["_role"]
 # ─── Sidebar (fragment: only re-renders itself, not the chat area) ────
 @st.cache_data(ttl=30, show_spinner=False)
 def _fetch_sidebar_state(api_url: str):
-    """
-    Poll the backend health and current configuration states periodically.
-    Cached briefly to prevent flickering during rapid page redraws.
+    """Health, provider, Gemini-key status, player sources and LLM timeout in one request.
+
+    Cached for 30 s, so reruns (every click) cost no request; actions that change one of these
+    values clear the cache.
     """
     return requests.get(f"{api_url}/sidebar-state", timeout=5).json()
+
+
+def _sidebar_state() -> dict | None:
+    """The cached /sidebar-state, or None when the backend is unreachable."""
+    try:
+        return _fetch_sidebar_state(api_url())
+    except Exception:
+        return None
 
 
 @st.fragment
@@ -160,11 +170,7 @@ def _render_sidebar():
         st.rerun()
 
     API_URL = api_url()
-
-    try:
-        _sidebar = _fetch_sidebar_state(API_URL)
-    except Exception:
-        _sidebar = None
+    _sidebar = _sidebar_state()
 
     # Provider-Umschaltung
     st.subheader("LLM Provider")
@@ -215,46 +221,39 @@ def _render_sidebar():
         if current_model:
             st.caption(f"Aktiv: **{current_model}**")
 
-        # Gemini API key
-        gem_status = _sidebar.get("gemini_status", {}) if _sidebar else {"has_key": False, "source": "none"}
-
-        if gem_status.get("has_key"):
+        # Gemini API key — held in backend memory only, never written to .env
+        gem_status = (_sidebar or {}).get("gemini_status", {"has_key": False, "source": "none"})
+        has_key = gem_status.get("has_key", False)
+        if has_key:
             src_label = {"env": "Umgebungsvariable", "runtime": "UI-Eingabe"}.get(gem_status.get("source"), "?")
             st.caption(f"🔑 Gemini-Key: ✅ ({src_label})")
-            with st.expander("Gemini-Key überschreiben"):
-                new_key_override = st.text_input(
-                    "Neuer API-Key", type="password", key="_gemini_key_override",
-                    help="Wird nur im Speicher gehalten, nicht in .env geschrieben.",
-                )
-                if st.button("Key setzen", key="_gemini_set_override"):
-                    try:
-                        r = requests.post(f"{API_URL}/provider/gemini/key",
-                                          json={"api_key": new_key_override}, timeout=10)
-                        r.raise_for_status()
-                        st.success("Gemini-Key aktualisiert.")
-                        _fetch_sidebar_state.clear()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Fehler: {e}")
         else:
             st.warning("🔑 Gemini-Key fehlt — Provider 'gemini' ist nicht nutzbar.")
-            new_key = st.text_input(
-                "Gemini API-Key eingeben", type="password", key="_gemini_key_new",
-                help="Wird nur im Speicher gehalten, nicht in .env geschrieben.",
-            )
-            if st.button("Key speichern", key="_gemini_set_new"):
-                if not new_key.strip():
-                    st.error("Kein Key eingegeben.")
+        if msg := st.session_state.pop("_gemini_key_msg", None):
+            st.success(msg)
+
+        def _post_gemini_key(key: str | None, done: str):
+            try:
+                r = requests.post(f"{API_URL}/provider/gemini/key", json={"api_key": key}, timeout=10)
+                r.raise_for_status()
+            except Exception as e:
+                st.error(f"Fehler: {e}")
+                return
+            _fetch_sidebar_state.clear()
+            st.session_state["_gemini_key_msg"] = done   # survives the rerun (st.success right here wouldn't)
+            st.rerun()
+
+        with st.expander("Gemini-Key ändern" if has_key else "Gemini-Key eingeben", expanded=not has_key):
+            new_key = st.text_input("API-Key", type="password", key="_gemini_key",
+                                    help="Wird nur im Speicher gehalten, nicht in .env geschrieben.")
+            if st.button("Key setzen", key="_gemini_set"):
+                if new_key.strip():
+                    _post_gemini_key(new_key.strip(), "Gemini-Key gesetzt.")
                 else:
-                    try:
-                        r = requests.post(f"{API_URL}/provider/gemini/key",
-                                          json={"api_key": new_key}, timeout=10)
-                        r.raise_for_status()
-                        st.success("Gemini-Key gesetzt.")
-                        _fetch_sidebar_state.clear()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Fehler: {e}")
+                    st.error("Kein Key eingegeben.")
+            # Only a key entered here can be removed here — an env key stays until .env changes
+            if gem_status.get("source") == "runtime" and st.button("UI-Key entfernen", key="_gemini_clear"):
+                _post_gemini_key(None, "UI-Key entfernt.")
 
     else:
         if current_provider:
@@ -347,9 +346,7 @@ def _render_sidebar():
     st.divider()
 
     if st.button("🗑️ Neue Session"):
-        st.session_state.messages = []
-        st.session_state.session_id = None
-        st.session_state.session_usage = {"tokens_in": 0, "tokens_out": 0, "tokens_thinking": 0}
+        _reset_chat()
         st.rerun()
 
 
@@ -370,10 +367,7 @@ _content_category_filter = st.session_state.get("_content_category_filter")
 
 _player_source_ids: list[str] = []
 if _ROLE == roles.PLAYER:
-    try:
-        _player_source_ids = _fetch_sidebar_state(API_URL).get("player_source_ids", [])
-    except Exception:
-        _player_source_ids = []
+    _player_source_ids = (_sidebar_state() or {}).get("player_source_ids", [])
     if not _player_source_ids:
         st.warning("Für Spieler ist noch keine Quelle freigegeben. Die Spielleitung kann das auf der "
                    "Sources-Seite in der Spalte „🎲 Spieler“ einstellen.")
@@ -408,6 +402,19 @@ def _render_feedback(msg: dict):
         st.feedback("thumbs", key=f"fb_{msg['id']}", on_change=_send_feedback, args=(msg,))
 
 
+def _render_extras(msg: dict):
+    """Everything under an assistant answer: rewritten query, tokens, timings, sources."""
+    if msg.get("search_query"):
+        st.caption(f"🔎 Gesucht nach: {msg['search_query']}")
+    if msg.get("usage"):
+        st.caption(_fmt_usage(msg["usage"]))
+    if msg.get("timings"):
+        st.caption(_fmt_timings(msg["timings"]))
+    if msg.get("sources"):
+        with st.expander("📎 Quellen"):
+            _render_sources(msg["sources"])
+
+
 # ─── Chat History ─────────────────────────────────────────
 _MAX_VISIBLE_MESSAGES = 50
 _all_messages = st.session_state.messages
@@ -424,15 +431,7 @@ else:
 for msg in _visible:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
-        if msg.get("search_query"):
-            st.caption(f"🔎 Gesucht nach: {msg['search_query']}")
-        if msg.get("usage"):
-            st.caption(_fmt_usage(msg["usage"]))
-        if msg.get("timings"):
-            st.caption(_fmt_timings(msg["timings"]))
-        if msg.get("sources"):
-            with st.expander("📎 Quellen"):
-                _render_sources(msg["sources"])
+        _render_extras(msg)
         if msg["role"] == "assistant":
             _render_feedback(msg)
 
@@ -462,10 +461,7 @@ if prompt := st.chat_input(_placeholder, disabled=_chat_blocked):
     # Read timeout follows the configured LLM timeout: condense + answer can each
     # take up to that long before the first token arrives. From the cached
     # /sidebar-state — no extra request per message.
-    try:
-        _llm_timeout = _fetch_sidebar_state(API_URL).get("llm_timeout", 300)
-    except Exception:
-        _llm_timeout = 300
+    _llm_timeout = (_sidebar_state() or {}).get("llm_timeout", 300)
 
     # Stream response
     with st.chat_message("assistant"):
@@ -524,20 +520,6 @@ if prompt := st.chat_input(_placeholder, disabled=_chat_blocked):
                 })
             else:
                 placeholder.markdown(full_response)
-
-                if search_query:
-                    st.caption(f"🔎 Gesucht nach: {search_query}")
-
-                if usage:
-                    st.caption(_fmt_usage(usage))
-
-                if timings:
-                    st.caption(_fmt_timings(timings))
-
-                if sources:
-                    with st.expander("📎 Quellen"):
-                        _render_sources(sources)
-
                 answer = {
                     "role": "assistant",
                     "id": uuid.uuid4().hex,
@@ -550,6 +532,7 @@ if prompt := st.chat_input(_placeholder, disabled=_chat_blocked):
                     "search_query": search_query,
                 }
                 st.session_state.messages.append(answer)
+                _render_extras(answer)
                 _render_feedback(answer)
 
         except requests.exceptions.ConnectionError:

@@ -24,6 +24,7 @@ from src.api.eval_schemas import (
     RetrievalPreviewResponse,
     RetrievedChunkResponse,
 )
+from src.api.routes import _spawn_background
 
 logger = logging.getLogger(__name__)
 
@@ -40,24 +41,6 @@ _MAX_RESULTS = 3
 # Guards the check-then-create window in start_eval so two concurrent POSTs
 # can't both slip past _has_running_job().
 _eval_start_lock = asyncio.Lock()
-
-# Strong refs to running eval tasks — without this the asyncio GC may cancel them.
-_eval_tasks: set[asyncio.Task] = set()
-
-
-def _spawn_eval_task(coro) -> asyncio.Task:
-    """Schedule a background eval task while retaining a strong reference."""
-    task = asyncio.create_task(coro)
-    _eval_tasks.add(task)
-    task.add_done_callback(_eval_tasks.discard)
-    return task
-
-
-def _get_retriever():
-    """Retrieve the global retriever instance."""
-    from src.main import retriever
-    return retriever
-
 
 # ─── QA Pairs CRUD ─────────────────────────────────────────────────────
 
@@ -94,7 +77,7 @@ async def retrieval_preview(req: RetrievalPreviewRequest):
     except InvalidFilter as e:
         raise HTTPException(status_code=422, detail=f"Ungültiger metadata_filters: {e}") from None
 
-    retriever = _get_retriever()
+    retriever = main_module.retriever
     start = time.time()
     chunks = await retriever.retrieve(
         query=req.question,
@@ -126,17 +109,12 @@ async def retrieval_preview(req: RetrievalPreviewRequest):
 
 # ─── Chunk inspector ─────────────────────────────────────────────────
 
-def _get_vectorstore():
-    """Retrieve the global vector store instance."""
-    from src.main import vectorstore
-    return vectorstore
-
-
 @eval_router.get("/chunks/files")
 async def chunk_files(source_id: str):
     """Indexed files of one source, sorted — the file list of the chunk inspector."""
+    import src.main as main_module
     try:
-        files = await run_in_threadpool(_get_vectorstore().list_files, source_id)
+        files = await run_in_threadpool(main_module.vectorstore.list_files, source_id)
     except Exception as e:
         logger.error("Chunk inspector: listing files of %r failed: %s", source_id, e)
         raise HTTPException(status_code=503, detail=f"ChromaDB-Abfrage fehlgeschlagen: {e}") from e
@@ -146,7 +124,8 @@ async def chunk_files(source_id: str):
 @eval_router.get("/chunks", response_model=ChunkListResponse)
 async def file_chunks(source_id: str, source_file: str):
     """Every stored chunk of one file in document order, with full text and metadata."""
-    items = await run_in_threadpool(_get_vectorstore().get_chunks_for_file, source_id, source_file)
+    import src.main as main_module
+    items = await run_in_threadpool(main_module.vectorstore.get_chunks_for_file, source_id, source_file)
     if not items:
         raise HTTPException(status_code=404, detail=f"Keine Chunks für {source_id}/{source_file}")
     items.sort(key=lambda i: (i["metadata"].get("chunk_index", 0), i["id"]))
@@ -209,20 +188,20 @@ async def start_eval(req: EvalJobRequest, request: Request):
         )
 
         if req.eval_type == "retrieval":
-            _spawn_eval_task(_run_retrieval_eval(job, qa_pairs, req))
+            _spawn_background(_run_retrieval_eval(job, qa_pairs, req))
         else:
             # Same server that received this request — no hardcoded host/port
-            _spawn_eval_task(_run_e2e_eval(job, qa_pairs, str(request.base_url).rstrip("/")))
+            _spawn_background(_run_e2e_eval(job, qa_pairs, str(request.base_url).rstrip("/")))
 
     return EvalJobResponse(job_id=job_id, status="queued")
 
 
 async def _run_retrieval_eval(job: EvalJobStatus, qa_pairs: list[dict], req: EvalJobRequest):
     """Execute a retrieval-only evaluation and save the report."""
+    import src.main as main_module
     from evaluation.evaluate_retrieval import run_evaluation_with_retriever
-
     job.status = "running"
-    retriever = _get_retriever()
+    retriever = main_module.retriever
 
     def _progress(current, total):
         """Mirror evaluator progress onto the tracked job status."""
@@ -259,12 +238,9 @@ async def _run_e2e_eval(job: EvalJobStatus, qa_pairs: list[dict], api_url: str):
 
     job.status = "running"
 
-    def _run_sync():
-        """Blocking evaluator invocation, offloaded to a worker thread."""
-        return evaluate(api_url, qa_pairs)
-
     try:
-        report = await asyncio.get_event_loop().run_in_executor(None, _run_sync)
+        # Blocking HTTP calls per question; to_thread because the job outlives the starting request
+        report = await asyncio.to_thread(evaluate, api_url, qa_pairs)
 
         filename = save_report(report, _RESULTS_DIR, "e2e").name
         _cleanup_results("e2e")

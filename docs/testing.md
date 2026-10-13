@@ -32,6 +32,10 @@ Unit-Test; Routenverhalten gehört in `tests/integration/`.
 Vault über HTTP und fragt ihn über `/query/stream` ab — echtes Parsen, echte Embeddings (kleines
 MiniLM-Modell), echte ChromaDB, Fake-LLM. Er lädt ein Modell und dauert daher länger als der Rest.
 
+`tests/integration/conftest.py` stellt das echte Embedding-Modell als session-weite Fixture
+`embed_service` bereit (einmal pro Testlauf geladen, von RAG-Pipeline, End-to-End- und
+Spieler-Sicherheitstest geteilt) und `parse_sse()` für die Events aus `/query/stream`.
+
 ---
 
 ## Tests ausführen

@@ -58,6 +58,14 @@ _EDITABLE_KEYS: dict = {
     },
 }
 
+# Shown by GET /config for context but not editable there (models are picked in settings.yaml).
+# No file paths and no secrets in the API response.
+_READ_ONLY_KEYS: dict = {
+    "llm": {"provider": None, "ollama": {"model": None}, "gemini": {"model": None}},
+    "embeddings": {"model": None, "device": None},
+    "vectorstore": {"collection_name": None},
+}
+
 
 class SourceConfig(BaseModel):
     """A single ingestion source. Either a folder or a single file."""
@@ -308,62 +316,10 @@ class ConfigManager:
         )
 
     def editable_snapshot(self) -> dict:
-        """Return the current values of all UI-editable settings plus a few
-        read-only fields the UI wants to display (embeddings model, vectorstore
-        mode). Secrets and infra knobs are never included."""
-        s = self.settings
-        return {
-            "retrieval": {
-                "top_k": s.retrieval.top_k,
-                "score_threshold": s.retrieval.score_threshold,
-                "reranking": {
-                    "enabled": s.retrieval.reranking.enabled,
-                    "top_k_rerank": s.retrieval.reranking.top_k_rerank,
-                    "max_per_source": s.retrieval.reranking.max_per_source,
-                },
-                "hybrid": {
-                    "enabled": s.retrieval.hybrid.enabled,
-                    "bm25_weight": s.retrieval.hybrid.bm25_weight,
-                    "bm25_top_k": s.retrieval.hybrid.bm25_top_k,
-                },
-            },
-            "llm": {
-                "provider": s.llm.provider,
-                "fallback_enabled": s.llm.fallback_enabled,
-                "ollama": {
-                    "model": s.llm.ollama.model,
-                    "temperature": s.llm.ollama.temperature,
-                    "top_p": s.llm.ollama.top_p,
-                    "max_tokens": s.llm.ollama.max_tokens,
-                    "timeout": s.llm.ollama.timeout,
-                },
-                "gemini": {
-                    "model": s.llm.gemini.model,
-                    "temperature": s.llm.gemini.temperature,
-                    "top_p": s.llm.gemini.top_p,
-                    "max_tokens": s.llm.gemini.max_tokens,
-                    "timeout": s.llm.gemini.timeout,
-                },
-            },
-            "conversation": {
-                "window_size": s.conversation.window_size,
-                "condense_question": s.conversation.condense_question,
-                "session_timeout_minutes": s.conversation.session_timeout_minutes,
-            },
-            "chunking": {
-                "strategy": s.chunking.strategy,
-                "max_chunk_size": s.chunking.max_chunk_size,
-                "chunk_overlap": s.chunking.chunk_overlap,
-                "min_chunk_size": s.chunking.min_chunk_size,
-            },
-            "embeddings": {
-                "model": s.embeddings.model,
-                "device": s.embeddings.device,
-            },
-            "vectorstore": {
-                "collection_name": s.vectorstore.collection_name,   # no file paths in the API response
-            },
-        }
+        """Current values of every UI-editable setting (``_EDITABLE_KEYS``) plus the read-only fields
+        the Settings page displays (``_READ_ONLY_KEYS``) — derived from the live settings, so the
+        snapshot can't drift from the allow-list. Secrets and paths are never included."""
+        return _filter_allowed(self.settings.model_dump(), _deep_merge(_EDITABLE_KEYS, _READ_ONLY_KEYS))
 
     def save_settings(self, updates: dict) -> dict:
         """Merge ``updates`` into the live Settings and persist to the settings.local.yaml sidecar.

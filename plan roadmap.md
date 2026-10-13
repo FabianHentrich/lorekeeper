@@ -516,7 +516,7 @@ int8 verworfen (kaum schneller, anderes Ranking). Modell-Laden DirectML 1,3 s id
 
 **Aufwand**: Gering-Mittel (reine Doku, mehrere Dateien). Last 🟢.
 
-## 7.4 Code-Qualität: Dead Code, Vereinfachung, Clean Code (Review 13.10.) — 🔄 Pakete A + B erledigt
+## 7.4 Code-Qualität: Dead Code, Vereinfachung, Clean Code (Review 13.10.) — 🔄 Pakete A–C erledigt
 
 **Ergebnis des Reviews** (Agent, nur lesend; Suite grün, ruff/mypy sauber): Alle Funktionen in `src/`, `ui/`, `evaluation/` haben Aufrufer — toter Code steckt in Config-Feldern, Datenfeldern, Parametern, Zweigen und Altlasten. Komplexeste Stellen laut ruff: `ui/LoreKeeper.py:_render_sidebar` (Komplexität 29), `orchestrator.run` (19), `OllamaProvider.generate_stream` (14), `_rerank` (13), `validate_filters` (13). Geschätzt ~400–450 Zeilen weniger, wenn alle risikoarmen Punkte umgesetzt werden.
 
@@ -576,6 +576,16 @@ Suite: 618 grün (zwei Tests der alten Zuordnungs-Heuristik entfernt).
 5. `_spawn_eval_task` = `_spawn_background` wiederverwenden; Prompt-Routen mit `_templates()`/`_variant_from_raw()`; Chunking mit einer Strategie-Tabelle und gemeinsamem Wort-Split; Retriever-Kleinigkeiten (`_to_chunk` in der Expansion, Backfill per Slice); `IngestionResult` als Dataclass; Provider-Doppelungen (Ollama-Nachrichten, Gemini-Key-Auflösung); `asyncio.get_event_loop().run_in_executor` → `run_in_threadpool`.
 6. Tests: `tests/integration/conftest.py` mit einem session-weiten Embedding-Service (Modell nur einmal laden) und einem `parse_sse()`-Helfer.
 
+**Paket C umgesetzt (13.10.)** — Entscheidung C3: leere Eingabe wird abgelehnt, eigener Knopf „UI-Key entfernen“:
+1. `editable_snapshot` = `_EDITABLE_KEYS` + `_READ_ONLY_KEYS` (Ausgabe gegen den alten Stand verglichen: identisch).
+2. `_get_services()`, `_get_retriever()`, `_get_vectorstore()`, `_spawn_eval_task` entfernt — Handler lesen `main_module.<dienst>`, Eval-Jobs nutzen `_spawn_background`. Hintergrundjobs laufen über `asyncio.to_thread` statt `run_in_executor` (`run_in_threadpool` hing im TestClient).
+3. Chat-Seite: „Neue Session“ = `_reset_chat()`, `_render_extras(msg)` für Verlauf und neue Antwort, ein Gemini-Key-Block (leere Eingabe abgelehnt, „UI-Key entfernen“ nur bei Laufzeit-Key, Bestätigung über Flash), `_sidebar_state()` statt dreimal try/except; Docstring von `_fetch_sidebar_state` korrigiert. `_render_sidebar` bleibt mit Komplexität 29 der komplexeste Block (Provider-Wechsel, Status, Filter) — weiteres Aufteilen wäre reines Verschieben.
+4. Evaluation-Seite: `_show_eval_error` (409 → Warnung) statt 3 Kopien, `_flipped(...)` statt 2, `_csv(...)` statt 4. Sources-Seite: `_FOLDER_MAP_COLUMNS`, `_cmap_from_rows` als eine Regel (vorher schrieb „Zuordnung speichern“ jeden Ordner in die `category_map`, „Neue Source“ nur abweichende — gleiches Ergebnis, jetzt einheitlich nur abweichende), ein „🏷 Recategorize“ oben neben den Indizier-Knöpfen statt einer pro Quelle.
+5. Prompt-Routen mit `_templates()`/`_variant_from_raw()`; Chunking mit Strategie-Tabelle, `_word_split` und `_split_prose` (Ausgabe auf 2.018 echten Dokumenten, alle Strategien, gegen den alten Stand verglichen: identisch); Retriever (`_to_chunk` in der Expansion, Backfill per Slice); `IngestionResult` als Dataclass; `_messages()` in Ollama, `_resolve_api_key()` in Gemini; `_ensure_ollama` mit `time.monotonic()`; `_PROGRESS_FIELDS` im Ingest-Fortschritt.
+6. `tests/integration/conftest.py`: session-weites `embed_service` (Modell einmal statt dreimal geladen), `parse_sse()` statt 5 Kopien. Neue UI-Tests `tests/ui/test_simplified_pages.py` (Gemini-Key, Neue Session, Ordner-Zuordnung, Recategorize, Ergebnisvergleich); Tests für `_templates`/`_variant_from_raw`.
+
+Suite: 626 grün (vorher 618).
+
 *Paket D — Clean Code*:
 1. Falsche Docstrings, Kommentare, Hilfetexte (Liste oben) — zusammen mit 7.3.
 2. Nutzer sichtbare `detail`-Meldungen der API einheitlich deutsch (heute gemischt), Logs bleiben englisch.
@@ -588,7 +598,7 @@ Suite: 618 grün (zwei Tests der alten Zuordnungs-Heuristik entfernt).
 A2 (reparieren), 
 B3 (`document_paths`-Shim), 
 B6 (zwei Endpoints), 
-C3 (Gemini-Key leer), 
+C3 (Gemini-Key leer → abgelehnt + Entfernen-Knopf), 
 D4 (Eval-Defaults), 
 D6 (400 → 422).
 
@@ -602,7 +612,7 @@ D6 (400 → 422).
 
 ## Priorisierungsvorschlag
 
-Erledigt: 7.2 Code-Review + Nachbesserung, 3.10 Regelwerk-Slot, 5.4 Reranker auf der GPU (DirectML), 5.2 Startup-Baseline, 3.3 Chunk-Inspector, 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
+Erledigt: 7.4 Pakete A–C (Fehler, toter Code, Vereinfachung), 7.2 Code-Review + Nachbesserung, 3.10 Regelwerk-Slot, 5.4 Reranker auf der GPU (DirectML), 5.2 Startup-Baseline, 3.3 Chunk-Inspector, 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
 
 **Offen am Gaming-PC (Nutzer)**: alte Autostart-Aufgabe „LoreKeeper Server“ als Admin entfernen (`Unregister-ScheduledTask -TaskName "LoreKeeper Server" -Confirm:$false`); DHCP-Reservierung für `192.168.178.34` im Router.
 
@@ -613,7 +623,7 @@ Erledigt: 7.2 Code-Review + Nachbesserung, 3.10 Regelwerk-Slot, 5.4 Reranker auf
 | 1 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf; dann Re-Index, Eval, Spieler-Messung — dabei 3.8/3.9 im Browser durchklicken     |
 | 2 | Offene Prüfungen im laufenden Betrieb | Mittel — bestätigt, dass die Neuerungen im echten Chat wirken | Gering | 🟡 | Mit gestartetem LoreKeeper: 3.6 Folgefragen („fass das kürzer zusammen“), 👍/👎 + Tabs „Feedback“/„Chunks“, Rerank-Timings in der Chat-Caption (5.4), Regelwerk-Slot an x002/x005 im Chat (3.10), `pytest -m live` (Spieler-Modus, schickt nur noch `role`) |
 | 3 | 7.3 Inline-Doku (Docstrings) | Mittel — Code verständlich ohne Kontext, Regeln aus CLAUDE.md umgesetzt | Gering-Mittel | 🟢 | 27 Module ohne Modul-Docstring, Config-Felder ohne Kommentar; reine Doku |
-| 4 | 7.4 Pakete C–D — Vereinfachung, Clean Code | Mittel — ~400 Zeilen weniger, weniger Sync-Gefahren | Mittel | 🟢 | Offene Entscheidungen zuerst klären; Paket D1 zusammen mit 7.3 |
+| 4 | 7.4 Paket D — Clean Code | Gering-Mittel — einheitliche Meldungen, benannte Konstanten, keine Griffe in private Attribute | Gering | 🟢 | Entscheidungen D4 (Eval-Defaults → Config-Wert) und D6 (422 über `Literal`) getroffen; D1 zusammen mit 7.3 |
 | 5 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Mit der Chunk-Prüfung aus 5.2 messbar; Golden Set ~1 min |
 | 6 | 5.5 Vektorsuche reproduzierbar machen | Gering-Mittel — stabile Ergebnisse nach Neustart, verlässliche Eval-Vergleiche | Gering-Mittel | 🟡 | ±2 Abschnitte Schwankung zwischen Prozessen; `ef_search` erhöhen oder exakt suchen |
 | 7 | 3.2 Session-History — ⏸ zurückgestellt | Unklar | Mittel | 🟢 | Erst entscheiden, ob gespeicherte Sessions bei einem Wissenstool Nutzen haben |

@@ -2,8 +2,8 @@
 
 These tests do NOT spin up the real lifespan (no models, no ChromaDB, no LLM).
 Instead, they build a bare FastAPI app with the router attached, then inject
-fakes into ``src.main`` module globals — which ``routes._get_services()``
-imports lazily on every call.
+fakes into ``src.main`` module globals — the route handlers read them from
+``src.main`` on every call.
 
 The goal is to verify the HTTP contract: request/response shapes, SSE event
 structure, session_id propagation, error codes, and provider switching.
@@ -22,6 +22,7 @@ from fastapi.testclient import TestClient
 import src.main as main_module
 from src.api.routes import router
 from src.retrieval.retriever import RetrievedChunk
+from tests.integration.conftest import parse_sse
 
 # ─── Fakes ──────────────────────────────────────────────────────────────────────
 
@@ -302,7 +303,7 @@ def test_query_stream_done_event_carries_condensed_search_query(client, fake_ser
 
     fake_services.generator.condense_question = _condense
 
-    done = _parse_sse(client.post("/query/stream", json={"question": "Wer ist sein Vater?"}).text)[-1]
+    done = parse_sse(client.post("/query/stream", json={"question": "Wer ist sein Vater?"}).text)[-1]
     assert done["type"] == "done"
     assert done["search_query"] == "Wer ist der Vater von Arkenfeld?"
 
@@ -361,15 +362,6 @@ def test_query_persists_messages_across_calls(client, fake_services):
 
 # ─── /query/stream ─────────────────────────────────────────────────────────────
 
-def _parse_sse(raw: str) -> list[dict]:
-    """Helper to convert raw Server-Sent Event text into dict objects."""
-    events = []
-    for line in raw.splitlines():
-        if line.startswith("data: "):
-            events.append(json.loads(line[len("data: "):]))
-    return events
-
-
 def test_query_stream_yields_tokens_and_done_event(client, fake_services):
     """Ensure generating streams provide granular JSON events ending with a structured summary."""
     with client.stream("POST", "/query/stream", json={"question": "Hi"}) as resp:
@@ -377,7 +369,7 @@ def test_query_stream_yields_tokens_and_done_event(client, fake_services):
         assert resp.headers["content-type"].startswith("text/event-stream")
         body = resp.read().decode("utf-8")
 
-    events = _parse_sse(body)
+    events = parse_sse(body)
     token_events = [e for e in events if e["type"] == "token"]
     done_events = [e for e in events if e["type"] == "done"]
 
@@ -404,7 +396,7 @@ def test_query_returns_stage_timings(client, fake_services):
 
 def test_query_stream_done_event_carries_timings(client, fake_services):
     """Ensure the done event reports time to first token alongside the total."""
-    done = _parse_sse(client.post("/query/stream", json={"question": "Wo liegt Arkenfeld?"}).text)[-1]
+    done = parse_sse(client.post("/query/stream", json={"question": "Wo liegt Arkenfeld?"}).text)[-1]
     timings = done["timings"]
     assert 0 <= timings["first_token_ms"] <= timings["total_ms"]
     assert timings["chunks"] == 1
@@ -466,7 +458,7 @@ def test_query_stream_reports_model_that_answered(client, fake_services):
             yield "Antwort"
 
     main_module.generator = FallbackGenerator()
-    done = _parse_sse(client.post("/query/stream", json={"question": "Hi"}).text)[-1]
+    done = parse_sse(client.post("/query/stream", json={"question": "Hi"}).text)[-1]
     assert done["model_used"] == "gemini-2.5-flash"
 
 
@@ -476,7 +468,7 @@ def test_query_stream_no_chunks_emits_fallback_token(client, fake_services):
     with client.stream("POST", "/query/stream", json={"question": "???"}) as resp:
         body = resp.read().decode("utf-8")
 
-    events = _parse_sse(body)
+    events = parse_sse(body)
     assert any(
         e["type"] == "token" and "Keine relevanten Quellen" in e["content"]
         for e in events
@@ -498,7 +490,7 @@ def test_query_stream_falls_back_to_original_question_when_condense_fails(client
 
     with client.stream("POST", "/query/stream", json={"question": "Wer ist sein Vater?"}) as resp:
         assert resp.status_code == 200
-        events = _parse_sse(resp.read().decode("utf-8"))
+        events = parse_sse(resp.read().decode("utf-8"))
 
     assert fake_services.retriever.last_call["query"] == "Wer ist sein Vater?"
     assert any(e["type"] == "done" for e in events)

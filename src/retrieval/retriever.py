@@ -257,7 +257,8 @@ class Retriever:
                 where=where,
             )
 
-            bm25_only = len([r for r in bm25_results if r["id"] not in {v["id"] for v in vector_results}])
+            vector_ids = {v["id"] for v in vector_results}
+            bm25_only = sum(1 for r in bm25_results if r["id"] not in vector_ids)
             logger.info(
                 f"Hybrid search: {len(vector_results)} vector + {len(bm25_results)} bm25 "
                 f"candidates ({bm25_only} bm25-only)"
@@ -329,17 +330,8 @@ class Retriever:
                 continue
             section.sort(key=lambda it: it["metadata"].get("chunk_index", 0))
             score = max(c.score for c in chunks if c.source_file == source_file and c.heading in headings)
-            expanded[(source_id, source_file, parent)] = [
-                RetrievedChunk(
-                    content=it["content"],
-                    source_file=source_file,
-                    document_type=it["metadata"].get("document_type", ""),
-                    heading=it["metadata"].get("heading_hierarchy", ""),
-                    score=score,
-                    metadata=it["metadata"],
-                )
-                for it in section
-            ]
+            # The section's chunks inherit the score of its best hit
+            expanded[(source_id, source_file, parent)] = [_to_chunk({**it, "score": score}) for it in section]
             logger.info(f"Expanded section '{parent}' ({source_file}): {len(headings)} hits → {len(section)} chunks")
 
         if not expanded:
@@ -419,13 +411,9 @@ class Retriever:
             per_source_count[key] = per_source_count.get(key, 0) + 1
             selected.append((score, chunk))
 
-        backfilled = 0
-        if len(selected) < top_k and overflow:
-            for entry in overflow:
-                if len(selected) >= top_k:
-                    break
-                selected.append(entry)
-                backfilled += 1
+        fill = overflow[:max(0, top_k - len(selected))]
+        selected += fill
+        backfilled = len(fill)
 
         # Rules slot: no rulebook chunk made it — the best one (main pool or the separate rules
         # search) takes the last place if it scores ≥ min_score. Never more than this one chunk.

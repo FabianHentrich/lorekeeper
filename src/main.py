@@ -75,8 +75,8 @@ async def _ensure_ollama(base_url: str, timeout: float = 30.0) -> subprocess.Pop
     )
 
     # Wait until it's ready
-    deadline = asyncio.get_event_loop().time() + timeout
-    while asyncio.get_event_loop().time() < deadline:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.get(f"{base_url}/api/tags", timeout=3)

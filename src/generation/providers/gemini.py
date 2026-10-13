@@ -31,14 +31,20 @@ def set_runtime_api_key(key: str | None) -> None:
     _runtime_api_key = key or None
 
 
+def _resolve_api_key(config: GeminiConfig) -> tuple[str, str]:
+    """The Gemini API key and where it came from: runtime override (UI) > environment > .env.
+    Returns ``("", "none")`` when there is none."""
+    if _runtime_api_key:
+        return _runtime_api_key, "runtime"
+    key = os.environ.get(config.api_key_env) or dotenv_values(".env").get(config.api_key_env) or ""
+    return key, ("env" if key else "none")
+
+
 def get_api_key_status(config: GeminiConfig) -> dict:
     """Return whether a Gemini API key is available and where it came from.
     Never returns the key itself."""
-    if _runtime_api_key:
-        return {"has_key": True, "source": "runtime"}
-    if os.environ.get(config.api_key_env) or dotenv_values(".env").get(config.api_key_env):
-        return {"has_key": True, "source": "env"}
-    return {"has_key": False, "source": "none"}
+    _, source = _resolve_api_key(config)
+    return {"has_key": source != "none", "source": source}
 
 
 class GeminiProvider(BaseLLMProvider):
@@ -51,11 +57,7 @@ class GeminiProvider(BaseLLMProvider):
         self.config = config
         self.model = config.model
 
-        api_key = (
-            _runtime_api_key
-            or os.environ.get(config.api_key_env, "")
-            or dotenv_values(".env").get(config.api_key_env, "")
-        )
+        api_key, _ = _resolve_api_key(config)
         if not api_key:
             raise ValueError(f"No Gemini API key — set {config.api_key_env} or supply one via the UI")
 

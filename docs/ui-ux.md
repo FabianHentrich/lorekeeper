@@ -111,12 +111,16 @@ Schlägt der Wechsel fehl, springt die Auswahl zurück und es erscheint eine Feh
 
 | Zustand im Backend | Anzeige |
 |---|---|
-| Key aus Umgebung / `.env` | `🔑 Gemini-Key: ✅ (Umgebungsvariable)` + Ausklapper **Override** |
-| Key in dieser Laufzeit über die UI gesetzt | `🔑 Gemini-Key: ✅ (UI-Eingabe)` + **Override** |
-| Kein Key | Gelbe Warnung + Passwortfeld + **Key speichern** |
+| Key aus Umgebung / `.env` | `🔑 Gemini-Key: ✅ (Umgebungsvariable)` + Ausklapper **Gemini-Key ändern** |
+| Key in dieser Laufzeit über die UI gesetzt | `🔑 Gemini-Key: ✅ (UI-Eingabe)` + **Gemini-Key ändern** + **UI-Key entfernen** |
+| Kein Key | Gelbe Warnung + offener Ausklapper **Gemini-Key eingeben** |
 
-Die Eingabe geht an `POST /provider/gemini/key`; das Backend hält den Key nur im Speicher (nie auf
-Platte, nach Neustart weg). Ist Gemini aktiv, wird der Provider sofort neu gebaut.
+Im Ausklapper: Passwortfeld + **Key setzen** → `POST /provider/gemini/key`. Leere Eingabe wird
+abgelehnt („Kein Key eingegeben.“) statt still den Key zu löschen; dafür gibt es **UI-Key
+entfernen** (`{"api_key": null}`), nur solange der Key aus der UI stammt — ein Key aus `.env` bleibt
+bis zur Änderung dort. Die Bestätigung erscheint nach dem Neuladen der Seite. Das Backend hält den
+Key nur im Speicher (nie auf Platte, nach Neustart weg). Ist Gemini aktiv, wird der Provider sofort
+neu gebaut.
 
 ### Status
 
@@ -255,6 +259,7 @@ Quellen aus `config/sources.yaml` verwalten, ohne YAML zu öffnen. Seitenauswahl
 | — (Kennzahl) | `GET /stats` | Gesamtzahl der Chunks; nach jedem Indizieren/Löschen aktualisiert |
 | ⚡ **Nur Änderungen indizieren** | `POST /ingest` | Inkrementell, unveränderte Dateien werden übersprungen — der Normalfall |
 | 🔄 **Alle Dokumente neu indizieren** | `POST /ingest?full=true` | Jede Datei; nötig nach Chunking-Änderungen |
+| 🏷 **Recategorize** | `POST /sources/recategorize` | Schreibt nur `group` / `content_category` / `source_id` neu (Sekunden, kein Embedding) — für **alle** Quellen; nach geänderter `category_map` / `group` |
 
 Alle Indizier-Vorgänge zeigen **nicht-blockierenden Fortschritt**: die Job-ID steht in
 `st.session_state["_ingest_job"]`, das Fragment `_ingest_progress()`
@@ -285,13 +290,14 @@ Je Quelle ein Ausklapper (`📁 {id} — {path}`):
 | Knopf | Backend | Hinweis |
 |---|---|---|
 | 🔄 **Reindex** | `POST /sources/{id}/reindex` | Löscht und indiziert eine Quelle neu, mit Fortschritt; nötig bei geändertem Inhalt oder Pfad |
-| 🏷 **Recategorize (alle)** | `POST /sources/recategorize` | Schreibt nur `group` / `content_category` / `source_id` neu (Sekunden, kein Embedding) — für **alle** Quellen |
 | 🗑 **Source entfernen** | `DELETE /sources/{id}` | Entfernt Quelle **und** ihre Chunks; mit Bestätigungs-Checkbox |
 
 **Ordner-Zuordnung:** `GET /sources/{id}/folders` (60 s gecacht) liefert die Ordner; eine zweite
 Tabelle (*name, type, category, group*) ist mit der aktuellen `category_map` vorbelegt.
 **💾 Zuordnung speichern** baut daraus die neue `category_map` und speichert per `PUT /sources`;
-danach Recategorize.
+danach Recategorize. Einträge bekommen nur Zeilen, die von Default-Kategorie/-Group der Quelle
+abweichen (nicht zugeordnete Ordner fallen ohnehin darauf zurück) — dieselbe Regel wie beim
+Anlegen einer neuen Quelle.
 
 ### 4. Neue Quelle hinzufügen
 

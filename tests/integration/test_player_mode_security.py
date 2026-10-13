@@ -36,7 +36,6 @@ from src.api.eval_routes import eval_router
 from src.api.routes import router
 from src.config.manager import (
     ConfigManager,
-    EmbeddingsConfig,
     RerankingConfig,
     RetrievalConfig,
     RulesSlotConfig,
@@ -48,9 +47,9 @@ from src.conversation.manager import ConversationManager
 from src.generation.generator import Generator
 from src.prompts.manager import PromptManager
 from src.retrieval.bm25_index import BM25Index
-from src.retrieval.embeddings import EmbeddingService
 from src.retrieval.retriever import Retriever
 from src.retrieval.vectorstore import VectorStoreService
+from tests.integration.conftest import parse_sse
 
 _REPO = Path(__file__).resolve().parents[2]
 
@@ -181,7 +180,7 @@ def _write(folder: Path, files: dict[str, str]) -> None:
 
 
 @pytest.fixture(scope="module")
-def env(tmp_path_factory):
+def env(tmp_path_factory, embed_service):
     """Ingest both sources once; yield client, retriever and the recording LLM."""
     tmp = tmp_path_factory.mktemp("player_security")
     rules_dir, world_dir = tmp / "regeln", tmp / "welt"
@@ -202,10 +201,7 @@ def env(tmp_path_factory):
         SourceConfig(id="sl-regeln", path=str(gm_rules_dir), group="rules"),
     ]
 
-    embed = EmbeddingService(EmbeddingsConfig(
-        model="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-        device="cpu", batch_size=32, normalize=True,
-    ))
+    embed = embed_service
     vectorstore = VectorStoreService(
         VectorStoreConfig(mode="embedded", collection_name=f"player_{uuid.uuid4().hex}", distance_metric="cosine"),
         embed,
@@ -275,8 +271,7 @@ def _stream(client, question: str, session_id: str | None = None) -> dict:
     body = {"question": question, "metadata_filters": PLAYER_FILTER}
     if session_id:
         body["session_id"] = session_id
-    events = [json.loads(line[6:]) for line in client.post("/query/stream", json=body).text.splitlines()
-              if line.startswith("data: ")]
+    events = parse_sse(client.post("/query/stream", json=body).text)
     assert not [e for e in events if e["type"] == "error"], events
     return events[-1]
 
@@ -327,7 +322,7 @@ def test_condensed_follow_up_cannot_widen_the_search(env):
 def _stream_as_player(client, question: str, **extra) -> tuple[int, list[dict]]:
     extra.setdefault("hybrid_search", False)
     resp = client.post("/query/stream", json={"question": question, "role": "player", **extra})
-    events = [json.loads(line[6:]) for line in resp.text.splitlines() if line.startswith("data: ")]
+    events = parse_sse(resp.text)
     return resp.status_code, events
 
 
@@ -368,7 +363,7 @@ def test_player_filter_can_only_narrow(env, sneaky, hybrid):
 def test_player_cannot_continue_a_game_master_session(env):
     """With a game master's session id the player gets a fresh session — no condense against GM history."""
     gm = env.client.post("/query/stream", json={"question": "Wer ist Sol Invictus wirklich?"})
-    gm_session = [json.loads(line[6:]) for line in gm.text.splitlines() if line.startswith("data: ")][-1]["session_id"]
+    gm_session = parse_sse(gm.text)[-1]["session_id"]
 
     _, events = _stream_as_player(env.client, "Und was steckt dahinter?", session_id=gm_session)
 

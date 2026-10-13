@@ -62,14 +62,23 @@ def _reload_prompt_manager(prompts_dict: dict):
 
 
 def _read_variant_file(path: Path) -> dict:
-    """Load a localized YAML file containing prompt variant definitions safely."""
-    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    return raw
+    """Load a prompts YAML file (the active prompts.yaml or a variant) as a dict."""
+    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
-def _prompts_dict_from_set(ps: PromptSet) -> dict:
-    """Convert a strictly-typed PromptSet Pydantic model into a flat dictionary."""
-    return {k: getattr(ps, k) for k in _TEMPLATE_KEYS}
+def _templates(raw: dict) -> dict:
+    """The four templates of a loaded prompts file; missing ones are empty."""
+    return {k: raw.get(k, "") for k in _TEMPLATE_KEYS}
+
+
+def _variant_from_raw(raw: dict, default_name: str) -> PromptVariant:
+    """A loaded prompts file as a PromptVariant (name/description from ``_meta`` if present)."""
+    meta = raw.get("_meta", {})
+    return PromptVariant(
+        name=meta.get("name", default_name),
+        description=meta.get("description", ""),
+        prompts=PromptSet(**_templates(raw)),
+    )
 
 
 # ─── Active prompts ─────────────────────────────────────────────────────────────
@@ -79,14 +88,7 @@ async def get_active():
     """Retrieve the currently active prompt configuration from disk."""
     if not _active_path().exists():
         raise HTTPException(status_code=404, detail="config/prompts.yaml not found")
-    raw = _read_variant_file(_active_path())
-    prompts = {k: raw.get(k, "") for k in _TEMPLATE_KEYS}
-    meta = raw.get("_meta", {})
-    return PromptVariant(
-        name=meta.get("name", "active"),
-        description=meta.get("description", ""),
-        prompts=PromptSet(**prompts),
-    )
+    return _variant_from_raw(_read_variant_file(_active_path()), "active")
 
 
 @prompt_router.put("/active", response_model=PromptVariant)
@@ -94,7 +96,7 @@ async def update_active(variant: PromptVariant):
     """Update and hot-reload the active prompt configuration immediately."""
     _validate_templates(variant.prompts)
     import src.main as main_module
-    prompts_dict = _prompts_dict_from_set(variant.prompts)
+    prompts_dict = variant.prompts.model_dump()
     main_module.config.save_prompts(prompts_dict)
     _reload_prompt_manager(prompts_dict)
     logger.info("Active prompts updated and reloaded")
@@ -113,10 +115,7 @@ async def list_variants():
     if not _variants_dir().exists():
         return []
 
-    def templates(raw: dict) -> dict:
-        return {k: raw.get(k, "") for k in _TEMPLATE_KEYS}
-
-    active = templates(_read_variant_file(_active_path())) if _active_path().exists() else None
+    active = _templates(_read_variant_file(_active_path())) if _active_path().exists() else None
 
     summaries = []
     for f in sorted(_variants_dir().glob("*.yaml")):
@@ -125,7 +124,7 @@ async def list_variants():
         summaries.append(PromptVariantSummary(
             name=f.stem,
             description=meta.get("description", ""),
-            is_active=templates(raw) == active,
+            is_active=_templates(raw) == active,
         ))
     return summaries
 
@@ -136,14 +135,7 @@ async def get_variant(name: str):
     path = _variant_path(name)
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Variante '{name}' nicht gefunden")
-    raw = _read_variant_file(path)
-    meta = raw.get("_meta", {})
-    prompts = {k: raw.get(k, "") for k in _TEMPLATE_KEYS}
-    return PromptVariant(
-        name=meta.get("name", name),
-        description=meta.get("description", ""),
-        prompts=PromptSet(**prompts),
-    )
+    return _variant_from_raw(_read_variant_file(path), name)
 
 
 @prompt_router.put("/variants/{name}", response_model=PromptVariant)
@@ -152,11 +144,7 @@ async def save_variant(name: str, variant: PromptVariant):
     _validate_templates(variant.prompts)
     _variants_dir().mkdir(parents=True, exist_ok=True)
 
-    data = {
-        "_meta": {"name": variant.name, "description": variant.description},
-    }
-    for k in _TEMPLATE_KEYS:
-        data[k] = getattr(variant.prompts, k)
+    data = {"_meta": {"name": variant.name, "description": variant.description}, **variant.prompts.model_dump()}
 
     path = _variant_path(name)
     path.write_text(
@@ -189,23 +177,16 @@ async def activate_variant(name: str):
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Variante '{name}' nicht gefunden")
 
-    raw = _read_variant_file(path)
-    prompts_dict = {k: raw.get(k, "") for k in _TEMPLATE_KEYS}
-
-    ps = PromptSet(**prompts_dict)
-    _validate_templates(ps)
+    variant = _variant_from_raw(_read_variant_file(path), name)
+    _validate_templates(variant.prompts)
 
     import src.main as main_module
+    prompts_dict = variant.prompts.model_dump()
     main_module.config.save_prompts(prompts_dict)
     _reload_prompt_manager(prompts_dict)
 
-    meta = raw.get("_meta", {})
     logger.info(f"Variant activated: {name}")
-    return PromptVariant(
-        name=meta.get("name", name),
-        description=meta.get("description", ""),
-        prompts=ps,
-    )
+    return variant
 
 
 # ─── Preview ────────────────────────────────────────────────────────────────────
