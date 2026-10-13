@@ -19,11 +19,10 @@ mehrere Minuten, nicht parallel zur Simulation). Ein Golden-Set-Lauf dauert ~1 m
 
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 1 | 5.5 Vektorsuche reproduzierbar machen | Gering-Mittel — verlässliche Eval-Vergleiche | Gering-Mittel | 🟡 | ±2 Abschnitte Schwankung zwischen Prozessen |
-| 2 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Antwortqualität und Prompt-Größe; mit der Chunk-Prüfung aus 5.2 messbar |
-| 3 | 3.12 Folgefragen ohne Rückbezugswort | Gering-Mittel — passende Quellen bei „fass das kürzer zusammen“ | Gering | 🟢 | Im Live-Test gefunden (13.10.) |
-| 4 | 3.10 Restliche Abschnitt-Misses | Gering-Mittel — Regelfragen präziser | Mittel | 🟡 | Einzelfälle, je Golden-Set-Lauf prüfbar |
-| 5 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf (extern) |
+| 1 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Antwortqualität und Prompt-Größe; mit der Chunk-Prüfung aus 5.2 messbar |
+| 2 | 3.12 Folgefragen ohne Rückbezugswort | Gering-Mittel — passende Quellen bei „fass das kürzer zusammen“ | Gering | 🟢 | Im Live-Test gefunden (13.10.) |
+| 3 | 3.10 Restliche Abschnitt-Misses | Gering-Mittel — Regelfragen präziser | Mittel | 🟡 | Einzelfälle, je Golden-Set-Lauf prüfbar |
+| 4 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf (extern) |
 | — | 3.2 Session-History ⏸ | Unklar | Mittel | 🟢 | Erst entscheiden, ob gespeicherte Sessions Nutzen haben |
 | — | 3.4 Kommentar zur Bewertung ⏸ | Gering | Gering | 🟢 | Feature |
 | — | 2 Bilder im Chat (Phase 1/2) ⏸ | Mittel / Nice-to-have | Mittel / Mittel-Hoch | 🔴/🟡 | Feature |
@@ -44,18 +43,6 @@ einmal von Hand bedienen (API-Seite live geprüft, siehe unten).
 ---
 
 ## Offene Punkte
-
-### 5.5 Vektorsuche nicht reproduzierbar
-
-Dieselbe Frage liefert nach einem Neustart für ~9 von 278 Golden-Fragen andere Vektor-Kandidaten
-(innerhalb eines Prozesses stabil, Query-Embeddings bitgleich). ChromaDBs HNSW-Suche ist
-approximativ — teils fehlt ein besserer Treffer (p087: 0,796 in einem Lauf gefunden, im anderen
-nicht). Folge: Eval-Läufe in getrennten Prozessen schwanken um ±2 Abschnitte; Varianten deshalb nur
-im selben Prozess vergleichen.
-
-**Lösung (zu prüfen)**: `ef_search` der Collection erhöhen oder bei der kleinen Collection (~20 k
-Chunks) exakt suchen; vorher messen, ob die Abweichung verschwindet und was es an Latenz kostet.
-Ändert die Collection-Konfiguration → nur bei gestopptem Backend.
 
 ### 5.3 Gesamtbudget für Section Expansion
 
@@ -176,6 +163,7 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 | 5.2 | Performance-Tests: Anfrage-Budgets, `pytest -m perf`, Startup-Baseline 17,7 s | 11./12.10. | `docs/testing.md` |
 | 5.3 | Antwortzeit: Qwen3-Denken aus, Kontext 16k, Keep-alive 1 h, `top_rank` 3 — erster Token 8,7 → 1,1 s | 11./12.10. | `docs/provider-strategy.md`, `docs/configuration.md` |
 | 5.4 | Reranker auf der GPU (DirectML): 840 → 50 ms, unter Last 14 s → 70 ms | 12.10. | `docs/embedding-strategy.md` |
+| 5.5 | Vektorsuche exakt und reproduzierbar: `hnsw_ef_search` 100 → 1000 (0 statt 11 abweichende Golden-Fragen zwischen Prozessen, +5 ms/Frage, p105 gewonnen); Stolperfalle l2 beim Anlegen behoben; Prüfung „🎯 Suchgenauigkeit“ in der UI und Anleitung auf der Evaluation-Seite | 13.10. | `docs/embedding-strategy.md`, `docs/configuration.md` |
 | 6.0 (Teil) | Simulation als Quellen-Gruppe `simulation` | 12.10. | oben, `docs/configuration.md` |
 | 7.0/7.1 | Testlücken Gemini/Prompts/Eval auf 100 %, Eval-CLI in der Windows-Konsole | 12.10. | `docs/testing.md` |
 | 7.2 | Code-Review: Filter-Vertrag (nur `$eq`/`$ne`/`$in`/`$and`, sonst 422), GPU-Rückfall bei gleichzeitigen Fragen | 13.10. | `docs/configuration.md`, `docs/testing.md` |

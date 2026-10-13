@@ -13,6 +13,7 @@ Evaluation-Seite steht in [ui-ux.md](ui-ux.md#evaluation-seite-uipages2_evaluati
 6. [Kennzahlen und Ziele](#kennzahlen-und-ziele)
 7. [Vorgehen](#vorgehen)
 8. [Neue Fragen hinzufügen](#neue-fragen-hinzufügen)
+9. [Suchgenauigkeit prüfen](#suchgenauigkeit-prüfen)
 
 ---
 
@@ -139,11 +140,11 @@ A/B-Vergleich: zweimal laufen lassen und die Berichte vergleichen (z.B. `--no-hy
 `--hybrid`). Die Evaluation-Seite hat dafür den Knopf **⚖ A/B starten (Vektor vs. Hybrid)** mit
 Differenz der Trefferquote und den Fragen, die Hybrid gewinnt oder verliert.
 
-> **Varianten im selben Prozess vergleichen.** ChromaDBs HNSW-Suche ist approximativ: nach einem
-> Neustart bekommen ~9 von 278 Fragen leicht andere Vektor-Kandidaten (bei bitgleichen
-> Query-Embeddings), zwei getrennte Läufe weichen deshalb um etwa ±2 Abschnitt-Treffer ab. Für
-> Parameter-Vergleiche in einem Skript je Variante einen `Retriever` bauen und
-> `run_evaluation_with_retriever` aufrufen (Roadmap 5.5).
+> **Läufe sind reproduzierbar** (seit 13.10.): Mit `vectorstore.hnsw_ef_search: 1000` sucht ChromaDB
+> exakt, zwei Läufe in getrennten Prozessen liefern dieselben Treffer (vorher ±2 Abschnitte, ~9
+> Fragen mit anderen Kandidaten nach einem Neustart — [embedding-strategy.md](embedding-strategy.md)
+> → „Warum `ef_search: 1000`?“). Für Parameter-Vergleiche in einem Skript genügt weiterhin je
+> Variante ein `Retriever` mit `run_evaluation_with_retriever`.
 
 Die Konsolenausgabe zeigt die Aufteilung nach `source_type` und einen Block `Misses` mit erwarteten
 und gefundenen Dateien für jeden Fehlschlag — genau lesen, er erklärt, *warum* eine Frage scheitert.
@@ -237,3 +238,22 @@ lassen. Dabei:
    richtige Quelle eintragen. Umgeschriebene Folgefragen werden automatisch in ihrer eigenständigen
    Form übernommen (die Chat-Frage steht in `notes`); hat die Heuristik eine Folgefrage nicht
    erkannt („Und wer ist sein Vater?“ ohne Umschreiben), von Hand eigenständig formulieren.
+
+---
+
+## Suchgenauigkeit prüfen
+
+Evaluation → Retrieval Eval → **🎯 Suchgenauigkeit prüfen** (`POST /eval/search-exactness`, läuft
+im Backend, nur lesend, wenige Sekunden). Für jede Golden-Frage vergleicht sie die Top-K der
+Vektorsuche (HNSW, so wie im Chat: gleicher Filter, `retrieval.top_k`) mit einer exakten Suche über
+alle gespeicherten Vektoren.
+
+- **„Exakt: 278/278“** — die Suche findet dieselben Kandidaten wie eine exakte Suche; Eval-Läufe sind
+  reproduzierbar. Stand 13.10. bei 4745 Chunks mit `hnsw_ef_search: 1000`.
+- **Abweichungen** — die Liste nennt je Frage, wie viele Chunks der exakten Top-K fehlen. Dann
+  `vectorstore.hnsw_ef_search` in `settings.yaml` erhöhen (z.B. verdoppeln), **Backend neu starten**
+  (ChromaDB übernimmt einen geänderten Wert erst beim Neuladen des Index) und erneut prüfen.
+
+Wann: nach größeren Index-Änderungen — neue Quellen, viele neue Dokumente, Bildbeschreibungen. Ein
+paar neue Notizen ändern nichts. Hintergrund und Messung:
+[embedding-strategy.md](embedding-strategy.md) → „Warum `ef_search: 1000`?“.

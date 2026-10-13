@@ -98,6 +98,24 @@ class EvalJobStatus(BaseModel):
     result_file: str | None = None
 
 
+class ExactnessDeviation(BaseModel):
+    """A golden question whose HNSW top-k misses chunks of the exact top-k."""
+    id: str
+    question: str
+    missed: int
+
+
+class SearchExactnessResponse(BaseModel):
+    """Result of comparing the vector search with an exact search over the golden questions."""
+    questions: int
+    exact: int                       # questions whose top-k equals the exact top-k
+    top_k: int
+    chunks: int                      # chunks in the collection
+    ef_search: int
+    deviations: list[ExactnessDeviation]
+    seconds: float
+
+
 class EvalResultSummary(BaseModel):
     """Key figures of a stored report for the results list."""
     filename: str

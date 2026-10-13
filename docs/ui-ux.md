@@ -340,6 +340,10 @@ verschiedenen Quellen nicht. Eine umbenannte `id` gilt als neue Quelle — vorhe
 Golden Set pflegen, Suche testen, Evaluationen laufen lassen, Ergebnisse vergleichen. Sieben Tabs.
 Hintergrund und Kennzahlen: [evaluation.md](evaluation.md).
 
+Oben auf der Seite erklärt der Ausklapper **„ℹ️ Anleitung“** jeden Tab, wann man ihn braucht und
+was die Zahlen bedeuten (Text in `ui/evaluation_guide.md` — bei neuen Tabs oder Kennzahlen dort
+ergänzen).
+
 Die Parameter-Regler (Kandidaten, finale Chunks, Max. pro Quelle) in „Frage testen“ und „Retrieval
 Eval“ starten bei den Werten aus `settings.yaml` (`GET /config`, 60 s gecacht) — ein Lauf mit
 unberührten Reglern misst also, was der Chat nutzt. Ist `/config` nicht erreichbar, gelten 15/8/3.
@@ -348,7 +352,7 @@ unberührten Reglern misst also, was der Chat nutzt. Ist `/config` nicht erreich
 |---|---|
 | **1 Golden Set** | Bearbeitbare Tabelle aller Fragen aus `evaluation/qa_pairs.yaml` (ID, Frage, Typ, Kategorie, erwartete Quellen, Antwort-Stichwörter, Notizen); **💾 Golden Set speichern** über `PUT /eval/qa-pairs`, Zeilen ohne ID oder Frage werden übersprungen |
 | **2 Frage testen** | Eine Frage gegen den Retriever (`POST /eval/preview`, ohne LLM) mit einstellbaren Parametern; Tabelle der Chunks (Score, Quelle, Überschrift, Vorschau) + Latenz. Das Ergebnis bleibt im Session-State stehen, sodass sich die Frage danach ins Golden Set übernehmen lässt (erwartete Quellen vorbelegt, eine schon vergebene ID wird abgelehnt) |
-| **3 Retrieval Eval** | Ganzes Golden Set ohne LLM als Hintergrund-Job (`POST /eval/run`, `GET /eval/status/{id}`); Trefferquote, Abschnitt-Trefferquote, Aufschlüsselung nach Typ, Details je Frage (⚠️ = richtige Datei, falscher Abschnitt); **⚖ A/B starten (Vektor vs. Hybrid)** |
+| **3 Retrieval Eval** | Ganzes Golden Set ohne LLM als Hintergrund-Job (`POST /eval/run`, `GET /eval/status/{id}`); Trefferquote, Abschnitt-Trefferquote, Aufschlüsselung nach Typ, Details je Frage (⚠️ = richtige Datei, falscher Abschnitt); **⚖ A/B starten (Vektor vs. Hybrid)**; **🎯 Suchgenauigkeit prüfen** (`POST /eval/search-exactness`): „Exakt: N/N Golden-Fragen …“ oder eine Warnung mit den Fragen, bei denen die Vektorsuche Chunks der exakten Top-K verpasst, und dem Hinweis, `hnsw_ef_search` zu erhöhen |
 | **4 End-to-End** | Golden Set mit LLM: Trefferquote, Answer-Contains-Quote, mittlere Latenz, Antworten je Frage. Langsam |
 | **5 Ergebnisse** | Gespeicherte Läufe (max. 3 je Typ) mit Kennzahlen und Config, löschen; zwei Läufe vergleichen (Differenz + Fragen, deren Treffer sich geändert hat) |
 | **6 Feedback** | Aktuelle 👍/👎 je Chat-Antwort (`GET /feedback`, letzte Bewertung je `message_id`, zurückgenommene ausgelassen). Standard nur 👎, 👍 per Schalter. Ausgewählte Zeilen werden zu Golden-Set-Fragen `f###` (`ui/feedback.py`): 👍 behält die Quellen der Antwort, 👎 bleibt leer mit Notiz zum Nachtragen; umgeschriebene Folgefragen gehen in ihrer eigenständigen Form ein; Fragen, die schon im Golden Set stehen, werden übersprungen. Ändert sich die angezeigte Liste (👍-Schalter, neue Bewertungen), werden die Häkchen zurückgesetzt, damit keins auf eine andere Antwort rutscht |

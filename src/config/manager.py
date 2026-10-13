@@ -156,6 +156,10 @@ class VectorStoreConfig(BaseModel):
     collection_name: str = "lorekeeper"
     # Only "cosine" gives correct scores (score = 1 - distance); fixed when the collection is created
     distance_metric: str = "cosine"
+    # HNSW search breadth. 1000 makes the search exact and identical across processes at our size
+    # (4.7 k chunks; 100 missed exact top-15 members for 38 of 278 golden questions and varied per
+    # process) for ~2 ms per query — roadmap 5.5. Applied to an existing collection at startup.
+    hnsw_ef_search: int = 1000
 
 
 class RerankingConfig(BaseModel):

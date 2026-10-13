@@ -194,6 +194,7 @@ Modellwechsel erfordert eine komplette Neu-Indizierung.
 | `persist_directory` | `str` | `./chroma_data` | Speicherort der eingebetteten ChromaDB |
 | `collection_name` | `str` | `lorekeeper` | ChromaDB-Collection |
 | `distance_metric` | `str` | `cosine` | Nur `cosine` liefert richtige Scores (`1 − Distanz`); `l2`/`ip` würden den `score_threshold` verfälschen. Wird beim Anlegen der Collection festgelegt — eine Abweichung steht als Warnung im Log |
+| `hnsw_ef_search` | `int` | `1000` | Suchbreite der HNSW-Suche. 1000 sucht bei ~5 k Chunks exakt und in jedem Prozess gleich (+~2 ms pro Abfrage); wird beim Start auf eine bestehende Collection übertragen (Log-Zeile `hnsw ef_search … → …`). Eine Änderung wirkt erst nach einem Neustart des Backends (ChromaDB übernimmt sie beim Neuladen des Index). Bei deutlich mehr Chunks: Evaluation → 🎯 Suchgenauigkeit prüfen ([evaluation.md](evaluation.md#suchgenauigkeit-prüfen)) |
 
 ChromaDB läuft immer eingebettet im Backend-Prozess. Kein zweiter Prozess darf gleichzeitig auf
 `chroma_data/` zugreifen.

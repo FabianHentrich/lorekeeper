@@ -6,6 +6,7 @@ end-to-end eval, and result comparison — all from the UI.
 
 import hashlib
 import time
+from pathlib import Path
 
 import pandas as pd
 import requests
@@ -253,10 +254,18 @@ def _render_retrieval_result(result: dict):
             st.code(f"[{e.get('id', '?')}] {e.get('error', '')}", language=None)
 
 
+# Short in-app guide, kept as Markdown next to the pages (tables can't be wrapped in code);
+# the full reference is docs/evaluation.md in the repo
+_GUIDE = (Path(__file__).resolve().parents[1] / "evaluation_guide.md").read_text(encoding="utf-8")
+
+
 # ─── Page ─────────────────────────────────────────────────────────────
 
 st.title("🎯 Evaluation")
 st.caption("Golden Set verwalten, Retrieval testen und tunen, Ergebnisse vergleichen.")
+
+with st.expander("ℹ️ Anleitung: Was die Tabs prüfen und wann man sie braucht"):
+    st.markdown(_GUIDE)
 
 tab_gs, tab_test, tab_ret, tab_e2e, tab_results, tab_fb, tab_chunks = st.tabs([
     "Golden Set", "Frage testen", "Retrieval Eval", "End-to-End", "Ergebnisse", "Feedback", "Chunks",
@@ -570,6 +579,29 @@ with tab_ret:
                     st.markdown("**Hybrid**")
                     _render_retrieval_result(res_b)
 
+        except Exception as e:
+            _show_eval_error(e)
+
+    # Search exactness: is hnsw_ef_search still large enough for the index? (roadmap 5.5)
+    st.divider()
+    st.markdown("**🎯 Suchgenauigkeit** — findet die Vektorsuche dieselben Kandidaten wie eine exakte Suche?")
+    st.caption("Nach größeren Index-Änderungen (neue Quellen, viele neue Dokumente) einmal prüfen. "
+               "Nur lesend, dauert einige Sekunden.")
+    if st.button("🎯 Suchgenauigkeit prüfen", key="ret_exact"):
+        try:
+            resp = requests.post(f"{API_URL}/eval/search-exactness", timeout=300)
+            raise_for_status(resp)
+            ex = resp.json()
+            summary = (f"{ex['exact']}/{ex['questions']} Golden-Fragen mit exakten Top-{ex['top_k']} · "
+                       f"{ex['chunks']} Chunks · `hnsw_ef_search` {ex['ef_search']} · {ex['seconds']:.1f} s")
+            if not ex["deviations"]:
+                st.success(f"Exakt: {summary}")
+            else:
+                st.warning(f"Nicht exakt: {summary}. Die Suche verpasst bei diesen Fragen Chunks, die eine "
+                           "exakte Suche finden würde — `vectorstore.hnsw_ef_search` in `settings.yaml` "
+                           "erhöhen (z.B. verdoppeln), Backend neu starten, erneut prüfen.")
+                st.dataframe(pd.DataFrame([{"ID": d["id"], "Frage": d["question"][:80], "verpasst": d["missed"]}
+                                           for d in ex["deviations"]]), hide_index=True, width="stretch")
         except Exception as e:
             _show_eval_error(e)
 

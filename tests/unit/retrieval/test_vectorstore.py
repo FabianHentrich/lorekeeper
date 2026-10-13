@@ -139,32 +139,49 @@ class TestChunkId:
 class TestGetCollection:
     """Test suite for collection creation and distance-metric handling."""
 
-    def _fresh(self, vs_config, embed_service, collection_metadata):
-        svc = VectorStoreService(vs_config, embed_service)
-        client = MagicMock()
-        client.get_or_create_collection.return_value.metadata = collection_metadata
-        svc._client = client
-        return svc, client
+    """Against a real in-memory ChromaDB: the API's quirks (l2 trap, ignored config on reopen) are the point."""
 
-    def test_cosine_space_passed_explicitly(self, vs_config, embed_service):
-        """Verify cosine is requested explicitly instead of relying on Chroma's l2 default."""
-        svc, client = self._fresh(vs_config, embed_service, {"hnsw:space": "cosine"})
-        svc._get_collection()
-        kwargs = client.get_or_create_collection.call_args[1]
-        assert kwargs["metadata"] == {"hnsw:space": "cosine"}
+    def _service(self, vs_config, embed_service, name, ef=1000):
+        import chromadb
+        cfg = vs_config.model_copy(update={"collection_name": name, "hnsw_ef_search": ef})
+        svc = VectorStoreService(cfg, embed_service)
+        svc._client = chromadb.EphemeralClient()
+        return svc
+
+    @staticmethod
+    def _name():
+        import uuid
+        return f"vs-{uuid.uuid4().hex[:12]}"
+
+    def test_new_collection_is_cosine_with_the_configured_ef_search(self, vs_config, embed_service):
+        """Chroma 1.5 silently made an l2 collection when space came via metadata next to a configuration."""
+        hnsw = self._service(vs_config, embed_service, self._name())._get_collection().configuration_json["hnsw"]
+        assert (hnsw["space"], hnsw["ef_search"]) == ("cosine", 1000)
+
+    def test_existing_collection_gets_the_configured_ef_search(self, vs_config, embed_service, caplog):
+        """get_or_create ignores the configuration of an existing collection — the service applies it."""
+        name = self._name()
+        self._service(vs_config, embed_service, name, ef=100)._get_collection()
+
+        with caplog.at_level("INFO"):
+            col = self._service(vs_config, embed_service, name, ef=1000)._get_collection()
+
+        assert col.configuration_json["hnsw"]["ef_search"] == 1000
+        assert "ef_search 100 → 1000" in caplog.text
 
     def test_warns_on_legacy_l2_collection(self, vs_config, embed_service, caplog):
-        """Verify a collection created without hnsw:space (l2 default) triggers a wipe hint."""
-        svc, _ = self._fresh(vs_config, embed_service, None)
+        """Verify a collection created without an explicit space (l2 default) triggers a wipe hint."""
+        name = self._name()
+        svc = self._service(vs_config, embed_service, name)
+        svc._get_client().create_collection(name)          # legacy: no space given
         with caplog.at_level("WARNING"):
             svc._get_collection()
         assert "uses distance 'l2'" in caplog.text
 
     def test_no_warning_when_space_matches(self, vs_config, embed_service, caplog):
         """Verify no warning for a collection already using the configured metric."""
-        svc, _ = self._fresh(vs_config, embed_service, {"hnsw:space": "cosine"})
         with caplog.at_level("WARNING"):
-            svc._get_collection()
+            self._service(vs_config, embed_service, self._name())._get_collection()
         assert "uses distance" not in caplog.text
 
 
@@ -338,3 +355,37 @@ class TestWipeCollection:
         with pytest.raises(RuntimeError, match="locked"):
             service.wipe_collection()
 
+
+
+
+class TestCompareWithExactSearch:
+    """The search-exactness check (roadmap 5.5) against a real in-memory ChromaDB with random vectors."""
+
+    @staticmethod
+    def _store(vs_config, embed_service, ef):
+        import uuid
+
+        import chromadb
+        import numpy as np
+        cfg = vs_config.model_copy(update={"collection_name": f"ex-{uuid.uuid4().hex[:12]}", "hnsw_ef_search": ef})
+        svc = VectorStoreService(cfg, embed_service)
+        svc._client = chromadb.EphemeralClient()
+        rng = np.random.default_rng(7)
+        vectors = rng.normal(size=(3000, 24)).astype("float32")
+        col = svc._get_collection()
+        for start in range(0, 3000, 1000):
+            col.add(ids=[f"c{i}" for i in range(start, start + 1000)],
+                    embeddings=vectors[start:start + 1000].tolist(),
+                    metadatas=[{"document_type": "image" if i % 50 == 0 else "markdown"}
+                               for i in range(start, start + 1000)])
+        queries = rng.normal(size=(40, 24)).astype("float32").tolist()
+        return svc, queries
+
+    def test_a_narrow_search_misses_chunks_of_the_exact_top_k(self, vs_config, embed_service):
+        svc, queries = self._store(vs_config, embed_service, ef=15)
+        missed = svc.compare_with_exact_search(queries, 15, {"document_type": {"$ne": "image"}})
+        assert len(missed) == 40 and sum(missed) > 0
+
+    def test_a_wide_search_is_exact(self, vs_config, embed_service):
+        svc, queries = self._store(vs_config, embed_service, ef=3000)
+        assert svc.compare_with_exact_search(queries, 15, {"document_type": {"$ne": "image"}}) == [0] * 40

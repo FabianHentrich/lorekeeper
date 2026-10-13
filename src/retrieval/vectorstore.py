@@ -10,6 +10,7 @@ import logging
 from typing import Any
 
 import chromadb
+import numpy as np
 from chromadb.errors import NotFoundError
 
 from src.config.manager import VectorStoreConfig
@@ -44,23 +45,35 @@ class VectorStoreService:
         return self._client
 
     def _get_collection(self):
-        """Return (or create on first call) the configured collection with the right distance metric."""
+        """Return (or create on first call) the configured collection with the right distance metric
+        and search breadth.
+
+        Everything goes through ``configuration`` — combined with the old ``metadata={"hnsw:space": …}``
+        Chroma 1.5 silently created an **l2** collection. The space is fixed at creation (a mismatch is
+        logged with the fix); ``ef_search`` can change and is applied to an existing collection here,
+        because ``get_or_create_collection`` ignores the configuration of a collection that exists.
+        """
         if self._collection is None:
             client = self._get_client()
             # Always set the space explicitly — Chroma defaults to l2, which turns
             # ``1 - distance`` into ``2*cos - 1`` and silently tightens score_threshold.
             self._collection = client.get_or_create_collection(
                 name=self.config.collection_name,
-                metadata={"hnsw:space": self.config.distance_metric},
+                configuration={"hnsw": {"space": self.config.distance_metric,
+                                        "ef_search": self.config.hnsw_ef_search}},
             )
-            # The space is fixed at creation; an existing collection keeps its old one.
-            space = (self._collection.metadata or {}).get("hnsw:space", "l2")
+            hnsw = (self._collection.configuration_json or {}).get("hnsw") or {}
+            space = hnsw.get("space", "l2")
             if space != self.config.distance_metric:
                 logger.warning(
                     f"Collection '{self.config.collection_name}' uses distance '{space}' but config "
                     f"expects '{self.config.distance_metric}' — scores are wrong until the collection "
                     "is wiped (POST /admin/wipe) and re-ingested."
                 )
+            if hnsw.get("ef_search") != self.config.hnsw_ef_search:
+                self._collection.modify(configuration={"hnsw": {"ef_search": self.config.hnsw_ef_search}})
+                logger.info("Collection '%s': hnsw ef_search %s → %s", self.config.collection_name,
+                            hnsw.get("ef_search"), self.config.hnsw_ef_search)
         return self._collection
 
     def _chunk_id(self, chunk: Chunk) -> str:
@@ -225,6 +238,31 @@ class VectorStoreService:
         """Every stored chunk as ChromaDB's column dict (``ids`` plus the ``include`` fields) —
         for the full scans of the BM25 build and recategorize."""
         return self._get_collection().get(include=include)
+
+    def compare_with_exact_search(self, query_embeddings: list[list[float]], top_k: int,
+                                  where: dict | None) -> list[int]:
+        """For each query: how many of the exact top-``top_k`` chunks the HNSW search misses (0 = exact).
+
+        The exact side is a brute-force cosine over every stored vector that passes ``where`` (ChromaDB
+        applies the filter for both sides). Used by ``/eval/search-exactness`` to show whether
+        ``hnsw_ef_search`` is still large enough for the index size (roadmap 5.5). Reads only.
+        """
+        collection = self._get_collection()
+        hnsw = collection.query(query_embeddings=query_embeddings, n_results=top_k, where=where, include=[])
+        data = collection.get(where=where, include=["embeddings"])
+        ids = data.get("ids") or []
+        if not ids:
+            return [0] * len(query_embeddings)
+        stored = np.asarray(data["embeddings"], dtype=np.float32)
+        stored /= np.linalg.norm(stored, axis=1, keepdims=True)
+        queries = np.asarray(query_embeddings, dtype=np.float32)
+        queries /= np.linalg.norm(queries, axis=1, keepdims=True)
+        sims = queries @ stored.T
+        missed = []
+        for row, found in zip(sims, hnsw["ids"], strict=True):
+            exact = {ids[i] for i in np.argsort(-row)[:top_k]}
+            missed.append(len(exact - set(found)))
+        return missed
 
     def get_chunks_for_file(self, source_id: str, source_file: str,
                             where: dict | None = None) -> list[dict[str, Any]]:

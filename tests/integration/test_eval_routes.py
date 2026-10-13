@@ -475,3 +475,51 @@ def test_eval_is_refused_while_an_ingest_runs(client, tmp_eval_dir):
 
     assert r.status_code == 409 and "Indexierung" in r.json()["detail"]
     assert not _eval_jobs
+
+
+
+# ─── Search exactness (roadmap 5.5) ─────────────────────────────────────────────
+
+@pytest.fixture
+def exactness_env(client, tmp_eval_dir, monkeypatch):
+    from src.config.manager import RetrievalConfig, VectorStoreConfig
+    _write_pairs(tmp_eval_dir, [{**_PAIR, "id": "a", "question": "Frage A"}, {**_PAIR, "id": "b", "question": "Frage B"}])
+    main_module.config.settings.retrieval = RetrievalConfig(top_k=15)
+    main_module.config.settings.vectorstore = VectorStoreConfig(hnsw_ef_search=1000)
+    seen = {}
+
+    class Store:
+        def compare_with_exact_search(self, vectors, top_k, where):
+            seen.update(vectors=vectors, top_k=top_k, where=where)
+            return [0, 2]
+
+        def count(self):
+            return 4745
+
+    monkeypatch.setattr(main_module, "vectorstore", Store())
+    monkeypatch.setattr(main_module, "embedding_service",
+                        SimpleNamespace(embed_queries_sync=lambda texts: [[float(len(t))] for t in texts]))
+    return seen
+
+
+def test_search_exactness_reports_the_deviating_questions(client, exactness_env):
+    r = client.post("/eval/search-exactness")
+
+    assert r.status_code == 200
+    body = r.json()
+    assert (body["questions"], body["exact"], body["top_k"], body["chunks"], body["ef_search"]) == (2, 1, 15, 4745, 1000)
+    assert body["deviations"] == [{"id": "b", "question": "Frage B", "missed": 2}]
+    # same filter as the chat: image chunks excluded on both sides
+    assert exactness_env["where"] == {"document_type": {"$ne": "image"}}
+    assert exactness_env["vectors"] == [[7.0], [7.0]]
+
+
+def test_search_exactness_is_refused_while_an_ingest_runs(client, exactness_env):
+    from src.api import sources_routes
+    from src.api.schemas import IngestStatusResponse
+    sources_routes._ingest_jobs["j"] = IngestStatusResponse(job_id="j", status="running")
+    try:
+        assert client.post("/eval/search-exactness").status_code == 409
+    finally:
+        sources_routes._ingest_jobs.clear()
+    assert "vectors" not in exactness_env

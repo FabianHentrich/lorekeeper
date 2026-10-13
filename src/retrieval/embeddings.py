@@ -59,6 +59,14 @@ class EmbeddingService:
         )
         return embedding.tolist()
 
+    def embed_queries_sync(self, texts: list[str]) -> list[list[float]]:
+        """Batch-embed questions (``query:`` prefix) synchronously — for eval checks that embed the whole
+        golden set at once. Only call from worker threads, never from the event loop."""
+        model = self._get_model()
+        embeddings = model.encode([self._with_query_prefix(t) for t in texts],
+                                  batch_size=self.config.batch_size, normalize_embeddings=self.config.normalize)
+        return np.asarray(embeddings).tolist()
+
     def embed_texts_sync(self, texts: list[str]) -> list[list[float]]:
         """Batch-embed passages synchronously. Only call from worker threads, never from the event loop."""
         model = self._get_model()

@@ -23,6 +23,9 @@ from src.retrieval.vectorstore import VectorStoreService
 logger = logging.getLogger(__name__)
 
 RULES_GROUP = "rules"
+# Image chunks are filename stubs that only add noise (roadmap 2) — excluded from every search, and
+# from the search-exactness check, which must compare exactly what the chat searches
+IMAGE_EXCLUSION: dict = {"document_type": {"$ne": "image"}}
 _RERANK_MAX_TOKENS = 512  # cross-encoder input limit (query + chunk); longer pairs are truncated
 _SLOT_MIN_PLACES = 3  # with fewer final chunks one rules chunk would push out most of the answer's context
 
@@ -194,7 +197,7 @@ class Retriever:
         # Build where filter — image chunks are excluded entirely: their content is just a
         # filename stub that pollutes ranking. So no image ever becomes a source today; real
         # image descriptions and their retrieval are roadmap item 2.
-        text_filter: dict = {"document_type": {"$ne": "image"}}
+        text_filter: dict = IMAGE_EXCLUSION
         if metadata_filters:
             conditions = [text_filter] + [{k: v} for k, v in metadata_filters.items()]
             where: dict | None = {"$and": conditions}

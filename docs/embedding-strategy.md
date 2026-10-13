@@ -198,6 +198,35 @@ passt zu Fragen nach der Entität; das LLM sieht weiter nur den sauberen Inhalt.
 Das funktioniert, weil Obsidian-Vaults die Identität einer Entität per Konvention im Dateinamen
 tragen. Bei beliebigen Markdown-Sammlungen ginge das nicht.
 
+### Warum `ef_search: 1000`?
+
+ChromaDB sucht über einen HNSW-Graphen — approximativ. Mit der Voreinstellung `ef_search: 100`
+fehlte bei 38 von 278 Golden-Fragen mindestens ein Chunk, den eine exakte Suche unter den Top 15
+hat, und nach einem Neustart bekamen 6–8 Fragen andere Kandidaten (bitgleiche Query-Embeddings).
+Eval-Läufe in getrennten Prozessen schwankten dadurch um ±2 Abschnitte. Gemessen am 13.10. auf
+einer Kopie des Index (4745 Chunks; Top 15 mit dem Bild-Filter wie im Betrieb):
+
+| `ef_search` | anders als exakte Suche | anders zwischen Prozessen | pro Abfrage |
+|---|---|---|---|
+| 100 | 38–39 Fragen | bis 8 | 9,6 ms |
+| 200 | 12–13 | bis 8 | 9,9 ms |
+| 500 | 4–6 | bis 2 | 10,9 ms |
+| **1000** | **0** | **0** | 11,8 ms |
+
+Golden Set (je zwei Läufe in getrennten Prozessen): mit 100 Dateien 275/274 von 278, Abschnitte
+136/135 von 153, 11 Fragen mit anderer Trefferliste; mit **1000 beide Läufe identisch**, 276/278 und
+137/153 (p105 gewinnt Datei und Abschnitt, nichts verloren), Ø 183 statt 178 ms pro Frage. Der Wert
+ist an die Größe gebunden: wächst der Index deutlich (Bilder, weitere Quellen), mit **Evaluation →
+🎯 Suchgenauigkeit prüfen** gegen eine exakte Suche neu prüfen
+([evaluation.md](evaluation.md#suchgenauigkeit-prüfen)). Ein geänderter Wert wirkt erst nach einem
+Neustart des Backends — ChromaDB übernimmt ihn beim Laden des Index, nicht in einen schon geladenen. Eine exakte Suche in NumPy statt HNSW wäre ein
+zweiter Suchweg (Filter, Spieler-Modus, Synchronität mit der Collection) — bei 0 Abweichung unnötig.
+
+**Stolperfalle beim Anlegen**: Gibt man ChromaDB 1.5 `metadata={"hnsw:space": "cosine"}` *und*
+`configuration` zusammen, entsteht still eine **l2**-Collection. LoreKeeper setzt deshalb Raum und
+`ef_search` nur über `configuration`; ein späteres `get_or_create_collection` ignoriert die
+Konfiguration einer bestehenden Collection, `ef_search` wird dann per `modify` nachgezogen.
+
 ### Warum Chunking nach Überschriften?
 
 Obsidian-Dokumente sind **über Überschriften strukturiert**: ein Charakterbogen hat `## Werte`,

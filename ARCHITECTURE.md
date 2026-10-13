@@ -482,7 +482,7 @@ Das Backend lauscht nur auf `127.0.0.1:8000`; der Browser spricht ausschließlic
 | DELETE | `/sources/{id}`             | Quelle und ihre Chunks entfernen |
 | POST   | `/sources/recategorize`     | `group`/`category` neu setzen (ohne Re-Embedding) |
 | POST   | `/admin/wipe`               | Collection leeren (Body `{"confirm": "DELETE"}`) |
-| —      | Sperre während eines Ingests | `DELETE /sources/{id}`, `/admin/wipe`, `/sources/recategorize` und `/eval/run` antworten mit 409 „Eine Indexierung läuft bereits“ |
+| —      | Sperre während eines Ingests | `DELETE /sources/{id}`, `/admin/wipe`, `/sources/recategorize`, `/eval/run` und `/eval/search-exactness` antworten mit 409 „Eine Indexierung läuft bereits“ |
 | GET/POST | `/provider`               | Aktiver Provider / zur Laufzeit wechseln (`provider`: `ollama` oder `gemini`, sonst 422) |
 | GET    | `/provider/gemini/status`   | Ob ein Gemini-Key da ist (ohne den Key) |
 | POST   | `/provider/gemini/key`      | Gemini-Key zur Laufzeit setzen (nur im Prozess) |
@@ -495,6 +495,7 @@ Das Backend lauscht nur auf `127.0.0.1:8000`; der Browser spricht ausschließlic
 | POST   | `/eval/preview`             | Eine Frage gegen den Retriever (ohne LLM), mit `role`; weggelassene `top_k`/`top_k_rerank`/`max_per_source` = Wert aus `settings.yaml` |
 | GET    | `/eval/chunks/files`        | Indizierte Dateien einer Quelle (Chunk-Inspector) |
 | GET    | `/eval/chunks`              | Alle Chunks einer Datei in Dokumentreihenfolge |
+| POST   | `/eval/search-exactness`    | Vektorsuche gegen exakte Suche über alle Golden-Fragen (gleicher Filter und `top_k` wie im Chat; nur lesend; 409 während eines Ingests) |
 | POST   | `/eval/run`                 | Retrieval- oder End-to-End-Eval als Job (`eval_type`: `retrieval` oder `e2e`, sonst 422; Parameter wie `/eval/preview`) |
 | GET    | `/eval/status/{job_id}`     | Fortschritt eines Eval-Jobs |
 | GET/DELETE | `/eval/results[/{file}]` | Ergebnisse auflisten / lesen / löschen |

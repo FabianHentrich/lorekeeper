@@ -99,3 +99,34 @@ def test_comparing_two_stored_results_lists_the_flipped_questions(fake_backend, 
     metrics = {m.label: m.value for m in at.metric}
     assert (metrics["Hit Rate A"], metrics["Hit Rate B"], metrics["Differenz"]) == ("100.0%", "50.0%", "-50.0%")
     assert "**1 Fragen mit geändertem Ergebnis:**" in [m.value for m in at.markdown]
+
+
+
+EXACT = {"questions": 278, "exact": 278, "top_k": 15, "chunks": 4745, "ef_search": 1000, "deviations": [], "seconds": 3.2}
+
+
+def test_search_exactness_ok(fake_backend, monkeypatch):
+    monkeypatch.setitem(conftest.PAYLOADS, "/eval/search-exactness", EXACT)
+    at = _ok(open_page("evaluation").run())
+    _ok(at.button(key="ret_exact").click().run())
+
+    assert any(s.value.startswith("Exakt: 278/278 Golden-Fragen") for s in at.success)
+
+
+def test_search_exactness_deviations_suggest_raising_ef_search(fake_backend, monkeypatch):
+    monkeypatch.setitem(conftest.PAYLOADS, "/eval/search-exactness", {
+        **EXACT, "exact": 277, "deviations": [{"id": "p087", "question": "Was ist ein Geist?", "missed": 1}]})
+    at = _ok(open_page("evaluation").run())
+    _ok(at.button(key="ret_exact").click().run())
+
+    [warning] = [w.value for w in at.warning if w.value.startswith("Nicht exakt")]
+    assert warning.startswith("Nicht exakt: 277/278") and "hnsw_ef_search" in warning
+    assert at.dataframe[-1].value["ID"].tolist() == ["p087"]
+
+
+def test_guide_explains_every_tab(fake_backend):
+    at = _ok(open_page("evaluation").run())
+    guide = next(e for e in at.expander if e.label.startswith("ℹ️ Anleitung"))
+    text = " ".join(m.value for m in guide.markdown)
+    for tab in ("Golden Set", "Frage testen", "Retrieval Eval", "End-to-End", "Ergebnisse", "Feedback", "Chunks"):
+        assert f"**{tab}**" in text

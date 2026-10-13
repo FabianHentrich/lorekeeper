@@ -32,6 +32,7 @@ vectorstore:
   persist_directory: ./chroma_data   # embedded ChromaDB in the backend process
   collection_name: lorekeeper
   distance_metric: cosine
+  hnsw_ef_search: 1000            # exakte, reproduzierbare Suche bei ~5 k Chunks (+2 ms/Abfrage; Roadmap 5.5)
 
 # Retrieval
 retrieval:

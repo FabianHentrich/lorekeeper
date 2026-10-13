@@ -32,6 +32,7 @@ from src.api.eval_schemas import (
     RetrievalPreviewRequest,
     RetrievalPreviewResponse,
     RetrievedChunkResponse,
+    SearchExactnessResponse,
 )
 from src.api.sources_routes import refuse_during_ingest
 from src.config.manager import atomic_write_text
@@ -114,6 +115,44 @@ async def retrieval_preview(req: RetrievalPreviewRequest):
         ],
         latency_ms=round(latency_ms, 1),
     )
+
+
+# ─── Search exactness ────────────────────────────────────────────────
+
+@eval_router.post("/search-exactness", response_model=SearchExactnessResponse)
+async def search_exactness():
+    """Compare the vector search (HNSW) with an exact search for every golden question.
+
+    HNSW is approximate; ``vectorstore.hnsw_ef_search`` decides how close it gets. At 4.7 k chunks
+    1000 gave identical results (roadmap 5.5) — this check shows whether that still holds after the
+    index grew. Same filter and top-k as the chat; reads only, takes a few seconds.
+    """
+    import src.main as main_module
+    from src.retrieval.retriever import IMAGE_EXCLUSION
+
+    if not _QA_PATH.exists():
+        raise HTTPException(status_code=404, detail="qa_pairs.yaml nicht gefunden")
+    pairs = load_qa_pairs(_QA_PATH)
+    if not pairs:
+        raise HTTPException(status_code=400, detail="Golden Set ist leer")
+    refuse_during_ingest()  # a half-built index would measure nothing useful
+
+    settings = main_module.config.settings
+    top_k = settings.retrieval.top_k
+    vs = main_module.vectorstore
+    t0 = time.perf_counter()
+    vectors = await run_in_threadpool(main_module.embedding_service.embed_queries_sync,
+                                      [p["question"] for p in pairs])
+    missed = await run_in_threadpool(vs.compare_with_exact_search, vectors, top_k, IMAGE_EXCLUSION)
+    chunks = await run_in_threadpool(vs.count)
+    deviations = [{"id": p.get("id", "?"), "question": p["question"], "missed": m}
+                  for p, m in zip(pairs, missed, strict=True) if m]
+    seconds = round(time.perf_counter() - t0, 1)
+    logger.info("Search exactness: %d/%d golden questions exact (top_k=%d, ef_search=%d, %d chunks, %.1f s)",
+                len(pairs) - len(deviations), len(pairs), top_k, settings.vectorstore.hnsw_ef_search, chunks, seconds)
+    return SearchExactnessResponse(questions=len(pairs), exact=len(pairs) - len(deviations), top_k=top_k,
+                                   chunks=chunks, ef_search=settings.vectorstore.hnsw_ef_search,
+                                   deviations=deviations, seconds=seconds)
 
 
 # ─── Chunk inspector ─────────────────────────────────────────────────
