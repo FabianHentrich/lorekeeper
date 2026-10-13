@@ -165,5 +165,6 @@ class GeminiProvider(BaseLLMProvider):
         try:
             await self._client.aio.models.get(model=self.model)
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug("Gemini health check failed: %s: %s", type(e).__name__, e)
             return False

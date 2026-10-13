@@ -17,6 +17,7 @@ attacker could simply renew): every wrong attempt waits ``FAILURE_DELAY_S``, and
 for ``LOCKOUT_S``. Sessions that are already logged in are not affected.
 """
 import hmac
+import logging
 import os
 import threading
 import time
@@ -26,6 +27,9 @@ import streamlit as st
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
+# The UI process has no log file: without a handler, WARNING and above reach the Streamlit console
+logger = logging.getLogger(__name__)
 
 # 127.0.0.1, not localhost: on Windows localhost resolves to IPv6 first and costs ~2 s per connection
 DEFAULT_API_URL = "http://127.0.0.1:8000"
@@ -72,9 +76,15 @@ def check_password(entered: str) -> bool:
     if hmac.compare_digest(entered.encode(), _password().encode()):
         with _lock:
             _failures.clear()
+        logger.info("Admin login")
         return True
     with _lock:
         _failures.append(_now())
+        failures = len(_failures)
+    if failures >= MAX_FAILURES:
+        logger.warning("Admin login failed — %d failures, login locked for %d min", failures, LOCKOUT_S // 60)
+    else:
+        logger.warning("Admin login failed (%d of %d before the lock)", failures, MAX_FAILURES)
     time.sleep(FAILURE_DELAY_S)
     return False
 

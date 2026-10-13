@@ -626,7 +626,7 @@ Offen: `recategorize` importiert weiterhin das private `_resolve_category` aus d
 
 **Aufwand**: Gering-Mittel. Last 🟢.
 
-## 10.0 Logging prüfen und wenn nötig erweitern — 🔄 Paket A erledigt, B und C offen
+## 10.0 Logging prüfen und wenn nötig erweitern — 🔄 Pakete A und B erledigt, C offen
 - sind alle wichtigen events geloggt
 - sind alle wichtigen fehler geloggt
 - sind unnötige dinge geloggt
@@ -664,6 +664,8 @@ Offen: `recategorize` importiert weiterhin das private `_resolve_category` aus d
 **Entscheidungen (13.10.)**: #11 — die Frage steht **einmal pro Anfrage vollständig auf INFO** (Anker, um die folgenden Zeilen zuzuordnen); bei Folgefragen Original und umgeschriebene Fassung in derselben Zeile, die übrigen Zeilen ohne Fragetext. #12 — ja, `logs/ollama.log`.
 
 **Paket A umgesetzt (13.10.)**: #1 `setup_logging` leitet `uvicorn.error` in die Logdatei (nur wenn es die Root-Handler nicht ohnehin erreicht, ohne Doppel bei erneutem Setup); die Middleware schreibt bei unbehandelten Exceptions eine eigene Zeile. #2 Ingest-Jobs loggen Start, Ende (mit Zahl der Dateifehler) und Fehler mit Traceback, jeweils mit Job-ID und Art (`incremental`/`full`/`reindex <id>`). #3 Traceback bei Eval-Jobs, Datei-Fehlern im Orchestrator, Fehlern pro Eval-Frage, LLM-Fehlern (sync + Stream), Chunk-Inspector und Fallback (WARNING mit `exc_info`); Condense und Health-Loop mit Exception-Typ. #4 Abgebrochene Streams: `Stream aborted by the client after … (… chars sent)`. #14 Session-GC überlebt eine fehlschlagende Bereinigung. #15 Kaputte Eval-Ergebnisse werden mit WARNING übersprungen. #16 `get_embedding_dimension()` (FutureWarning weg), ungenutzter Logger in `onnx_reranker` entfernt, `_log` → `logger`. Tests: neu `tests/integration/test_logging_paths.py` (Middleware, Ingest-Fehler, Stream-Abbruch), `uvicorn.error` → Datei in `test_logging_setup.py`, Fallback-Traceback, GC, Eval-Job-Traceback — alle sieben gegen den alten Stand mutationsgeprüft (je ein Test schlägt fehl). Doku: `docs/operations.md` → Logs „Fehler suchen“. Suite: 639 grün (vorher 632).
+
+**Paket B umgesetzt (13.10.)**: #5 `update_health()` loggt nur Wechsel (WARNING bei Ausfall, INFO bei Erholung, auch der Startzustand); Grund eines fehlgeschlagenen Checks auf DEBUG (Ollama, Gemini); „model not pulled“ einmal pro Ausfall statt alle 60 s. #6 `Sources saved: … player_visible=[…]`, `Source removed: … (N chunks deleted)`, `Settings updated: {Werte}` (Allow-Liste enthält keine Secrets), `Gemini runtime key set/cleared` ohne den Key. #7 Abgelehnte Spieler-Anfragen in `/query*` und `/eval/preview` mit Grund (WARNING); Admin-Login-Fehlversuche und Sperre in `ui/admin_gate.py` (Streamlit-Konsole, die UI hat keine Logdatei). #8 `session=<8> role=<rolle>` an Timings, LLM-Fehlern und Stream-Abbruch, `model=` an der Timings-Zeile. #13 Beide CLIs nutzen `setup_logging` statt `basicConfig`. Tests: Health-Wechsel, Session/Rolle/Modell, Gemini-Key ohne Key im Log, `player_visible` beim Speichern, Ablehnungsgrund (Spieler-Sicherheitstest erweitert), „not pulled“ einmal, Admin-Login — alle sieben mutationsgeprüft. Doku: `docs/operations.md` → Logs. Suite: 644 grün.
 
 **Hinweis**: `logs/lorekeeper.log` enthält bis Zeile ~1.225 noch Testausgaben vom 10.10. (Ursache seit 03f5c36 behoben) — einmal rotieren/löschen, damit `grep ERROR` nicht in die Irre führt.
 

@@ -6,6 +6,7 @@ PUT/DELETE /sources exercise the actual sources.yaml persistence.
 """
 from __future__ import annotations
 
+import logging
 import time
 from types import SimpleNamespace
 from urllib.parse import quote
@@ -185,12 +186,15 @@ def test_put_sources_persists_to_sidecar(client, env):
     assert [s["id"] for s in saved["sources"]] == ["neu"]
 
 
-def test_player_visible_defaults_off_and_round_trips(client, env):
-    """New sources are game-master-only; the player flag survives PUT, sources.yaml and GET."""
+def test_player_visible_defaults_off_and_round_trips(client, env, caplog):
+    """New sources are game-master-only; the player flag survives PUT, sources.yaml and GET — and the log
+    shows which sources players can search from now on."""
+    caplog.set_level(logging.INFO, logger="src.api.routes")
     r = client.put("/sources", json={"sources": [
         {**_src("regeln", env), "player_visible": True}, _src("lore", env),
     ]})
     assert r.status_code == 200
+    assert "Sources saved: 2 sources, player_visible=['regeln']" in [rec.getMessage() for rec in caplog.records]
 
     saved = {s["id"]: s for s in yaml.safe_load(env.sources_path.read_text(encoding="utf-8"))["sources"]}
     assert saved["regeln"]["player_visible"] is True

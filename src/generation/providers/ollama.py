@@ -53,6 +53,7 @@ class OllamaProvider(BaseLLMProvider):
         self.config = config
         self.base_url = config.base_url
         self.model = config.model
+        self._warned_not_pulled = False
 
         self._client = AsyncOpenAI(
             base_url=f"{self.base_url}/v1",
@@ -195,10 +196,12 @@ class OllamaProvider(BaseLLMProvider):
                 if resp.status_code != 200:
                     return False
                 names = {m.get("name", "") for m in resp.json().get("models", [])}
-        except Exception:
+        except Exception as e:
+            logger.debug("Ollama health check failed: %s: %s", type(e).__name__, e)
             return False
         # Ollama stores an untagged name ("qwen3") as "qwen3:latest"
         available = self.model in names or f"{self.model}:latest" in names
-        if not available:
+        if not available and not self._warned_not_pulled:  # once, not on every 60-s health check
             logger.warning(f"Ollama model '{self.model}' is not pulled — run: ollama pull {self.model}")
+        self._warned_not_pulled = not available
         return available

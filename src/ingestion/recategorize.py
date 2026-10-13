@@ -82,6 +82,7 @@ def recategorize(config: ConfigManager | None = None, vectorstore: VectorStoreSe
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    from src.logging_setup import setup_logging
+    setup_logging(config_manager.settings.logging)  # same file, levels and suppress list as the backend
     result = recategorize()
     print(f"Done: {result}")

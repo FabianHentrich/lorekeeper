@@ -144,14 +144,12 @@ async def lifespan(app: FastAPI):
     gc_task = asyncio.create_task(conversation_manager.start_gc())
 
     # Start background health checker
-    from src.api.routes import _health_cache, _health_loop
-    # Seed cache with initial state (vectorstore + provider already initialized)
+    from src.api.routes import _health_loop, update_health
+    # Seed cache with initial state (vectorstore + provider already initialized); logs the first state
     try:
-        chroma_ok = vectorstore.health_check()
-        llm_ok = await provider.health_check()
-        _health_cache.update({"chroma": chroma_ok, "llm": llm_ok})
-    except Exception:
-        pass
+        update_health(vectorstore.health_check(), await provider.health_check())
+    except Exception as e:
+        logger.warning("Initial health check failed (%s: %s); the health loop retries", type(e).__name__, e)
     health_task = asyncio.create_task(_health_loop())
 
     logger.info(f"LoreKeeper ready (provider={settings.llm.provider}, model={getattr(provider, 'model', '?')})")

@@ -82,8 +82,10 @@ async def retrieval_preview(req: RetrievalPreviewRequest):
     try:
         filters = effective_filters(req.role, main_module.config.settings.ingestion.sources, req.metadata_filters)
     except NoPlayerSources:
+        logger.warning("Refused %s preview: no source is released for players", req.role)
         raise HTTPException(status_code=403, detail="Keine Quelle für Spieler freigegeben") from None
     except InvalidFilter as e:
+        logger.warning("Refused %s preview: invalid metadata_filters (%s)", req.role, e)
         raise HTTPException(status_code=422, detail=f"Ungültiger metadata_filters: {e}") from None
 
     retriever = main_module.retriever

@@ -382,11 +382,13 @@ def test_player_preview_is_restricted_too(env):
     assert {c["source_id"] for c in data.json()["chunks"]} <= set(PLAYER_SOURCES)
 
 
-def test_player_without_released_sources_is_refused(env, monkeypatch):
+def test_player_without_released_sources_is_refused(env, monkeypatch, caplog):
     for s in env.config.settings.ingestion.sources:
         monkeypatch.setattr(s, "player_visible", False)
     assert env.client.post("/query/stream", json={"question": "Was ist Überschaden?", "role": "player"}).status_code == 403
     assert env.client.post("/eval/preview", json={"question": "x", "role": "player"}).status_code == 403
+    refusals = [r.getMessage() for r in caplog.records if r.getMessage().startswith("Refused player")]
+    assert len(refusals) == 2, "a refusal must say why in the log, not only as a status code"
 
 
 @pytest.mark.parametrize("hybrid", [False, True], ids=["vector", "hybrid"])

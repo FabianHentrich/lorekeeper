@@ -126,6 +126,22 @@ class TestOllamaProvider:
             assert await provider.health_check() is expected
 
     @pytest.mark.asyncio
+    async def test_missing_model_is_warned_once_not_every_check(self, caplog):
+        """The health loop runs every 60 s — the hint to pull the model belongs in the log once per outage."""
+        provider = OllamaProvider(config=OllamaConfig(model="qwen3:8b"))
+        with patch("httpx.AsyncClient") as mock_client_cls:
+            mock_resp = MagicMock(status_code=200)
+            mock_resp.json.return_value = {"models": []}
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(return_value=mock_resp)
+            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+            for _ in range(3):
+                await provider.health_check()
+
+        assert sum("is not pulled" in r.getMessage() for r in caplog.records) == 1
+
+    @pytest.mark.asyncio
     async def test_health_check_failure(self):
         """
         Verify that receiving underlying connection failures via httpx gracefully

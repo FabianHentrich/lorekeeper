@@ -74,3 +74,47 @@ def fake_services(monkeypatch):
     monkeypatch.setattr(main_module, "prompt_manager", api.FakePromptManager())
     monkeypatch.setattr(main_module, "retriever", api.FakeRetriever())
     monkeypatch.setattr(main_module, "provider", api.FakeProvider())
+
+
+# ─── Package B: important events ───────────────────────────────────────────────
+
+def test_health_logs_only_changes(monkeypatch, caplog):
+    """A line per change (down = WARNING, recovered = INFO), not one every 60 s."""
+    monkeypatch.setattr(routes, "_health_cache", {"chroma": False, "llm": False})
+    with caplog.at_level(logging.INFO, logger="src.api.routes"):
+        routes.update_health(True, True)
+        routes.update_health(True, True)
+        routes.update_health(True, False)
+
+    changes = [r for r in caplog.records if r.getMessage().startswith("Health changed")]
+    assert [r.levelno for r in changes] == [logging.INFO, logging.WARNING]
+    assert "llm=False (was chroma=True llm=True)" in changes[1].getMessage()
+
+
+async def test_answer_lines_carry_session_role_and_model(fake_services, caplog):
+    """With several people asking at once, session/role/model tie the lines of one question together."""
+    response = await routes.query_stream(QueryRequest(question="Was ist Arkenfeld?", role="game_master"))
+    with caplog.at_level(logging.INFO, logger="src.api.routes"):
+        async for _ in response.body_iterator:
+            pass
+
+    timings = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("Query timings"))
+    assert "session=test-ses role=game_master model=qwen3:8b" in timings
+
+
+async def test_gemini_key_change_is_logged_without_the_key(monkeypatch, caplog):
+    """Set/clear shows up in the log; the key itself never does."""
+    from src.generation.providers import gemini
+    monkeypatch.setattr(main_module, "config", SimpleNamespace(settings=SimpleNamespace(
+        llm=SimpleNamespace(provider="ollama"))))
+    try:
+        with caplog.at_level(logging.INFO, logger="src.api.routes"):
+            await routes.set_gemini_key({"api_key": "AIza-SECRET"})
+            await routes.set_gemini_key({"api_key": None})
+    finally:
+        gemini.set_runtime_api_key(None)
+
+    messages = [r.getMessage() for r in caplog.records]
+    assert any(m.startswith("Gemini runtime key set") for m in messages)
+    assert any(m.startswith("Gemini runtime key cleared") for m in messages)
+    assert not any("SECRET" in m for m in messages)

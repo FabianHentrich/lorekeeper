@@ -72,3 +72,15 @@ def test_api_url_from_environment(monkeypatch, fake_backend):
     import admin_gate
 
     assert admin_gate.api_url() == "http://127.0.0.1:9000"
+
+
+def test_failed_logins_and_the_lock_are_logged(monkeypatch, caplog):
+    """Guessing the password in the home network must leave a trace (Streamlit console)."""
+    import admin_gate
+    monkeypatch.setenv("LOREKEEPER_ADMIN_PASSWORD", "geheim")
+    for _ in range(admin_gate.MAX_FAILURES):
+        assert not admin_gate.check_password("falsch")
+
+    warnings = [r.getMessage() for r in caplog.records if r.name == "admin_gate"]
+    assert warnings[0] == f"Admin login failed (1 of {admin_gate.MAX_FAILURES} before the lock)"
+    assert warnings[-1].startswith(f"Admin login failed — {admin_gate.MAX_FAILURES} failures, login locked")

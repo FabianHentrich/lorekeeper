@@ -74,11 +74,17 @@ def _ms(since: float) -> int:
     return round((time.perf_counter() - since) * 1000)
 
 
-def _log_timings(timings: dict) -> None:
+def _who(session_id: str, role: str) -> str:
+    """``session=<first 8 chars> role=<role>`` — ties the lines of one question together when several
+    people ask at the same time."""
+    return f"session={session_id[:8]} role={role}"
+
+
+def _log_timings(timings: dict, who: str, model: str) -> None:
     """One INFO line per answered query — the basis for spotting slow stages."""
     stages = " ".join(f"{k}={v}" for k, v in timings.get("retrieval_stages_ms", {}).items())
     logger.info(
-        f"Query timings: condense={timings.get('condense_ms', 0)}ms "
+        f"Query timings: {who} model={model} condense={timings.get('condense_ms', 0)}ms "
         f"retrieval={timings.get('retrieval_ms', 0)}ms ({stages}) "
         f"first_token={timings.get('first_token_ms', 0)}ms total={timings.get('total_ms', 0)}ms "
         f"chunks={timings.get('chunks', 0)} prompt_chars={timings.get('prompt_chars', 0)}"
@@ -97,8 +103,10 @@ async def _prepare_query(request: QueryRequest, timings: dict):
         filters = effective_filters(request.role, main_module.config.settings.ingestion.sources,
                                     request.metadata_filters)
     except NoPlayerSources:
+        logger.warning("Refused %s query: no source is released for players", request.role)
         raise HTTPException(status_code=403, detail="Keine Quelle für Spieler freigegeben") from None
     except InvalidFilter as e:
+        logger.warning("Refused %s query: invalid metadata_filters (%s)", request.role, e)
         raise HTTPException(status_code=422, detail=f"Ungültiger metadata_filters: {e}") from None
 
     session = cm.get_or_create_session(request.session_id, access_role=request.role)
@@ -181,7 +189,7 @@ async def query(request: QueryRequest):
             answer = response.content
             model_used = response.model
         except Exception as e:
-            logger.exception("LLM generation failed")
+            logger.exception("LLM generation failed (%s)", _who(session.session_id, request.role))
             raise HTTPException(status_code=503, detail=f"LLM nicht erreichbar: {e}") from e
     else:
         answer = pm.render_no_context(question=request.question)
@@ -193,7 +201,7 @@ async def query(request: QueryRequest):
     sources = [SourceReference(**_chunk_to_source_dict(c)) for c in chunks]
     latency_ms = (time.time() - start) * 1000
     timings["total_ms"] = _ms(t_start)
-    _log_timings(timings)
+    _log_timings(timings, _who(session.session_id, request.role), model_used)
 
     return QueryResponse(
         answer=answer,
@@ -244,10 +252,11 @@ async def query_stream(request: QueryRequest):
                 event = json.dumps({"type": "token", "content": full_answer})
                 yield f"data: {event}\n\n"
         except (asyncio.CancelledError, GeneratorExit):
-            logger.info("Stream aborted by the client after %dms (%d chars sent)", _ms(t_start), len(full_answer))
+            logger.info("Stream aborted by the client after %dms (%d chars sent, %s)", _ms(t_start),
+                        len(full_answer), _who(session.session_id, request.role))
             raise
         except Exception as e:
-            logger.exception("Streaming generation failed")
+            logger.exception("Streaming generation failed (%s)", _who(session.session_id, request.role))
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
             return
 
@@ -258,13 +267,14 @@ async def query_stream(request: QueryRequest):
         if usage:
             session.add_usage(usage)
         timings["total_ms"] = _ms(t_start)
-        _log_timings(timings)
+        model_used = stream_ctx.model or prov.model
+        _log_timings(timings, _who(session.session_id, request.role), model_used)
 
         done_event = json.dumps({
             "type": "done",
             "session_id": session.session_id,
             "sources": sources,
-            "model_used": stream_ctx.model or prov.model,
+            "model_used": model_used,
             "search_query": search_query,
             "timings": timings,
             "usage": usage,
@@ -378,6 +388,16 @@ async def ingest_status(job_id: str):
     return _ingest_jobs[job_id]
 
 
+def update_health(chroma_ok: bool, llm_ok: bool) -> None:
+    """Store a health result; only a change is logged (WARNING when something went down, INFO on
+    recovery) — a line every 60 s would bury the moment the LLM actually went away."""
+    previous = (_health_cache["chroma"], _health_cache["llm"])
+    _health_cache.update({"chroma": chroma_ok, "llm": llm_ok})
+    if previous != (chroma_ok, llm_ok):
+        level = logging.INFO if chroma_ok and llm_ok else logging.WARNING
+        logger.log(level, "Health changed: chroma=%s llm=%s (was chroma=%s llm=%s)", chroma_ok, llm_ok, *previous)
+
+
 async def _health_loop(interval: float = _HEALTH_INTERVAL_S):
     """Background loop that refreshes the health cache periodically."""
     while True:
@@ -385,7 +405,7 @@ async def _health_loop(interval: float = _HEALTH_INTERVAL_S):
             import src.main as main_module
             chroma_ok = await run_in_threadpool(main_module.vectorstore.health_check)
             llm_ok = await main_module.provider.health_check()
-            _health_cache.update({"chroma": chroma_ok, "llm": llm_ok})
+            update_health(chroma_ok, llm_ok)
         except Exception as e:
             logger.warning("Background health check failed (%s: %s)", type(e).__name__, e)
         await asyncio.sleep(interval)
@@ -566,6 +586,9 @@ async def update_sources(payload: dict):
         raise HTTPException(status_code=400, detail="Doppelte Quellen-IDs")
     main_module.config.settings.ingestion.sources = new_sources
     main_module.config.save_sources()
+    # player_visible decides what players can search — the log must show when it changed
+    logger.info("Sources saved: %d sources, player_visible=%s", len(new_sources),
+                [s.id for s in new_sources if s.player_visible])
     return {"sources": [s.model_dump() for s in new_sources]}
 
 
@@ -602,6 +625,7 @@ async def delete_source(source_id: str):
     deleted = vs.delete_by_source_id(source_id)
     main_module.config.settings.ingestion.sources = [s for s in sources if s.id != source_id]
     main_module.config.save_sources()
+    logger.info("Source removed: %s (%d chunks deleted)", source_id, deleted)
     return {"deleted_chunks": deleted}
 
 
@@ -653,6 +677,9 @@ async def set_gemini_key(payload: dict):
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Key vom Provider abgelehnt: {e}") from e
 
+    # Never the key itself
+    logger.info("Gemini runtime key %s (active provider rebuilt: %s)",
+                "set" if key and key.strip() else "cleared", rebuilt)
     return {"status": "ok", "rebuilt_active_provider": rebuilt}
 
 
@@ -687,7 +714,8 @@ async def update_config(request: ConfigUpdateRequest):
         logger.error(f"save_settings failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
-    logger.info(f"Settings updated: {list(updates.keys())}")
+    # Values are safe to log: the allow-list (_EDITABLE_KEYS) holds no secrets and no paths
+    logger.info("Settings updated: %s", updates)
     return snapshot
 
 

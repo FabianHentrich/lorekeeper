@@ -242,7 +242,22 @@ Was im Log steht:
   fallback`, WARNING) mit Traceback — der Fallback antwortet, ein Fehler im Hauptprovider fällt
   sonst nicht auf.
 - **Abgebrochene Antworten** (Seite geschlossen, Lese-Timeout der UI): `Stream aborted by the client
-  after <ms> (<n> chars sent)` — es fehlt dann die `Query timings`-Zeile.
+  after <ms> (<n> chars sent, …)` — es fehlt dann die `Query timings`-Zeile.
+- **Zuordnung**: `Query timings`, LLM-Fehler und abgebrochene Streams tragen `session=<8 Zeichen>
+  role=<rolle>` (Timings auch `model=` — nach einem Fallback das Modell, das wirklich geantwortet
+  hat). Fragen mehrere Leute gleichzeitig, nach `session=` filtern.
+- **Health**: nur Wechsel — `Health changed: chroma=… llm=… (was …)`, WARNING wenn etwas ausfällt,
+  INFO bei Erholung. Fehlt ein Ollama-Modell, kommt der Hinweis `ollama pull …` einmal pro Ausfall.
+  Den Grund eines fehlgeschlagenen Checks zeigt `logging.level: DEBUG`.
+- **Änderungen**: `Sources saved: … player_visible=[…]` (welche Quellen Spieler durchsuchen
+  können), `Source removed`, `Settings updated: {…}` mit den Werten, `Gemini runtime key set/cleared`
+  (nie der Key selbst).
+- **Abgelehnte Spieler-Anfragen**: `Refused player query/preview: …` mit Grund (keine Quelle
+  freigegeben, ungültiger Filter).
+- **Admin-Login** (UI-Prozess, keine Logdatei → Streamlit-Konsolenfenster): jeder Fehlversuch und
+  die Sperre nach 5 Fehlversuchen als WARNING.
+- Die CLIs `python -m src.ingestion.orchestrator` und `…recategorize` schreiben mit derselben
+  Konfiguration in dieselbe Datei.
 
 Bewertungen (👍/👎 im Chat) landen in `logs/feedback.jsonl`, ein JSON-Objekt pro Zeile. Eine
 geänderte oder zurückgenommene Bewertung ist eine neue Zeile mit derselben `message_id` — die letzte
