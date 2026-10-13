@@ -48,13 +48,12 @@ einmal von Hand bedienen (API-Seite live geprüft, siehe unten).
 `docs/embedding-strategy.md` → „Warum `top_k` 20?“. Danach: „Alte Vault-Werte“ per
 `ingestion.skip_sections` aus dem Index (59 Dateien, Index 4697 → 4419 Chunks, z010 gewonnen),
 36 verwaiste Chunks entfernter Quellen gelöscht, Golden Set ohne z013–z016 (Quellen entfernt) —
-Stand: Datei 272/274, Abschnitt 137/149, Suche exakt mit `ef_search` 2000.
+Stand: Datei 272/274, Abschnitt 137/149, Suche exakt mit `ef_search` 2000. Tabellen-Chunks bekommen ihre
+Zeilennamen in den Embed-Text — Langschwert (p086) und Armbrust (p087) gelöst, Abschnitt 139/149
+(`docs/embedding-strategy.md` → „Aufbau des Embed-Texts“).
 
 **Offen, je mit Diagnose** (Rang des richtigen Chunks in der Vektorsuche, Reranker-Score richtig
 gegen gewählt; Skript-Muster: Rang in den Top 200 + `_predict` je Paar):
-- **Zu tief für mehr Kandidaten** — Waffentabelle 7.1.1: „Langschwert“ (p086) Rang 37, „Armbrust“
-  (p087) Rang 50 hinter „Armdrücker“; der Reranker würde die Armbrust-Tabelle vorn sehen. Ansatz:
-  Embed-Text von Tabellen-Chunks (Zeilennamen stärker gewichten) — braucht Neu-Indizierung.
 - **Reranker wählt anders** — Würfelsystem (p003, 1.1 auf Rang 6, −5,6 gegen −4,7), Erlernen
   neuer Zauber (p010, 5.1 gegen 5.3), Verbände (p099, Rang 1, verliert im Rerank), Flammenheilung
   (p108, Rang 22).
@@ -137,6 +136,7 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 | 3.11 | Spieler-/Spielleiter-Modus inkl. Sicherheitstests (deterministisch, live, Spy-Test) | 11./12.10. | `ARCHITECTURE.md` 4.8, `docs/testing.md` |
 | 3.12 | Folgefragen ohne Inhaltswort („Fass das kürzer zusammen“, „Gib mir ein Beispiel“) gehen durch Condense — Suche und Quellenliste passen zum Thema; Wortliste nur ergänzend (unbekanntes Wort = Inhaltswort), Unit-Tests in beide Richtungen, mutationsgeprüft. Live 13.10.: „Fass das kürzer zusammen“ → „Fasse die Beschreibung von Arkenfeld kurz zusammen.“ (1,2 s), Quellen `Orte/Arkenfeld.md` statt Venthir/Regelbuch | 13.10. | `docs/prompts.md` |
 | 3.10 (Teil) | `top_k` 20 (+2 Abschnitte, Hybrid verworfen), `ingestion.skip_sections` gegen „Alte Vault-Werte“ (Full-Reindex, 4419 Chunks), `ef_search` 1000 → 2000 (nach den Re-Index-Läufen wieder exakt), verwaiste Chunks entfernt, Golden Set 274 Fragen — Datei 272/274, Abschnitt 137/149 | 13.10. | `docs/embedding-strategy.md`, `docs/parsing.md`, `docs/configuration.md`, `docs/evaluation.md` |
+| 3.10 (Teil) | Tabellen-Chunks: Zeilennamen im Embed-Text („Einträge: Dolch, …“) — Langschwert/Armbrust gelöst, Abschnitt 137 → 139/149, nichts verloren (Vektor-Rang 22 → 14, 47 → 2); Fließtext-Variante verworfen; Full-Reindex, Suche exakt | 13.10. | `docs/embedding-strategy.md` |
 | 12.1 | Ingest-Lücke: Ein Lauf über alle Quellen löscht Chunks von Quellen, die nicht mehr in `sources.yaml` stehen (vorher blieben sie durchsuchbar, 13.10.: 36 Chunks); nie bei leerer Quellenliste, nicht bei Einzel-Reindex; beide Schutzbedingungen mutationsgeprüft | 13.10. | `ARCHITECTURE.md` 4, `docs/data-flow.md`, `docs/configuration.md` |
 | 4.1 | Heimnetz-Betrieb (`start.ps1 -Server`, Firewall-Skript, kein Autostart) | 11.10. | `docs/operations.md` |
 | 4.2 (Teil) | Spieler-Filter im Backend erzwungen (`role`) | 12.10. | `ARCHITECTURE.md` 4.8 |

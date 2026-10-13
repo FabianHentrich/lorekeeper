@@ -388,6 +388,19 @@ flowchart TD
 - **Schicht 2 — Kontext:** `Überschrift > Unterüberschrift` — welcher Abschnitt (vom Chunker in den
   Inhalt geschrieben).
 - **Schicht 3 — Inhalt:** der eigentliche Text, Tabellen, Listen.
+- **Nur bei Tabellen — Zeilennamen:** zwischen Identität und Inhalt eine Zeile `Einträge: Dolch,
+  Kurzschwert, Langschwert, …` mit der ersten Zelle jeder Tabellenzeile (ohne Kopf- und
+  Trennzeile; Fortsetzungszeilen mit leerer erster Zelle zählen nicht). Tabellen bleiben beim
+  Chunking ganz, ein Vektor ist dann der Durchschnitt aller Zeilen — eine Frage nach **einer** Zeile
+  („Wie viel Schaden macht ein Langschwert?“) traf ihn nur schwach. Der gespeicherte Inhalt bleibt
+  unverändert.
+
+  Messung 13.10. (Roadmap 3.10, je Variante eine frisch aufgebaute Collection, nur die Vektoren der
+  1821 Tabellen-Chunks neu): Abschnitte 137 → **139/149** (+ Langschwert p086, + Armbrust p087),
+  nichts verloren; Vektor-Rang des richtigen Chunks Langschwert 22 → 14, Armbrust 47 → 2.
+  **Verworfen:** die Tabelle als Fließtext („Armbrust — schwer · GEW + 5 · …“, ohne `|` und `**`) —
+  gewann nur p086, verlor x005, Armbrust blieb auf Rang 44. Abgeschnitten wird bei Tabellen fast nie:
+  nur 6 Simulations-Tabellen sind länger als die 512 Token des Modells.
 
 ---
 

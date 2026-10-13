@@ -178,7 +178,7 @@ Der End-to-End-Lauf kann `expected_source_ids` nicht prüfen — `/query` liefer
 | Kennzahl | Skript | Was sie misst | Ziel | Stand 13.10. |
 |---|---|---|---|---|
 | **Trefferquote (Datei)** | `evaluate_retrieval.py` | Erwartete Datei unter den gefundenen Chunks | > 0,85 | 0,993 (272/274) |
-| **Abschnitt-Trefferquote** | `evaluate_retrieval.py` | Erwarteter Abschnitt unter den Überschriften | darf nicht sinken | 137/149 |
+| **Abschnitt-Trefferquote** | `evaluate_retrieval.py` | Erwarteter Abschnitt unter den Überschriften | darf nicht sinken | 139/149 |
 | **Answer Contains** | `evaluate.py` | Stichwörter in der LLM-Antwort | > 0,75 | — |
 | **Latenz** | `evaluate.py` | Antwortzeit gesamt, gemittelt über die beantworteten Fragen (fehlgeschlagene zählen bei den Quoten als Fehltreffer) | < 10 s | ~3–4 s |
 

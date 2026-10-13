@@ -106,6 +106,38 @@ class TestBuildEmbedText:
         identity_line = text.split("\n\n")[0]
         assert identity_line.count("Arkenfeld") == 1
 
+    _WEAPONS = ("**7.1.1 Waffen** > **Fernkampfwaffen**\n\n"
+                "|**Waffe**|**Kat.**|**normal**|**Besonderheiten**|\n"
+                "|---|---|---|---|\n"
+                "|**Kurzbogen**|leicht|GEW + 1|**15 m**|\n"
+                "|**l**<br>**Langbogen**|normal|GEW + 2|**60 m**|\n"
+                "|**Armbrust**|schwer|GEW + 5|**45 m**; nur ein Geschoß, Nach-|\n"
+                "||||laden als**Bonusaktion**|")
+
+    def _embed_text(self, service, content):
+        return service._build_embed_text(Chunk(content=content, source_file="pnp_regelbuch.pdf",
+                                               source_path="/r.pdf", document_type="pdf", metadata={}))
+
+    def test_table_gets_its_row_names_after_the_identity(self, service):
+        """One vector averages all rows — the names make a single row findable ("Armbrust" ranked 47th)."""
+        parts = self._embed_text(service, self._WEAPONS).split("\n\n")
+
+        assert parts[0] == "pnp_regelbuch"
+        assert parts[1] == "Einträge: Kurzbogen, l Langbogen, Armbrust"
+        assert self._WEAPONS in "\n\n".join(parts[2:])     # the table itself stays unchanged
+
+    def test_header_separator_and_continuation_rows_are_not_names(self, service):
+        names = self._embed_text(service, self._WEAPONS).split("\n\n")[1]
+
+        assert "Waffe" not in names and "---" not in names and "laden" not in names
+
+    def test_two_tables_each_skip_their_header(self, service):
+        content = "|A|B|\n|---|---|\n|x|1|\n\nText\n\n|C|D|\n|:--|--:|\n|y|2|"
+        assert self._embed_text(service, content).split("\n\n")[1] == "Einträge: x, y"
+
+    def test_text_without_table_has_no_names_line(self, service, sample_chunk):
+        assert "Einträge:" not in service._build_embed_text(sample_chunk)
+
 
 class TestChunkId:
     """Test suite verifying hash stability for reproducible partial sequence mapping."""

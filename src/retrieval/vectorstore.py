@@ -7,6 +7,7 @@ explicitly and a mismatch with an existing collection is logged.
 """
 import hashlib
 import logging
+import re
 from typing import Any
 
 import chromadb
@@ -23,6 +24,32 @@ logger = logging.getLogger(__name__)
 _CHROMA_BATCH = 5000
 # Cosine scores closer than this count as tied (float32 noise) in the exactness check
 _TIE_EPS = 1e-6
+_TABLE_SEPARATOR = re.compile(r"^\|?(\s*:?-{2,}:?\s*\|)+\s*:?-*:?\s*\|?$")
+
+
+def _table_row_names(content: str) -> list[str]:
+    """First cell of every body row of the Markdown tables in ``content`` (header and separator rows skipped).
+
+    Rows with an empty first cell are continuations of the row above (PDF tables wrap long cells) and are
+    left out. ``**``/``<br>`` are removed so the names read as plain words.
+    """
+    names: list[str] = []
+    header_pending = True
+    for line in content.split("\n"):
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            header_pending = True   # a new table starts with its own header row
+            continue
+        if _TABLE_SEPARATOR.match(stripped):
+            continue
+        if header_pending:
+            header_pending = False
+            continue
+        first = stripped[1:].split("|", 1)[0]
+        first = re.sub(r"<br\s*/?>", " ", first).replace("**", "").strip()
+        if first:
+            names.append(first)
+    return names
 
 
 class VectorStoreService:
@@ -101,6 +128,12 @@ class VectorStoreService:
 
         No explicit weighting — sentence-transformers has none. Prominence is
         achieved by position (beginning of text) and repetition.
+
+        Table chunks get a line with their row names after the identity ("Einträge: Dolch, Kurzschwert,
+        Langschwert, …"): a table is one vector, the average of all rows, so a single row ("Wie viel Schaden
+        macht ein Langschwert?") matched it weakly. Golden set 13.10. (roadmap 3.10): weapon questions
+        p086/p087 solved, vector rank 22 → 14 and 47 → 3, nothing lost; rewriting the table as plain text
+        was worse.
         """
         parts = []
 
@@ -118,6 +151,10 @@ class VectorStoreService:
         if aliases:
             identity += " | " + " | ".join(aliases)
         parts.append(identity)
+
+        # 1b. Row names of tables — makes single rows findable (see docstring)
+        if names := _table_row_names(chunk.content):
+            parts.append("Einträge: " + ", ".join(names))
 
         # 2+3. Heading + content (already prepended in chunk.content by _doc_to_chunk)
         parts.append(chunk.content)
