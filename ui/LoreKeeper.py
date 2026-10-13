@@ -14,7 +14,7 @@ import requests
 import roles
 import streamlit as st
 from admin_gate import admin_login_form, api_url, is_admin
-from backend import raise_for_status
+from backend import get_json, raise_for_status
 
 
 def _render_sources(sources: list[dict]):
@@ -152,7 +152,7 @@ def _fetch_sidebar_state(api_url: str):
     Cached for 30 s, so reruns (every click) cost no request; actions that change one of these
     values clear the cache.
     """
-    return requests.get(f"{api_url}/sidebar-state", timeout=5).json()
+    return get_json(f"{api_url}/sidebar-state", timeout=5)
 
 
 def _sidebar_state() -> dict | None:

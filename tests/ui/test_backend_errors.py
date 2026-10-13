@@ -64,3 +64,43 @@ def test_variant_names_are_url_encoded_and_a_failed_delete_is_shown(fake_backend
     _ok(at.button(key="del_Meine Variante").click().run())
 
     assert any("500: Datei gesperrt" in e.value for e in at.error), [e.value for e in at.error]
+
+
+# ─── Reads go through get_json (roadmap 11.0 P5) ────────────────────────────────
+
+def test_failed_golden_set_read_never_overwrites_the_golden_set(fake_backend, monkeypatch):
+    """"Add to golden set" reads the set, appends, writes it back. A failed read used to be taken as
+    data ({"detail": …} → no pairs) — the PUT then replaced the whole golden set with one question."""
+    from tests.ui.test_question_preview import PREVIEW
+    monkeypatch.setitem(conftest.PAYLOADS, "/eval/preview", PREVIEW)
+    at = _ok(open_page("evaluation").run())
+    at.text_input(key="test_question").set_value("Was ist Arkenfeld?").run()
+    _ok(at.button(key="test_run").click().run())
+
+    fake_backend.errors["GET /eval/qa-pairs"] = (500, {"detail": "Datei gesperrt"})
+    at.text_input(key="test_add_id_1").set_value("m099").run()
+    _ok(at.button(key="test_add_btn_1").click().run())
+
+    assert "PUT /eval/qa-pairs" not in fake_backend.calls
+    assert any("500: Datei gesperrt" in e.value for e in at.error), [e.value for e in at.error]
+
+
+def test_eval_job_unknown_to_the_backend_ends_polling_at_once(fake_backend, monkeypatch):
+    """404 (job registry gone after a backend restart) is final — not 45 retries ending in "unreachable"."""
+    monkeypatch.setitem(conftest.PAYLOADS, "/eval/run", {"job_id": "j1", "status": "queued"})
+    fake_backend.errors["GET /eval/status/j1"] = (404, {"detail": "Job nicht gefunden"})
+    at = _ok(open_page("evaluation").run())
+    _ok(at.button(key="ret_run").click().run())
+
+    assert fake_backend.calls.count("GET /eval/status/j1") == 1
+    assert any("Job nicht gefunden" in e.value for e in at.error), [e.value for e in at.error]
+
+
+def test_ingest_job_unknown_to_the_backend_ends_tracking(fake_backend, monkeypatch):
+    monkeypatch.setitem(conftest.PAYLOADS, "/ingest", {"job_id": "j1", "status": "queued"})
+    fake_backend.errors["GET /ingest/status/j1"] = (404, {"detail": "Job nicht gefunden"})
+    at = _ok(open_page("sources").run())
+    _ok(next(b for b in at.button if b.label == "⚡ Nur Änderungen indizieren").click().run())
+
+    assert "_ingest_job" not in at.session_state
+    assert fake_backend.calls.count("GET /ingest/status/j1") == 1

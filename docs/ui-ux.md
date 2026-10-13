@@ -417,8 +417,12 @@ die folgenden. Die Zahl der Backend-Aufrufe pro Seite prüft `tests/ui/test_back
 
 **Fehler vom Backend** zeigen alle Seiten gleich: `ui/backend.py:raise_for_status` macht aus einer
 Nicht-2xx-Antwort `BackendError` mit Statuscode und dem `detail`-Text des Backends (bei 422 nur die
-Meldungen). Auch Löschaufrufe (Varianten, Eval-Ergebnisse) prüfen den Status; Variantennamen gehen
-URL-kodiert in den Pfad.
+Meldungen). Alle Lesezugriffe laufen über `get_json` (GET + Statusprüfung + JSON) — vorher wurde
+bei 21 Aufrufen eine Fehlerantwort als Daten genommen (z.B. hätte „Zum Golden Set hinzufügen“ nach
+einem fehlgeschlagenen Lesen das Golden Set mit einer einzigen Frage überschrieben). Auch
+Löschaufrufe (Varianten, Eval-Ergebnisse) prüfen den Status; Variantennamen gehen URL-kodiert in den
+Pfad. Kennt das Backend einen Ingest- oder Eval-Job nicht mehr (404, z.B. nach einem Neustart),
+beenden die Fortschrittsanzeigen sofort mit dieser Meldung statt ~45 s „nicht erreichbar“.
 
 ---
 

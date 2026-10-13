@@ -13,7 +13,7 @@ import pandas as pd
 import requests
 import streamlit as st
 from admin_gate import api_url, require_admin
-from backend import raise_for_status
+from backend import BackendError, get_json, raise_for_status
 
 _POLL_MAX_FAILURES = 30  # ~45 s of unreachable backend before giving up
 _POLL_INTERVAL_S = 1.5
@@ -39,7 +39,7 @@ st.caption(
 @st.cache_data(ttl=5)
 def _fetch_sources():
     """Fetch all configuring Document ingestion sources from the backend API."""
-    return requests.get(f"{API_URL}/sources", timeout=5).json()["sources"]
+    return get_json(f"{API_URL}/sources", timeout=5)["sources"]
 
 
 def _refresh(message: str | None = None):
@@ -62,7 +62,7 @@ if _flash := st.session_state.pop("_flash", None):
 @st.cache_data(ttl=30, show_spinner=False)
 def _fetch_stats(api_url: str):
     """Retrieve aggregate VectorStore telemetry (e.g. total indexed chunks)."""
-    return requests.get(f"{api_url}/stats", timeout=5).json()
+    return get_json(f"{api_url}/stats", timeout=5)
 
 
 _FOLDER_MAP_COLUMNS = {
@@ -116,7 +116,7 @@ def _start_ingest(endpoint: str, label: str, params: dict | None = None):
     try:
         r = requests.post(f"{API_URL}{endpoint}", params=params, timeout=10)
         if r.status_code == 409:
-            active = requests.get(f"{API_URL}/ingest/active", timeout=5).json()
+            active = get_json(f"{API_URL}/ingest/active", timeout=5)
             if not active:  # finished in between
                 st.warning(r.json()["detail"])
                 return
@@ -142,8 +142,11 @@ def _ingest_progress():
     if not job:
         return
     try:
-        info = requests.get(f"{API_URL}/ingest/status/{job['id']}", timeout=5).json()
+        info = get_json(f"{API_URL}/ingest/status/{job['id']}", timeout=5)
         job["failures"] = 0
+    except BackendError as e:
+        # e.g. 404: the job registry lives in backend memory — gone after a restart. Final, no retry.
+        info = {"status": "unbekannt", "errors": [f"{e} — wurde das Backend neu gestartet?"]}
     except Exception as e:
         job["failures"] += 1
         if job["failures"] < _POLL_MAX_FAILURES:

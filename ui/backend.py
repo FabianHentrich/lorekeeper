@@ -33,3 +33,15 @@ def raise_for_status(resp: requests.Response) -> None:
     if isinstance(detail, list):
         detail = "; ".join(str(err.get("msg", err)) if isinstance(err, dict) else str(err) for err in detail)
     raise BackendError(resp.status_code, str(detail))
+
+
+def get_json(url: str, timeout: float = 5, **kwargs):
+    """GET, status check, JSON — the read path of every page.
+
+    Without the check a 4xx/5xx body (``{"detail": ...}``) was used as data and failed later as a
+    ``KeyError`` or an empty list instead of showing the backend's reason (roadmap 11.0 P5).
+    Raises ``BackendError`` (non-2xx) or a ``requests`` exception (backend unreachable).
+    """
+    resp = requests.get(url, timeout=timeout, **kwargs)
+    raise_for_status(resp)
+    return resp.json()

@@ -8,7 +8,7 @@ from urllib.parse import quote
 import requests
 import streamlit as st
 from admin_gate import api_url, require_admin
-from backend import raise_for_status
+from backend import get_json, raise_for_status
 
 st.set_page_config(page_title="Prompts — LoreKeeper", page_icon="✏", layout="wide")
 
@@ -47,7 +47,7 @@ def _fetch_active(api_url: str):
     Returns:
         dict: The active prompt variants containing 'system', 'qa', 'condense' and 'no_context' templates.
     """
-    return requests.get(f"{api_url}/prompts/active", timeout=5).json()
+    return get_json(f"{api_url}/prompts/active", timeout=5)
 
 
 @st.cache_data(ttl=10, show_spinner=False)
@@ -63,7 +63,7 @@ def _fetch_variants(api_url: str):
     Returns:
         list[dict]: List of metadata dictionaries for each variant.
     """
-    return requests.get(f"{api_url}/prompts/variants", timeout=5).json()
+    return get_json(f"{api_url}/prompts/variants", timeout=5)
 
 
 @st.cache_data(ttl=10, show_spinner=False)
@@ -80,7 +80,7 @@ def _fetch_variant(api_url: str, name: str):
     Returns:
         dict: The full variant data including the actual template strings.
     """
-    return requests.get(f"{api_url}/prompts/variants/{quote(name, safe='')}", timeout=5).json()
+    return get_json(f"{api_url}/prompts/variants/{quote(name, safe='')}", timeout=5)
 
 
 # ─── Page ─────────────────────────────────────────────────────────────

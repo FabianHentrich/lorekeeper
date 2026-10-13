@@ -11,7 +11,7 @@ import pandas as pd
 import requests
 import streamlit as st
 from admin_gate import api_url, require_admin
-from backend import BackendError, raise_for_status
+from backend import BackendError, get_json, raise_for_status
 from feedback import pairs_from_feedback
 
 st.set_page_config(page_title="Evaluation — LoreKeeper", page_icon="🎯", layout="wide")
@@ -137,8 +137,14 @@ def _poll_eval_job(job_id: str, label: str = "Evaluation"):
         failures = 0
         while True:
             try:
-                info = requests.get(f"{API_URL}/eval/status/{job_id}", timeout=5).json()
+                info = get_json(f"{API_URL}/eval/status/{job_id}", timeout=5)
                 failures = 0
+            except BackendError as e:
+                # e.g. 404: job registry gone after a backend restart — final, not "unreachable"
+                progress_line.empty()
+                status.update(label=f"{label}: Job nicht mehr bekannt", state="error", expanded=True)
+                st.error(f"{e} — wurde das Backend neu gestartet?")
+                return None
             except Exception as e:
                 failures += 1
                 if failures >= _POLL_MAX_FAILURES:
@@ -262,13 +268,13 @@ tab_gs, tab_test, tab_ret, tab_e2e, tab_results, tab_fb, tab_chunks = st.tabs([
 @st.cache_data(ttl=10, show_spinner=False)
 def _fetch_qa_pairs(api_url: str):
     """Fetch the active pool of Golden Set test questions targeting expected metadata."""
-    return requests.get(f"{api_url}/eval/qa-pairs", timeout=5).json()
+    return get_json(f"{api_url}/eval/qa-pairs", timeout=5)
 
 
 @st.cache_data(ttl=15, show_spinner=False)
 def _fetch_eval_results(api_url: str):
     """Fetch history references for saved evaluation runs."""
-    return requests.get(f"{api_url}/eval/results", timeout=5).json()
+    return get_json(f"{api_url}/eval/results", timeout=5)
 
 
 with tab_gs:
@@ -439,7 +445,7 @@ with tab_test:
                     st.error("ID ist Pflichtfeld.")
                 else:
                     try:
-                        existing_pairs = requests.get(f"{API_URL}/eval/qa-pairs", timeout=5).json().get("pairs", [])
+                        existing_pairs = get_json(f"{API_URL}/eval/qa-pairs", timeout=5).get("pairs", [])
                         if any(p.get("id") == add_id.strip() for p in existing_pairs):
                             st.error(f"ID '{add_id.strip()}' gibt es im Golden Set schon.")
                         else:
@@ -511,7 +517,7 @@ with tab_ret:
             )
             _fetch_eval_results.clear()
             if result_file:
-                result = requests.get(f"{API_URL}/eval/results/{result_file}", timeout=10).json()
+                result = get_json(f"{API_URL}/eval/results/{result_file}", timeout=10)
                 _render_retrieval_result(result)
         except Exception as e:
             _show_eval_error(e)
@@ -532,8 +538,8 @@ with tab_ret:
             _fetch_eval_results.clear()
 
             if file_vec and file_hyb:
-                res_a = requests.get(f"{API_URL}/eval/results/{file_vec}", timeout=10).json()
-                res_b = requests.get(f"{API_URL}/eval/results/{file_hyb}", timeout=10).json()
+                res_a = get_json(f"{API_URL}/eval/results/{file_vec}", timeout=10)
+                res_b = get_json(f"{API_URL}/eval/results/{file_hyb}", timeout=10)
 
                 hr_a = res_a.get("hit_rate", 0)
                 hr_b = res_b.get("hit_rate", 0)
@@ -587,7 +593,7 @@ with tab_e2e:
             _fetch_eval_results.clear()
 
             if result_file:
-                result = requests.get(f"{API_URL}/eval/results/{result_file}", timeout=10).json()
+                result = get_json(f"{API_URL}/eval/results/{result_file}", timeout=10)
 
                 c1, c2, c3 = st.columns(3)
                 c1.metric("Hit Rate", f"{result.get('hit_rate', 0):.1%}")
@@ -672,8 +678,8 @@ with tab_results:
             if sel_a and sel_b and sel_a != sel_b:
                 if st.button("Vergleichen", key="cmp_run"):
                     try:
-                        res_a = requests.get(f"{API_URL}/eval/results/{sel_a}", timeout=10).json()
-                        res_b = requests.get(f"{API_URL}/eval/results/{sel_b}", timeout=10).json()
+                        res_a = get_json(f"{API_URL}/eval/results/{sel_a}", timeout=10)
+                        res_b = get_json(f"{API_URL}/eval/results/{sel_b}", timeout=10)
 
                         # Metric comparison
                         st.markdown("**Metriken**")
@@ -705,7 +711,7 @@ with tab_results:
 @st.cache_data(ttl=10, show_spinner=False)
 def _fetch_feedback(api_url: str):
     """Current 👍/👎 per chat answer, newest first."""
-    return requests.get(f"{api_url}/feedback", timeout=5).json()
+    return get_json(f"{api_url}/feedback", timeout=5)
 
 
 with tab_fb:
@@ -757,7 +763,7 @@ with tab_fb:
                 st.warning("Keine Zeile ausgewählt.")
             else:
                 try:
-                    existing = requests.get(f"{API_URL}/eval/qa-pairs", timeout=5).json().get("pairs", [])
+                    existing = get_json(f"{API_URL}/eval/qa-pairs", timeout=5).get("pairs", [])
                     new_pairs = pairs_from_feedback(chosen, existing)
                     if not new_pairs:
                         st.info("Alle ausgewählten Fragen stehen schon im Golden Set.")
@@ -782,7 +788,7 @@ _SHORT_CHUNK_CHARS = 100  # below this a chunk carries little meaning on its own
 @st.cache_data(ttl=60, show_spinner=False)
 def _fetch_sources(api_url: str):
     """Configured sources for the inspector's source picker."""
-    return requests.get(f"{api_url}/sources", timeout=5).json().get("sources", [])
+    return get_json(f"{api_url}/sources", timeout=5).get("sources", [])
 
 
 @st.cache_data(ttl=30, show_spinner=False)
