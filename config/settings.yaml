@@ -4,7 +4,6 @@
 
 # Ingestion
 # Sources are configured in config/sources.yaml (sidecar, gitignored).
-# document_paths is DEPRECATED — use config/sources.yaml instead.
 ingestion:
   supported_formats: [".md", ".pdf", ".png", ".jpg", ".jpeg", ".webp"]
   exclude_patterns:
@@ -13,7 +12,6 @@ ingestion:
     - "*alt.md"
     - "*(1).md"
     - "*.draft.*"
-  watch_for_changes: false
 
 # Chunking
 chunking:
@@ -31,11 +29,7 @@ embeddings:
 
 # Vector Store
 vectorstore:
-  provider: chroma
-  mode: embedded
-  persist_directory: ./chroma_data
-  chroma_host: chromadb
-  chroma_port: 8000
+  persist_directory: ./chroma_data   # embedded ChromaDB in the backend process
   collection_name: lorekeeper
   distance_metric: cosine
 
@@ -93,12 +87,6 @@ conversation:
   session_timeout_minutes: 60
   session_gc_interval_seconds: 300
 
-# API
-api:
-  host: "0.0.0.0"
-  port: 8000
-  reload: true
-
 # Logging
 logging:
   level: INFO                       # DEBUG | INFO | WARNING | ERROR
@@ -112,9 +100,3 @@ logging:
     - huggingface_hub
     - sentence_transformers
     - openai
-
-# UI
-ui:
-  title: "LoreKeeper"
-  subtitle: "Frag deine Welt."
-  api_url: "http://127.0.0.1:8000"

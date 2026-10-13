@@ -28,35 +28,11 @@ class TestMatchSource:
         result = _match_source({"source_id": "other"}, [s])
         assert result is None
 
-    def test_match_by_source_collection(self, tmp_path):
-        """
-        Verify legacy chunks utilizing older `source_collection` schemas successfully
-        fuzzy match against the root directory name of active source paths.
-        """
-        folder = tmp_path / "PnP-Welt"
-        folder.mkdir()
-        s = _make_source(id="vault", path=str(folder))
-        result = _match_source({"source_collection": "PnP-Welt"}, [s])
-        assert result is s
-
-    def test_match_by_source_file_path(self, tmp_path):
-        """
-        Verify orphan chunks lacking exact config identifiers can deduce their parent source
-        by resolving their internal relative paths against available root mappings.
-        """
-        folder = tmp_path / "vault"
-        folder.mkdir()
-        (folder / "NPCs").mkdir()
-        (folder / "NPCs" / "aldric.md").write_text("x")
-        s = _make_source(id="v", path=str(folder))
-        result = _match_source({"source_file": "NPCs/aldric.md"}, [s])
-        assert result is s
-
     def test_no_match_returns_none(self):
-        """Verify deeply malformed chunks return None avoiding exceptions through blind updates."""
+        """Chunks without (or with an unknown) source_id stay unmatched — no guessing by path."""
         s = _make_source(id="v")
-        result = _match_source({}, [s])
-        assert result is None
+        assert _match_source({}, [s]) is None
+        assert _match_source({"source_file": "NPCs/aldric.md"}, [s]) is None
 
 
 class TestRecategorize:

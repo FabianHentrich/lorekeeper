@@ -1,6 +1,5 @@
 import logging
 import re
-import time
 from collections.abc import AsyncGenerator
 
 from openai import AsyncOpenAI
@@ -64,18 +63,16 @@ class OllamaProvider(BaseLLMProvider):
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
-        start = time.time()
         response = await self._client.chat.completions.create(
             model=self.model,
             messages=messages,
-            temperature=kwargs.get("temperature", self.config.temperature),
-            top_p=kwargs.get("top_p", self.config.top_p),
-            max_tokens=kwargs.get("max_tokens", self.config.max_tokens),
+            temperature=self.config.temperature,   # read per call: Settings-page edits apply live
+            top_p=self.config.top_p,
+            max_tokens=self.config.max_tokens,
             timeout=self.config.timeout,
             stream=False,
             extra_body=self._thinking_off(),
         )
-        latency_ms = (time.time() - start) * 1000
 
         content = _strip_thinking(response.choices[0].message.content or "")
         usage = {}
@@ -83,7 +80,6 @@ class OllamaProvider(BaseLLMProvider):
             usage = {
                 "tokens_in": response.usage.prompt_tokens,
                 "tokens_out": response.usage.completion_tokens,
-                "latency_ms": latency_ms,
             }
 
         return LLMResponse(
@@ -91,7 +87,6 @@ class OllamaProvider(BaseLLMProvider):
             model=self.model,
             provider="ollama",
             usage=usage,
-            raw_response=response.model_dump() if hasattr(response, "model_dump") else {},
         )
 
     async def generate_stream(
@@ -115,9 +110,9 @@ class OllamaProvider(BaseLLMProvider):
         stream = await self._client.chat.completions.create(
             model=self.model,
             messages=messages,
-            temperature=kwargs.get("temperature", self.config.temperature),
-            top_p=kwargs.get("top_p", self.config.top_p),
-            max_tokens=kwargs.get("max_tokens", self.config.max_tokens),
+            temperature=self.config.temperature,
+            top_p=self.config.top_p,
+            max_tokens=self.config.max_tokens,
             timeout=self.config.timeout,
             stream=True,
             stream_options={"include_usage": True},

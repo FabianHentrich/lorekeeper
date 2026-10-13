@@ -231,98 +231,97 @@ with tab_gs:
         st.error(f"Backend nicht erreichbar: {e}")
         pairs = []
 
-    if pairs or True:  # always show editor
-        rows = []
-        for p in pairs:
-            rows.append({
-                "id": p.get("id", ""),
-                "question": p.get("question", ""),
-                "source_type": p.get("source_type", "markdown"),
-                "category": p.get("category", ""),
-                "expected_sources": ", ".join(p.get("expected_sources", [])),
-                "expected_answer_contains": ", ".join(p.get("expected_answer_contains", [])),
-                "expected_section": p.get("expected_section", ""),
-                "expected_source_ids": ", ".join(p.get("expected_source_ids", [])),
-                "notes": p.get("notes", ""),
+    rows = []
+    for p in pairs:
+        rows.append({
+            "id": p.get("id", ""),
+            "question": p.get("question", ""),
+            "source_type": p.get("source_type", "markdown"),
+            "category": p.get("category", ""),
+            "expected_sources": ", ".join(p.get("expected_sources", [])),
+            "expected_answer_contains": ", ".join(p.get("expected_answer_contains", [])),
+            "expected_section": p.get("expected_section", ""),
+            "expected_source_ids": ", ".join(p.get("expected_source_ids", [])),
+            "notes": p.get("notes", ""),
+        })
+
+    df = pd.DataFrame(rows) if rows else pd.DataFrame(
+        columns=["id", "question", "source_type", "category",
+                 "expected_sources", "expected_answer_contains", "expected_section",
+                 "expected_source_ids", "notes"]
+    )
+
+    edited = st.data_editor(
+        df,
+        num_rows="dynamic",
+        column_config={
+            "id": st.column_config.TextColumn("ID", width="small"),
+            "question": st.column_config.TextColumn("Frage"),
+            "source_type": st.column_config.SelectboxColumn(
+                "Source Type", options=["markdown", "pdf", "image", "mixed", "simulation"], width="small",
+            ),
+            "category": st.column_config.TextColumn("Kategorie", width="small"),
+            "expected_sources": st.column_config.TextColumn(
+                "Expected Sources",
+                help="Komma-getrennt, z.B.: Orte/Arkenfeld.md, NPCs/Malek.md",
+            ),
+            "expected_answer_contains": st.column_config.TextColumn(
+                "Answer Contains",
+                help="Komma-getrennte Keywords für die E2E-Prüfung",
+            ),
+            "expected_section": st.column_config.TextColumn(
+                "Abschnitt",
+                help="Abschnitt, in dem ein Treffer liegen muss: Nummer (z.B. 4.10) oder Überschrift",
+                width="small",
+            ),
+            "expected_source_ids": st.column_config.TextColumn(
+                "Source-IDs",
+                help="Optional, komma-getrennt: die erwartete Datei muss aus einer dieser Quellen kommen "
+                     "(für gleichnamige Dateien, z.B. zwei llm_report.md)",
+                width="small",
+            ),
+            "notes": st.column_config.TextColumn("Notizen"),
+        },
+        hide_index=True,
+        width="stretch",
+        key="gs_editor",
+    )
+
+    if st.button("💾 Golden Set speichern", type="primary", key="gs_save"):
+        save_pairs = []
+        for _, row in edited.iterrows():
+            pid = (row.get("id") or "").strip()
+            pq = (row.get("question") or "").strip()
+            if not pid or not pq:
+                continue
+            save_pairs.append({
+                "id": pid,
+                "question": pq,
+                "source_type": row.get("source_type") or "markdown",
+                "category": (row.get("category") or "").strip(),
+                "expected_sources": [
+                    s.strip() for s in (row.get("expected_sources") or "").split(",") if s.strip()
+                ],
+                "expected_answer_contains": [
+                    s.strip() for s in (row.get("expected_answer_contains") or "").split(",") if s.strip()
+                ],
+                "expected_section": (row.get("expected_section") or "").strip(),
+                "expected_source_ids": [
+                    s.strip() for s in (row.get("expected_source_ids") or "").split(",") if s.strip()
+                ],
+                "notes": (row.get("notes") or "").strip(),
             })
-
-        df = pd.DataFrame(rows) if rows else pd.DataFrame(
-            columns=["id", "question", "source_type", "category",
-                     "expected_sources", "expected_answer_contains", "expected_section",
-                     "expected_source_ids", "notes"]
-        )
-
-        edited = st.data_editor(
-            df,
-            num_rows="dynamic",
-            column_config={
-                "id": st.column_config.TextColumn("ID", width="small"),
-                "question": st.column_config.TextColumn("Frage"),
-                "source_type": st.column_config.SelectboxColumn(
-                    "Source Type", options=["markdown", "pdf", "image", "mixed", "simulation"], width="small",
-                ),
-                "category": st.column_config.TextColumn("Kategorie", width="small"),
-                "expected_sources": st.column_config.TextColumn(
-                    "Expected Sources",
-                    help="Komma-getrennt, z.B.: Orte/Arkenfeld.md, NPCs/Malek.md",
-                ),
-                "expected_answer_contains": st.column_config.TextColumn(
-                    "Answer Contains",
-                    help="Komma-getrennte Keywords für die E2E-Prüfung",
-                ),
-                "expected_section": st.column_config.TextColumn(
-                    "Abschnitt",
-                    help="Abschnitt, in dem ein Treffer liegen muss: Nummer (z.B. 4.10) oder Überschrift",
-                    width="small",
-                ),
-                "expected_source_ids": st.column_config.TextColumn(
-                    "Source-IDs",
-                    help="Optional, komma-getrennt: die erwartete Datei muss aus einer dieser Quellen kommen "
-                         "(für gleichnamige Dateien, z.B. zwei llm_report.md)",
-                    width="small",
-                ),
-                "notes": st.column_config.TextColumn("Notizen"),
-            },
-            hide_index=True,
-            width="stretch",
-            key="gs_editor",
-        )
-
-        if st.button("💾 Golden Set speichern", type="primary", key="gs_save"):
-            save_pairs = []
-            for _, row in edited.iterrows():
-                pid = (row.get("id") or "").strip()
-                pq = (row.get("question") or "").strip()
-                if not pid or not pq:
-                    continue
-                save_pairs.append({
-                    "id": pid,
-                    "question": pq,
-                    "source_type": row.get("source_type") or "markdown",
-                    "category": (row.get("category") or "").strip(),
-                    "expected_sources": [
-                        s.strip() for s in (row.get("expected_sources") or "").split(",") if s.strip()
-                    ],
-                    "expected_answer_contains": [
-                        s.strip() for s in (row.get("expected_answer_contains") or "").split(",") if s.strip()
-                    ],
-                    "expected_section": (row.get("expected_section") or "").strip(),
-                    "expected_source_ids": [
-                        s.strip() for s in (row.get("expected_source_ids") or "").split(",") if s.strip()
-                    ],
-                    "notes": (row.get("notes") or "").strip(),
-                })
-            try:
-                resp = requests.put(
-                    f"{API_URL}/eval/qa-pairs",
-                    json={"pairs": save_pairs},
-                    timeout=10,
-                )
-                resp.raise_for_status()
-                _fetch_qa_pairs.clear()
-                st.success(f"{len(save_pairs)} QA-Paare gespeichert.")
-            except Exception as e:
-                st.error(f"Speichern fehlgeschlagen: {e}")
+        try:
+            resp = requests.put(
+                f"{API_URL}/eval/qa-pairs",
+                json={"pairs": save_pairs},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            _fetch_qa_pairs.clear()
+            st.success(f"{len(save_pairs)} QA-Paare gespeichert.")
+        except Exception as e:
+            st.error(f"Speichern fehlgeschlagen: {e}")
 
 
 # ═══ Tab 2: Frage testen ═════════════════════════════════════════════

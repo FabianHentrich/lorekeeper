@@ -76,7 +76,7 @@ PAYLOADS: dict[str, object] = {
         "conversation": {"window_size": 8, "condense_question": True, "session_timeout_minutes": 60},
         "chunking": {"strategy": "heading_aware", "max_chunk_size": 256, "chunk_overlap": 30, "min_chunk_size": 20},
         "embeddings": {"model": "intfloat/multilingual-e5-base", "device": "auto"},
-        "vectorstore": {"mode": "embedded", "collection_name": "lorekeeper"},
+        "vectorstore": {"collection_name": "lorekeeper"},
     },
     "/prompts/active": {"name": "active", "description": "", "prompts": _PROMPTS},
     "/prompts/variants": [{"name": "Variante", "description": "", "is_active": False}],

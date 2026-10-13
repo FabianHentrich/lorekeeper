@@ -227,7 +227,7 @@ class TestSettings:
         """Verify that Settings initializes with the correct default values."""
         s = Settings()
         assert s.llm.provider == "ollama"
-        assert s.vectorstore.mode == "embedded"
+        assert s.vectorstore.persist_directory == "./chroma_data"
         assert s.retrieval.top_k == 15
 
     def test_env_override(self, monkeypatch):
@@ -241,16 +241,11 @@ class TestSettings:
         s = Settings()
         assert s.llm.provider == "gemini"
 
-    def test_chroma_mode_override(self, monkeypatch):
-        """
-        Verify that the Chroma mode can be overridden via environment variable.
-
-        Args:
-            monkeypatch (pytest.MonkeyPatch): Pytest fixture to mock environment variables.
-        """
-        monkeypatch.setenv("VECTORSTORE__MODE", "client")
+    def test_nested_env_override(self, monkeypatch):
+        """Nested keys are overridden with a double underscore (``SECTION__KEY``)."""
+        monkeypatch.setenv("VECTORSTORE__COLLECTION_NAME", "test_collection")
         s = Settings()
-        assert s.vectorstore.mode == "client"
+        assert s.vectorstore.collection_name == "test_collection"
 
 
 class TestSourceConfig:

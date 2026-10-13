@@ -262,7 +262,6 @@ class IngestionOrchestrator:
                         "content_category": content_category,
                         "source_id": source.id,
                         "group": group,
-                        "source_collection": base.name,
                         "last_modified": last_modified,
                     })
 

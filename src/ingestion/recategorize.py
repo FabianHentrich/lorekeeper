@@ -15,32 +15,12 @@ logger = logging.getLogger(__name__)
 
 
 def _match_source(meta: dict, sources: list[SourceConfig]) -> SourceConfig | None:
-    """Best-effort matching of a stored chunk to a source.
+    """The configured source a stored chunk belongs to, by its ``source_id`` (None if unknown).
 
-    Strategy (in order):
-      1. explicit source_id in metadata
-      2. source_collection == base path name
-      3. source_file path can be made relative to a source base path
+    Every chunk written by the orchestrator carries ``source_id``; chunks of a removed or renamed
+    source stay unmatched and are counted as such.
     """
-    by_id = {s.id: s for s in sources}
-    sid = meta.get("source_id")
-    if sid and sid in by_id:
-        return by_id[sid]
-
-    coll = (meta.get("source_collection") or "").lower()
-    if coll:
-        for s in sources:
-            if IngestionOrchestrator._source_base(s).name.lower() == coll:
-                return s
-
-    src_file = meta.get("source_file", "")
-    if src_file:
-        for s in sources:
-            base = IngestionOrchestrator._source_base(s)
-            candidate = (base / src_file)
-            if candidate.exists():
-                return s
-    return None
+    return next((s for s in sources if s.id == meta.get("source_id")), None)
 
 
 def recategorize(config: ConfigManager | None = None, vectorstore: VectorStoreService | None = None) -> dict:

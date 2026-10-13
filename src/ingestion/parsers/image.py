@@ -9,9 +9,9 @@ class ImageMetaParser(BaseParser):
     """Parser that generates a 'stub' textual representation for image files.
 
     Instead of performing OCR (which isn't implemented), it relies purely on the
-    filename and the folder structure. Note that images are excluded from actual
-    context delivery to the LLM during retrieval via metadata filtering, but
-    having them in the vector store allows their names to be searched via UI references.
+    filename and the folder structure. The retriever currently excludes all image
+    chunks (``document_type != image``), so these stubs are indexed but never retrieved —
+    groundwork for image descriptions (roadmap item 2).
     """
     def can_parse(self, file_path: Path) -> bool:
         """True for common raster image formats (png/jpg/jpeg/webp/gif)."""

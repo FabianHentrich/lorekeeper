@@ -9,7 +9,6 @@ from .base import BaseParser, ParsedDocument
 WIKILINK_PATTERN = re.compile(r"!?\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
 IMAGE_EMBED_PATTERN = re.compile(r"!\[\[([^\]]+\.(png|jpg|jpeg|webp|gif))\]\]", re.IGNORECASE)
 CALLOUT_PATTERN = re.compile(r"^>\s*\[!(\w+)\]\s*(.*)$", re.MULTILINE)
-CALLOUT_CONTINUATION = re.compile(r"^>\s?(.*)$", re.MULTILINE)
 TAG_PATTERN = re.compile(r"(?:^|\s)#([A-Za-zÀ-ÿ\w]+)(?=\s|$)")
 HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
 

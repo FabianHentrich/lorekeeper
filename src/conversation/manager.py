@@ -42,7 +42,6 @@ def needs_condense(question: str) -> bool:
 class Message:
     role: str  # "user" or "assistant"
     content: str
-    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass

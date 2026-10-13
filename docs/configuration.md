@@ -16,8 +16,7 @@ hierher, statt Werte zu wiederholen; die Datei mit den aktuellen Werten ist `con
 8. [`llm`](#llm)
 9. [`conversation`](#conversation)
 10. [`logging`](#logging)
-11. [`api` und `ui`](#api-und-ui)
-12. [Umgebungsvariablen](#umgebungsvariablen)
+11. [Umgebungsvariablen](#umgebungsvariablen)
 
 ---
 
@@ -75,8 +74,6 @@ Die Allow-List steht in `src/config/manager.py` (`_EDITABLE_KEYS`); andere Schl�
 |-----------|-----|---------|--------------|
 | `supported_formats` | `list[str]` | `[".md", ".pdf", ".png", ".jpg", ".jpeg", ".webp"]` | Verarbeitete Dateiendungen |
 | `exclude_patterns` | `list[str]` | siehe unten | Glob-Muster f체r ausgeschlossene Dateien/Ordner |
-| `watch_for_changes` | `bool` | `false` | Nicht umgesetzt (reserviert f체r automatisches Neu-Indizieren) |
-| `document_paths` | `list[str]` | `[]` | **Veraltet.** Ohne `sources.yaml` wandelt der Loader die Pfade einmalig in Quellen mit `group: lore` um und warnt |
 
 Standard-Ausschl체sse: `.obsidian/*`, `.trash/*`, `*alt.md` (Sicherungskopien), `*(1).md`
 (Duplikate), `*.draft.*` (Entw체rfe). `.tex`-Dateien werden ohnehin nicht gelesen.
@@ -192,13 +189,11 @@ Modellwechsel erfordert eine komplette Neu-Indizierung.
 
 | Schl체ssel | Typ | Default | Beschreibung |
 |-----------|-----|---------|--------------|
-| `mode` | `str` | `embedded` | `embedded` (im Backend-Prozess) \| `client` (externer Server, ungenutzt) |
-| `persist_directory` | `str` | `./chroma_data` | Speicherort im Modus `embedded` |
-| `chroma_host` / `chroma_port` | `str` / `int` | `chromadb` / `8000` | Nur im Modus `client` |
+| `persist_directory` | `str` | `./chroma_data` | Speicherort der eingebetteten ChromaDB |
 | `collection_name` | `str` | `lorekeeper` | ChromaDB-Collection |
 | `distance_metric` | `str` | `cosine` | `cosine` \| `l2` \| `ip` |
 
-Umschalten 체ber `VECTORSTORE__MODE`. Im Modus `embedded` darf kein zweiter Prozess gleichzeitig auf
+ChromaDB l채uft immer eingebettet im Backend-Prozess. Kein zweiter Prozess darf gleichzeitig auf
 `chroma_data/` zugreifen.
 
 ---
@@ -313,14 +308,6 @@ neu gebaut.
 
 ---
 
-## `api` und `ui`
-
-Beide Abschnitte stehen in `settings.yaml`, werden vom Code aber **nicht ausgewertet**: Host und
-Port des Backends bestimmt der `uvicorn`-Aufruf (`start.ps1` bindet immer an `127.0.0.1:8000`),
-die Backend-URL der UI kommt aus `LOREKEEPER_API_URL`.
-
----
-
 ## Umgebungsvariablen
 
 **LoreKeeper** (in `.env` oder als Umgebungsvariable):
@@ -334,7 +321,7 @@ die Backend-URL der UI kommt aus `LOREKEEPER_API_URL`.
 | `LLM__OLLAMA__MODEL` | `llm.ollama.model` | `qwen3:14b` |
 | `LLM__OLLAMA__BASE_URL` | `llm.ollama.base_url` | `http://127.0.0.1:11434` |
 | `LLM__GEMINI__MODEL` | `llm.gemini.model` | `gemini-2.5-flash` |
-| `VECTORSTORE__MODE` | `vectorstore.mode` | `embedded` |
+| `VECTORSTORE__COLLECTION_NAME` | `vectorstore.collection_name` | `lorekeeper` |
 | `RETRIEVAL__TOP_K` | `retrieval.top_k` | `15` |
 | `RETRIEVAL__RERANKING__MAX_PER_SOURCE` | `retrieval.reranking.max_per_source` | `5` |
 | `CONVERSATION__WINDOW_SIZE` | `conversation.window_size` | `12` |

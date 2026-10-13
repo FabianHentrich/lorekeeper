@@ -131,7 +131,7 @@ class TestExtractImageDocs:
         img.write_bytes(b"fake png")
 
         md = f"Text davor.\n![Ein Bild]({img})\nText danach."
-        cleaned, docs = _extract_image_docs(md, tmp_path, "test.pdf", "/path/test.pdf")
+        cleaned, docs = _extract_image_docs(md, tmp_path, "test.pdf")
 
         assert len(docs) == 1
         assert docs[0].document_type == "image"
@@ -143,7 +143,7 @@ class TestExtractImageDocs:
     def test_missing_image_removed(self, tmp_path):
         """Verify malformed image references quietly dissolve out of text instead of breaking."""
         md = "![alt](nonexistent.png)"
-        cleaned, docs = _extract_image_docs(md, tmp_path, "test.pdf", "/path/test.pdf")
+        cleaned, docs = _extract_image_docs(md, tmp_path, "test.pdf")
         assert len(docs) == 0
         assert cleaned == ""
 
@@ -153,7 +153,7 @@ class TestExtractImageDocs:
         img.write_bytes(b"fake")
 
         md = "![](page1-0.png)"
-        cleaned, docs = _extract_image_docs(md, tmp_path, "test.pdf", "/path/test.pdf")
+        cleaned, docs = _extract_image_docs(md, tmp_path, "test.pdf")
         assert len(docs) == 1
         assert "page1 0" in docs[0].content
 

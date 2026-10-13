@@ -96,12 +96,8 @@ class PdfConfig(BaseModel):
 
 class IngestionConfig(BaseModel):
     sources: list[SourceConfig] = []
-    # DEPRECATED — kept only for backwards compatibility. If sources is empty
-    # but document_paths is set, the loader migrates them on the fly.
-    document_paths: list[str] = []
     supported_formats: list[str] = [".md", ".pdf", ".png", ".jpg", ".jpeg", ".webp"]
     exclude_patterns: list[str] = [".obsidian/*", ".trash/*", "*alt.md", "*(1).md", "*.draft.*"]
-    watch_for_changes: bool = False
     pdf: PdfConfig = PdfConfig()
 
 
@@ -129,11 +125,7 @@ class EmbeddingsConfig(BaseModel):
 
 
 class VectorStoreConfig(BaseModel):
-    provider: str = "chroma"
-    mode: str = "embedded"
-    persist_directory: str = "./chroma_data"
-    chroma_host: str = "chromadb"
-    chroma_port: int = 8000
+    persist_directory: str = "./chroma_data"   # embedded ChromaDB inside the backend process
     collection_name: str = "lorekeeper"
     distance_metric: str = "cosine"
 
@@ -214,12 +206,6 @@ class ConversationConfig(BaseModel):
     session_gc_interval_seconds: int = 300
 
 
-class APIConfig(BaseModel):
-    host: str = "0.0.0.0"
-    port: int = 8000
-    reload: bool = True
-
-
 class LoggingConfig(BaseModel):
     level: str = "INFO"
     file: str | None = "logs/lorekeeper.log"
@@ -229,12 +215,6 @@ class LoggingConfig(BaseModel):
     suppress: list[str] = [
         "httpx", "httpcore", "chromadb", "huggingface_hub", "sentence_transformers", "safetensors", "model_utils",
     ]
-
-
-class UIConfig(BaseModel):
-    title: str = "LoreKeeper"
-    subtitle: str = "Frag deine Welt."
-    api_url: str = "http://127.0.0.1:8000"
 
 
 class Settings(BaseSettings):
@@ -263,8 +243,6 @@ class Settings(BaseSettings):
     llm: LLMConfig = LLMConfig()
     conversation: ConversationConfig = ConversationConfig()
     logging: LoggingConfig = LoggingConfig()
-    api: APIConfig = APIConfig()
-    ui: UIConfig = UIConfig()
 
     @classmethod
     def settings_customise_sources(cls, settings_cls, **kwargs):
@@ -300,7 +278,6 @@ class ConfigManager:
         # YAML data is passed as init_settings (lowest priority after defaults)
         self.settings = Settings(**_deep_merge(_read_yaml(settings_path), _read_yaml(self._local_settings_path)))
 
-        # Load sources sidecar (if present), then apply migration shim if needed
         self._load_sources_sidecar()
 
         self._prompts_raw: dict = {}
@@ -308,42 +285,16 @@ class ConfigManager:
             self._prompts_raw = yaml.safe_load(prompts_path.read_text(encoding="utf-8")) or {}
 
     def _load_sources_sidecar(self) -> None:
-        """Load config/sources.yaml into settings.ingestion.sources.
-
-        Falls back to migrating settings.ingestion.document_paths into
-        Source entries (group=lore) when no sidecar exists. This shim emits a
-        warning so users notice they should migrate.
-        """
+        """Load config/sources.yaml into settings.ingestion.sources (warns if there is none)."""
         if self._sources_path.exists():
             raw = yaml.safe_load(self._sources_path.read_text(encoding="utf-8")) or {}
             sources_raw = raw.get("sources", []) or []
             self.settings.ingestion.sources = [SourceConfig(**s) for s in sources_raw]
             return
-
-        # No sidecar — try migration shim from deprecated document_paths.
-        # If neither exists, sources stays empty and we warn.
-        legacy = self.settings.ingestion.document_paths
-        if legacy:
-            _log.warning(
-                "config/sources.yaml not found; migrating ingestion.document_paths "
-                "to sources (group=lore). Create config/sources.yaml to silence this "
-                "warning and customize per-source group/category mapping."
-            )
-            migrated = []
-            for path in legacy:
-                src_id = Path(path).name.lower().replace(" ", "_") or "source"
-                migrated.append(SourceConfig(
-                    id=src_id,
-                    path=path,
-                    group="lore",
-                    default_category="misc",
-                ))
-            self.settings.ingestion.sources = migrated
-        else:
-            _log.warning(
-                "No sources configured. Create config/sources.yaml or add sources "
-                "via the UI (Sources page) to start indexing documents."
-            )
+        _log.warning(
+            "No sources configured. Create config/sources.yaml or add sources "
+            "via the UI (Sources page) to start indexing documents."
+        )
 
     def save_sources(self) -> None:
         """Persist current ingestion.sources to config/sources.yaml."""
@@ -410,8 +361,7 @@ class ConfigManager:
                 "device": s.embeddings.device,
             },
             "vectorstore": {
-                "mode": s.vectorstore.mode,
-                "collection_name": s.vectorstore.collection_name,
+                "collection_name": s.vectorstore.collection_name,   # no file paths in the API response
             },
         }
 

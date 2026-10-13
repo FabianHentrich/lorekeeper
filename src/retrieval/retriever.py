@@ -179,9 +179,9 @@ class Retriever:
         query_embedding = await self.embedding_service.embed_text(query)
         stage_ms["embed"] = (time.perf_counter() - t0) * 1000
 
-        # Build where filter — images are excluded from LLM context (their content
-        # is just a filename stub and pollutes ranking). They appear as UI sources
-        # only when they happen to be the cited document in a text chunk.
+        # Build where filter — image chunks are excluded entirely: their content is just a
+        # filename stub that pollutes ranking. So no image ever becomes a source today; real
+        # image descriptions and their retrieval are roadmap item 2.
         text_filter: dict = {"document_type": {"$ne": "image"}}
         if metadata_filters:
             conditions = [text_filter] + [{k: v} for k, v in metadata_filters.items()]

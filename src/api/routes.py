@@ -50,8 +50,8 @@ def _spawn_background(coro) -> asyncio.Task:
     task.add_done_callback(_background_tasks.discard)
     return task
 
-# Health check cache (TTL = 30s)
-_health_cache: dict = {"ts": 0.0, "chroma": False, "llm": False}
+# Health state, refreshed by _health_loop every 60 s; /health and /sidebar-state only read it
+_health_cache: dict = {"chroma": False, "llm": False}
 
 
 def _get_services():
@@ -375,7 +375,7 @@ async def _health_loop(interval: float = 60.0):
             _, _, _, _, _, vs, prov = _get_services()
             chroma_ok = await run_in_threadpool(vs.health_check)
             llm_ok = await prov.health_check()
-            _health_cache.update({"ts": time.monotonic(), "chroma": chroma_ok, "llm": llm_ok})
+            _health_cache.update({"chroma": chroma_ok, "llm": llm_ok})
         except Exception as e:
             logger.warning("Background health check failed: %s", e)
         await asyncio.sleep(interval)

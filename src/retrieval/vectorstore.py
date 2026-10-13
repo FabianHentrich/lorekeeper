@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 
 
 class VectorStoreService:
-    """ChromaDB wrapper handling both embedded (PersistentClient) and client (HttpClient) modes.
+    """ChromaDB wrapper — embedded (``PersistentClient``) inside the backend process.
+
+    No second process may open ``persist_directory`` while the backend runs (file locks).
 
     Covers the chunk lifecycle — upsert, similarity query, metadata-only update, delete, wipe.
     """
@@ -25,20 +27,10 @@ class VectorStoreService:
         self._collection = None
 
     def _get_client(self) -> chromadb.ClientAPI:
-        """Return the ChromaDB client, connecting on first call.
-
-        HttpClient in client mode, otherwise PersistentClient."""
+        """Return the embedded ChromaDB client, connecting on first call."""
         if self._client is None:
-            if self.config.mode == "client":
-                self._client = chromadb.HttpClient(
-                    host=self.config.chroma_host,
-                    port=self.config.chroma_port,
-                )
-            else:
-                self._client = chromadb.PersistentClient(
-                    path=self.config.persist_directory,
-                )
-            logger.info(f"ChromaDB connected (mode={self.config.mode})")
+            self._client = chromadb.PersistentClient(path=self.config.persist_directory)
+            logger.info(f"ChromaDB connected (embedded, {self.config.persist_directory})")
         return self._client
 
     def _get_collection(self):

@@ -338,7 +338,6 @@ with st.expander("Read-only: Infrastruktur (nur per .env / settings.yaml änderb
     with col_v:
         st.markdown("**Vectorstore**")
         st.code(
-            f"mode:       {cfg['vectorstore']['mode']}\n"
             f"collection: {cfg['vectorstore']['collection_name']}",
             language="yaml",
         )

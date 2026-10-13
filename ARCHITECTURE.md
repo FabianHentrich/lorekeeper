@@ -299,8 +299,7 @@ Rechenbibliothek würde die Vektoren gegenüber dem bestehenden Index leicht ver
 Aliase, Überschriftenpfad + Inhalt), gespeichert wird der Inhalt, den später das LLM sieht.
 Begründung: [docs/embedding-strategy.md](docs/embedding-strategy.md).
 
-**ChromaDB** läuft `embedded` im FastAPI-Prozess und persistiert nach `./chroma_data`. Der Modus
-`client` (externer Server) existiert im Code, wird aber nicht genutzt. Weil die Datenbank im
+**ChromaDB** läuft `embedded` im FastAPI-Prozess und persistiert nach `./chroma_data`. Weil die Datenbank im
 Backend-Prozess steckt, darf **kein zweiter Prozess** (z.B. die Ingestion-CLI) gleichzeitig auf
 `chroma_data/` zugreifen.
 
@@ -421,7 +420,7 @@ Lädt und validiert die Konfiguration mit Pydantic-Settings. Reihenfolge (höchs
 
 Welche Werte die UI ändern darf, legt eine Allow-List fest (`_EDITABLE_KEYS`); Änderungen werden
 auf die laufenden Dienste angewendet, ohne Neustart. Quellen kommen aus dem Sidecar
-`config/sources.yaml`; ein veraltetes `ingestion.document_paths` wird beim Start einmalig migriert.
+`config/sources.yaml`; fehlt die Datei, startet LoreKeeper ohne Quellen (Warnung im Log).
 Alle Schlüssel und Variablen: [docs/configuration.md](docs/configuration.md).
 
 ---

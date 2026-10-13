@@ -98,8 +98,7 @@ def _apply_toc_headings(md_text: str, toc_items: list[list]) -> str:
     return re.compile(r'^(#{1,6})\s+(.+)$', re.MULTILINE).sub(_fix_heading, md_text)
 
 
-def _extract_image_docs(md_text: str, image_dir: Path, source_file: str,
-                        source_path: str) -> tuple[str, list[ParsedDocument]]:
+def _extract_image_docs(md_text: str, image_dir: Path, source_file: str) -> tuple[str, list[ParsedDocument]]:
     """Find image references in markdown, create ParsedDocuments for existing
     image files, and replace references with descriptive placeholder text.
 
@@ -213,9 +212,7 @@ class PDFParser(BaseParser):
 
                 # Extract image references
                 if cfg.extract_images:
-                    text, img_docs = _extract_image_docs(
-                        text, image_dir, source_file, source_path
-                    )
+                    text, img_docs = _extract_image_docs(text, image_dir, source_file)
                     all_image_docs.extend(img_docs)
 
                 page_texts.append(text)

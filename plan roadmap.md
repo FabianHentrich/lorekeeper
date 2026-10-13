@@ -93,6 +93,7 @@ Aktuell zeigt die UI Bilder nur im Source-Expander. Für echtes "Bild-im-Chat" b
 3. Beschreibung als Content speichern, Originalpfad als Metadatum beibehalten
 4. Bild-Ausschluss im Retriever aufheben, Golden-Set-Fragen für Bilder (i001–i010) prüfen
 5. Re-Ingest der Bilder (Last: Vision-Modell auf der GPU, nicht parallel zur Simulation)
+6. **Vorher klären (Review 13.10.)**: Aus PDFs extrahierte Bilder zeigen heute auf ein temporäres Verzeichnis, das nach dem Parsen gelöscht wird — für Bildbeschreibungen und die Anzeige muss die Extraktion an einen dauerhaften Ort schreiben. Heute werden Bild-Chunks vom Retriever komplett ausgeschlossen, also nie gefunden.
 
 **Phase 2 — Inline-Anzeige:**
 1. `GET /files/{path}` Endpoint für Bild-Serving (Base64 oder FileResponse)
@@ -515,7 +516,7 @@ int8 verworfen (kaum schneller, anderes Ranking). Modell-Laden DirectML 1,3 s id
 
 **Aufwand**: Gering-Mittel (reine Doku, mehrere Dateien). Last 🟢.
 
-## 7.4 Code-Qualität: Dead Code, Vereinfachung, Clean Code (Review 13.10.) — 🔄 Paket A erledigt
+## 7.4 Code-Qualität: Dead Code, Vereinfachung, Clean Code (Review 13.10.) — 🔄 Pakete A + B erledigt
 
 **Ergebnis des Reviews** (Agent, nur lesend; Suite grün, ruff/mypy sauber): Alle Funktionen in `src/`, `ui/`, `evaluation/` haben Aufrufer — toter Code steckt in Config-Feldern, Datenfeldern, Parametern, Zweigen und Altlasten. Komplexeste Stellen laut ruff: `ui/LoreKeeper.py:_render_sidebar` (Komplexität 29), `orchestrator.run` (19), `OllamaProvider.generate_stream` (14), `_rerank` (13), `validate_filters` (13). Geschätzt ~400–450 Zeilen weniger, wenn alle risikoarmen Punkte umgesetzt werden.
 
@@ -557,6 +558,16 @@ Suite: 620 grün (vorher 599).
 6. Endpoints ohne Aufrufer: `GET /provider/gemini/status` (Daten stecken in `/sidebar-state`), `GET /provider` (nur Tests) — **Entscheidung** (öffentliche API behalten oder entfernen).
 7. **Bildpfad** (Bild-Chunks erreichen nie eine Antwort, PDF-Bilder zeigen auf gelöschte Temp-Dateien): nicht entfernen — Roadmap 2 baut darauf auf. Jetzt nur falsche Docstrings/Kommentare korrigieren und den Temp-Pfad in Roadmap 2 vermerken.
 
+**Paket B umgesetzt (13.10.)** — Entscheidungen: `document_paths`-Shim entfernt, die zwei Endpoints bleiben, Bildpfad bleibt:
+1. Entfernt: `ingestion.watch_for_changes`, `api.*` (`APIConfig`), `ui.*` (`UIConfig`), `vectorstore.provider` samt YAML-Blöcken; alte YAML-Dateien laden weiter (`extra="ignore"`).
+2. ChromaDB nur noch eingebettet: Client-Modus (`HttpClient`, `mode`, `chroma_host`, `chroma_port`) entfernt; `/config` zeigt im Nur-lesen-Block nur die Collection (keine Pfade in der API).
+3. Migrations-Shim `ingestion.document_paths` entfernt — ohne `sources.yaml` startet LoreKeeper ohne Quellen (Warnung).
+4. Tote Felder/Parameter: `LLMResponse.raw_response` (Ollama kopierte pro Aufruf die ganze Antwort), `latency_ms`-Buchhaltung, nie genutzte `**kwargs`-Overrides der Provider (Werte jetzt direkt aus der Config), `Message.timestamp`, `_health_cache["ts"]` (+ falscher Kommentar „TTL = 30s“), Parameter `source_path` in `_extract_image_docs`, `CALLOUT_CONTINUATION`, `if pairs or True`.
+5. `recategorize._match_source` nur noch über `source_id` (Index geprüft 13.10.: 0 von 4745 Chunks ohne `source_id`); `source_collection` wird nicht mehr geschrieben (bestehende Chunks behalten das Feld, stört nicht).
+6. Bildpfad: falsche Kommentare/Docstrings korrigiert (Bild-Chunks werden heute nie gefunden); Hinweis in Roadmap 2.
+
+Suite: 618 grün (zwei Tests der alten Zuordnungs-Heuristik entfernt).
+
 *Paket C — Vereinfachungen* (gleiches Verhalten, je Testabdeckung prüfen):
 1. `ConfigManager.editable_snapshot` aus `_EDITABLE_KEYS` ableiten statt zweiter Handbaum (−50 Zeilen, Sync-Gefahr weg).
 2. `_get_services()`-7-Tupel, `_get_retriever()`, `_get_vectorstore()` → überall `main_module.<dienst>` (−25).
@@ -573,7 +584,13 @@ Suite: 620 grün (vorher 599).
 5. Kein Griff in private Attribute anderer Module: `VectorStoreService.get_all()`, `ConfigManager.prompts_path`, `_source_base` als Modulfunktion.
 6. `Literal` statt Handprüfung für `provider`/`eval_type` — **Entscheidung** (Statuscode 400 → 422).
 
-**Offene Entscheidungen**: A2 (reparieren oder entfernen), B3 (`document_paths`-Shim), B6 (zwei Endpoints), C3 (Gemini-Key leer), D4 (Eval-Defaults), D6 (400 → 422).
+**Offene Entscheidungen**: 
+A2 (reparieren), 
+B3 (`document_paths`-Shim), 
+B6 (zwei Endpoints), 
+C3 (Gemini-Key leer), 
+D4 (Eval-Defaults), 
+D6 (400 → 422).
 
 **Aufwand**: Paket A gering-mittel, B gering, C mittel, D gering. Last 🟢 (nur Code + Tests).
 
@@ -596,7 +613,7 @@ Erledigt: 7.2 Code-Review + Nachbesserung, 3.10 Regelwerk-Slot, 5.4 Reranker auf
 | 1 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf; dann Re-Index, Eval, Spieler-Messung — dabei 3.8/3.9 im Browser durchklicken     |
 | 2 | Offene Prüfungen im laufenden Betrieb | Mittel — bestätigt, dass die Neuerungen im echten Chat wirken | Gering | 🟡 | Mit gestartetem LoreKeeper: 3.6 Folgefragen („fass das kürzer zusammen“), 👍/👎 + Tabs „Feedback“/„Chunks“, Rerank-Timings in der Chat-Caption (5.4), Regelwerk-Slot an x002/x005 im Chat (3.10), `pytest -m live` (Spieler-Modus, schickt nur noch `role`) |
 | 3 | 7.3 Inline-Doku (Docstrings) | Mittel — Code verständlich ohne Kontext, Regeln aus CLAUDE.md umgesetzt | Gering-Mittel | 🟢 | 27 Module ohne Modul-Docstring, Config-Felder ohne Kommentar; reine Doku |
-| 4 | 7.4 Pakete B–D — toter Code, Vereinfachung, Clean Code | Mittel — ~400 Zeilen weniger, weniger Sync-Gefahren | Mittel | 🟢 | Offene Entscheidungen zuerst klären; Paket D1 zusammen mit 7.3 |
+| 4 | 7.4 Pakete C–D — Vereinfachung, Clean Code | Mittel — ~400 Zeilen weniger, weniger Sync-Gefahren | Mittel | 🟢 | Offene Entscheidungen zuerst klären; Paket D1 zusammen mit 7.3 |
 | 5 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Mit der Chunk-Prüfung aus 5.2 messbar; Golden Set ~1 min |
 | 6 | 5.5 Vektorsuche reproduzierbar machen | Gering-Mittel — stabile Ergebnisse nach Neustart, verlässliche Eval-Vergleiche | Gering-Mittel | 🟡 | ±2 Abschnitte Schwankung zwischen Prozessen; `ef_search` erhöhen oder exakt suchen |
 | 7 | 3.2 Session-History — ⏸ zurückgestellt | Unklar | Mittel | 🟢 | Erst entscheiden, ob gespeicherte Sessions bei einem Wissenstool Nutzen haben |

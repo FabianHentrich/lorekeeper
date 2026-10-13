@@ -8,8 +8,7 @@ class LLMResponse:
     content: str
     model: str
     provider: str
-    usage: dict = field(default_factory=dict)
-    raw_response: dict = field(default_factory=dict)
+    usage: dict = field(default_factory=dict)   # tokens_in / tokens_out where the provider reports them
 
 
 @dataclass

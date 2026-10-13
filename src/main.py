@@ -149,7 +149,7 @@ async def lifespan(app: FastAPI):
     try:
         chroma_ok = vectorstore.health_check()
         llm_ok = await provider.health_check()
-        _health_cache.update({"ts": time.monotonic(), "chroma": chroma_ok, "llm": llm_ok})
+        _health_cache.update({"chroma": chroma_ok, "llm": llm_ok})
     except Exception:
         pass
     health_task = asyncio.create_task(_health_loop())

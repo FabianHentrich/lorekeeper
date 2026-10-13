@@ -88,21 +88,19 @@ class GeminiProvider(BaseLLMProvider):
                 else:
                     raise
 
-    def _build_config(self, **kwargs) -> types.GenerateContentConfig:
-        """Assemble the per-request GenerateContentConfig from defaults + per-call overrides."""
+    def _build_config(self, system_prompt: str | None = None) -> types.GenerateContentConfig:
+        """Per-request GenerateContentConfig; values are read per call so Settings-page edits apply live."""
         return types.GenerateContentConfig(
-            temperature=kwargs.get("temperature", self.config.temperature),
-            top_p=kwargs.get("top_p", self.config.top_p),
-            max_output_tokens=kwargs.get("max_tokens", self.config.max_tokens),
-            system_instruction=kwargs.get("system_prompt", None),
+            temperature=self.config.temperature,
+            top_p=self.config.top_p,
+            max_output_tokens=self.config.max_tokens,
+            system_instruction=system_prompt,
             http_options=types.HttpOptions(timeout=self.config.timeout * 1000),
         )
 
     async def generate(self, prompt: str, system_prompt: str = "", **kwargs) -> LLMResponse:
         """Produce a complete, non-streamed Gemini response with rate limiting and 429 retries."""
-        gen_config = self._build_config(system_prompt=system_prompt or None, **kwargs)
-
-        start = time.time()
+        gen_config = self._build_config(system_prompt or None)
 
         async def _call():
             """Single Gemini API invocation — wrapped so _retry_on_429 can retry it."""
@@ -113,10 +111,9 @@ class GeminiProvider(BaseLLMProvider):
             )
 
         response = await self._retry_on_429(_call)
-        latency_ms = (time.time() - start) * 1000
 
         content = response.text or ""
-        usage = {"latency_ms": latency_ms}
+        usage = {}
         if response.usage_metadata:
             usage["tokens_in"] = response.usage_metadata.prompt_token_count
             usage["tokens_out"] = response.usage_metadata.candidates_token_count
@@ -126,7 +123,6 @@ class GeminiProvider(BaseLLMProvider):
             model=self.model,
             provider="gemini",
             usage=usage,
-            raw_response={},
         )
 
     async def generate_stream(
@@ -137,7 +133,7 @@ class GeminiProvider(BaseLLMProvider):
         **kwargs,
     ) -> AsyncGenerator[str, None]:
         """Stream Gemini tokens, updating ``stream_result`` with usage metadata as it arrives."""
-        gen_config = self._build_config(system_prompt=system_prompt or None, **kwargs)
+        gen_config = self._build_config(system_prompt or None)
 
         await self._rate_limit()
 
