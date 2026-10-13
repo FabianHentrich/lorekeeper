@@ -32,7 +32,8 @@ flowchart LR
         S4["🎯 Quellen-Filter<br/>☑ 🗺️ Lore · ☑ 📖 Abenteuer<br/>☑ 📋 Regelwerk · ☑ 📊 Simulation"]
         S5["🔍 Hybrid Search"]
         S7["🗑️ Neue Session"]
-        S0 --- S1 --- S2 --- S3 --- S4 --- S5 --- S7
+        S8["⏻ LoreKeeper beenden<br/><i>nur Admin</i>"]
+        S0 --- S1 --- S2 --- S3 --- S4 --- S5 --- S7 --- S8
     end
 
     subgraph CHAT["💬 Chatbereich"]
@@ -49,7 +50,7 @@ flowchart LR
 
     classDef side fill:#ede9fe,stroke:#7c3aed,color:#4c1d95
     classDef chat fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
-    class S0,S1,S2,S3,S4,S5,S7 side
+    class S0,S1,S2,S3,S4,S5,S7,S8 side
     class C1,C2,C3,C4,C5 chat
 ```
 
@@ -166,6 +167,18 @@ Der Retriever verknüpft das mit dem festen Filter `document_type != "image"` pe
 
 Hinweise auf **⚙ Sources** (Chunk-Zahl, Indizieren, Quellen) und **🛠 Settings**. **🗑️ Neue
 Session** leert `messages` und `session_id` — die nächste Frage startet ohne Verlauf.
+
+### LoreKeeper beenden (`ui/shutdown.py`)
+
+**⏻ LoreKeeper beenden** steht unten in der Sidebar jeder Seite (Chat und alle Admin-Seiten), nur
+für Admins (mit Passwort erst nach dem Login, ohne Passwort für alle wie die Admin-Seiten). Der
+erste Klick fragt nach („alle Nutzer verlieren die Verbindung“), **Beenden** startet `stop.ps1`
+losgelöst ohne Fenster (Ablauf: [operations.md](operations.md#server-im-heimnetz-lan)), **Abbrechen**
+nimmt die Frage zurück. Läuft eine Indizierung (`GET /ingest/active`), wird nicht beendet und die
+Seite sagt warum; ist das Backend nicht erreichbar, wird trotzdem beendet. Die UI startet das Skript
+selbst statt einen Backend-Endpunkt aufzurufen: UI und Backend laufen immer auf demselben PC, so
+bleibt das Beenden hinter dem Admin-Login, ohne eine neue API-Route zu öffnen. Beim Seitenaufbau
+keine Backend-Anfrage — die Ingest-Prüfung läuft erst beim Bestätigen.
 
 ---
 
@@ -442,6 +455,7 @@ beenden die Fortschrittsanzeigen sofort mit dieser Meldung statt ~45 s „nicht 
 | `_role` | `"player" \| "game_master"` | Gewählte Rolle; fehlt → Rollenauswahl. Entfernen (Rolle wechseln) setzt Chat und Session zurück |
 | `_is_admin` | `bool` | Nach erfolgreichem Admin-Login; schaltet Admin-Seiten und Provider-Steuerung frei |
 | `_selected_provider` | `str` | Gewählter Provider (Widget-State) |
+| `_confirm_stop` | `bool` | Rückfrage von **⏻ LoreKeeper beenden** ist offen |
 | `_provider_switch_ok` / `_provider_switch_error` | `bool` / `str` | Kurzzeit-Flags nach einem Provider-Wechsel |
 | `_ingest_job` | `dict \| None` | Sources-Seite: verfolgter Indizier-Job `{id, label, failures}` |
 | `_flash` | `str` | Sources-Seite: Erfolgsmeldung, die ein Neuladen überlebt |

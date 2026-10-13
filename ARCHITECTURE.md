@@ -199,12 +199,14 @@ lorekeeper/
 │   ├── roles.py                   # Spieler-/Spielleiter-Filter in der UI
 │   ├── feedback.py                # Bewertungen → Golden-Set-Fragen
 │   ├── backend.py                 # raise_for_status → BackendError mit dem detail des Backends (alle Seiten)
+│   ├── shutdown.py                # ⏻ LoreKeeper beenden in der Sidebar (Admin) → stop.ps1
 │   └── pages/                     # 1_Sources · 2_Evaluation · 3_Prompts · 4_Settings
 │
 ├── evaluation/                    # Golden Set (278 Fragen), evaluate_retrieval.py, evaluate.py
 ├── tests/                         # unit · integration · ui · perf (-m perf) · live (-m live)
 ├── scripts/setup-lan.ps1          # Firewall-Regel für den Heimnetz-Betrieb
 ├── start.ps1                      # Start von Backend + UI (Entwicklung / -Server)
+├── stop.ps1                       # sauberes Beenden (Strg+C an beide Fenster, nach Timeout hart)
 ├── chroma_data/                   # ChromaDB-Persistenz (nicht versioniert)
 └── logs/                          # lorekeeper.log (+ lorekeeper.<Datum>.log je Tag), ollama.log, feedback.jsonl (nicht versioniert)
 ```

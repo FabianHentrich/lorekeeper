@@ -119,11 +119,20 @@ an, die die Port-Freigabe überstimmt.
 
 - **Starten** (kein Autostart — Absicht): `.\start.ps1 -Server` im Projektordner. Backend und UI
   öffnen sich als zwei minimierte Fenster, die Konsole zeigt die LAN-URLs.
-- **Stoppen**: beide LoreKeeper-Fenster schließen.
-- **Am Gaming-PC entwickeln**: Server stoppen, dann `.\start.ps1`. Der Server-Modus lädt Code-
+- **Stoppen**: `.\stop.ps1` im Projektordner oder in der UI **⏻ LoreKeeper beenden** (Sidebar,
+  nur Admin). Beides schickt Strg+C an das Backend- und das UI-Fenster (wie ein Tastendruck dort),
+  wartet bis zu 20 s (`-Timeout`) und beendet dann hart, was noch läuft — samt einem Ollama, das
+  das Backend gestartet hat. Während einer Indizierung verweigert beides (ein harter Abbruch kann
+  einen halb geschriebenen Index hinterlassen); `.\stop.ps1 -Force` bricht sie trotzdem ab. Die
+  Ausgabe des Buttons steht in `logs/stop.log`.
+- **Nicht die Fenster schließen**: Das X beendet den Prozess, bevor sein Shutdown läuft — ein von
+  LoreKeeper gestartetes Ollama läuft dann weiter, und im Log fehlt „Shutting down“ (13.10.: 7 von
+  10 Starts endeten so). Strg+C im Fenster ist sauber; gemessen am 13.10.: Backend 1,3–1,6 s,
+  UI 0,2 s, auch während eines Streams oder einer Evaluation.
+- **Am Gaming-PC entwickeln**: Server stoppen (`.\stop.ps1`), dann `.\start.ps1`. Der Server-Modus lädt Code-
   Änderungen **nicht** nach: nach einem Update stoppen und neu starten.
 - `start.ps1` überspringt einen Teil, dessen Port schon belegt ist („already running“) — ein
-  übriges Fenster aus dem anderen Modus erst schließen.
+  übriger Teil aus dem anderen Modus erst beenden (`.\stop.ps1`).
 
 **Alte Autostart-Aufgabe entfernen:** Die erste Version von `setup-lan.ps1` legte eine
 Anmelde-Aufgabe „LoreKeeper Server“ an. Löschen braucht Admin-Rechte — `setup-lan.ps1` erneut als

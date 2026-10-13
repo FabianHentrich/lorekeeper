@@ -15,10 +15,13 @@ import streamlit as st
 from admin_gate import api_url, require_admin
 from backend import BackendError, get_json, raise_for_status
 from feedback import pairs_from_feedback
+from shutdown import render_stop_button
 
 st.set_page_config(page_title="Evaluation — LoreKeeper", page_icon="🎯", layout="wide")
 
 require_admin()
+with st.sidebar:
+    render_stop_button()
 
 API_URL = api_url()
 

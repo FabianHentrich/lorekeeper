@@ -14,6 +14,7 @@ import requests
 import streamlit as st
 from admin_gate import api_url, require_admin
 from backend import BackendError, get_json, raise_for_status
+from shutdown import render_stop_button
 
 _POLL_MAX_FAILURES = 30  # ~45 s of unreachable backend before giving up
 _POLL_INTERVAL_S = 1.5
@@ -24,6 +25,8 @@ _GROUPS = ["lore", "adventure", "rules", "simulation"]
 st.set_page_config(page_title="Sources — LoreKeeper", page_icon="⚙", layout="wide")
 
 require_admin()
+with st.sidebar:
+    render_stop_button()
 
 API_URL = api_url()
 

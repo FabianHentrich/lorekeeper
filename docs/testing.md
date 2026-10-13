@@ -158,6 +158,7 @@ die `timings` pro Anfrage (Log-Zeile `Query timings:` / Zeile unter jeder Antwor
 `pytest --cov=src --cov=ui --cov=evaluation` — Stand 13.10.: **93 %**. Ergänzt wird nach
 Fehlerrisiko, nicht nach Prozent: zuerst Pfade, die Daten schreiben oder Zustand umschalten
 (Speichern, Aktivieren, Provider-Wechsel samt Rückfall, Golden Set). Bewusst ungetestet: der
-Ollama-Autostart in `src/main.py` (braucht echte Prozesse), das Übernehmen von Feedback per Häkchen
-im Data-Editor (AppTest kann keine Zellen anklicken; die Logik in `ui/feedback.py` ist getestet) und
+Ollama-Autostart in `src/main.py` und `stop.ps1` (brauchen echte Prozesse; `stop.ps1` am 13.10.
+von Hand geprüft: Dev- und Server-Modus, Startweg des Buttons unter PowerShell 5.1, Ingest-Sperre,
+`-Force`), das Übernehmen von Feedback per Häkchen im Data-Editor (AppTest kann keine Zellen anklicken; die Logik in `ui/feedback.py` ist getestet) und
 die CLI-Einstiegspunkte (`main()`).

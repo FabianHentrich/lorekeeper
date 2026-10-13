@@ -186,6 +186,7 @@ Voraussetzungen: Windows, Python 3.11+ (`winget install Python.Python.3.12`),
    ```powershell
    .\start.ps1            # Entwicklung: Auto-Reload, UI nur auf diesem PC
    .\start.ps1 -Server    # Heimnetz: UI im LAN erreichbar, kein Auto-Reload (docs/operations.md)
+   .\stop.ps1             # sauber beenden (oder ⏻ LoreKeeper beenden in der UI-Sidebar)
    ```
    Die UI läuft dann unter **http://127.0.0.1:8501**. Ohne Skript: `uvicorn src.main:app --reload
    --port 8000` und in einem zweiten Terminal `streamlit run ui/LoreKeeper.py`.

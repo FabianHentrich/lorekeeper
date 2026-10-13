@@ -15,6 +15,7 @@ import roles
 import streamlit as st
 from admin_gate import admin_login_form, api_url, is_admin
 from backend import get_json, raise_for_status
+from shutdown import render_stop_button
 
 
 def _render_sources(sources: list[dict]):
@@ -167,7 +168,7 @@ def _sidebar_state() -> dict | None:
 def _render_sidebar():
     """
     Render the isolated sidebar configuration panel. Includes provider switching,
-    API key overrides, source filter checkboxes, and server status readouts.
+    API key overrides, source filter checkboxes, server status readouts and (admin) the stop button.
     """
     st.header("Einstellungen")
 
@@ -366,6 +367,8 @@ def _render_sidebar():
     if st.button("🗑️ Neue Session"):
         _reset_chat()
         st.rerun()
+
+    render_stop_button()
 
 
 with st.sidebar:

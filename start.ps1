@@ -3,6 +3,7 @@
 #   .\start.ps1           Development: auto-reload on code changes, UI only on this PC (127.0.0.1)
 #   .\start.ps1 -Server   Home-network server: no auto-reload, UI reachable in the LAN, no browser
 #                         (one-time firewall rule: scripts\setup-lan.ps1, see roadmap 4.1; no autostart)
+#   .\stop.ps1            Stop both cleanly (see there)
 #
 # The backend always stays on 127.0.0.1 — the UI talks to it server-side, so only port 8501 is exposed.
 
@@ -121,4 +122,4 @@ if ($Server) {
 }
 Write-Host "  Docs    : http://127.0.0.1:$BACKEND_PORT/docs"
 Write-Host ""
-Write-Host "Close the process windows to stop." -ForegroundColor DarkGray
+Write-Host "Stop with .\stop.ps1 or the UI sidebar button (closing the windows skips the clean shutdown)." -ForegroundColor DarkGray
