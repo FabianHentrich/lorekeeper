@@ -9,9 +9,27 @@ from pathlib import Path
 
 from src.config.manager import LoggingConfig
 
+# uvicorn logs unhandled route exceptions and lifespan crashes here
+_UVICORN_ERROR = "uvicorn.error"
+
+
+def _reaches_root(logger: logging.Logger) -> bool:
+    """True if records of ``logger`` propagate up to the root handlers."""
+    current: logging.Logger | None = logger
+    while current is not None and current.parent is not None:
+        if not current.propagate:
+            return False
+        current = current.parent
+    return True
+
 
 def setup_logging(config: LoggingConfig):
-    """Wire up console + rotating file handlers and silence noisy third-party loggers."""
+    """Wire up console + rotating file handlers and silence noisy third-party loggers.
+
+    Under uvicorn, ``uvicorn.error`` stops at the ``uvicorn`` logger (``propagate=False``, console only),
+    so tracebacks of 500s and startup crashes would never reach the file — the file handler is attached
+    to it directly. Without uvicorn (tests, CLI) the records already reach the root and nothing is added.
+    """
     root = logging.getLogger()
     root.setLevel(config.level.upper())
 
@@ -40,6 +58,13 @@ def setup_logging(config: LoggingConfig):
         )
         file_handler.setFormatter(formatter)
         root.addHandler(file_handler)
+
+        uvicorn_error = logging.getLogger(_UVICORN_ERROR)
+        for old in [h for h in uvicorn_error.handlers if isinstance(h, RotatingFileHandler)]:
+            uvicorn_error.removeHandler(old)  # repeated setup (reload) must not write every line twice
+            old.close()
+        if not _reaches_root(uvicorn_error):
+            uvicorn_error.addHandler(file_handler)
 
     # Suppress noisy third-party loggers
     for name in config.suppress:

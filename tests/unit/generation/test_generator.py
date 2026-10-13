@@ -67,6 +67,17 @@ class TestGenerator:
         assert result.content == "Fallback-Antwort"
 
     @pytest.mark.asyncio
+    async def test_fallback_logs_the_primary_traceback(self, mock_provider, mock_fallback, caplog):
+        """The fallback answers, so a bug in the primary is only visible through the logged traceback."""
+        mock_provider.generate.side_effect = TypeError("bug in primary")
+        gen = Generator(provider=mock_provider, fallback_provider=mock_fallback)
+
+        await gen.generate(system_prompt="sys", qa_prompt="frage")
+
+        warning = next(r for r in caplog.records if "trying fallback" in r.getMessage())
+        assert warning.exc_info and isinstance(warning.exc_info[1], TypeError)
+
+    @pytest.mark.asyncio
     async def test_generate_no_fallback_raises(self, mock_provider):
         """
         Verify that if the primary provider fails and no fallback is configured,

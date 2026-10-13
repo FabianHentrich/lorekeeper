@@ -329,7 +329,7 @@ def test_unknown_job_status_is_404(client):
     assert client.get("/eval/status/nope").status_code == 404
 
 
-def test_retrieval_eval_failure_marks_job_as_error(client, tmp_eval_dir, monkeypatch):
+def test_retrieval_eval_failure_marks_job_as_error(client, tmp_eval_dir, monkeypatch, caplog):
     import evaluation.evaluate_retrieval as ev
 
     async def boom(**kwargs):
@@ -342,6 +342,8 @@ def test_retrieval_eval_failure_marks_job_as_error(client, tmp_eval_dir, monkeyp
 
     assert (status["status"], status["error"]) == ("error", "chroma locked")
     assert list(tmp_eval_dir.results_dir.iterdir()) == []
+    failed = next(r for r in caplog.records if r.getMessage().startswith("Retrieval eval job"))
+    assert failed.exc_info, "the log must carry the traceback, not just the message"
 
 
 def test_e2e_eval_saves_report_against_the_same_server(client, tmp_eval_dir, monkeypatch):

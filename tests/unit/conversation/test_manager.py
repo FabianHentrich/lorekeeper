@@ -1,3 +1,6 @@
+import asyncio
+import logging
+
 import pytest
 
 from src.config.manager import ConversationConfig
@@ -190,3 +193,28 @@ class TestSessionRoles:
 
     def test_unknown_id_keeps_the_requested_id(self, cm):
         assert cm.get_or_create_session("abc", access_role="player").session_id == "abc"
+
+
+async def test_gc_survives_a_failing_cleanup(caplog):
+    """One failing cleanup must not end the GC task — sessions would silently stop expiring."""
+    cm = ConversationManager(ConversationConfig(session_gc_interval_seconds=0))
+    calls = []
+
+    def cleanup():
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("boom")
+
+    cm._cleanup_expired = cleanup
+    with caplog.at_level(logging.ERROR):
+        task = asyncio.create_task(cm.start_gc())
+        for _ in range(1000):  # bounded: a GC task that died must fail the test, not hang it
+            if len(calls) >= 2 or task.done():
+                break
+            await asyncio.sleep(0)
+        assert not task.done(), "the GC task died on the first failing cleanup"
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    assert any(r.getMessage() == "Session GC failed" and r.exc_info for r in caplog.records)

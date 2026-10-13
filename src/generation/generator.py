@@ -42,7 +42,8 @@ class Generator:
             return await self.provider.generate(qa_prompt, system_prompt=system_prompt)
         except Exception as e:
             if self.fallback_provider:
-                logger.warning(f"Primary provider failed ({e}), trying fallback")
+                # With traceback: the fallback answers, so a bug in the primary would otherwise go unnoticed
+                logger.warning(f"Primary provider failed ({e}), trying fallback", exc_info=True)
                 return await self.fallback_provider.generate(qa_prompt, system_prompt=system_prompt)
             raise
 
@@ -74,7 +75,7 @@ class Generator:
                 if emitted:
                     logger.error(f"Primary provider failed mid-stream ({e}); cannot fall back safely")
                 raise
-            logger.warning(f"Primary provider failed before emitting tokens ({e}), trying fallback")
+            logger.warning(f"Primary provider failed before emitting tokens ({e}), trying fallback", exc_info=True)
             if stream_result is not None:
                 stream_result.model = self.fallback_provider.model
             async for token in self.fallback_provider.generate_stream(

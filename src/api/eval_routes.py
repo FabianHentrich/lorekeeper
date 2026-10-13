@@ -125,7 +125,7 @@ async def chunk_files(source_id: str):
     try:
         files = await run_in_threadpool(main_module.vectorstore.list_files, source_id)
     except Exception as e:
-        logger.error("Chunk inspector: listing files of %r failed: %s", source_id, e)
+        logger.exception("Chunk inspector: listing files of %r failed", source_id)
         raise HTTPException(status_code=503, detail=f"ChromaDB-Abfrage fehlgeschlagen: {e}") from e
     return {"files": files}
 
@@ -233,9 +233,9 @@ async def _run_retrieval_eval(job: EvalJobStatus, qa_pairs: list[dict], req: Eva
         logger.info(f"Retrieval eval done: hit_rate={report['hit_rate']}, file={filename}")
 
     except Exception as e:
+        logger.exception("Retrieval eval job %s failed", job.job_id)
         job.status = "error"
         job.error = str(e)
-        logger.error(f"Retrieval eval failed: {e}")
 
 
 async def _run_e2e_eval(job: EvalJobStatus, qa_pairs: list[dict], api_url: str):
@@ -257,9 +257,9 @@ async def _run_e2e_eval(job: EvalJobStatus, qa_pairs: list[dict], api_url: str):
         logger.info(f"E2E eval done: hit_rate={report['hit_rate']}, file={filename}")
 
     except Exception as e:
+        logger.exception("E2E eval job %s failed", job.job_id)
         job.status = "error"
         job.error = str(e)
-        logger.error(f"E2E eval failed: {e}")
 
 
 @eval_router.get("/status/{job_id}", response_model=EvalJobStatus)
@@ -291,7 +291,8 @@ async def list_results():
                 total_questions=data.get("total_questions", 0),
                 config=data.get("config", {}),
             ))
-        except Exception:
+        except Exception as e:
+            logger.warning("Skipping unreadable eval result %s (%s: %s)", f.name, type(e).__name__, e)
             continue
 
     return summaries

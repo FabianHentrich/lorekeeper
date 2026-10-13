@@ -16,7 +16,7 @@ import yaml
 from pydantic import BaseModel, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 # Allowed source groups — fixed on purpose, the UI filters are built on exactly these four.
 SourceGroup = Literal["lore", "adventure", "rules", "simulation"]
@@ -331,7 +331,7 @@ class ConfigManager:
             sources_raw = raw.get("sources", []) or []
             self.settings.ingestion.sources = [SourceConfig(**s) for s in sources_raw]
             return
-        _log.warning(
+        logger.warning(
             "No sources configured. Create config/sources.yaml or add sources "
             "via the UI (Sources page) to start indexing documents."
         )

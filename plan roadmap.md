@@ -626,15 +626,49 @@ Offen: `recategorize` importiert weiterhin das private `_resolve_category` aus d
 
 **Aufwand**: Gering-Mittel. Last 🟢.
 
-## 10.0 Logging prüfen und wenn nötig erweitern
+## 10.0 Logging prüfen und wenn nötig erweitern — 🔄 Paket A erledigt, B und C offen
 - sind alle wichtigen events geloggt
 - sind alle wichtigen fehler geloggt
 - sind unnötige dinge geloggt
 - unterschied zwischen normalem und debug logging gemacht?
 
-**Bewertung (13.10.)**: Impact Mittel — am Spielabend ist das Log die einzige Quelle, um einen Fehler hinterher zu verstehen. Bekannt: Fehlerpfade loggen teils ohne Traceback (`logger.error(f"…{e}")` statt `exc_info`), z.B. Streaming- und Eval-Fehler; ein fehlgeschlagener Ingest-Job schreibt den Fehler nur in den Job-Status, nicht ins Log. Vorgehen: alle `logger.`-Aufrufe und `except`-Zweige durchgehen (Agent-Review mit Fokus „error handling“), Ergebnis als Liste hier, dann Fixes in einem Paket.
+**Review (13.10.)** — Agent mit Fokus Logging/Fehlerbehandlung über die ganze Codebasis, dazu das echte `logs/lorekeeper.log` (17.904 Zeilen). Selbst nachgeprüft: #1 (Repro: Traceback nur in der Konsole, Logger `uvicorn` hat `propagate=False`), #2, #9 (105× `httpx2`, 61× „AFC is enabled“ im Log), #14, ungenutzter Logger in `onnx_reranker`. Gut und nicht anzufassen: `getLogger(__name__)` überall, keine Secrets im Log, Provider-Wechsel und GPU→CPU-Fallback, Start/Stop, Eval-Start/-Ende, Ingest-Zusammenfassung.
 
-**Aufwand**: Gering. Last 🟢.
+**Befunde**:
+1. **Unbehandelte Exceptions erreichen die Logdatei nie** (Hoch): 500er aus Routen und Abstürze beim Start laufen über `uvicorn.error` → nur Konsole. Im `-Server`-Modus schließt das Fenster beim Startabsturz — Traceback weg. Die Request-Middleware schreibt bei einer Exception auch keine Zeile.
+2. **Fehlgeschlagener Ingest-Job wird nicht geloggt** (Hoch): nur Job-Status im Speicher; nach Reindex-Fehler steht im Log „Deleted N chunks“ und dann nichts. Auch Start des Jobs fehlt.
+3. **Fehler ohne Traceback/Typ** (Mittel): Eval-Jobs, Fehler pro Datei im Orchestrator, Generator-Fallback (ein Bug im Hauptprovider wird als WARNING verschluckt, der Fallback antwortet), LLM-Fehler, Condense, Health-Loop, Chunk-Inspector.
+4. **Abgebrochene Streams hinterlassen nichts** (Mittel): Client weg / UI-Timeout → keine Zeile, keine Timings (im echten Log nachweisbar, 13.10. 02:23).
+5. **Health-Wechsel nie geloggt** (Mittel): „LLM seit 20:41 weg“ steht nirgends; dafür „model not pulled“ alle 60 s als WARNING.
+6. **Sicherheitsrelevante Änderungen nicht geloggt** (Mittel): `PUT /sources` (inkl. `player_visible`), Quelle entfernt, Gemini-Key gesetzt/gelöscht (ohne den Key), Settings-Werte (nur Abschnittsnamen).
+7. **Abgelehnte Spieler-Anfragen (403/422) ohne Grund; Admin-Login-Fehlversuche und Sperre gar nicht** (Mittel, im Heimnetz-Betrieb).
+8. **Zeilen einer Frage nicht zuordenbar** (Mittel-Gering): keine Session/Rolle/Modell in Timings- und Fehlerzeilen — bei 8.0 (mehrere Nutzer) laufen die Zeilen durcheinander.
+9. **Rauschen** (Gering): `httpx2`/`google_genai` nicht unterdrückt; YAML- und Code-Liste von `suppress` auseinander (`safetensors`, `model_utils` greifen nicht); Status-Polling (`/ingest/status`, `/eval/status`) und Admin-GETs auf INFO; Retriever schreibt 3–6 INFO-Zeilen pro Frage (71 % des Logs).
+10. Middleware-Dauer bei `/query/stream` = Zeit bis zu den Headern (363 ms statt 24,5 s) — irreführend (Gering).
+11. Fragetext im Log uneinheitlich (mal ganz, mal 60 Zeichen, Folgefragen doppelt) — **Entscheidung** nötig.
+12. Von LoreKeeper gestartetes Ollama schreibt nach `DEVNULL` — Absturzgrund weg (Gering).
+13. CLIs (`orchestrator`, `recategorize`) nutzen `basicConfig` statt `setup_logging` (keine Datei, kein `suppress`, cp1252-Fehler); Warnungen vor `setup_logging` gehen nur nach stderr (Gering).
+14. Session-GC-Schleife ohne Fehlerschutz — eine Exception beendet die Bereinigung still (Gering).
+15. Kaputte Eval-Ergebnisdatei wird still aus der Liste ausgelassen (Gering).
+16. Kleinkram: ungenutzter Logger in `onnx_reranker.py`, `_log` statt `logger` in `config/manager.py`, `get_sentence_embedding_dimension()` veraltet (FutureWarning in der Suite; bricht den Start, sobald sentence-transformers die Methode entfernt).
+17. Rotation unter Windows kann scheitern, wenn die Datei anderswo offen ist (plausibel, nicht reproduziert) — nur beobachten.
+
+**Korrekturplan** (drei Pakete, je eigener Commit, je mit `caplog`-Tests):
+
+*Paket A — Fehler landen im Log*: #1 (`uvicorn.error` an den Datei-Handler, Middleware loggt unbehandelte Exceptions), #2 (Start/Ende/Fehler des Ingest-Jobs mit Job-ID und Art), #3 (`logger.exception` bei Eval-Jobs, Datei-Fehlern, Fallback, LLM-Fehlern; Condense/Health mit Exception-Typ), #4 (abgebrochene Streams mit Dauer und Zeichenzahl), #14, #15, #16 (veraltete Methode zuerst).
+
+*Paket B — Wichtige Ereignisse*: #5 (nur Health-Wechsel loggen, Grund auf DEBUG), #6 (Quellen inkl. `player_visible`, Key gesetzt/gelöscht, angewandte Settings-Werte), #7 (Grund bei 403/422 im Backend; Admin-Login-Fehlversuche und Sperre in der UI → Streamlit-Konsole), #8 (`session`, `role`, `model` in Timings- und Fehlerzeilen), #13 (`setup_logging` in den CLIs).
+
+*Paket C — Rauschen*: #9 (`httpx2`, `google_genai` unterdrücken, eine `suppress`-Liste in Code und YAML; erfolgreiche Status-Polls und GETs auf DEBUG; Expansion-Details auf DEBUG, eine Zusammenfassung pro Frage auf INFO), #10 (`/query/stream` aus der Middleware-Dauer nehmen, die Timings-Zeile hat die echte), #11 (Frage einmal vollständig auf INFO, Folgefrage mit umgeschriebener Fassung in derselben Zeile), #12 (`logs/ollama.log`).
+
+**Entscheidungen (13.10.)**: #11 — die Frage steht **einmal pro Anfrage vollständig auf INFO** (Anker, um die folgenden Zeilen zuzuordnen); bei Folgefragen Original und umgeschriebene Fassung in derselben Zeile, die übrigen Zeilen ohne Fragetext. #12 — ja, `logs/ollama.log`.
+
+**Paket A umgesetzt (13.10.)**: #1 `setup_logging` leitet `uvicorn.error` in die Logdatei (nur wenn es die Root-Handler nicht ohnehin erreicht, ohne Doppel bei erneutem Setup); die Middleware schreibt bei unbehandelten Exceptions eine eigene Zeile. #2 Ingest-Jobs loggen Start, Ende (mit Zahl der Dateifehler) und Fehler mit Traceback, jeweils mit Job-ID und Art (`incremental`/`full`/`reindex <id>`). #3 Traceback bei Eval-Jobs, Datei-Fehlern im Orchestrator, Fehlern pro Eval-Frage, LLM-Fehlern (sync + Stream), Chunk-Inspector und Fallback (WARNING mit `exc_info`); Condense und Health-Loop mit Exception-Typ. #4 Abgebrochene Streams: `Stream aborted by the client after … (… chars sent)`. #14 Session-GC überlebt eine fehlschlagende Bereinigung. #15 Kaputte Eval-Ergebnisse werden mit WARNING übersprungen. #16 `get_embedding_dimension()` (FutureWarning weg), ungenutzter Logger in `onnx_reranker` entfernt, `_log` → `logger`. Tests: neu `tests/integration/test_logging_paths.py` (Middleware, Ingest-Fehler, Stream-Abbruch), `uvicorn.error` → Datei in `test_logging_setup.py`, Fallback-Traceback, GC, Eval-Job-Traceback — alle sieben gegen den alten Stand mutationsgeprüft (je ein Test schlägt fehl). Doku: `docs/operations.md` → Logs „Fehler suchen“. Suite: 639 grün (vorher 632).
+
+**Hinweis**: `logs/lorekeeper.log` enthält bis Zeile ~1.225 noch Testausgaben vom 10.10. (Ursache seit 03f5c36 behoben) — einmal rotieren/löschen, damit `grep ERROR` nicht in die Irre führt.
+
+**Aufwand**: A gering, B gering, C gering. Last 🟢.
+
 ## 11.0 Architektur-Review: Passt der Aufbau noch, was sollte modularer werden?
 
 **Wann**: nach 10.0 und der Messung aus 8.0, **vor** 9.0 und vor dem Wiederaufnehmen der Features. Begründung:

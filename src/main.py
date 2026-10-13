@@ -182,9 +182,18 @@ _QUIET_PATHS = {"/health", "/sidebar-state"}
 
 @app.middleware("http")
 async def request_logging(request, call_next):
-    """Log incoming HTTP requests and their processing times, ignoring specific paths."""
+    """Log incoming HTTP requests and their processing times, ignoring specific paths.
+
+    An unhandled exception gets its own line here; the traceback follows from uvicorn on ``uvicorn.error``,
+    which ``setup_logging`` routes into the log file.
+    """
     start = time.time()
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.error("%s %s → unhandled exception (%.0fms)", request.method, request.url.path,
+                     (time.time() - start) * 1000)
+        raise
     if request.url.path in _QUIET_PATHS:
         return response
     duration_ms = (time.time() - start) * 1000

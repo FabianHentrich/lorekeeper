@@ -113,7 +113,8 @@ async def _prepare_query(request: QueryRequest, timings: dict):
                 question = await gen.condense_question(condense_prompt, main_module.condense_provider)
                 logger.info(f"Condensed question: {request.question!r} → {question!r}")
             except Exception as e:
-                logger.warning(f"Condense failed ({e}); retrieving with the original question")
+                logger.warning("Condense failed (%s: %s); retrieving with the original question",
+                               type(e).__name__, e)
             timings["condense_ms"] = _ms(t0)
         else:
             logger.info(f"Condense skipped (standalone question): {question!r}")
@@ -180,7 +181,7 @@ async def query(request: QueryRequest):
             answer = response.content
             model_used = response.model
         except Exception as e:
-            logger.error(f"LLM generation failed: {e}")
+            logger.exception("LLM generation failed")
             raise HTTPException(status_code=503, detail=f"LLM nicht erreichbar: {e}") from e
     else:
         answer = pm.render_no_context(question=request.question)
@@ -217,7 +218,11 @@ async def query_stream(request: QueryRequest):
     sources = [_chunk_to_source_dict(c) for c in chunks]
 
     async def event_stream():
-        """Yield SSE 'token' events during generation and a final 'done' event with metadata."""
+        """Yield SSE 'token' events during generation and a final 'done' event with metadata.
+
+        A client that leaves mid-answer (page closed, UI read timeout) cancels the generator at a yield;
+        that is logged — otherwise the log just stops after the retrieval lines.
+        """
         full_answer = ""
         stream_ctx = StreamResult()
 
@@ -238,8 +243,11 @@ async def query_stream(request: QueryRequest):
                 timings["first_token_ms"] = _ms(t_start)
                 event = json.dumps({"type": "token", "content": full_answer})
                 yield f"data: {event}\n\n"
+        except (asyncio.CancelledError, GeneratorExit):
+            logger.info("Stream aborted by the client after %dms (%d chars sent)", _ms(t_start), len(full_answer))
+            raise
         except Exception as e:
-            logger.error(f"Streaming generation failed: {e}")
+            logger.exception("Streaming generation failed")
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
             return
 
@@ -267,9 +275,12 @@ async def query_stream(request: QueryRequest):
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
-def _start_ingest_job(run_sync) -> str:
-    """Create a job, launch the sync orchestrator run in a thread, and return
-    the job_id. `run_sync` is a zero-arg callable returning an IngestionResult."""
+def _start_ingest_job(run_sync, label: str) -> str:
+    """Create a job, launch the sync orchestrator run in a thread, and return the job_id.
+
+    ``run_sync(progress_cb)`` returns an IngestionResult; ``label`` names the job in the log
+    ("incremental", "full", "reindex <id>"). Start, end and failure are logged — the job registry is
+    in memory, so after a restart the log is the only record of why a run failed."""
     import src.main as main_module
 
     # Parallel runs race on delete/upsert of the same chunks
@@ -278,6 +289,7 @@ def _start_ingest_job(run_sync) -> str:
 
     job_id = str(uuid.uuid4())
     _ingest_jobs[job_id] = IngestStatusResponse(job_id=job_id, status="queued")
+    logger.info("Ingest job %s started (%s)", job_id, label)
 
     def _update_progress(result):
         """Copy orchestrator progress fields onto the tracked job status."""
@@ -295,7 +307,9 @@ def _start_ingest_job(run_sync) -> str:
             _ingest_jobs[job_id].status = "done"
             _ingest_jobs[job_id].errors = result.errors
             main_module.bm25_index.invalidate()
+            logger.info("Ingest job %s done (%s): %d file errors", job_id, label, len(result.errors))
         except Exception as e:
+            logger.exception("Ingest job %s failed (%s)", job_id, label)
             _ingest_jobs[job_id].status = "error"
             _ingest_jobs[job_id].errors.append(str(e))
 
@@ -320,7 +334,7 @@ async def ingest(full: bool = False):
             vectorstore=vs, progress_callback=progress_cb, full=full,
         )
 
-    return IngestJobResponse(job_id=_start_ingest_job(_run), status="queued")
+    return IngestJobResponse(job_id=_start_ingest_job(_run, "full" if full else "incremental"), status="queued")
 
 
 @router.post("/feedback")
@@ -373,7 +387,7 @@ async def _health_loop(interval: float = _HEALTH_INTERVAL_S):
             llm_ok = await main_module.provider.health_check()
             _health_cache.update({"chroma": chroma_ok, "llm": llm_ok})
         except Exception as e:
-            logger.warning("Background health check failed: %s", e)
+            logger.warning("Background health check failed (%s: %s)", type(e).__name__, e)
         await asyncio.sleep(interval)
 
 
@@ -572,7 +586,7 @@ async def reindex_source(source_id: str):
             vectorstore=vs, only_source_id=source_id, progress_callback=progress_cb,
         )
 
-    return IngestJobResponse(job_id=_start_ingest_job(_run), status="queued")
+    return IngestJobResponse(job_id=_start_ingest_job(_run, f"reindex {source_id}"), status="queued")
 
 
 @router.delete("/sources/{source_id:path}")

@@ -124,7 +124,7 @@ async def run_evaluation_with_retriever(
                 hybrid=hybrid,
             )
         except Exception as e:
-            logger.error("Eval [%s/%s] id=%s error: %s", idx + 1, total, pair.get("id", "?"), e)
+            logger.exception("Eval [%s/%s] id=%s failed", idx + 1, total, pair.get("id", "?"))
             results.append({
                 "id": pair.get("id", "?"),
                 "question": question,

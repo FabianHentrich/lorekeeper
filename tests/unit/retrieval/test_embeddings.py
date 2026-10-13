@@ -17,7 +17,7 @@ def config():
 def mock_model():
     """Provides a mocked SentenceTransformer avoiding GPU resource lockups during testing."""
     model = MagicMock()
-    model.get_sentence_embedding_dimension.return_value = 4
+    model.get_embedding_dimension.return_value = 4
     return model
 
 
@@ -79,7 +79,7 @@ class TestLazyModelLoading:
         svc = EmbeddingService(config)
         fake_model = MagicMock()
         fake_model.encode.return_value = np.array([0.0])
-        fake_model.get_sentence_embedding_dimension.return_value = 1
+        fake_model.get_embedding_dimension.return_value = 1
         with patch("src.retrieval.embeddings.SentenceTransformer", return_value=fake_model):
             result = svc.embed_texts_sync(["x"])
         assert svc._model is fake_model

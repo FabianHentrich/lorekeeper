@@ -38,7 +38,7 @@ class EmbeddingService:
                 self.config.model,
                 device=self.config.device if self.config.device != "auto" else None,
             )
-            logger.info(f"Embedding model loaded (dim={self._model.get_sentence_embedding_dimension()})")
+            logger.info(f"Embedding model loaded (dim={self._model.get_embedding_dimension()})")
         return self._model
 
     def _with_query_prefix(self, text: str) -> str:

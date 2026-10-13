@@ -290,7 +290,7 @@ class IngestionOrchestrator:
 
             except Exception as e:
                 error_msg = f"Error processing {file_path}: {e}"
-                logger.error(error_msg)
+                logger.exception(error_msg)
                 result.errors.append(error_msg)
                 # Keep the previously indexed version instead of treating the file as deleted
                 processed.add(key)

@@ -5,12 +5,9 @@ Same model and tokenizer as the torch ``CrossEncoder``, so the scores match to r
 RX 9070 XT: 15 pairs in ~50 ms instead of ~840 ms on the CPU, and ~70 ms instead of ~14 s
 while the CPU is fully loaded (roadmap 5.4).
 """
-import logging
 import threading
 
 import numpy as np
-
-logger = logging.getLogger(__name__)
 
 DML_PROVIDER = "DmlExecutionProvider"
 

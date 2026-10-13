@@ -229,6 +229,21 @@ Pro Anfrage steht eine Zeile `Query timings: …` im Log (Condense, Retrieval-St
 gesamt, Chunks, Prompt-Größe). Den Log-Level setzt `logging.level` (`DEBUG` zeigt u.a. alle
 Rerank-Scores).
 
+**Fehler suchen** — `Select-String -Path logs\lorekeeper.log -Pattern 'ERROR|Traceback' -Context 0,20`.
+Was im Log steht:
+- **Unbehandelte Fehler** einer Anfrage: eine Zeile `<METHODE> <pfad> → unhandled exception`, danach
+  der Traceback von uvicorn (`uvicorn.error` wird in die Datei geleitet; vorher stand er nur in der
+  Konsole). Auch ein Absturz beim Start steht mit Traceback in der Datei.
+- **Ingest-Jobs**: `Ingest job <id> started (<art>)`, dann `done (…): N file errors` oder
+  `failed` mit Traceback. Die Job-Liste lebt nur im Speicher — nach einem Neustart ist das Log die
+  einzige Spur. Fehler einzelner Dateien stehen als `Error processing <pfad>` mit Traceback.
+- **Eval-Jobs** (`Retrieval eval job <id> failed`), **LLM-Fehler** (`LLM generation failed`,
+  `Streaming generation failed`) und der **Fallback** (`Primary provider failed …, trying
+  fallback`, WARNING) mit Traceback — der Fallback antwortet, ein Fehler im Hauptprovider fällt
+  sonst nicht auf.
+- **Abgebrochene Antworten** (Seite geschlossen, Lese-Timeout der UI): `Stream aborted by the client
+  after <ms> (<n> chars sent)` — es fehlt dann die `Query timings`-Zeile.
+
 Bewertungen (👍/👎 im Chat) landen in `logs/feedback.jsonl`, ein JSON-Objekt pro Zeile. Eine
 geänderte oder zurückgenommene Bewertung ist eine neue Zeile mit derselben `message_id` — die letzte
 Zeile je `message_id` gilt (`rating: null` = zurückgenommen). Auswerten geht am einfachsten über

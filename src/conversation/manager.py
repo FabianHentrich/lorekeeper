@@ -158,7 +158,10 @@ class ConversationManager:
         try:
             while True:
                 await asyncio.sleep(self.config.session_gc_interval_seconds)
-                self._cleanup_expired()
+                try:
+                    self._cleanup_expired()
+                except Exception:
+                    logger.exception("Session GC failed")  # keep the loop alive — sessions must keep expiring
         except asyncio.CancelledError:
             logger.info("Session GC cancelled")
             raise
