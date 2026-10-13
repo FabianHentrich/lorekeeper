@@ -182,7 +182,11 @@ lorekeeper/
 │   ├── conversation/manager.py    # Sessions je Rolle, Sliding Window, GC
 │   ├── prompts/manager.py         # Jinja2-Rendering
 │   └── api/
-│       ├── routes.py              # /query, /ingest, /sources, /provider, /config, /feedback, …
+│       ├── routes.py              # bündelt die drei Router unten zu einem
+│       ├── query_routes.py        # /query, /query/stream (Condense, Retrieval, Warte-Hinweis)
+│       ├── sources_routes.py      # /ingest*, /sources*, /admin/wipe, /stats (Jobs, Sperre während Ingest)
+│       ├── system_routes.py       # /health, /sidebar-state, /sessions, /provider*, /config, /feedback, install_llm
+│       ├── background.py          # spawn_background (starke Referenz auf Job-Tasks)
 │       ├── access.py              # Spieler-Filter aus player_visible
 │       ├── eval_routes.py         # /eval/* (Golden Set, Preview, Eval-Jobs, Chunk-Inspector)
 │       ├── prompt_routes.py       # /prompts/*

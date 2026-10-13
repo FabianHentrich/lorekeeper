@@ -247,7 +247,7 @@ wurde (z.B. ohne Verlaufsblock im `qa`), gilt danach als nicht aktiv; einmal neu
 ```
 
 **Eigenes Template ergänzen:** Schlüssel in `prompts.yaml`, `render_*`-Methode in
-`src/prompts/manager.py`, Aufruf in `src/api/routes.py`.
+`src/prompts/manager.py`, Aufruf in `src/api/query_routes.py`.
 
 ---
 

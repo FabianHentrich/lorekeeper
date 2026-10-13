@@ -19,7 +19,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import src.main as main_module
-from src.api import routes as routes_module
+from src.api import sources_routes as sources_routes_module
 from src.api.routes import router
 from src.config.manager import (
     ConfigManager,
@@ -122,7 +122,7 @@ def app_env(tmp_path, embed_service):
     originals = {n: getattr(main_module, n) for n in services}
     for n, v in services.items():
         setattr(main_module, n, v)
-    routes_module._ingest_jobs.clear()
+    sources_routes_module._ingest_jobs.clear()
 
     app = FastAPI()
     app.include_router(router)
@@ -131,7 +131,7 @@ def app_env(tmp_path, embed_service):
 
     for n, v in originals.items():
         setattr(main_module, n, v)
-    routes_module._ingest_jobs.clear()
+    sources_routes_module._ingest_jobs.clear()
 
 
 def _ingest(client, **params) -> dict:

@@ -26,7 +26,7 @@ sauber, keine echten LLM-Aufrufe) gelten wie in den übrigen Docs beschrieben.
 
 Grundregeln: Unit-Tests mocken externe Dienste (Ollama, Gemini, ChromaDB). Integrationstests nutzen
 `chromadb.EphemeralClient` (im Speicher, kein Plattenzugriff). **Kein echter LLM- oder API-Aufruf in
-der Testsuite.** Neue Logik in `src/` (außer dünner Verdrahtung in `src/api/routes.py`) bekommt einen
+der Testsuite.** Neue Logik in `src/` (außer dünner Verdrahtung in den Routen-Modulen `src/api/*_routes.py`) bekommt einen
 Unit-Test; Routenverhalten gehört in `tests/integration/`.
 
 `tests/integration/test_e2e_ingest_query.py` ist der End-to-End-Test: Er indiziert einen kleinen

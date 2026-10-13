@@ -130,7 +130,7 @@ curl.exe -X POST http://127.0.0.1:8000/provider -H "Content-Type: application/js
 ```
 
 Der Wechsel baut Provider, Condense-Provider und `Generator` (mit Fallback) zusammen neu
-(`ProviderFactory.build_all()` über `install_llm()` in `src/api/routes.py`) und frischt danach den
+(`ProviderFactory.build_all()` über `install_llm()` in `src/api/system_routes.py`) und frischt danach den
 LLM-Health-Status auf; scheitert er (z.B. fehlender Key), bleibt der alte Satz. Derselbe Weg läuft
 beim Gemini-Key und beim Umschalten von `llm.fallback_enabled` auf der Settings-Seite — der
 `Generator` legt seinen Fallback beim Bau fest, ein bloßes Ändern der Einstellung erreichte ihn

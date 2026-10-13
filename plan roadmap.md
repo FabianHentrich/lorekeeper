@@ -706,7 +706,7 @@ Offen: #17 (Umbenennen beim Tageswechsel unter Windows, wenn die Datei anderswo 
 
 **Aufwand**: A gering, B gering, C gering. Last 🟢.
 
-## 11.0 Architektur-Review: Passt der Aufbau noch, was sollte modularer werden? — 🔄 Umbau läuft (P1–P6 erledigt, P7 offen)
+## 11.0 Architektur-Review: Passt der Aufbau noch, was sollte modularer werden? — ✅ Erledigt (P1–P7; P8 optional)
 
 **Wann**: nach 10.0 und der Messung aus 8.0, **vor** 9.0 und vor dem Wiederaufnehmen der Features. Begründung:
 - 8.0 kann Umbauten erzwingen (z.B. atomarer Provider-Wechsel, Job-Verwaltung, Warteschlange fürs LLM) — die gehören in denselben Entwurf, nicht in einen zweiten Umbau danach.
@@ -785,11 +785,15 @@ Die Beobachtungen oben, bewertet:
 
 **P6 umgesetzt (13.10.)**: Lifespan mit `try/finally` und `_shutdown()` — schlägt der Start nach dem Ollama-Autostart fehl, wird das gestartete Ollama trotzdem beendet; abgebrochene Hintergrund-Tasks werden abgewartet; hängt Ollama beim Beenden länger als 10 s, wird es hart beendet statt den Shutdown mit einer Exception abzubrechen. `atomic_write_text()` (temporäre Datei im selben Ordner + `os.replace`) für alle fünf Schreibstellen: `sources.yaml`, `settings.local.yaml`, `prompts.yaml`, Prompt-Varianten, Golden Set. Jinja2 in `SandboxedEnvironment` (Prompt-Vorschau und `PromptManager`); die echten Templates rendern unverändert (E2E- und Prompt-Tests grün). Tests: Startfehler beendet Ollama, Schreibfehler lässt alte Datei und keine Temp-Datei zurück, Sandbox lehnt `''.__class__.__mro__…` ab — mutationsgeprüft. Doku: `docs/prompts.md`, `ARCHITECTURE.md`. Suite: 681 grün.
 
+**P7 umgesetzt (13.10.)**: `src/api/routes.py` (839 Zeilen) aufgeteilt in `query_routes.py` (287, Fragen + Warte-Hinweis), `sources_routes.py` (294, Ingest-Jobs, Quellen, Wipe, Stats, Sperre während Ingest), `system_routes.py` (295, Health, Sidebar, Sessions, Provider, Gemini-Key, Config, Feedback, `install_llm`) und `background.py` (`spawn_background`, vorher als privater Name von `eval_routes` importiert). `routes.py` bündelt die drei Router, damit `main.py` und die Tests weiter `router` importieren. Blöcke per Skript wörtlich verschoben, Verhalten unverändert: Suite 681 grün wie vorher, OpenAPI-Pfade und -Methoden identisch (26), Reihenfolge der `/sources`-Routen erhalten (Test `test_static_source_routes_not_shadowed`). Tests zeigen auf die neuen Module. Doku: Strukturbaum in `ARCHITECTURE.md` und `CLAUDE.md`, Verweise in `prompts.md`, `provider-strategy.md`, `testing.md`.
+
+**11.0 abgeschlossen** — P1–P7 umgesetzt; P8 (Dienste-Modul, Reranker-Modul) bleibt optional für die Feature-Arbeit.
+
 ---
 
 ## Priorisierungsvorschlag
 
-Erledigt: 8.0 Gleichzeitige Anfragen (Messung + Warte-Hinweis), 10.0 Logging (Pakete A–C), 7.3 Inline-Doku, 7.4 Pakete A–D (Fehler, toter Code, Vereinfachung, Clean Code), 7.2 Code-Review + Nachbesserung, 3.10 Regelwerk-Slot, 5.4 Reranker auf der GPU (DirectML), 5.2 Startup-Baseline, 3.3 Chunk-Inspector, 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
+Erledigt: 11.0 Architektur-Review + Umbau P1–P7, 8.0 Gleichzeitige Anfragen (Messung + Warte-Hinweis), 10.0 Logging (Pakete A–C), 7.3 Inline-Doku, 7.4 Pakete A–D (Fehler, toter Code, Vereinfachung, Clean Code), 7.2 Code-Review + Nachbesserung, 3.10 Regelwerk-Slot, 5.4 Reranker auf der GPU (DirectML), 5.2 Startup-Baseline, 3.3 Chunk-Inspector, 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
 
 **Offen am Gaming-PC (Nutzer)**: alte Autostart-Aufgabe „LoreKeeper Server“ als Admin entfernen (`Unregister-ScheduledTask -TaskName "LoreKeeper Server" -Confirm:$false`); DHCP-Reservierung für `192.168.178.34` im Router.
 
@@ -799,13 +803,11 @@ Erledigt: 8.0 Gleichzeitige Anfragen (Messung + Warte-Hinweis), 10.0 Logging (Pa
 
 | Reihenfolge | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 1 | 11.0 Umbau P1–P4 (Fehler + Filter) | Hoch — Recategorize und Fallback-Schalter funktionieren nicht, Hybrid-Index wird bei gleichzeitigen Fragen/Admin-Aktionen falsch | Je S | 🟢 | Zwei High-Fehler (selbst reproduziert); Pakete klein und einzeln committbar |
-| 1b | 11.0 Umbau P5–P7 | Mittel — einheitliche UI-Fehler, robuste Config-Dateien, Übersicht vor den Features | S–M | 🟢 | P7 (Routen aufteilen) ist Entscheidung |
-| 2 | 9.0 Testabdeckung | Gering-Mittel — Lücken in den Admin-Seiten und `evaluate.py` | Gering-Mittel | 🟢 | 85 % gesamt; gezielt Pfade mit Fehlerrisiko, keine Prozentjagd |
-| 3 | Offene Prüfungen im laufenden Betrieb | Mittel — bestätigt, dass die Neuerungen im echten Chat wirken | Gering | 🟡 | Mit gestartetem LoreKeeper: 3.6 Folgefragen, 👍/👎 + Tabs „Feedback“/„Chunks“, Rerank-Timings (5.4), Regelwerk-Slot an x002/x005 (3.10), `pytest -m live`; gut mit 8.0 kombinierbar |
-| 4 | 5.5 Vektorsuche reproduzierbar machen | Gering-Mittel — verlässliche Eval-Vergleiche | Gering-Mittel | 🟡 | ±2 Abschnitte Schwankung zwischen Prozessen; `ef_search` erhöhen oder exakt suchen |
-| 5 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Antwortqualität/Prompt-Größe; mit der Chunk-Prüfung aus 5.2 messbar |
-| 6 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf (extern); dann Re-Index, Eval, Spieler-Messung |
+| 1 | 9.0 Testabdeckung | Gering-Mittel — Lücken in den Admin-Seiten und `evaluate.py` | Gering-Mittel | 🟢 | 85 % gesamt; gezielt Pfade mit Fehlerrisiko, keine Prozentjagd |
+| 2 | Offene Prüfungen im laufenden Betrieb | Mittel — bestätigt, dass die Neuerungen im echten Chat wirken | Gering | 🟡 | Mit gestartetem LoreKeeper: 3.6 Folgefragen, 👍/👎 + Tabs „Feedback“/„Chunks“, Rerank-Timings (5.4), Regelwerk-Slot an x002/x005 (3.10), `pytest -m live`; gut mit 8.0 kombinierbar |
+| 3 | 5.5 Vektorsuche reproduzierbar machen | Gering-Mittel — verlässliche Eval-Vergleiche | Gering-Mittel | 🟡 | ±2 Abschnitte Schwankung zwischen Prozessen; `ef_search` erhöhen oder exakt suchen |
+| 4 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Antwortqualität/Prompt-Größe; mit der Chunk-Prüfung aus 5.2 messbar |
+| 5 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf (extern); dann Re-Index, Eval, Spieler-Messung |
 | — | 3.2 Session-History — ⏸ | Unklar | Mittel | 🟢 | Feature, ruht; erst entscheiden, ob gespeicherte Sessions Nutzen haben |
 | — | 2 Bilder im Chat (Phase 1/2) — ⏸ | Mittel / Nice-to-have | Mittel / Mittel-Hoch | 🔴/🟡 | Feature, ruht |
 | — | 4.2 Internet-Zugriff (Tailscale) — ⏸ | Mittel | Gering | 🟢 | Feature, ruht; sinnvoll erst nach 8.0 |

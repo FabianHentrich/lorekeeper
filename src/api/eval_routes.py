@@ -19,6 +19,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from evaluation.evaluate_retrieval import load_qa_pairs, save_report
 from src.api.access import InvalidFilter, NoPlayerSources, effective_filters
+from src.api.background import spawn_background
 from src.api.eval_schemas import (
     ChunkListResponse,
     EvalJobRequest,
@@ -32,7 +33,7 @@ from src.api.eval_schemas import (
     RetrievalPreviewResponse,
     RetrievedChunkResponse,
 )
-from src.api.routes import _spawn_background, refuse_during_ingest
+from src.api.sources_routes import refuse_during_ingest
 from src.config.manager import atomic_write_text
 
 logger = logging.getLogger(__name__)
@@ -194,10 +195,10 @@ async def start_eval(req: EvalJobRequest, request: Request):
         )
 
         if req.eval_type == "retrieval":
-            _spawn_background(_run_retrieval_eval(job, qa_pairs, req))
+            spawn_background(_run_retrieval_eval(job, qa_pairs, req))
         else:
             # Same server that received this request — no hardcoded host/port
-            _spawn_background(_run_e2e_eval(job, qa_pairs, str(request.base_url).rstrip("/")))
+            spawn_background(_run_e2e_eval(job, qa_pairs, str(request.base_url).rstrip("/")))
 
     return EvalJobResponse(job_id=job_id, status="queued")
 

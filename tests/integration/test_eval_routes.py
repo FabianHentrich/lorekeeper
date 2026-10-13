@@ -464,7 +464,7 @@ def test_preview_rejects_malformed_filters_with_422(client, bad):
 
 def test_eval_is_refused_while_an_ingest_runs(client, tmp_eval_dir):
     """Numbers from a half-built index would be meaningless."""
-    from src.api import routes
+    from src.api import sources_routes as routes
     from src.api.schemas import IngestStatusResponse
     _write_pairs(tmp_eval_dir, [_PAIR])
     routes._ingest_jobs["j"] = IngestStatusResponse(job_id="j", status="running")

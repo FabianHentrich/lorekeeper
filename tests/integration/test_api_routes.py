@@ -212,9 +212,10 @@ def fake_services():
     # Seed health cache (background loop doesn't run in tests)
     import time as _time
 
-    from src.api import routes as routes_module
-    routes_module._health_cache.update({"ts": _time.monotonic(), "chroma": True, "llm": True})
-    routes_module._ingest_jobs.clear()
+    from src.api import sources_routes as sources_routes_module
+    from src.api import system_routes as system_routes_module
+    system_routes_module._health_cache.update({"ts": _time.monotonic(), "chroma": True, "llm": True})
+    sources_routes_module._ingest_jobs.clear()
 
     yield fakes
 
@@ -506,8 +507,8 @@ def test_health_healthy(client, fake_services):
 
 
 def test_health_degraded_when_llm_down(client, fake_services):
-    from src.api import routes as routes_module
-    routes_module._health_cache["llm"] = False
+    from src.api import system_routes as system_routes_module
+    system_routes_module._health_cache["llm"] = False
     response = client.get("/health")
     assert response.json() == {"status": "degraded", "chromadb": True, "llm": False, "sources_configured": True}
 
@@ -575,19 +576,19 @@ def test_ingest_status_unknown_job_returns_404(client, fake_services):
 
 def test_ingest_rejected_while_job_running(client, fake_services):
     """Validate a second ingest is refused with 409 while one is still running."""
-    from src.api import routes as routes_module
+    from src.api import sources_routes as sources_routes_module
     from src.api.schemas import IngestStatusResponse
-    routes_module._ingest_jobs["busy"] = IngestStatusResponse(job_id="busy", status="running")
+    sources_routes_module._ingest_jobs["busy"] = IngestStatusResponse(job_id="busy", status="running")
 
     assert client.post("/ingest").status_code == 409
 
 
 def test_reindex_rejected_while_job_running(client, fake_services):
     """Validate a per-source reindex is refused with 409 while another job is running."""
-    from src.api import routes as routes_module
+    from src.api import sources_routes as sources_routes_module
     from src.api.schemas import IngestStatusResponse
     main_module.config.settings.ingestion.sources = [SimpleNamespace(id="vault")]
-    routes_module._ingest_jobs["busy"] = IngestStatusResponse(job_id="busy", status="queued")
+    sources_routes_module._ingest_jobs["busy"] = IngestStatusResponse(job_id="busy", status="queued")
 
     assert client.post("/sources/vault/reindex").status_code == 409
 
@@ -686,9 +687,9 @@ def test_put_config_filters_disallowed_inner_keys(config_client):
 
 def test_feedback_is_appended_as_json_lines(client, tmp_path, monkeypatch):
     """Each rating is one line; a changed or withdrawn rating is a new line for the same message_id."""
-    import src.api.routes as routes_module
+    import src.api.system_routes as system_routes_module
     path = tmp_path / "logs" / "feedback.jsonl"
-    monkeypatch.setattr(routes_module, "_FEEDBACK_PATH", path)
+    monkeypatch.setattr(system_routes_module, "_FEEDBACK_PATH", path)
     body = {"message_id": "m1", "rating": "down", "role": "player", "question": "Was ist Überschaden?",
             "answer": "…", "sources": ["pnp_regelbuch.pdf"], "model": "qwen3:14b"}
 
@@ -702,17 +703,17 @@ def test_feedback_is_appended_as_json_lines(client, tmp_path, monkeypatch):
 
 
 def test_feedback_rejects_unknown_ratings(client, tmp_path, monkeypatch):
-    import src.api.routes as routes_module
-    monkeypatch.setattr(routes_module, "_FEEDBACK_PATH", tmp_path / "feedback.jsonl")
+    import src.api.system_routes as system_routes_module
+    monkeypatch.setattr(system_routes_module, "_FEEDBACK_PATH", tmp_path / "feedback.jsonl")
     assert client.post("/feedback", json={"message_id": "m1", "rating": "meh"}).status_code == 422
     assert not (tmp_path / "feedback.jsonl").exists()
 
 
 def test_feedback_list_keeps_the_last_rating_per_answer(client, tmp_path, monkeypatch):
     """Changed ratings count once, withdrawn ones disappear, broken lines are skipped, newest first."""
-    import src.api.routes as routes_module
+    import src.api.system_routes as system_routes_module
     path = tmp_path / "feedback.jsonl"
-    monkeypatch.setattr(routes_module, "_FEEDBACK_PATH", path)
+    monkeypatch.setattr(system_routes_module, "_FEEDBACK_PATH", path)
     lines = [
         {"ts": "2026-10-12T10:00:00", "message_id": "a", "rating": "up", "question": "A"},
         {"ts": "2026-10-12T10:01:00", "message_id": "a", "rating": "down", "question": "A"},   # changed
@@ -728,8 +729,8 @@ def test_feedback_list_keeps_the_last_rating_per_answer(client, tmp_path, monkey
 
 
 def test_feedback_list_without_file_is_empty(client, tmp_path, monkeypatch):
-    import src.api.routes as routes_module
-    monkeypatch.setattr(routes_module, "_FEEDBACK_PATH", tmp_path / "nope.jsonl")
+    import src.api.system_routes as system_routes_module
+    monkeypatch.setattr(system_routes_module, "_FEEDBACK_PATH", tmp_path / "nope.jsonl")
     assert client.get("/feedback").json() == []
 
 

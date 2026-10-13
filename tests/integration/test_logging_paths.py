@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 import src.main as main_module
-from src.api import routes
+from src.api import background, query_routes, sources_routes, system_routes
 from src.api.schemas import QueryRequest
 from tests.integration import test_api_routes as api
 
@@ -36,29 +36,29 @@ def test_unhandled_route_exception_gets_a_log_line(caplog):
 
 async def test_failed_ingest_job_is_logged_with_traceback(caplog):
     """A reindex that dies after deleting the source's chunks must say why — in the log, not only in the job."""
-    routes._ingest_jobs.clear()
+    sources_routes._ingest_jobs.clear()
 
     def run(progress_cb):
         raise RuntimeError("chroma locked")
 
-    with caplog.at_level(logging.INFO, logger="src.api.routes"):
-        job_id = routes._start_ingest_job(run, "reindex vault")
-        await asyncio.gather(*routes._background_tasks)
+    with caplog.at_level(logging.INFO, logger="src.api.sources_routes"):
+        job_id = sources_routes._start_ingest_job(run, "reindex vault")
+        await asyncio.gather(*background._background_tasks)
 
     messages = [rec.getMessage() for rec in caplog.records]
     assert f"Ingest job {job_id} started (reindex vault)" in messages
     failed = next(rec for rec in caplog.records if rec.getMessage() == f"Ingest job {job_id} failed (reindex vault)")
     assert failed.exc_info and "chroma locked" in str(failed.exc_info[1])
-    assert routes._ingest_jobs[job_id].status == "error"
-    routes._ingest_jobs.clear()
+    assert sources_routes._ingest_jobs[job_id].status == "error"
+    sources_routes._ingest_jobs.clear()
 
 
 async def test_stream_aborted_by_the_client_is_logged(fake_services, caplog):
     """Closing the stream after the first token (page closed, UI timeout) leaves a line instead of silence."""
-    response = await routes.query_stream(QueryRequest(question="Was ist Arkenfeld?"))
+    response = await query_routes.query_stream(QueryRequest(question="Was ist Arkenfeld?"))
     events = response.body_iterator
 
-    with caplog.at_level(logging.INFO, logger="src.api.routes"):
+    with caplog.at_level(logging.INFO, logger="src.api.query_routes"):
         await events.__anext__()
         await events.aclose()
 
@@ -81,11 +81,11 @@ def fake_services(monkeypatch):
 
 def test_health_logs_only_changes(monkeypatch, caplog):
     """A line per change (down = WARNING, recovered = INFO), not one every 60 s."""
-    monkeypatch.setattr(routes, "_health_cache", {"chroma": False, "llm": False})
-    with caplog.at_level(logging.INFO, logger="src.api.routes"):
-        routes.update_health(True, True)
-        routes.update_health(True, True)
-        routes.update_health(True, False)
+    monkeypatch.setattr(system_routes, "_health_cache", {"chroma": False, "llm": False})
+    with caplog.at_level(logging.INFO, logger="src.api.system_routes"):
+        system_routes.update_health(True, True)
+        system_routes.update_health(True, True)
+        system_routes.update_health(True, False)
 
     changes = [r for r in caplog.records if r.getMessage().startswith("Health changed")]
     assert [r.levelno for r in changes] == [logging.INFO, logging.WARNING]
@@ -94,8 +94,8 @@ def test_health_logs_only_changes(monkeypatch, caplog):
 
 async def test_answer_lines_carry_session_role_and_model(fake_services, caplog):
     """With several people asking at once, session/role/model tie the lines of one question together."""
-    response = await routes.query_stream(QueryRequest(question="Was ist Arkenfeld?", role="game_master"))
-    with caplog.at_level(logging.INFO, logger="src.api.routes"):
+    response = await query_routes.query_stream(QueryRequest(question="Was ist Arkenfeld?", role="game_master"))
+    with caplog.at_level(logging.INFO, logger="src.api.query_routes"):
         async for _ in response.body_iterator:
             pass
 
@@ -112,9 +112,9 @@ async def test_gemini_key_change_is_logged_without_the_key(monkeypatch, caplog):
     monkeypatch.setattr(ProviderFactory, "build_all", staticmethod(
         lambda settings: (api.FakeProvider(), None, api.FakeGenerator())))
     try:
-        with caplog.at_level(logging.INFO, logger="src.api.routes"):
-            await routes.set_gemini_key({"api_key": "AIza-SECRET"})
-            await routes.set_gemini_key({"api_key": None})
+        with caplog.at_level(logging.INFO, logger="src.api.system_routes"):
+            await system_routes.set_gemini_key({"api_key": "AIza-SECRET"})
+            await system_routes.set_gemini_key({"api_key": None})
     finally:
         gemini.set_runtime_api_key(None)
 
@@ -134,7 +134,7 @@ def _question_lines(caplog) -> list[str]:
 async def test_the_question_is_logged_once_at_info(fake_services, caplog):
     """One line carries the question — the anchor for the retrieval, timings and error lines after it."""
     with caplog.at_level(logging.INFO):
-        await routes.query(QueryRequest(question="Was ist Arkenfeld?"))
+        await query_routes.query(QueryRequest(question="Was ist Arkenfeld?"))
 
     assert _question_lines(caplog) == ["Question (session=test-ses role=game_master): 'Was ist Arkenfeld?'"]
     assert sum("Was ist Arkenfeld?" in r.getMessage() for r in caplog.records if r.levelno >= logging.INFO) == 1
@@ -151,7 +151,7 @@ async def test_a_condensed_follow_up_shows_both_forms_in_one_line(fake_services,
 
     monkeypatch.setattr(gen, "condense_question", condense)
     with caplog.at_level(logging.INFO):
-        await routes.query(QueryRequest(question="Wer ist sein Vater?"))
+        await query_routes.query(QueryRequest(question="Wer ist sein Vater?"))
 
     assert _question_lines(caplog) == [
         "Question (session=test-ses role=game_master): 'Wer ist sein Vater?' → condensed 'Wer ist der Vater von Arkenfeld?'"
@@ -232,31 +232,31 @@ async def test_started_ollama_writes_into_its_log_file(tmp_path, monkeypatch):
 
 async def _events(request) -> list[dict]:
     import json
-    response = await routes.query_stream(request)
+    response = await query_routes.query_stream(request)
     return [json.loads(chunk[6:]) async for chunk in response.body_iterator]
 
 
 async def test_answer_waiting_for_another_gets_a_notice_first(fake_services, monkeypatch):
     """Ollama answers one question at a time — the chat says why the answer hasn't started yet."""
-    monkeypatch.setattr(routes, "_active_generations", 1)
+    monkeypatch.setattr(query_routes, "_active_generations", 1)
     events = await _events(QueryRequest(question="Was ist Arkenfeld?"))
 
     assert events[0] == {"type": "status", "content": "Das LLM beantwortet gerade eine andere Frage — deine kommt danach."}
     assert events[1]["type"] == "token" and events[-1]["type"] == "done"
-    assert routes._active_generations == 1  # back to the other answer's count after this one finished
+    assert query_routes._active_generations == 1  # back to the other answer's count after this one finished
 
 
 async def test_no_notice_when_the_llm_is_free(fake_services):
     events = await _events(QueryRequest(question="Was ist Arkenfeld?"))
     assert [e["type"] for e in events if e["type"] == "status"] == []
-    assert routes._active_generations == 0
+    assert query_routes._active_generations == 0
 
 
 async def test_count_drops_when_the_client_leaves(fake_services):
     """An aborted stream must not leave a phantom generation — every later question would show the notice."""
-    response = await routes.query_stream(QueryRequest(question="Was ist Arkenfeld?"))
+    response = await query_routes.query_stream(QueryRequest(question="Was ist Arkenfeld?"))
     events = response.body_iterator
     await events.__anext__()
-    assert routes._active_generations == 1
+    assert query_routes._active_generations == 1
     await events.aclose()
-    assert routes._active_generations == 0
+    assert query_routes._active_generations == 0

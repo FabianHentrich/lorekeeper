@@ -170,7 +170,7 @@ async def lifespan(app: FastAPI):
         tasks.append(asyncio.create_task(conversation_manager.start_gc()))
 
         # Start background health checker
-        from src.api.routes import _health_loop, update_health
+        from src.api.system_routes import _health_loop, update_health
         # Seed cache with initial state (vectorstore + provider already initialized); logs the first state
         try:
             update_health(vectorstore.health_check(), await provider.health_check())

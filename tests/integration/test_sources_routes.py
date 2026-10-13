@@ -17,7 +17,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import src.main as main_module
-from src.api import routes as routes_module
+from src.api import sources_routes as sources_routes_module
 from src.api.routes import router
 from src.config.manager import ConfigManager, SourceConfig
 from src.ingestion.orchestrator import IngestionOrchestrator, IngestionResult
@@ -78,13 +78,13 @@ def env(tmp_path):
     )
     for n in names:
         setattr(main_module, n, getattr(fakes, n))
-    routes_module._ingest_jobs.clear()
+    sources_routes_module._ingest_jobs.clear()
 
     yield fakes
 
     for n, v in originals.items():
         setattr(main_module, n, v)
-    routes_module._ingest_jobs.clear()
+    sources_routes_module._ingest_jobs.clear()
 
 
 @pytest.fixture
@@ -189,7 +189,7 @@ def test_put_sources_persists_to_sidecar(client, env):
 def test_player_visible_defaults_off_and_round_trips(client, env, caplog):
     """New sources are game-master-only; the player flag survives PUT, sources.yaml and GET — and the log
     shows which sources players can search from now on."""
-    caplog.set_level(logging.INFO, logger="src.api.routes")
+    caplog.set_level(logging.INFO, logger="src.api.sources_routes")
     r = client.put("/sources", json={"sources": [
         {**_src("regeln", env), "player_visible": True}, _src("lore", env),
     ]})
@@ -497,7 +497,7 @@ def test_index_changes_are_refused_while_an_ingest_runs(client, env, method, pat
     """A source deleted mid-run came back as orphans (the job upserted it again); a wipe left a
     silent partial index."""
     from src.api.schemas import IngestStatusResponse
-    routes_module._ingest_jobs["j"] = IngestStatusResponse(job_id="j", status="running")
+    sources_routes_module._ingest_jobs["j"] = IngestStatusResponse(job_id="j", status="running")
 
     r = client.request(method, path, json=body)
 
