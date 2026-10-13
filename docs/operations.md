@@ -171,7 +171,7 @@ steht in `logs/ollama.log`.
 
 **Mehrere Fragen gleichzeitig**: Ollama beantwortet sie nacheinander (`OLLAMA_NUM_PARALLEL=1`,
 bewusst so gelassen). `OLLAMA_NUM_PARALLEL=2` wurde gemessen: Das erste Token kommt bei Gleichzeitigen
-schneller, aber jede Antwort läuft langsamer — auch allein (−27 %), bei ~2,6 GB mehr VRAM (Roadmap 8.0).
+schneller, aber jede Antwort läuft langsamer — auch allein (−27 %), bei ~2,6 GB mehr VRAM (Messung: [provider-strategy.md](provider-strategy.md)).
 
 ### ChromaDB-Dateisperre
 

@@ -87,11 +87,28 @@ ein selbst gestartetes `ollama serve` findet sie nur, wenn `OLLAMA_MODELS` auf d
 — sonst steht „Ollama lists no models at all“ im Log. Seine Ausgabe schreibt das selbst gestartete
 Ollama nach `logs/ollama.log` ([operations.md](operations.md)).
 
-**Mehrere Fragen gleichzeitig:** Ollama beantwortet sie nacheinander (`OLLAMA_NUM_PARALLEL=1`,
-bewusst nicht geändert). Gemessen (Roadmap 8.0): bei vier gleichzeitigen Fragen wartet die letzte bis
-~17 s auf ihr erstes Token, der Durchsatz bleibt bei ~150 Zeichen/s. Mit `OLLAMA_NUM_PARALLEL=2`
-käme das erste Token schneller, aber jede Antwort liefe langsamer — auch allein (−27 %) — bei ~2,6 GB
-mehr VRAM. Wartende sehen im Chat einen Hinweis (SSE-Event `status`).
+**Mehrere Fragen gleichzeitig — Entscheidung (13.10.): `OLLAMA_NUM_PARALLEL` bleibt 1.** Ollama
+beantwortet gleichzeitige Fragen dann nacheinander. Gemessen mit 1–4 gleichzeitigen `/query/stream`-
+Fragen (gemischte Rollen, je 3 Runden, qwen3:14b auf der RX 9070 XT, echter Index; 84 Fragen, keine
+Fehler):
+
+| `OLLAMA_NUM_PARALLEL` | gleichzeitig | erstes Token Median / Max | Tempo pro Antwort | Gesamtdurchsatz |
+|---|---|---|---|---|
+| **1** | 1 | 0,2 / 0,3 s | 162 Zeichen/s | 151 Z/s |
+| 1 | 2 | 1,7 / 2,9 s | 185 Z/s | 148 Z/s |
+| 1 | 3 | 2,5 / 15,8 s | 166 Z/s | 149 Z/s |
+| 1 | 4 | 5,0 / 17,0 s | 161 Z/s | 146 Z/s |
+| 2 | 1 | 0,3 / 0,3 s | 119 Z/s | 114 Z/s |
+| 2 | 2 | 0,6 / 0,6 s | 95 Z/s | 137 Z/s |
+| 2 | 3 | 0,9 / 4,7 s | 88 Z/s | 140 Z/s |
+| 2 | 4 | 2,5 / 12,5 s | 87 Z/s | 147 Z/s |
+
+Begründung: Der Engpass ist das LLM, nicht LoreKeeper (Retrieval bei 4 gleichzeitig ~450 ms statt
+135 ms). Mit 2 parallelen Slots kommt das erste Token für Gleichzeitige schneller, aber jede Antwort
+läuft langsamer — **auch wenn nur einer fragt (−27 %)** — ohne Gewinn beim Durchsatz, bei 14,4 statt
+11,8 GB VRAM (KV-Cache 5,1 statt 2,6 GB) neben dem Reranker auf derselben GPU. Der häufige Fall
+(einer fragt) bleibt so am schnellsten; Wartende sehen im Chat „Das LLM beantwortet gerade eine
+andere Frage …“ (SSE-Event `status`). Ungemessen: Fragen während eines laufenden Ingests.
 
 **Keep-alive:** Ollama entlädt ein Modell nach 5 Minuten Leerlauf; die nächste Frage wartet dann
 ~16 s (gemessen: erster Token nach 18 s statt 1,1 s). `setx OLLAMA_KEEP_ALIVE 1h` hält es bis eine

@@ -198,7 +198,7 @@ Quellen, Tokens und Zeiten gerendert und die `session_id` für Folgefragen gespe
 Beantwortet das LLM gerade andere Fragen (Spielabend, mehrere fragen gleichzeitig), steht bis zum
 ersten Token ein Hinweis da: „⏳ Das LLM beantwortet gerade eine andere Frage — deine kommt
 danach.“ (`status`-Event). Ollama arbeitet eine Frage nach der anderen ab; bei vier gleichzeitigen
-Fragen wartet die letzte bis zu ~17 s auf ihr erstes Token (Roadmap 8.0).
+Fragen wartet die letzte bis zu ~17 s auf ihr erstes Token ([provider-strategy.md](provider-strategy.md)).
 
 ```mermaid
 sequenceDiagram

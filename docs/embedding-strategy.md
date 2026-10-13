@@ -75,7 +75,27 @@ Warnung ins Log und nimmt das torch-Modell auf der CPU; fällt die GPU erst im B
 (Treiber-Reset, VRAM voll), wechselt er ebenso mit Warnung auf die CPU — für den Rest der Laufzeit,
 statt jede weitere Frage scheitern zu lassen. Der Bi-Encoder bleibt bewusst auf der
 CPU: ein Query-Embedding kostet ~0,08 s, und eine andere Rechenbibliothek würde die Vektoren
-gegenüber dem bestehenden Index leicht verschieben. Hintergrund und Benchmark: Roadmap 5.4.
+gegenüber dem bestehenden Index leicht verschieben.
+
+**Warum DirectML (Entscheidung 12.10.)** — Benchmark auf Ryzen 5 5600X / RX 9070 XT, 15 Paare in
+Produktionsgröße, 30 Wiederholungen; „Last“ = 12 Busy-Loop-Prozesse (≈ laufende Simulation):
+
+| Variante | idle | unter Last | Ranking wie torch? |
+|---|---|---|---|
+| torch CPU | 840 ms | 14,2 s | — |
+| ONNX fp32 CPU | 840 ms | 2,9 s | ✅ identisch |
+| ONNX int8 CPU (`quint8_avx2`) | 710 ms | 2,8 s | ❌ Top-8 weicht ab → verworfen |
+| **DirectML fp32 (GPU)** | **50 ms** | **68 ms** | ✅ identisch (max. Abweichung 6·10⁻⁶) |
+| DirectML fp16 | — | — | lädt nicht |
+
+Golden Set mit GPU-Reranker in ~1 min statt ~12 min, gleiche Treffer. Verworfen bzw. später neu zu
+prüfen: **PyTorch + ROCm unter Windows** (die RX 9070 XT lieferte still Nullen — hätte den Index
+zerstört), **Windows ML** als Nachfolger von DirectML (Radeon-Pfad aus Python nicht belegt). DirectML
+ist bei Microsoft im Wartungsmodus und braucht das Paket `onnxruntime-directml` statt `onnxruntime`
+(Installation: README); ein `pip install -r requirements.txt` kann das CPU-Paket zurückholen — dann
+greift der CPU-Rückfall mit Warnung im Log, falsch wird nichts. Im Betrieb (13.10.) braucht die
+ganze Suche warm 120–170 ms; die erste Frage mit einer neuen Eingabelänge ist auf DirectML einmalig
+langsamer (~0,4 s), direkt nach dem Laden des LLM in den Grafikspeicher einmal ~2 s gesehen.
 
 ### Warum BM25-Hybrid-Suche?
 

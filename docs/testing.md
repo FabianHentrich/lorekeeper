@@ -10,6 +10,7 @@ sauber, keine echten LLM-Aufrufe) gelten wie in den übrigen Docs beschrieben.
 3. [Sicherheitsprüfungen (Spieler-Modus, Admin-Login)](#sicherheitsprüfungen-spieler-modus-admin-login)
 4. [Log-Pfade](#log-pfade)
 5. [Performance-Prüfungen](#performance-prüfungen)
+6. [Abdeckung](#abdeckung)
 
 ---
 
@@ -149,3 +150,14 @@ pytest -m perf tests/perf/test_startup.py     # nur Start — LoreKeeper muss ge
 
 LLM-Antwortzeiten werden nicht automatisch getestet (modell- und hardwareabhängig); dafür gibt es
 die `timings` pro Anfrage (Log-Zeile `Query timings:` / Zeile unter jeder Antwort im Chat).
+
+---
+
+## Abdeckung
+
+`pytest --cov=src --cov=ui --cov=evaluation` — Stand 13.10.: **93 %**. Ergänzt wird nach
+Fehlerrisiko, nicht nach Prozent: zuerst Pfade, die Daten schreiben oder Zustand umschalten
+(Speichern, Aktivieren, Provider-Wechsel samt Rückfall, Golden Set). Bewusst ungetestet: der
+Ollama-Autostart in `src/main.py` (braucht echte Prozesse), das Übernehmen von Feedback per Häkchen
+im Data-Editor (AppTest kann keine Zellen anklicken; die Logik in `ui/feedback.py` ist getestet) und
+die CLI-Einstiegspunkte (`main()`).

@@ -43,6 +43,7 @@ Stand: 2026-10-13
 5. [Hardware & Modelle](#5-hardware--modelle)
 6. [Betrieb](#6-betrieb)
 7. [Erweiterungspunkte](#7-erweiterungspunkte)
+8. [Architektur-Entscheidungen](#8-architektur-entscheidungen)
 
 ---
 
@@ -517,7 +518,7 @@ data: {"type": "error", "content": "..."}                       (bei Abbruch)
 ```
 
 - `status`: deutscher Hinweis, wenn die Antwort auf andere warten muss (Ollama beantwortet eine Frage
-  nach der anderen, `OLLAMA_NUM_PARALLEL=1`; Messung und Entscheidung: Roadmap 8.0). Nur bei Ollama.
+  nach der anderen, `OLLAMA_NUM_PARALLEL=1`; Messung und Entscheidung: [provider-strategy.md](docs/provider-strategy.md)). Nur bei Ollama.
 - `session_id` kommt im `done`-Event — ohne sie kann der Client keine Folgefrage zuordnen.
 - `model_used` ist das Modell, das tatsächlich geantwortet hat (nach Fallback das Fallback-Modell).
 - `timings`: Dauer je Stufe in ms (`condense_ms`, `retrieval_ms` mit Stufen embed/search/bm25/rerank/expand,
@@ -556,7 +557,7 @@ Referenzsystem (Gaming-PC): AMD Ryzen 5 5600X (6 Kerne), 32 GB RAM, AMD Radeon R
 | Fallback | Cloud | Gemini `gemini-2.5-flash` | nur bei Bedarf — kostenpflichtig, Budgets stoppen nicht automatisch |
 
 **AMD-Hinweise:** CUDA gibt es nur für NVIDIA. PyTorch mit ROCm unter Windows liefert auf der
-RX 9070 XT derzeit stillschweigend Nullen (Roadmap 5.4) — deshalb läuft der Reranker über
+RX 9070 XT derzeit stillschweigend Nullen ([embedding-strategy.md](docs/embedding-strategy.md) → Cross-Encoder) — deshalb läuft der Reranker über
 DirectML und das Embedding auf der CPU. Ollama nutzt die Karte direkt.
 
 Modell wechseln: `ollama pull <modell>`, dann `llm.ollama.model` in der Settings-Seite bzw.
@@ -588,3 +589,38 @@ LoreKeeper läuft ausschließlich lokal unter Windows; ChromaDB steckt im Backen
 | Anderer Reranker | Modell in `reranking.model`; für die GPU braucht es einen ONNX-Export (`onnx/model.onnx`) |
 
 Geplante Arbeit: [plan roadmap.md](plan%20roadmap.md).
+
+---
+
+## 8. Architektur-Entscheidungen
+
+Aus dem Architektur-Review vom 13.10. (Agent über die ganze Codebasis, Befunde selbst nachgeprüft).
+Maßstab: ein Umbau muss ein konkretes Problem lösen — Testbarkeit, Sicherheit des Spieler-Filters,
+Nebenläufigkeit, Übersicht —, keine Abstraktion für Einmal-Logik.
+
+**So bleibt es, weil es trägt:**
+- **Dienste als Modul-Globale in `src.main`**, pro Anfrage über `import src.main as main_module`
+  gelesen. Der Provider-Wechsel ist trotzdem atomar: `install_llm()` setzt Provider,
+  Condense-Provider und Generator ohne `await` dazwischen, laufende Anfragen arbeiten mit ihrem
+  Schnappschuss weiter.
+- **Spieler-Filter als Konvention plus Prüfung statt Wrapper**: jeder Suchweg reicht `where` durch,
+  ein Spy-Test verlangt die Einschränkung in jedem Store-/BM25-Zugriff einer Spieler-Anfrage
+  ([testing.md](docs/testing.md#sicherheitsprüfungen-spieler-modus-admin-login)). Ein
+  `FilteredVectorStore` wird erst sinnvoll, wenn eine neue Art Suchweg dazukommt (z.B. Wikilink-Expansion).
+- **Zwei In-Memory-Job-Listen** (Ingest, Eval) ohne Aufräumen: wenige Einträge am Tag, weg beim
+  Neustart; Starts sind atomar. Was fehlte, war die Sperre *zwischen* ihnen (jetzt: 409 während eines Ingests).
+- **Retriever als ein Modul**: Suche, Fusion, Rerank, Deckel, Slot und Expansion hängen eng
+  zusammen; nur Reranker + GPU-Rückfall wären ein eigener Baustein (optional, mit Feature-Arbeit).
+
+**Bewusst nicht** (Kosten ohne gelöstes Problem): DI-Container über FastAPI `Depends`/`app.state`
+(35 Stellen, löst nichts, was `install_llm` nicht löst); generische Job-Registry; Prompt-Varianten im
+`ConfigManager`; Retriever in Pipeline-Klassen zerlegen; LLM-Warteschlange (Ollama serialisiert
+selbst, der Chat zeigt den Hinweis); UI-Seiten aufteilen (AppTest testet pro Seitendatei);
+typisierter API-Client in der UI (`ui/backend.py` mit `raise_for_status`/`get_json` reicht).
+
+**Bewusste Grenze — Vertrauen in den Aufrufer**: Das Backend glaubt dem Client die Rolle (Default
+`game_master`), und `/sessions`, `/feedback`, `/eval/*`, `/sources/*` haben keinen eigenen Login.
+Das reicht, solange nur der Streamlit-Prozess `127.0.0.1:8000` erreicht (der Admin-Schutz sitzt in
+der UI). Wird die API je selbst erreichbar (Internet-Zugriff, weiterer Client), muss vorher der
+Default auf `player` oder eine Authentifizierung her.
+
