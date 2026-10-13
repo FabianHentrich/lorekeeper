@@ -706,7 +706,7 @@ Offen: #17 (Umbenennen beim Tageswechsel unter Windows, wenn die Datei anderswo 
 
 **Aufwand**: A gering, B gering, C gering. Last 🟢.
 
-## 11.0 Architektur-Review: Passt der Aufbau noch, was sollte modularer werden? — 🔄 Umbau läuft (P1–P5 erledigt)
+## 11.0 Architektur-Review: Passt der Aufbau noch, was sollte modularer werden? — 🔄 Umbau läuft (P1–P6 erledigt, P7 offen)
 
 **Wann**: nach 10.0 und der Messung aus 8.0, **vor** 9.0 und vor dem Wiederaufnehmen der Features. Begründung:
 - 8.0 kann Umbauten erzwingen (z.B. atomarer Provider-Wechsel, Job-Verwaltung, Warteschlange fürs LLM) — die gehören in denselben Entwurf, nicht in einen zweiten Umbau danach.
@@ -782,6 +782,8 @@ Die Beobachtungen oben, bewertet:
 **P4 umgesetzt (13.10.)**: `get_chunks_for_file(source_id, source_file, where)` verknüpft den Anfrage-Filter; die Section Expansion gibt ihn weiter — jetzt trägt jeder Suchweg den Filter. Spy-Test in `tests/integration/test_player_mode_security.py`: zeichnet alle Store-/BM25-Zugriffe von Spieler-Anfragen (Vektor, BM25, Expansion; Hybrid an) auf und verlangt in jedem die Spieler-Einschränkung; prüft außerdem, dass alle drei Wege durchlaufen wurden. Mutationsgeprüft: Filter weg bei Expansion, Regelwerk-Slot oder BM25 → Test schlägt fehl (die Expansion-Lücke hätten die bisherigen Daten-Tests nicht bemerkt). Ein `FilteredVectorStore`-Wrapper bleibt unnötig. Doku: `ARCHITECTURE.md` 4.8, `docs/testing.md`. Suite: 674 grün.
 
 **P5 umgesetzt (13.10.)**: `ui/backend.py:get_json()` (GET + Statusprüfung + JSON); die 21 ungeprüften Lesezugriffe (Chat 1, Sources 4, Evaluation 13, Prompts 3) laufen darüber. Ein `send_json` war unnötig — alle schreibenden Aufrufe prüften den Status schon. Die beiden Fortschrittsanzeigen behandeln eine Fehlerantwort (z.B. 404 nach einem Backend-Neustart) als endgültig statt ~45 Fehlversuche lang „nicht erreichbar“. Tests: fehlgeschlagenes Lesen überschreibt das Golden Set nicht (vorher: PUT mit nur der neuen Frage), Eval- und Ingest-Polling bei 404 — mutationsgeprüft. Doku: `docs/ui-ux.md`. Suite: 677 grün.
+
+**P6 umgesetzt (13.10.)**: Lifespan mit `try/finally` und `_shutdown()` — schlägt der Start nach dem Ollama-Autostart fehl, wird das gestartete Ollama trotzdem beendet; abgebrochene Hintergrund-Tasks werden abgewartet; hängt Ollama beim Beenden länger als 10 s, wird es hart beendet statt den Shutdown mit einer Exception abzubrechen. `atomic_write_text()` (temporäre Datei im selben Ordner + `os.replace`) für alle fünf Schreibstellen: `sources.yaml`, `settings.local.yaml`, `prompts.yaml`, Prompt-Varianten, Golden Set. Jinja2 in `SandboxedEnvironment` (Prompt-Vorschau und `PromptManager`); die echten Templates rendern unverändert (E2E- und Prompt-Tests grün). Tests: Startfehler beendet Ollama, Schreibfehler lässt alte Datei und keine Temp-Datei zurück, Sandbox lehnt `''.__class__.__mro__…` ab — mutationsgeprüft. Doku: `docs/prompts.md`, `ARCHITECTURE.md`. Suite: 681 grün.
 
 ---
 

@@ -163,7 +163,7 @@ lorekeeper/
 ├── src/
 │   ├── main.py                    # FastAPI-App, Lifespan (Modelle laden, Session-GC, Health-Schleife), Request-Log
 │   ├── logging_setup.py           # Konsole + eine Logdatei pro Tag, uvicorn-Fehler in die Datei
-│   ├── config/manager.py          # YAML + Env + Sidecars → Pydantic-Settings
+│   ├── config/manager.py          # YAML + Env + Sidecars → Pydantic-Settings; atomic_write_text für alle Config-Dateien
 │   ├── ingestion/
 │   │   ├── orchestrator.py        # Parse → Chunk → Embed → Speichern (je Quelle)
 │   │   ├── recategorize.py        # group/category neu setzen ohne Re-Embedding

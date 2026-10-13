@@ -98,6 +98,26 @@ async def _ensure_ollama(base_url: str, timeout: float = 30.0) -> subprocess.Pop
     return None
 
 
+async def _shutdown(tasks: list[asyncio.Task]) -> None:
+    """Stop the background tasks and an Ollama that LoreKeeper started — also after a failed startup
+    (an Ollama started before the crash used to keep running). Cancelled tasks are awaited, so they
+    end before the process does."""
+    global _ollama_process
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    if _ollama_process:
+        logger.info(f"Stopping Ollama (PID {_ollama_process.pid})")
+        _ollama_process.terminate()
+        try:
+            _ollama_process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            logger.warning("Ollama did not stop within 10 s — killing it")
+            _ollama_process.kill()
+        _ollama_process = None
+    logger.info("LoreKeeper shutting down")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage the lifecycle of the FastAPI application, initializing shared resources and background tasks."""
@@ -118,56 +138,51 @@ async def lifespan(app: FastAPI):
 
     logger.info("Starting LoreKeeper...")
 
-    # Auto-start Ollama if provider is ollama
-    if settings.llm.provider == "ollama":
-        _ollama_process = await _ensure_ollama(settings.llm.ollama.base_url)
-
-    # Conversation
-    conversation_manager = ConversationManager(settings.conversation)
-
-    # Prompts
-    prompt_manager = PromptManager(prompts_dict=config.prompts)
-
-    # Embeddings + Vector Store
-    embedding_service = EmbeddingService(settings.embeddings)
-    await embedding_service.embed_text("warmup")  # pre-load model before first query
-    vectorstore = VectorStoreService(settings.vectorstore, embedding_service)
-    vectorstore.health_check()  # pre-connect ChromaDB
-
-    # Retrieval
-    bm25_index = BM25Index()
-    retriever = Retriever(settings.retrieval, embedding_service, vectorstore, bm25_index)
-    if settings.retrieval.reranking.enabled:
-        retriever.get_reranker()  # pre-load reranker model at startup
-
-    # LLM
-    provider, condense_provider, generator = ProviderFactory.build_all(settings)
-
-    # Start session GC
-    gc_task = asyncio.create_task(conversation_manager.start_gc())
-
-    # Start background health checker
-    from src.api.routes import _health_loop, update_health
-    # Seed cache with initial state (vectorstore + provider already initialized); logs the first state
+    # try/finally: a startup that fails halfway (model load, ChromaDB) must still stop what it started
+    tasks: list[asyncio.Task] = []
     try:
-        update_health(vectorstore.health_check(), await provider.health_check())
-    except Exception as e:
-        logger.warning("Initial health check failed (%s: %s); the health loop retries", type(e).__name__, e)
-    health_task = asyncio.create_task(_health_loop())
+        # Auto-start Ollama if provider is ollama
+        if settings.llm.provider == "ollama":
+            _ollama_process = await _ensure_ollama(settings.llm.ollama.base_url)
 
-    logger.info(f"LoreKeeper ready (provider={settings.llm.provider}, model={getattr(provider, 'model', '?')})")
+        # Conversation
+        conversation_manager = ConversationManager(settings.conversation)
 
-    yield
+        # Prompts
+        prompt_manager = PromptManager(prompts_dict=config.prompts)
 
-    health_task.cancel()
-    gc_task.cancel()
+        # Embeddings + Vector Store
+        embedding_service = EmbeddingService(settings.embeddings)
+        await embedding_service.embed_text("warmup")  # pre-load model before first query
+        vectorstore = VectorStoreService(settings.vectorstore, embedding_service)
+        vectorstore.health_check()  # pre-connect ChromaDB
 
-    if _ollama_process:
-        logger.info(f"Stopping Ollama (PID {_ollama_process.pid})")
-        _ollama_process.terminate()
-        _ollama_process.wait(timeout=10)
+        # Retrieval
+        bm25_index = BM25Index()
+        retriever = Retriever(settings.retrieval, embedding_service, vectorstore, bm25_index)
+        if settings.retrieval.reranking.enabled:
+            retriever.get_reranker()  # pre-load reranker model at startup
 
-    logger.info("LoreKeeper shutting down")
+        # LLM
+        provider, condense_provider, generator = ProviderFactory.build_all(settings)
+
+        # Start session GC
+        tasks.append(asyncio.create_task(conversation_manager.start_gc()))
+
+        # Start background health checker
+        from src.api.routes import _health_loop, update_health
+        # Seed cache with initial state (vectorstore + provider already initialized); logs the first state
+        try:
+            update_health(vectorstore.health_check(), await provider.health_check())
+        except Exception as e:
+            logger.warning("Initial health check failed (%s: %s); the health loop retries", type(e).__name__, e)
+        tasks.append(asyncio.create_task(_health_loop()))
+
+        logger.info(f"LoreKeeper ready (provider={settings.llm.provider}, model={getattr(provider, 'model', '?')})")
+
+        yield
+    finally:
+        await _shutdown(tasks)
 
 
 app = FastAPI(

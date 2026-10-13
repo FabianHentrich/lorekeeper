@@ -9,6 +9,8 @@ sidecar ``config/sources.yaml``. Only keys in ``_EDITABLE_KEYS`` can be changed 
 their next call. Full reference: docs/configuration.md.
 """
 import logging
+import os
+import tempfile
 from pathlib import Path
 from typing import Literal
 
@@ -342,14 +344,10 @@ class ConfigManager:
 
     def save_sources(self) -> None:
         """Persist current ingestion.sources to config/sources.yaml."""
-        self._sources_path.parent.mkdir(parents=True, exist_ok=True)
         data = {
             "sources": [s.model_dump(exclude_defaults=True) for s in self.settings.ingestion.sources]
         }
-        self._sources_path.write_text(
-            yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
-            encoding="utf-8",
-        )
+        atomic_write_text(self._sources_path, yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
 
     def editable_snapshot(self) -> dict:
         """Current values of every UI-editable setting (``_EDITABLE_KEYS``) plus the read-only fields
@@ -386,22 +384,20 @@ class ConfigManager:
         # Apply in place so existing service references stay valid.
         _apply_updates(self.settings, filtered)
 
-        self._local_settings_path.parent.mkdir(parents=True, exist_ok=True)
-        self._local_settings_path.write_text(
+        atomic_write_text(
+            self._local_settings_path,
             "# Written by the Settings page — overrides config/settings.yaml. Delete to reset.\n"
             + yaml.safe_dump(local, sort_keys=False, allow_unicode=True, default_flow_style=False),
-            encoding="utf-8",
         )
 
         return self.editable_snapshot()
 
     def save_prompts(self, prompts_dict: dict) -> None:
         """Persist prompts to config/prompts.yaml."""
-        self._prompts_path.parent.mkdir(parents=True, exist_ok=True)
         clean = {k: v for k, v in prompts_dict.items() if not k.startswith("_")}
-        self._prompts_path.write_text(
+        atomic_write_text(
+            self._prompts_path,
             yaml.safe_dump(clean, sort_keys=False, allow_unicode=True, default_flow_style=False),
-            encoding="utf-8",
         )
         self._prompts_raw = clean
 
@@ -414,6 +410,26 @@ class ConfigManager:
     def prompts_path(self) -> Path:
         """The active prompts file — the prompt routes keep their variants next to it."""
         return self._prompts_path
+
+
+def atomic_write_text(path: Path, text: str) -> None:
+    """Write ``text`` to a temp file next to ``path``, then ``os.replace`` it over the target.
+
+    A crash or power loss mid-write leaves the old file intact instead of a truncated one —
+    ``sources.yaml`` is gitignored and has no backup (roadmap 11.0 #9). Line endings as with
+    ``Path.write_text`` (platform default).
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 def _read_yaml(path: Path) -> dict:

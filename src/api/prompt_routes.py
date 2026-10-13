@@ -9,7 +9,8 @@ from pathlib import Path
 
 import yaml
 from fastapi import APIRouter, HTTPException
-from jinja2 import Environment, TemplateSyntaxError
+from jinja2 import TemplateSyntaxError
+from jinja2.sandbox import SandboxedEnvironment
 
 from src.api.prompt_schemas import (
     PromptSet,
@@ -18,6 +19,7 @@ from src.api.prompt_schemas import (
     RenderPreviewRequest,
     RenderPreviewResponse,
 )
+from src.config.manager import atomic_write_text
 from src.prompts.manager import PromptManager
 
 logger = logging.getLogger(__name__)
@@ -38,7 +40,8 @@ def _variants_dir() -> Path:
     """Resolve the directory where prompt variants are stored."""
     return _active_path().parent / "prompts"
 
-_jinja_env = Environment()
+# Sandboxed: /prompts/preview renders arbitrary template text — no attribute tricks to reach Python internals
+_jinja_env = SandboxedEnvironment()
 
 
 def _variant_path(name: str) -> Path:
@@ -153,10 +156,7 @@ async def save_variant(name: str, variant: PromptVariant):
     data = {"_meta": {"name": variant.name, "description": variant.description}, **variant.prompts.model_dump()}
 
     path = _variant_path(name)
-    path.write_text(
-        yaml.safe_dump(data, sort_keys=False, allow_unicode=True, default_flow_style=False),
-        encoding="utf-8",
-    )
+    atomic_write_text(path, yaml.safe_dump(data, sort_keys=False, allow_unicode=True, default_flow_style=False))
     logger.info(f"Variant saved: {name}")
     return variant
 

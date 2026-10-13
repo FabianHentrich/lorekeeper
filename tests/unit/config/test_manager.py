@@ -262,3 +262,37 @@ class TestSourceConfig:
         with pytest.raises(ValueError, match="group must be one of"):
             SourceConfig(id="sim", path="C:/sim", group="lore",
                          category_map={"Daten": {"category": "misc", "group": "daten"}})
+
+
+
+class TestAtomicWrite:
+    """Config files are replaced in one step — a crash mid-write must not leave a truncated file."""
+
+    def test_failed_write_keeps_the_old_file_and_leaves_no_temp_files(self, tmp_path, monkeypatch):
+        import os
+
+        from src.config.manager import atomic_write_text
+        target = tmp_path / "sources.yaml"
+        target.write_text("sources: [alt]\n", encoding="utf-8")
+
+        def crash(src, dst):
+            raise OSError("power loss")
+
+        monkeypatch.setattr(os, "replace", crash)
+        with pytest.raises(OSError):
+            atomic_write_text(target, "sources: [neu]\n")
+
+        assert target.read_text(encoding="utf-8") == "sources: [alt]\n"
+        assert [p.name for p in tmp_path.iterdir()] == ["sources.yaml"]
+
+    def test_save_sources_round_trips(self, tmp_path):
+        sources = tmp_path / "sub" / "sources.yaml"   # folder created on demand
+        cm = ConfigManager(settings_path=tmp_path / "settings.yaml", prompts_path=tmp_path / "p.yaml",
+                           sources_path=sources)
+        cm.settings.ingestion.sources = [SourceConfig(id="welt", path="C:/Vault", group="lore")]
+        cm.save_sources()
+
+        again = ConfigManager(settings_path=tmp_path / "settings.yaml", prompts_path=tmp_path / "p.yaml",
+                              sources_path=sources)
+        assert [s.id for s in again.settings.ingestion.sources] == ["welt"]
+        assert [p.name for p in sources.parent.iterdir()] == ["sources.yaml"]

@@ -88,3 +88,21 @@ def test_lifespan_creates_provider_via_factory(patched_lifespan):
     with TestClient(main_module.app):
         patched_lifespan.factory.build_all.assert_called_once()
         assert main_module.condense_provider is None
+
+
+
+def test_failed_startup_stops_the_ollama_it_started(patched_lifespan):
+    """A crash after the Ollama autostart (e.g. the embedding model fails to load) used to leave the
+    started Ollama running — the lifespan now cleans up in ``finally``."""
+    ollama = MagicMock(pid=4711)
+    patched_lifespan.embed.embed_text = AsyncMock(side_effect=RuntimeError("model download failed"))
+    settings = SimpleNamespace(llm=SimpleNamespace(provider="ollama"))
+    with patch("src.main._ensure_ollama", new=AsyncMock(return_value=ollama)), \
+            patch("src.main.ConfigManager") as fake_config:
+        fake_config.return_value.settings.llm.provider = settings.llm.provider
+        with pytest.raises(RuntimeError, match="model download failed"):
+            with TestClient(main_module.app):
+                pass
+
+    ollama.terminate.assert_called_once()
+    assert main_module._ollama_process is None

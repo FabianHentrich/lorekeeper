@@ -151,6 +151,8 @@ def test_activating_a_hand_edited_broken_variant_is_rejected(env):
     ("Frage: {{ question }}", {"question": "Was ist Arkenfeld?"}, 200, "Frage: Was ist Arkenfeld?"),
     ("{% if %}", {}, 422, "Jinja2-Syntaxfehler"),
     ("{{ missing.attr() }}", {}, 422, "Render-Fehler"),
+    # Sandbox: the classic route from a string to Python internals is refused (roadmap 11.0 #11)
+    ("{{ ''.__class__.__mro__[1].__subclasses__() }}", {}, 422, "Render-Fehler"),
 ])
 def test_preview(env, template, data, status, expected):
     client, _, _ = env

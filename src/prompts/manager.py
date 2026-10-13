@@ -5,7 +5,7 @@ The prompt routes replace the whole instance on hot reload. Variables per templa
 from pathlib import Path
 
 import yaml
-from jinja2 import Environment
+from jinja2.sandbox import SandboxedEnvironment
 
 
 class PromptManager:
@@ -20,7 +20,8 @@ class PromptManager:
         else:
             self.templates = {}
 
-        self.jinja_env = Environment()
+        # Sandboxed like the preview: templates are editable on the Prompts page
+        self.jinja_env = SandboxedEnvironment()
 
     def render(self, template_name: str, **kwargs) -> str:
         """Render the named template with the given Jinja2 variables. Raises ``KeyError`` if unknown."""

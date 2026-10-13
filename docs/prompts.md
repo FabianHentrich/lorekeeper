@@ -206,6 +206,10 @@ Neustart.
 | POST | `/prompts/preview` | Template mit Beispieldaten rendern |
 
 Alle schreibenden Endpoints prüfen die Jinja2-Syntax — ein fehlerhaftes Template ergibt HTTP 422.
+Gerendert wird in einer `SandboxedEnvironment` (Vorschau und Betrieb): Schleifen, Bedingungen,
+Filter und Attribute der Variablen gehen wie gewohnt, Umwege zu Python-Interna
+(`''.__class__.__mro__…`) werden abgelehnt (Render-Fehler, 422). Gespeichert wird atomar (temporäre
+Datei + Umbenennen) — ein Absturz beim Speichern hinterlässt keine halbe `prompts.yaml`.
 
 ### Varianten
 

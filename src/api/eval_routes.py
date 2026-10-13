@@ -33,6 +33,7 @@ from src.api.eval_schemas import (
     RetrievedChunkResponse,
 )
 from src.api.routes import _spawn_background, refuse_during_ingest
+from src.config.manager import atomic_write_text
 
 logger = logging.getLogger(__name__)
 
@@ -62,12 +63,8 @@ async def get_qa_pairs():
 @eval_router.put("/qa-pairs", response_model=QAPairList)
 async def put_qa_pairs(body: QAPairList):
     """Overwrite the QA pairs golden set file with a new list."""
-    _QA_PATH.parent.mkdir(parents=True, exist_ok=True)
     data = {"pairs": [p.model_dump() for p in body.pairs]}
-    _QA_PATH.write_text(
-        yaml.dump(data, allow_unicode=True, default_flow_style=False, sort_keys=False),
-        encoding="utf-8",
-    )
+    atomic_write_text(_QA_PATH, yaml.dump(data, allow_unicode=True, default_flow_style=False, sort_keys=False))
     logger.info("Golden Set saved: %d QA pairs", len(body.pairs))
     return body
 
