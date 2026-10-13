@@ -45,7 +45,10 @@ einmal von Hand bedienen (API-Seite live geprüft, siehe unten).
 
 **13.10. umgesetzt:** `top_k` 15 → 20 — Vorteil/Nachteil (k002) und Heimkehrpfennig (x008) gelöst
 (Abschnitte 136 → 138/153); Hybrid gemessen und verworfen (überall schlechter). Messung:
-`docs/embedding-strategy.md` → „Warum `top_k` 20?“.
+`docs/embedding-strategy.md` → „Warum `top_k` 20?“. Danach: „Alte Vault-Werte“ per
+`ingestion.skip_sections` aus dem Index (59 Dateien, Index 4697 → 4419 Chunks, z010 gewonnen),
+36 verwaiste Chunks entfernter Quellen gelöscht, Golden Set ohne z013–z016 (Quellen entfernt) —
+Stand: Datei 272/274, Abschnitt 137/149, Suche exakt mit `ef_search` 2000.
 
 **Offen, je mit Diagnose** (Rang des richtigen Chunks in der Vektorsuche, Reranker-Score richtig
 gegen gewählt; Skript-Muster: Rang in den Top 200 + `_predict` je Paar):
@@ -56,13 +59,15 @@ gegen gewählt; Skript-Muster: Rang in den Top 200 + `_predict` je Paar):
   neuer Zauber (p010, 5.1 gegen 5.3), Verbände (p099, Rang 1, verliert im Rerank), Flammenheilung
   (p108, Rang 22).
 - **Entität + Regel** — x003 (Mordlust bei Malek), x004 (Phönixfeder bei Thalion).
-- **Simulation** — z003, z006, z009, z010, z012, z014, z015 (Fragen zu Berichtsabschnitten).
+- **Simulation** — z003, z006, z009, z012 (Fragen zu Berichtsabschnitten).
 - Die 22-Chunk-Sektion „7.3 Legendäre Artefakte > Monolith“ landet bei fremden Regelfragen in den
   Top 3 („Ass-Regel“ p011, „Zauberspeicher“ p101); das Budget aus 5.6 streicht sie nur.
 
-**Inhalt (Nutzer)**: 59 Gegner-/Dämonen-Dateien haben seit dem Simulations-Export einen Abschnitt
-„## Alte Vault-Werte“ („nicht mehr maßgeblich“) im eingeklappten Callout — LoreKeeper indiziert ihn
-als normalen Text, alte und neue Werte konkurrieren (z010 zieht „Alte Vault-Werte > Fähigkeiten“).
+**Lücke im Ingest**: Wird eine Quelle direkt in `sources.yaml` gelöscht (statt über
+`DELETE /sources/{id}`), bleiben ihre Chunks im Index und durchsuchbar — der Ingest räumt nur
+innerhalb konfigurierter Quellen auf (13.10.: 36 Chunks von `sim-balance-roadmap` und
+`sim-faehigkeiten-analyse`, von Hand gelöscht). Ansatz: Ingest meldet bzw. löscht Chunks unbekannter
+`source_id`.
 
 ### 2 Bilder im Chat ⏸
 
@@ -134,6 +139,7 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 | 3.10 | Regelwerk-Slot (eigene Suche in `rules`, Mindest-Score −4) | 13.10. | `docs/embedding-strategy.md`, `docs/configuration.md` |
 | 3.11 | Spieler-/Spielleiter-Modus inkl. Sicherheitstests (deterministisch, live, Spy-Test) | 11./12.10. | `ARCHITECTURE.md` 4.8, `docs/testing.md` |
 | 3.12 | Folgefragen ohne Inhaltswort („Fass das kürzer zusammen“, „Gib mir ein Beispiel“) gehen durch Condense — Suche und Quellenliste passen zum Thema; Wortliste nur ergänzend (unbekanntes Wort = Inhaltswort), Unit-Tests in beide Richtungen, mutationsgeprüft. Offen: einmal live prüfen, dass Condense das Thema einsetzt | 13.10. | `docs/prompts.md` |
+| 3.10 (Teil) | `top_k` 20 (+2 Abschnitte, Hybrid verworfen), `ingestion.skip_sections` gegen „Alte Vault-Werte“ (Full-Reindex, 4419 Chunks), `ef_search` 1000 → 2000 (nach den Re-Index-Läufen wieder exakt), verwaiste Chunks entfernt, Golden Set 274 Fragen — Datei 272/274, Abschnitt 137/149 | 13.10. | `docs/embedding-strategy.md`, `docs/parsing.md`, `docs/configuration.md`, `docs/evaluation.md` |
 | 4.1 | Heimnetz-Betrieb (`start.ps1 -Server`, Firewall-Skript, kein Autostart) | 11.10. | `docs/operations.md` |
 | 4.2 (Teil) | Spieler-Filter im Backend erzwungen (`role`) | 12.10. | `ARCHITECTURE.md` 4.8 |
 | 4.3 | Sauberes Beenden: `stop.ps1` (Strg+C an beide Fenster, nach 20 s hart, samt Ollama; Sperre während Ingest) und **⏻ LoreKeeper beenden** in der Sidebar (Admin). Gemessen: Strg+C ist in allen Lagen sauber (Backend 1,3–1,6 s, UI 0,2 s, auch bei Stream/Eval) — 7 von 10 Starts endeten durch Fenster-Schließen ohne Shutdown; die verzögerte Strg+C-Reaktion war nicht reproduzierbar (Verdacht: markierter Text im Konsolenfenster hält den Prozess an) | 13.10. | `docs/operations.md`, `docs/ui-ux.md` |

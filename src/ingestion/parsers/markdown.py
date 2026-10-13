@@ -3,7 +3,8 @@
 Obsidian syntax is cleaned before embedding: wikilinks become plain text (targets kept as ``wikilinks``
 metadata), image embeds are removed, callout markers dropped; ``#tags`` and frontmatter ``aliases`` go into
 metadata (the aliases are later prepended to the embedded text). Also used for the Markdown that the PDF
-parser produces. Details: docs/parsing.md.
+parser produces. Sections named in ``ingestion.skip_sections`` (e.g. outdated stat blocks kept in the vault)
+are dropped from the raw text before anything else. Details: docs/parsing.md.
 """
 import re
 from pathlib import Path
@@ -28,6 +29,15 @@ class MarkdownParser(BaseParser):
     (> [!info]), ensuring that only clean text goes into the embedding vector store.
     It builds a structural hierarchy by tracking Markdown heading levels (H1-H6).
     """
+    def __init__(self, skip_sections: list[str] | None = None):
+        """``skip_sections``: heading titles (case-insensitive, ``**`` ignored) whose sections are not indexed."""
+        self._skip = {self._norm_title(t) for t in skip_sections or []}
+
+    @staticmethod
+    def _norm_title(title: str) -> str:
+        """Compare titles without case, surrounding whitespace or bold/italic markers."""
+        return title.strip().strip("*_ ").strip().lower()
+
     def can_parse(self, file_path: Path) -> bool:
         """True for `.md` files."""
         return file_path.suffix.lower() == ".md"
@@ -47,7 +57,7 @@ class MarkdownParser(BaseParser):
         if isinstance(aliases, str):
             aliases = [aliases]
 
-        content = post.content
+        content = self._drop_sections(post.content)
         tags = self._extract_tags(content)
         wikilinks = self._extract_wikilinks(content)
         content = self._clean_obsidian_syntax(content)
@@ -90,6 +100,33 @@ class MarkdownParser(BaseParser):
             ))
 
         return documents
+
+    def _drop_sections(self, text: str) -> str:
+        """Remove every section whose heading is in ``skip_sections``, up to the next heading of the same or a
+        higher level.
+
+        Runs on the raw text, before callout cleaning: headings inside a callout (``> ## Attribute``) don't
+        match here and so don't end the skipped section — after cleaning they would look like ordinary
+        headings and the skipped content would come back under them.
+        """
+        if not self._skip:
+            return text
+        kept: list[str] = []
+        skip_level: int | None = None
+        in_code = False
+        for line in text.split("\n"):
+            if line.lstrip().startswith(("```", "~~~")):
+                in_code = not in_code
+            heading = None if in_code else HEADING_PATTERN.match(line)
+            if heading:
+                level = len(heading.group(1))
+                if skip_level is not None and level <= skip_level:
+                    skip_level = None
+                if skip_level is None and self._norm_title(heading.group(2)) in self._skip:
+                    skip_level = level
+            if skip_level is None:
+                kept.append(line)
+        return "\n".join(kept)
 
     def _extract_tags(self, text: str) -> list[str]:
         """Find inline #tags matching Obsidian tag specifications."""

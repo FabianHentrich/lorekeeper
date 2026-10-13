@@ -12,6 +12,8 @@ ingestion:
     - "*alt.md"
     - "*(1).md"
     - "*.draft.*"
+  skip_sections:                    # Markdown sections not indexed, by heading title (full reindex after a change)
+    - "Alte Vault-Werte"            # outdated stat blocks from before the 30.09. balance export
 
 # Chunking
 chunking:
@@ -32,7 +34,7 @@ vectorstore:
   persist_directory: ./chroma_data   # embedded ChromaDB in the backend process
   collection_name: lorekeeper
   distance_metric: cosine
-  hnsw_ef_search: 1000            # exakte, reproduzierbare Suche bei ~5 k Chunks (+2 ms/Abfrage; Roadmap 5.5)
+  hnsw_ef_search: 2000            # exakte, reproduzierbare Suche auch nach vielen Re-Index-Läufen (Roadmap 5.5, 3.10)
 
 # Retrieval
 retrieval:

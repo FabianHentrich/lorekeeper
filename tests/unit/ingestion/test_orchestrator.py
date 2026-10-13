@@ -443,3 +443,15 @@ class TestExcludePatterns:
         base = Path("/vault")
         f = Path("/vault/NPCs/aldric.md")
         assert not _is_excluded(f, base, [".obsidian/*", ".trash/*"])
+
+
+def test_markdown_parser_gets_the_configured_skip_sections(tmp_path, monkeypatch):
+    """ingestion.skip_sections reaches the parser the orchestrator uses — else the setting has no effect."""
+    from src.config.manager import config_manager
+    monkeypatch.setattr(config_manager.settings.ingestion, "skip_sections", ["Alte Vault-Werte"])
+    f = tmp_path / "Wolf.md"
+    f.write_text("# Wolf\n\n## Werte\n\nneu\n\n## Alte Vault-Werte\n\nalt\n", encoding="utf-8")
+
+    parser = IngestionOrchestrator(config=config_manager)._get_parser(f)
+
+    assert [d.content for d in parser.parse(f)] == ["neu"]

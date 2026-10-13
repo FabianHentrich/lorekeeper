@@ -16,7 +16,7 @@ Datei, Regelwerk-Slot, Section Expansion und der Aufbau der Embed-Texte. Die Par
    - [Warum ein Regelwerk-Slot?](#warum-ein-regelwerk-slot)
    - [Warum Section Expansion?](#warum-section-expansion)
    - [Warum die Identitäts-Schicht?](#warum-die-identitäts-schicht-dateiname--aliase)
-   - [Warum `ef_search: 1000`?](#warum-ef_search-1000)
+   - [Warum `ef_search: 2000`?](#warum-ef_search-2000)
    - [Warum Chunking nach Überschriften?](#warum-chunking-nach-überschriften)
    - [Warum SHA-256 fürs Neu-Indizieren?](#warum-sha-256-fürs-neu-indizieren)
    - [Warum Bilder ausschließen?](#warum-bilder-aus-der-suche-ausschließen)
@@ -254,7 +254,7 @@ passt zu Fragen nach der Entität; das LLM sieht weiter nur den sauberen Inhalt.
 Das funktioniert, weil Obsidian-Vaults die Identität einer Entität per Konvention im Dateinamen
 tragen. Bei beliebigen Markdown-Sammlungen ginge das nicht.
 
-### Warum `ef_search: 1000`?
+### Warum `ef_search: 2000`?
 
 ChromaDB sucht über einen HNSW-Graphen — approximativ. Mit der Voreinstellung `ef_search: 100`
 fehlte bei 38 von 278 Golden-Fragen mindestens ein Chunk, den eine exakte Suche unter den Top 15
@@ -277,6 +277,13 @@ ist an die Größe gebunden: wächst der Index deutlich (Bilder, weitere Quellen
 ([evaluation.md](evaluation.md#suchgenauigkeit-prüfen)). Ein geänderter Wert wirkt erst nach einem
 Neustart des Backends — ChromaDB übernimmt ihn beim Laden des Index, nicht in einen schon geladenen. Eine exakte Suche in NumPy statt HNSW wäre ein
 zweiter Suchweg (Filter, Spieler-Modus, Synchronität mit der Collection) — bei 0 Abweichung unnötig.
+
+**1000 → 2000 (13.10., nach zwei Re-Index-Läufen):** Die Läufe haben jeden Vektor an Ort und Stelle
+ersetzt; HNSW baut seinen Graphen dabei nicht neu, die Suche wird schlechter. Bei 4419 Chunks fand
+1000 nicht mehr alles: 5 von 274 Golden-Fragen wichen bei `top_k` 20 ab (3 bei 15). Mit 2000 und
+4000 war die Suche wieder exakt (274/274 bei 15 und 20), 2000 kostet 21,5 statt 19,5 ms pro
+Abfrage. Nach weiteren Indizierungen deshalb wieder **🎯 Suchgenauigkeit prüfen** — ein Wipe mit
+Neu-Indizierung baut den Graphen frisch auf, falls ein höherer Wert nicht mehr reicht.
 
 **Stolperfalle beim Anlegen**: Gibt man ChromaDB 1.5 `metadata={"hnsw:space": "cosine"}` *und*
 `configuration` zusammen, entsteht still eine **l2**-Collection. LoreKeeper setzt deshalb Raum und

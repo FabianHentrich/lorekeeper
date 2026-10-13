@@ -76,8 +76,8 @@ Embedding-Modell funktioniert aber auch mit anderen Sprachen.
 | 🔁 **Inkrementelles Indizieren** | SHA-256-Hash pro Datei — nur Geändertes wird neu embedded |
 | ✏ **Prompt-Verwaltung** | Prompts bearbeiten, Varianten speichern und vergleichen, sofort wirksam |
 | 🛠 **Einstellungen live** | Retrieval-, LLM-, Gesprächs- und Chunking-Werte über die Settings-Seite, ohne Neustart |
-| 🎯 **Evaluation** | Golden Set (278 Fragen), Retrieval- und End-to-End-Eval, Chunk-Inspector |
-| ✅ **757 Tests**, 93 % Abdeckung (13.10.) | Unit, API-Integration, UI (Streamlit AppTest), Sicherheit; dazu Performance- und Live-Prüfungen |
+| 🎯 **Evaluation** | Golden Set (274 Fragen), Retrieval- und End-to-End-Eval, Chunk-Inspector |
+| ✅ **763 Tests**, 93 % Abdeckung (13.10.) | Unit, API-Integration, UI (Streamlit AppTest), Sicherheit; dazu Performance- und Live-Prüfungen |
 
 ---
 

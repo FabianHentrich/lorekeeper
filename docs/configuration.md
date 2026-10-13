@@ -74,6 +74,7 @@ Die Allow-List steht in `src/config/manager.py` (`_EDITABLE_KEYS`); andere Schl�
 |-----------|-----|---------|--------------|
 | `supported_formats` | `list[str]` | `[".md", ".pdf", ".png", ".jpg", ".jpeg", ".webp"]` | Verarbeitete Dateiendungen |
 | `exclude_patterns` | `list[str]` | siehe unten | Glob-Muster für ausgeschlossene Dateien/Ordner |
+| `skip_sections` | `list[str]` | `[]` (`settings.yaml`: `["Alte Vault-Werte"]`) | Markdown-Abschnitte, die nicht indiziert werden, nach Überschrift (Groß-/Kleinschreibung egal) — bis zur nächsten Überschrift gleicher oder höherer Ebene, Überschriften in Callouts zählen nicht ([parsing.md](parsing.md#was-er-macht)). Wirkt für geänderte Dateien; nach einer Änderung der Liste **alles neu indizieren** |
 
 Standard-Ausschlüsse: `.obsidian/*`, `.trash/*`, `*alt.md` (Sicherungskopien), `*(1).md`
 (Duplikate), `*.draft.*` (Entwürfe). `.tex`-Dateien werden ohnehin nicht gelesen.
@@ -202,7 +203,7 @@ Modellwechsel erfordert eine komplette Neu-Indizierung.
 | `persist_directory` | `str` | `./chroma_data` | Speicherort der eingebetteten ChromaDB |
 | `collection_name` | `str` | `lorekeeper` | ChromaDB-Collection |
 | `distance_metric` | `str` | `cosine` | Nur `cosine` liefert richtige Scores (`1 − Distanz`); `l2`/`ip` würden den `score_threshold` verfälschen. Wird beim Anlegen der Collection festgelegt — eine Abweichung steht als Warnung im Log |
-| `hnsw_ef_search` | `int` | `1000` | Suchbreite der HNSW-Suche. 1000 sucht bei ~5 k Chunks exakt und in jedem Prozess gleich (+~2 ms pro Abfrage); wird beim Start auf eine bestehende Collection übertragen (Log-Zeile `hnsw ef_search … → …`). Eine Änderung wirkt erst nach einem Neustart des Backends (ChromaDB übernimmt sie beim Neuladen des Index). Bei deutlich mehr Chunks: Evaluation → 🎯 Suchgenauigkeit prüfen ([evaluation.md](evaluation.md#suchgenauigkeit-prüfen)) |
+| `hnsw_ef_search` | `int` (≥ 1) | `2000` | Suchbreite der HNSW-Suche. 2000 sucht bei ~4–5 k Chunks exakt, auch nachdem Re-Index-Läufe den Graphen verschlechtert haben (1000 reichte danach nicht mehr) und in jedem Prozess gleich (+~2 ms pro Abfrage); wird beim Start auf eine bestehende Collection übertragen (Log-Zeile `hnsw ef_search … → …`). Eine Änderung wirkt erst nach einem Neustart des Backends (ChromaDB übernimmt sie beim Neuladen des Index). Bei deutlich mehr Chunks: Evaluation → 🎯 Suchgenauigkeit prüfen ([evaluation.md](evaluation.md#suchgenauigkeit-prüfen)) |
 
 ChromaDB läuft immer eingebettet im Backend-Prozess. Kein zweiter Prozess darf gleichzeitig auf
 `chroma_data/` zugreifen.

@@ -134,7 +134,7 @@ class IngestionOrchestrator:
         """
         self.config = config
         self.parsers: list[BaseParser] = [
-            MarkdownParser(),
+            MarkdownParser(skip_sections=self.config.settings.ingestion.skip_sections),
             PDFParser(pdf_config=self.config.settings.ingestion.pdf),
             ImageMetaParser(),
         ]

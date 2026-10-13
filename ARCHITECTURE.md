@@ -202,7 +202,7 @@ lorekeeper/
 │   ├── shutdown.py                # ⏻ LoreKeeper beenden in der Sidebar (Admin) → stop.ps1
 │   └── pages/                     # 1_Sources · 2_Evaluation · 3_Prompts · 4_Settings
 │
-├── evaluation/                    # Golden Set (278 Fragen), evaluate_retrieval.py, evaluate.py
+├── evaluation/                    # Golden Set (274 Fragen), evaluate_retrieval.py, evaluate.py
 ├── tests/                         # unit · integration · ui · perf (-m perf) · live (-m live)
 ├── scripts/setup-lan.ps1          # Firewall-Regel für den Heimnetz-Betrieb
 ├── start.ps1                      # Start von Backend + UI (Entwicklung / -Server)
@@ -576,7 +576,7 @@ LoreKeeper läuft ausschließlich lokal unter Windows; ChromaDB steckt im Backen
   und UI für die Entwicklung, `.\start.ps1 -Server` für den Heimnetz-Betrieb (UI im LAN, Backend
   bleibt auf `127.0.0.1`, kein Auto-Reload). Bewusst **kein Autostart**.
 - **Heimnetz, Passwort, Firewall, Fehlersuche, Logs:** [docs/operations.md](docs/operations.md).
-- **Evaluation:** Golden Set mit 278 Fragen, `evaluate_retrieval.py` (ohne LLM, ~1 min) und
+- **Evaluation:** Golden Set mit 274 Fragen, `evaluate_retrieval.py` (ohne LLM, ~1 min) und
   `evaluate.py` (mit LLM) — [docs/evaluation.md](docs/evaluation.md).
 
 ---

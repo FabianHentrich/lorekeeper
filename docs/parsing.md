@@ -40,6 +40,14 @@ scheitern.
 
 ### Was er macht
 
+0. **Ausgelassene Abschnitte** — Abschnitte, deren Überschrift in `ingestion.skip_sections` steht
+   (Groß-/Kleinschreibung und `**` egal), fallen vor allem anderen weg: von der Überschrift bis zur
+   nächsten Überschrift gleicher oder höherer Ebene. Das passiert auf dem Rohtext, vor dem Bereinigen
+   der Callouts — Überschriften **im** Callout (`> ## Attribute`) beenden den Abschnitt nicht; nach
+   dem Bereinigen sähen sie wie normale Überschriften aus und die alten Werte kämen darunter zurück.
+   Tags und Wikilinks des Abschnitts zählen nicht. Genutzt für „Alte Vault-Werte“: 59 Gegner- und
+   Dämonen-Dateien bewahren die Werte von vor dem 30.09. in einem eingeklappten Callout auf
+   („nicht mehr maßgeblich“); indiziert konkurrierten sie mit den aktuellen Werten (13.10.).
 1. **YAML-Frontmatter** — über `python-frontmatter`. `aliases` wird gesondert gespeichert (für die
    Identitäts-Schicht im Embedding), die übrigen Schlüssel gehen als Metadaten durch.
 2. **Wikilinks** — `[[Ziel]]` und `[[Ziel|Anzeigetext]]` werden erkannt. Die Ziele landen in

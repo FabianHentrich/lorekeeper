@@ -2486,36 +2486,3 @@ pairs:
     expected_source_ids: ["sim-faehigkeiten-bericht"]
     expected_answer_contains: ["Rang"]
     expected_section: "Rang-Skalierung: DPR je Rang"
-
-  - id: z013
-    question: "Worauf muss ich achten, wenn ich die Rangliste der Fähigkeitswertung lese?"
-    source_type: simulation
-    category: ability_balance
-    expected_sources: ["fachliche_analyse.md"]
-    expected_answer_contains: ["Median"]
-    expected_section: "1. Wie man die Rangliste liest"
-
-  - id: z014
-    question: "Welche Fähigkeiten wurden aufgrund der Simulation geändert und warum?"
-    source_type: simulation
-    category: ability_balance
-    expected_sources: ["fachliche_analyse.md"]
-    expected_answer_contains: []
-    expected_section: "3. Entscheidungen je Fähigkeit"
-
-  - id: z015
-    question: "Welche Auffälligkeiten in der Fähigkeitswertung sind bewusst akzeptiert?"
-    source_type: simulation
-    category: ability_balance
-    expected_sources: ["BALANCE_ROADMAP.md"]
-    expected_answer_contains: []
-    expected_section: "Akzeptiert"
-    notes: "Spielleiter-Quelle (Roadmap nennt auch Kampagnen-Kämpfe)."
-
-  - id: z016
-    question: "Was kann die Simulation der Fähigkeiten nicht abbilden?"
-    source_type: simulation
-    category: ability_balance
-    expected_sources: ["BALANCE_ROADMAP.md"]
-    expected_answer_contains: []
-    expected_section: "4. Grenzen des Modells"

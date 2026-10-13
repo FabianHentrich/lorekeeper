@@ -28,7 +28,7 @@ Verschlechterungen auffallen, bevor sie am Spieltisch stören.
 ## Kurz und knapp
 
 ```powershell
-# Schnell: nur Retrieval, kein LLM (~1 min für 278 Fragen mit GPU-Reranker)
+# Schnell: nur Retrieval, kein LLM (~1 min für 274 Fragen mit GPU-Reranker)
 python -m evaluation.evaluate_retrieval
 
 # Parameter für einen Lauf überschreiben
@@ -46,7 +46,7 @@ Berichte landen als JSON mit Zeitstempel in `evaluation/results/`.
 
 ## Das Golden Set (`evaluation/qa_pairs.yaml`)
 
-278 handverlesene Fragen:
+274 handverlesene Fragen:
 
 | Block | Anzahl | Was er prüft |
 |---|---|---|
@@ -57,7 +57,7 @@ Berichte landen als JSON mit Zeitstempel in `evaluation/results/`.
 | `s001–s006` **Strukturtests** | 6 | Unterabschnitte, Vielfalt über Quellen, Tabellen am Stück, Identitäts-Schicht, Wikilink-Querverweise |
 | `k001–k020` **Stichworttests** | 20 | Exakte Begriffe, bei denen BM25 der Vektorsuche überlegen sein sollte — seltene Eigennamen (Rhaz'Muell, Artheon Knisterhand Faraday), eindeutige Komposita (Ephraskal-Handschuh, Venthir-Siegelnetz-Blaupause), Farbvarianten (Blauer/Roter/Grüner Monolith). Für den A/B-Lauf Vektor vs. Hybrid |
 | `x001–x008` **quellenübergreifend** (`source_type: mixed`) | 8 | Eine Vault-Datei nennt eine Eigenheit/einen Zauber/ein Artefakt, dessen Regel nur im PDF steht (Maleks Schattenfreund, Escanors Ritterlichkeit). Einige vermerken Widersprüche zwischen Vault und Regelwerk in `notes`. Gemessen nach Abschnitt; der Regelwerk-Slot hob sie von 1/8 auf 5/8 |
-| `z001–z016` **Simulation** | 16 | Berichte der PnP-Simulation (Gruppe `simulation`). Prüfen Quelle (`expected_source_ids`) und benannten Abschnitt; Antwort-Stichwörter nur Methodenbegriffe, damit neue Simulationsläufe sie nicht brechen |
+| `z001–z012` **Simulation** | 12 | Berichte der PnP-Simulation (Gruppe `simulation`). Prüfen Quelle (`expected_source_ids`) und benannten Abschnitt; Antwort-Stichwörter nur Methodenbegriffe, damit neue Simulationsläufe sie nicht brechen |
 | `f###` **aus Feedback** | — | Über Evaluation → „Feedback“ aus bewerteten Chat-Antworten übernommen: 👍 behält die Quellen der Antwort, 👎 lässt sie leer zum Nachtragen |
 
 Die Strukturtests fangen Fehler, die Entitäten-Fragen übersehen:
@@ -140,10 +140,10 @@ A/B-Vergleich: zweimal laufen lassen und die Berichte vergleichen (z.B. `--no-hy
 `--hybrid`). Die Evaluation-Seite hat dafür den Knopf **⚖ A/B starten (Vektor vs. Hybrid)** mit
 Differenz der Trefferquote und den Fragen, die Hybrid gewinnt oder verliert.
 
-> **Läufe sind reproduzierbar** (seit 13.10.): Mit `vectorstore.hnsw_ef_search: 1000` sucht ChromaDB
+> **Läufe sind reproduzierbar** (seit 13.10.): Mit `vectorstore.hnsw_ef_search: 2000` sucht ChromaDB
 > exakt, zwei Läufe in getrennten Prozessen liefern dieselben Treffer (vorher ±2 Abschnitte, ~9
 > Fragen mit anderen Kandidaten nach einem Neustart — [embedding-strategy.md](embedding-strategy.md)
-> → „Warum `ef_search: 1000`?“). Für Parameter-Vergleiche in einem Skript genügt weiterhin je
+> → „Warum `ef_search: 2000`?“). Für Parameter-Vergleiche in einem Skript genügt weiterhin je
 > Variante ein `Retriever` mit `run_evaluation_with_retriever`.
 
 Die Konsolenausgabe zeigt die Aufteilung nach `source_type` und einen Block `Misses` mit erwarteten
@@ -177,8 +177,8 @@ Der End-to-End-Lauf kann `expected_source_ids` nicht prüfen — `/query` liefer
 
 | Kennzahl | Skript | Was sie misst | Ziel | Stand 13.10. |
 |---|---|---|---|---|
-| **Trefferquote (Datei)** | `evaluate_retrieval.py` | Erwartete Datei unter den gefundenen Chunks | > 0,85 | 0,986 |
-| **Abschnitt-Trefferquote** | `evaluate_retrieval.py` | Erwarteter Abschnitt unter den Überschriften | darf nicht sinken | 136/153 |
+| **Trefferquote (Datei)** | `evaluate_retrieval.py` | Erwartete Datei unter den gefundenen Chunks | > 0,85 | 0,993 (272/274) |
+| **Abschnitt-Trefferquote** | `evaluate_retrieval.py` | Erwarteter Abschnitt unter den Überschriften | darf nicht sinken | 137/149 |
 | **Answer Contains** | `evaluate.py` | Stichwörter in der LLM-Antwort | > 0,75 | — |
 | **Latenz** | `evaluate.py` | Antwortzeit gesamt, gemittelt über die beantworteten Fragen (fehlgeschlagene zählen bei den Quoten als Fehltreffer) | < 10 s | ~3–4 s |
 
@@ -251,14 +251,15 @@ dieselbe Notiz in zwei Quellen) sind austauschbar und zählen nicht als Abweichu
 
 Geprüft wird nur die Hauptsuche des Spielleiters — nicht die gefilterten Suchen (Regelwerk-Slot,
 Spieler-Modus, Quellenfilter der Sidebar). Gefilterte HNSW-Suchen werden bei wachsendem Index
-zuerst ungenau; bei 4745 Chunks und `ef_search: 1000` durchsucht HNSW ohnehin praktisch alles.
+zuerst ungenau; bei 4419 Chunks und `ef_search: 2000` durchsucht HNSW ohnehin praktisch alles.
 
-- **„Exakt: 278/278“** — die Suche findet dieselben Kandidaten wie eine exakte Suche; Eval-Läufe sind
-  reproduzierbar. Stand 13.10. bei 4745 Chunks mit `hnsw_ef_search: 1000`.
+- **„Exakt: 274/274“** — die Suche findet dieselben Kandidaten wie eine exakte Suche; Eval-Läufe sind
+  reproduzierbar. Stand 13.10. bei 4419 Chunks mit `hnsw_ef_search: 2000` (1000 reichte nach zwei
+  Re-Index-Läufen nicht mehr: 269/274).
 - **Abweichungen** — die Liste nennt je Frage, wie viele Chunks der exakten Top-K fehlen. Dann
   `vectorstore.hnsw_ef_search` in `settings.yaml` erhöhen (z.B. verdoppeln), **Backend neu starten**
   (ChromaDB übernimmt einen geänderten Wert erst beim Neuladen des Index) und erneut prüfen.
 
 Wann: nach größeren Index-Änderungen — neue Quellen, viele neue Dokumente, Bildbeschreibungen. Ein
 paar neue Notizen ändern nichts. Hintergrund und Messung:
-[embedding-strategy.md](embedding-strategy.md) → „Warum `ef_search: 1000`?“.
+[embedding-strategy.md](embedding-strategy.md) → „Warum `ef_search: 2000`?“.

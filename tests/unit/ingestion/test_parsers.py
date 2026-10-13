@@ -126,6 +126,69 @@ class TestMarkdownParser:
         assert len(docs) == 1  # Fallback document
 
 
+_VAULT_ENEMY = """# Grabeswolf
+
+## Kampfwerte
+
+LP 40, Biss 2W6 #wolf
+
+## Alte Vault-Werte
+
+> [!note]- Bisherige Werte aus dem Vault (nicht mehr maßgeblich)
+> ## Attribute
+>
+> LP 25, Biss 1W6 [[Altes Rudel]] #veraltet
+> ### Fähigkeiten
+> Heulen
+
+## Taktik
+
+Jagt im Rudel.
+"""
+
+
+class TestSkipSections:
+    """``ingestion.skip_sections``: whole sections left out of the index (outdated stat blocks in the vault)."""
+
+    def _parse(self, tmp_path, text, skip):
+        f = tmp_path / "Grabeswolf.md"
+        f.write_text(text, encoding="utf-8")
+        return MarkdownParser(skip_sections=skip).parse(f)
+
+    def test_skipped_section_and_its_callout_headings_are_gone(self, tmp_path):
+        """Headings inside the callout ('> ## Attribute') must not end the skipped section — after
+        callout cleaning they would look like ordinary headings and bring the old values back."""
+        docs = self._parse(tmp_path, _VAULT_ENEMY, ["Alte Vault-Werte"])
+
+        text = "\n".join(d.content for d in docs)
+        assert "LP 25" not in text and "Heulen" not in text
+        assert [d.heading_hierarchy for d in docs] == [["Grabeswolf", "Kampfwerte"], ["Grabeswolf", "Taktik"]]
+
+    def test_tags_and_wikilinks_of_the_skipped_section_are_dropped(self, tmp_path):
+        docs = self._parse(tmp_path, _VAULT_ENEMY, ["Alte Vault-Werte"])
+
+        assert docs[0].metadata["obsidian_tags"] == ["wolf"]
+        assert docs[0].metadata["wikilinks"] == []
+
+    def test_title_match_ignores_case_and_bold(self, tmp_path):
+        text = _VAULT_ENEMY.replace("## Alte Vault-Werte", "## **alte vault-werte**")
+        docs = self._parse(tmp_path, text, ["Alte Vault-Werte"])
+
+        assert "LP 25" not in "\n".join(d.content for d in docs)
+
+    def test_skipped_section_ends_at_a_higher_heading(self, tmp_path):
+        """A deeper skipped section ends at the next heading of its level or above."""
+        text = "# A\n\n## Werte\n\n### Alte Vault-Werte\n\nalt\n\n### Neu\n\nneu\n\n# B\n\nb\n"
+        docs = self._parse(tmp_path, text, ["Alte Vault-Werte"])
+
+        assert [d.content for d in docs] == ["neu", "b"]
+
+    def test_without_skip_list_everything_stays(self, tmp_path):
+        docs = self._parse(tmp_path, _VAULT_ENEMY, [])
+
+        assert "LP 25" in "\n".join(d.content for d in docs)
+
+
 class TestImageMetaParser:
     """Test suite validating metadata extraction constraints targeting binary image assets."""
 

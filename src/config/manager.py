@@ -122,6 +122,9 @@ class IngestionConfig(BaseModel):
     supported_formats: list[str] = [".md", ".pdf", ".png", ".jpg", ".jpeg", ".webp"]  # file suffixes, case-insensitive
     # fnmatch patterns relative to the source folder, for every source (sources can add their own)
     exclude_patterns: list[str] = [".obsidian/*", ".trash/*", "*alt.md", "*(1).md", "*.draft.*"]
+    # Markdown sections not indexed, by heading title (case-insensitive) — e.g. outdated stat blocks kept in the
+    # vault for reference. Takes effect for changed files; after editing the list run a full reindex.
+    skip_sections: list[str] = []
     pdf: PdfConfig = PdfConfig()
 
 
@@ -156,11 +159,12 @@ class VectorStoreConfig(BaseModel):
     collection_name: str = "lorekeeper"
     # Only "cosine" gives correct scores (score = 1 - distance); fixed when the collection is created
     distance_metric: str = "cosine"
-    # HNSW search breadth. 1000 makes the search exact and identical across processes at our size
-    # (4.7 k chunks; 100 missed exact top-15 members for 38 of 278 golden questions and varied per
-    # process) for ~2 ms per query — roadmap 5.5. Applied to an existing collection at startup.
+    # HNSW search breadth. Exact and identical across processes at our size: 100 missed exact top-15 members
+    # for 38 of 278 golden questions (roadmap 5.5); 1000 was exact on a fresh index but missed chunks for 5 of
+    # 274 after two re-index runs had updated every vector in place — 2000 is exact again (+2 ms per query,
+    # 13.10., roadmap 3.10). Applied to an existing collection at startup.
     # ≥ 1: ChromaDB rejects anything else on every collection access (each request would fail with 500)
-    hnsw_ef_search: int = Field(default=1000, ge=1)
+    hnsw_ef_search: int = Field(default=2000, ge=1)
 
 
 class RerankingConfig(BaseModel):
