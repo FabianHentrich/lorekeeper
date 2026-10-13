@@ -96,7 +96,7 @@ flowchart TD
 
     GEN["Generierung\nrender_qa(Chunks, Frage, Verlauf)\nVerlauf = letztes Q/A-Paar, als 'keine Quelle' markiert\n→ Provider.generate_stream()"]
 
-    GEN --> SSE["SSE-Stream\ndata: {type: token, content}\ndata: {type: done, session_id, sources, timings, usage}"]
+    GEN --> SSE["SSE-Stream\ndata: {type: status} (nur wenn das LLM noch andere Fragen beantwortet)\ndata: {type: token, content}\ndata: {type: done, session_id, sources, timings, usage}"]
 
     SSE --> UI["Streamlit\nToken für Token · Quellen · 👍/👎"]
 
@@ -165,7 +165,8 @@ Session“ in der UI starten ebenfalls eine neue Session.
 flowchart TD
     LOOP["Hintergrund-Schleife im Backend\nalle 60 s"]
     LOOP --> CHECK["ChromaDB: collection.count()\nOllama: GET /api/tags\nGemini: models.get()"]
-    CHECK --> CACHE[("Health-Cache\n{chroma, llm, ts}")]
+    CHECK --> CACHE[("Health-Cache\n{chroma, llm}")]
+    CHECK -.->|"nur bei Änderung"| LOG["Log: Health changed …\n(WARNING bei Ausfall, INFO bei Erholung)"]
 
     REQ1["GET /health"] --> CACHE
     REQ2["GET /sidebar-state\n(UI, 30 s gecacht)"] --> CACHE
@@ -176,4 +177,5 @@ flowchart TD
 ```
 
 Keine Anfrage wartet auf einen Health-Check: `/health` und `/sidebar-state` lesen nur den Cache,
-den die Schleife aktuell hält.
+den die Schleife aktuell hält. Ins Log schreibt die Schleife nur Wechsel des Zustands, nicht jeden
+Durchlauf.

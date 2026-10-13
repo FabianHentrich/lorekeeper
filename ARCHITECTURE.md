@@ -161,7 +161,8 @@ lorekeeper/
 │   └── prompts/                   # Gespeicherte Prompt-Varianten (gitignored)
 │
 ├── src/
-│   ├── main.py                    # FastAPI-App, Lifespan (Modelle laden, Session-GC)
+│   ├── main.py                    # FastAPI-App, Lifespan (Modelle laden, Session-GC, Health-Schleife), Request-Log
+│   ├── logging_setup.py           # Konsole + eine Logdatei pro Tag, uvicorn-Fehler in die Datei
 │   ├── config/manager.py          # YAML + Env + Sidecars → Pydantic-Settings
 │   ├── ingestion/
 │   │   ├── orchestrator.py        # Parse → Chunk → Embed → Speichern (je Quelle)
@@ -192,6 +193,7 @@ lorekeeper/
 │   ├── admin_gate.py              # Passwortschutz der Admin-Seiten
 │   ├── roles.py                   # Spieler-/Spielleiter-Filter in der UI
 │   ├── feedback.py                # Bewertungen → Golden-Set-Fragen
+│   ├── backend.py                 # raise_for_status → BackendError mit dem detail des Backends (alle Seiten)
 │   └── pages/                     # 1_Sources · 2_Evaluation · 3_Prompts · 4_Settings
 │
 ├── evaluation/                    # Golden Set (278 Fragen), evaluate_retrieval.py, evaluate.py
@@ -199,7 +201,7 @@ lorekeeper/
 ├── scripts/setup-lan.ps1          # Firewall-Regel für den Heimnetz-Betrieb
 ├── start.ps1                      # Start von Backend + UI (Entwicklung / -Server)
 ├── chroma_data/                   # ChromaDB-Persistenz (nicht versioniert)
-└── logs/                          # lorekeeper.log, feedback.jsonl (nicht versioniert)
+└── logs/                          # lorekeeper.log (+ lorekeeper.<Datum>.log je Tag), ollama.log, feedback.jsonl (nicht versioniert)
 ```
 
 ---

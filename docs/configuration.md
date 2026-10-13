@@ -259,7 +259,10 @@ Erlaubtes; `tests/integration/test_filter_contract.py` prüft, dass beide Suchwe
 Ollama selbst (Benutzer-Umgebungsvariablen, nicht LoreKeeper): `OLLAMA_CONTEXT_LENGTH=16384` — der
 OpenAI-kompatible Endpoint ignoriert `num_ctx` pro Anfrage, ohne die Variable wird der Prompt bei
 4096 Tokens still abgeschnitten; `OLLAMA_KEEP_ALIVE=1h` — sonst entlädt Ollama das Modell nach 5
-Minuten und die nächste Frage wartet ~16 s.
+Minuten und die nächste Frage wartet ~16 s; `OLLAMA_MODELS=<Modellordner der Ollama-App>` — nur nötig,
+wenn die App einen eigenen Ordner nutzt: dann findet ein von LoreKeeper selbst gestartetes Ollama die
+Modelle sonst nicht. `OLLAMA_NUM_PARALLEL` bleibt ungesetzt (= 1, eine Frage nach der anderen;
+Begründung in [provider-strategy.md](provider-strategy.md)).
 
 **`llm.gemini`**
 
@@ -331,4 +334,4 @@ neu gebaut.
 Jeder andere Schlüssel geht nach demselben Muster (`ABSCHNITT__UNTERSCHLÜSSEL`).
 
 **Ollama** (Benutzer-Umgebungsvariablen von Windows): `OLLAMA_CONTEXT_LENGTH=16384`,
-`OLLAMA_KEEP_ALIVE=1h` — siehe `llm.ollama`.
+`OLLAMA_KEEP_ALIVE=1h`, ggf. `OLLAMA_MODELS` — siehe `llm.ollama`.

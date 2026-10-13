@@ -97,7 +97,8 @@ Mit `LOREKEEPER_ADMIN_PASSWORD` (Heimnetz-Server, siehe [operations.md](operatio
 - gilt ein erfolgreicher Login für die Browser-Session und schaltet alle Seiten frei;
 - wird Raten serverweit gebremst: jedes falsche Passwort wartet 1 s, 5 Fehlversuche in 5 Minuten
   sperren den Login (beide Formulare, alle Sessions) für 5 Minuten. Angemeldete Sessions arbeiten
-  weiter; ein UI-Neustart hebt die Sperre auf.
+  weiter; ein UI-Neustart hebt die Sperre auf. Jeder Fehlversuch und die Sperre stehen als WARNING
+  im Konsolenfenster der UI (die UI hat keine Logdatei).
 
 Ohne Passwort ist alles offen (lokaler Einzelbetrieb).
 

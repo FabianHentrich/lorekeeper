@@ -81,7 +81,17 @@ ollama ps                          # Spalte CONTEXT muss 16384 zeigen
 
 16384 kostet bei qwen3:14b ~2,6 GB VRAM (11 GB gesamt, passt komplett in 16 GB). Startet das
 LoreKeeper-Backend `ollama serve` selbst (Ollama lief beim Start nicht), erbt dieser Prozess die
-Umgebung des Backends — nach dem Ändern der Variable erst die Ollama-App starten.
+Umgebung des Backends — nach dem Ändern der Variable erst die Ollama-App starten. Das gilt auch für
+den **Modellordner**: Die Ollama-App kann ihre Modelle in einem eigenen Ordner halten (App-Einstellung);
+ein selbst gestartetes `ollama serve` findet sie nur, wenn `OLLAMA_MODELS` auf denselben Ordner zeigt
+— sonst steht „Ollama lists no models at all“ im Log. Seine Ausgabe schreibt das selbst gestartete
+Ollama nach `logs/ollama.log` ([operations.md](operations.md)).
+
+**Mehrere Fragen gleichzeitig:** Ollama beantwortet sie nacheinander (`OLLAMA_NUM_PARALLEL=1`,
+bewusst nicht geändert). Gemessen (Roadmap 8.0): bei vier gleichzeitigen Fragen wartet die letzte bis
+~17 s auf ihr erstes Token, der Durchsatz bleibt bei ~150 Zeichen/s. Mit `OLLAMA_NUM_PARALLEL=2`
+käme das erste Token schneller, aber jede Antwort liefe langsamer — auch allein (−27 %) — bei ~2,6 GB
+mehr VRAM. Wartende sehen im Chat einen Hinweis (SSE-Event `status`).
 
 **Keep-alive:** Ollama entlädt ein Modell nach 5 Minuten Leerlauf; die nächste Frage wartet dann
 ~16 s (gemessen: erster Token nach 18 s statt 1,1 s). `setx OLLAMA_KEEP_ALIVE 1h` hält es bis eine

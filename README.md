@@ -77,7 +77,7 @@ Embedding-Modell funktioniert aber auch mit anderen Sprachen.
 | ✏ **Prompt-Verwaltung** | Prompts bearbeiten, Varianten speichern und vergleichen, sofort wirksam |
 | 🛠 **Einstellungen live** | Retrieval-, LLM-, Gesprächs- und Chunking-Werte über die Settings-Seite, ohne Neustart |
 | 🎯 **Evaluation** | Golden Set (278 Fragen), Retrieval- und End-to-End-Eval, Chunk-Inspector |
-| ✅ **537 Tests** | Unit, API-Integration, UI (Streamlit AppTest), Sicherheit; dazu Performance- und Live-Prüfungen |
+| ✅ **659 Tests** (13.10.) | Unit, API-Integration, UI (Streamlit AppTest), Sicherheit; dazu Performance- und Live-Prüfungen |
 
 ---
 
@@ -163,7 +163,8 @@ Voraussetzungen: Windows, Python 3.11+ (`winget install Python.Python.3.12`),
    ```
    Empfohlen als Benutzer-Umgebungsvariablen für Ollama: `OLLAMA_CONTEXT_LENGTH=16384` (sonst wird
    der Prompt bei großen Antworten abgeschnitten) und `OLLAMA_KEEP_ALIVE=1h` (kein Nachladen nach
-   5 Minuten Pause).
+   5 Minuten Pause). Hält die Ollama-App ihre Modelle in einem eigenen Ordner, zusätzlich
+   `OLLAMA_MODELS` auf diesen Ordner — sonst findet ein von LoreKeeper gestartetes Ollama sie nicht.
 
 3. **Konfigurieren**
    ```powershell

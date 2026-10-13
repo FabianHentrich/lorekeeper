@@ -8,7 +8,8 @@ sauber, keine echten LLM-Aufrufe) gelten wie in den übrigen Docs beschrieben.
 1. [Aufbau](#aufbau)
 2. [Tests ausführen](#tests-ausführen)
 3. [Sicherheitsprüfungen (Spieler-Modus, Admin-Login)](#sicherheitsprüfungen-spieler-modus-admin-login)
-4. [Performance-Prüfungen](#performance-prüfungen)
+4. [Log-Pfade](#log-pfade)
+5. [Performance-Prüfungen](#performance-prüfungen)
 
 ---
 
@@ -92,6 +93,19 @@ Spielleiter-Filter in den Spieler-Filter gemischt, Fail-open, Backend-Durchsetzu
 Anfrage-Filter in der Suche des Regelwerk-Slots weggelassen (5 Tests schlagen fehl). Ebenso
 mutationsgeprüft: der GPU→CPU-Rückfall bei gleichzeitigen Fragen und die Fehleranzeige im
 Chunk-Inspector.
+
+---
+
+## Log-Pfade
+
+Fehler und wichtige Ereignisse müssen im Log landen — nach einem Neustart ist es die einzige Spur
+(Roadmap 10.0). `tests/integration/test_logging_paths.py` prüft mit `caplog`: unbehandelte
+Exceptions (Middleware), fehlgeschlagene Ingest-Jobs mit Traceback, abgebrochene Streams, nur
+Health-*Wechsel*, `session`/`role`/`model` an den Zeilen einer Frage, die Frage genau einmal auf
+INFO, den Gemini-Key nie im Log, Log-Level je Request-Art, `logs/ollama.log` und den Warte-Hinweis
+(SSE `status`, Zähler auch nach Abbruch). `tests/unit/test_logging_setup.py` prüft, dass
+`uvicorn.error` in die Datei kommt, eine Datei pro Tag mit Wechsel um 6 Uhr und dass die
+`suppress`-Liste in Code und `settings.yaml` gleich ist. Alle mutationsgeprüft.
 
 ---
 
