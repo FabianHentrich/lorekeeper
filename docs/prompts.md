@@ -93,7 +93,7 @@ Wird bei jeder Anfrage mit gefundenen Chunks gerendert.
 | `chunks[i].heading` | `str` | Überschriftenpfad, z.B. `Arkenfeld > Überblick` |
 | `chunks[i].content` | `str` | Chunk-Text (mit Überschrift vorangestellt) |
 | `question` | `str` | Die (ggf. umgeschriebene) Frage |
-| `history` | `list[dict]` | Das letzte Frage/Antwort-Paar der Session (`role`: `user`/`assistant`, `content`) — leer bei der ersten Frage. Umfang: `conversation.answer_history_pairs` (1), frühere Antworten auf `answer_history_max_chars` (1500) gekürzt. Templates ohne Verlaufsblock ignorieren ihn |
+| `history` | `list[dict]` | Das letzte Frage/Antwort-Paar der Session (`role`: `user`/`assistant`, `content`) — leer bei der ersten Frage. Umfang: `conversation.answer_history_pairs` (1), jede Nachricht auf `answer_history_max_chars` (1500) Zeichen gekürzt. Templates ohne Verlaufsblock ignorieren ihn |
 
 Der Verlauf steht **vor** den Quellen und ist als „keine Quelle“ markiert: Er löst nur Bezüge auf
 die vorige Antwort auf („fass das kürzer zusammen“), Fakten kommen aus den Quellen. Bewusst nur ein

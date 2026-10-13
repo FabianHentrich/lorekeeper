@@ -1,3 +1,12 @@
+"""Retrieval: embed → vector search (+ BM25 and RRF) → score threshold → rerank with per-file cap and
+rules slot → section expansion.
+
+Player-mode safety: every extra search (rules slot) keeps the request's ``where`` filter, and expansion only
+loads chunks of files that already passed it (tests/integration/test_player_mode_security.py). Image chunks
+are excluded (filename stubs). The score threshold applies to cosine scores before fusion. The cross-encoder
+runs on the GPU via DirectML when configured and drops to the CPU for the rest of the run if the GPU fails.
+Design decisions and measurements: docs/embedding-strategy.md.
+"""
 import asyncio
 import logging
 import time
@@ -78,6 +87,7 @@ def _section_key(chunk) -> tuple[str, str, str] | None:
 
 @dataclass
 class RetrievedChunk:
+    """A hit as the API and the prompt use it; ``heading`` is the joined heading path ("A > B")."""
     content: str
     source_file: str
     document_type: str
@@ -168,11 +178,12 @@ class Retriever:
     ) -> list[RetrievedChunk]:
         """Search the vector store for chunks most relevant to the given query.
 
-        If hybrid search is enabled (either globally or via the request flag), it combines dense embeddings
-        with BM25 keyword matching via Reciprocal Rank Fusion. It then drops any chunk falling below the
-        configured score threshold, and optionally reranks the surviving candidates via a cross-encoder model.
-        When ``timings`` is given, per-stage durations in ms are written into it (embed, search, bm25,
-        rerank, expand).
+        Vector hits below the score threshold are dropped first; with hybrid search (config or request flag)
+        BM25 hits are fused in via Reciprocal Rank Fusion. The rerank picks ``top_k_rerank`` chunks with the
+        per-file cap and the rules slot, then section expansion may replace fragments with their whole
+        section. Parameters left at None take the config value. ``metadata_filters`` is applied to every
+        search path. When ``timings`` is given, per-stage durations in ms are written into it (embed,
+        search, bm25, rerank, expand).
         """
         stage_ms = timings if timings is not None else {}
         top_k = top_k or self.config.top_k

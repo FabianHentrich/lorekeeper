@@ -1,3 +1,10 @@
+"""Keyword index for hybrid search: rank_bm25 over the whole collection, held in memory.
+
+Built lazily on the first hybrid query, invalidated after every ingest job. ``_matches_filter`` must
+evaluate the same where-subset as ChromaDB (``access.validate_filters`` admits nothing else) — otherwise
+the player filter could leak through the keyword path. tests/integration/test_filter_contract.py checks
+that both paths return the same.
+"""
 import logging
 import re
 from typing import Any

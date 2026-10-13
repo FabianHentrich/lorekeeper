@@ -1,3 +1,7 @@
+"""Request and response models of the /eval API.
+
+Retrieval parameters left at None take the value from settings.yaml (resolved by the retriever).
+"""
 from typing import Literal
 
 from pydantic import BaseModel
@@ -6,6 +10,7 @@ from src.api.access import Role
 
 
 class QAPair(BaseModel):
+    """One golden-set question with what a hit must contain (evaluation/qa_pairs.yaml)."""
     id: str
     question: str
     source_type: str = "markdown"
@@ -18,10 +23,12 @@ class QAPair(BaseModel):
 
 
 class QAPairList(BaseModel):
+    """The whole golden set — PUT replaces the file."""
     pairs: list[QAPair]
 
 
 class RetrievalPreviewRequest(BaseModel):
+    """One question against the retriever without the LLM."""
     question: str
     # None = the value from settings.yaml (retrieval.top_k / reranking.top_k_rerank / reranking.max_per_source)
     top_k: int | None = None
@@ -33,6 +40,7 @@ class RetrievalPreviewRequest(BaseModel):
 
 
 class RetrievedChunkResponse(BaseModel):
+    """A preview hit; ``content_preview`` is the start of the chunk text."""
     source_id: str = ""
     source_file: str
     document_type: str
@@ -42,11 +50,13 @@ class RetrievedChunkResponse(BaseModel):
 
 
 class RetrievalPreviewResponse(BaseModel):
+    """Preview hits in final order plus the retrieval time."""
     chunks: list[RetrievedChunkResponse]
     latency_ms: float
 
 
 class InspectedChunk(BaseModel):
+    """A stored chunk with full text and metadata (chunk inspector)."""
     id: str
     chunk_index: int
     heading: str
@@ -56,12 +66,14 @@ class InspectedChunk(BaseModel):
 
 
 class ChunkListResponse(BaseModel):
+    """All chunks of one file in document order."""
     source_id: str
     source_file: str
     chunks: list[InspectedChunk]
 
 
 class EvalJobRequest(BaseModel):
+    """Start a golden-set run: ``retrieval`` (no LLM) or ``e2e`` (through /query)."""
     # None = the value from settings.yaml, as in RetrievalPreviewRequest
     top_k: int | None = None
     top_k_rerank: int | None = None
@@ -71,11 +83,13 @@ class EvalJobRequest(BaseModel):
 
 
 class EvalJobResponse(BaseModel):
+    """Id of the started eval job."""
     job_id: str
     status: str
 
 
 class EvalJobStatus(BaseModel):
+    """Progress of an eval job; ``result_file`` is set once the report is saved."""
     job_id: str
     status: str = "queued"
     progress: int = 0
@@ -85,6 +99,7 @@ class EvalJobStatus(BaseModel):
 
 
 class EvalResultSummary(BaseModel):
+    """Key figures of a stored report for the results list."""
     filename: str
     timestamp: str
     eval_type: str

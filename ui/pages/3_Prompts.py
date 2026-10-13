@@ -19,7 +19,8 @@ API_URL = api_url()
 _TEMPLATE_KEYS = ("system", "qa", "condense", "no_context")
 _TEMPLATE_HELP = {
     "system": "Statischer System-Prompt. Keine Jinja2-Variablen.",
-    "qa": "Variablen: `chunks` (Liste mit `.source_file`, `.heading`, `.content`), `question`",
+    "qa": "Variablen: `chunks` (Liste mit `.source_file`, `.heading`, `.content`), `question`, "
+          "`history` (letzte Frage/Antwort, Liste mit `.role`, `.content`)",
     "condense": "Variablen: `history` (Liste mit `.role`, `.content`), `question`",
     "no_context": "Variablen: `question`",
 }

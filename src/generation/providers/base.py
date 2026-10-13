@@ -1,3 +1,9 @@
+"""Interface every LLM provider implements, plus its result types.
+
+A new provider implements ``generate``, ``generate_stream`` (as an async generator) and ``health_check``,
+sets ``self.model`` in ``__init__``, writes token usage into ``stream_result.usage`` and is registered in
+``ProviderFactory``.
+"""
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
@@ -5,6 +11,7 @@ from dataclasses import dataclass, field
 
 @dataclass
 class LLMResponse:
+    """A complete, non-streamed answer."""
     content: str
     model: str
     provider: str

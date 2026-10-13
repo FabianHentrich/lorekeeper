@@ -781,11 +781,13 @@ _SHORT_CHUNK_CHARS = 100  # below this a chunk carries little meaning on its own
 
 @st.cache_data(ttl=60, show_spinner=False)
 def _fetch_sources(api_url: str):
+    """Configured sources for the inspector's source picker."""
     return requests.get(f"{api_url}/sources", timeout=5).json().get("sources", [])
 
 
 @st.cache_data(ttl=30, show_spinner=False)
 def _fetch_chunk_files(api_url: str, source_id: str):
+    """Indexed files of one source; a ChromaDB error raises (shown as an error, not as an empty list)."""
     resp = requests.get(f"{api_url}/eval/chunks/files", params={"source_id": source_id}, timeout=10)
     raise_for_status(resp)
     return resp.json().get("files", [])
@@ -793,6 +795,7 @@ def _fetch_chunk_files(api_url: str, source_id: str):
 
 @st.cache_data(ttl=30, show_spinner=False)
 def _fetch_file_chunks(api_url: str, source_id: str, source_file: str):
+    """All chunks of one file in document order."""
     resp = requests.get(f"{api_url}/eval/chunks", params={"source_id": source_id, "source_file": source_file},
                         timeout=10)
     raise_for_status(resp)

@@ -1,3 +1,10 @@
+"""Ollama provider over its OpenAI-compatible endpoint (``/v1``).
+
+Generation parameters are read from the shared config on every call, so Settings-page edits apply without
+a rebuild. For Qwen3, thinking is switched off with ``reasoning_effort: "none"`` — Ollama ignores
+``/no_think`` and ``think: false``. The context length cannot be set per request (the endpoint ignores
+``num_ctx``); ``OLLAMA_CONTEXT_LENGTH`` has to be set for the Ollama server (docs/configuration.md).
+"""
 import logging
 import re
 from collections.abc import AsyncGenerator

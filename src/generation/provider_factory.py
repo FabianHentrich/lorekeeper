@@ -1,3 +1,6 @@
+"""Builds LLM providers from the config: the active one, the optional fallback and the optional condense
+provider (always Ollama — same ``base_url``, different model).
+"""
 from src.config.manager import ConversationConfig, LLMConfig
 
 from .providers.base import BaseLLMProvider

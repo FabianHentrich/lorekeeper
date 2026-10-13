@@ -1,3 +1,8 @@
+"""LoreKeeper backend package.
+
+Importing it sets environment defaults that keep the Hugging Face / safetensors stack quiet. They
+only work when set before the first HF import — which is why they live here and not in main.py.
+"""
 import os
 
 # Suppress noisy HF/safetensors console output. Must be set before any HF import.

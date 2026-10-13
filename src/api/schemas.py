@@ -1,3 +1,6 @@
+"""Request and response models of the core API (/query, /feedback, /ingest, /health, /sidebar-state,
+provider and config).
+"""
 from typing import Literal
 
 from pydantic import BaseModel

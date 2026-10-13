@@ -191,7 +191,7 @@ Modellwechsel erfordert eine komplette Neu-Indizierung.
 |-----------|-----|---------|--------------|
 | `persist_directory` | `str` | `./chroma_data` | Speicherort der eingebetteten ChromaDB |
 | `collection_name` | `str` | `lorekeeper` | ChromaDB-Collection |
-| `distance_metric` | `str` | `cosine` | `cosine` \| `l2` \| `ip` |
+| `distance_metric` | `str` | `cosine` | Nur `cosine` liefert richtige Scores (`1 − Distanz`); `l2`/`ip` würden den `score_threshold` verfälschen. Wird beim Anlegen der Collection festgelegt — eine Abweichung steht als Warnung im Log |
 
 ChromaDB läuft immer eingebettet im Backend-Prozess. Kein zweiter Prozess darf gleichzeitig auf
 `chroma_data/` zugreifen.
@@ -218,8 +218,8 @@ Ablauf und Begründungen: [embedding-strategy.md](embedding-strategy.md).
 | `section_expansion.max_chunks` | `int` | `25` | Größere Sektionen werden nicht expandiert |
 | `section_expansion.top_rank` | `int` | `3` | Nur expandieren, wenn ein Treffer der Sektion unter den ersten N liegt (0 = egal). Golden Set: Ø Chunks 13,9 → 12,6, Abschnitt-Treffer unverändert; 2/1 schnitten schon relevante Übersichten ab |
 | `rules_slot.enabled` | `bool` | `false` (`settings.yaml`: `true`) | Fragen mit Vault-Entität *und* Regelbegriff („Was bewirkt Ritterlichkeit bei Escanor?“) füllen alle Kandidaten mit der Datei der Entität. Der Slot sucht zusätzlich nur in Gruppe `rules` (mit demselben Filter wie die Anfrage, der Spieler-Modus bleibt dicht); diese Kandidaten werden mit gereranked, aber nicht in den Haupt-Pool gemischt. Fehlt in den Top-`top_k_rerank` ein `rules`-Chunk, ersetzt der beste mit Score ≥ `min_score` den schwächsten — höchstens einer, und nur ab 3 finalen Chunks (bei 1–2 würde er den Großteil des Kontexts verdrängen) |
-| `rules_slot.candidates` | `int` | `5` | Größe der Regelwerk-Suche |
-| `rules_slot.min_score` | `float` | `-4.0` | Mindest-Rerank-Score (roher Logit). Golden Set im selben Prozess: aus 132/153 Abschnitte, x001–x008 1/8 · −3: 133, 2/8 · **−4: 136, 5/8** · −5/−6/−8: 136, 5/8, aber mehr Regel-Chunks in reinen Lore-Fragen (64 → 91 → 119 → 136 von 138) |
+| `rules_slot.candidates` | `int` | `8` (`settings.yaml`: `5`) | Größe der Regelwerk-Suche |
+| `rules_slot.min_score` | `float` | `-5.0` (`settings.yaml`: `-4.0`) | Mindest-Rerank-Score (roher Logit). Golden Set im selben Prozess: aus 132/153 Abschnitte, x001–x008 1/8 · −3: 133, 2/8 · **−4: 136, 5/8** · −5/−6/−8: 136, 5/8, aber mehr Regel-Chunks in reinen Lore-Fragen (64 → 91 → 119 → 136 von 138) |
 
 **`metadata_filters`** (pro Anfrage) werden vor der Suche geprüft. Erlaubt ist nur, was ChromaDB
 **und** die BM25-Suche gleich auswerten: Gleichheit (`"group": "rules"`), `$eq`/`$ne` mit einem
@@ -253,8 +253,8 @@ Erlaubtes; `tests/integration/test_filter_contract.py` prüft, dass beide Suchwe
 | `model` | `str` | `qwen3:14b` | Modellname (vorher `ollama pull`) |
 | `temperature` | `float` | `0.3` | Kreativität (0 = deterministisch) |
 | `top_p` | `float` | `0.9` | Nucleus Sampling |
-| `max_tokens` | `int` | `2048` | Höchstzahl Ausgabe-Tokens |
-| `timeout` | `int` | `300` | Timeout in Sekunden |
+| `max_tokens` | `int` | `1024` (`settings.yaml`: `2048`) | Höchstzahl Ausgabe-Tokens |
+| `timeout` | `int` | `120` (`settings.yaml`: `300`) | Timeout in Sekunden; der Chat leitet daraus sein Lese-Timeout ab |
 
 Ollama selbst (Benutzer-Umgebungsvariablen, nicht LoreKeeper): `OLLAMA_CONTEXT_LENGTH=16384` — der
 OpenAI-kompatible Endpoint ignoriert `num_ctx` pro Anfrage, ohne die Variable wird der Prompt bei
@@ -288,7 +288,7 @@ neu gebaut.
 | `window_size` | `int` | `8` | Frage/Antwort-**Paare** im Verlauf für das Umschreiben von Folgefragen |
 | `max_context_tokens` | `int` | `4096` | Harte Grenze für diesen Verlauf (ältere Paare fallen weg) |
 | `answer_history_pairs` | `int` | `1` | Paare, die der **Antwort**-Prompt sieht, als „keine Quelle“ markiert (0 = aus). Bewusst klein — mehr Verlauf verwässert die Quellen |
-| `answer_history_max_chars` | `int` | `1500` | Frühere Antworten im Antwort-Prompt werden hier gekürzt (`[…]`) |
+| `answer_history_max_chars` | `int` | `1500` | Jede Nachricht dieses Verlaufs (Frage und Antwort) wird hier gekürzt (`[…]`) |
 | `condense_question` | `bool` | `true` | Folgefragen mit Rückbezug für die Suche umschreiben |
 | `condense_model` | `str\|null` | `null` | Eigenes (schnelleres) Ollama-Modell fürs Umschreiben; `null` = Hauptmodell |
 | `session_timeout_minutes` | `int` | `60` | Inaktive Sessions nach N Minuten löschen |
@@ -304,7 +304,7 @@ neu gebaut.
 | `file` | `str\|null` | `logs/lorekeeper.log` | Logdatei; `null` = nur Konsole |
 | `max_bytes` | `int` | `10485760` | Größe vor dem Rotieren (10 MB) |
 | `backup_count` | `int` | `5` | Anzahl rotierter Dateien |
-| `suppress` | `list[str]` | siehe YAML | Fremd-Logger auf WARNING setzen |
+| `suppress` | `list[str]` | siehe YAML | Fremd-Logger auf ERROR setzen (der uvicorn-Zugriffslog steht fest auf WARNING) |
 
 ---
 

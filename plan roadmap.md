@@ -508,7 +508,7 @@ int8 verworfen (kaum schneller, anderes Ranking). Modell-Laden DirectML 1,3 s id
 
 **Aufwand**: Gering (umgesetzt).
 
-## 7.3 Inline-Doku (Docstrings) vervollständigen
+## 7.3 Inline-Doku (Docstrings) vervollständigen — ✅ Erledigt (inkl. 7.4 D1)
 
 **Problem**: Die Code-Doku ist uneinheitlich. Stand 13.10.: 27 Module ohne Modul-Docstring — darunter Kernmodule wie `src/retrieval/retriever.py`, `vectorstore.py`, `embeddings.py`, `src/api/routes.py`, `src/ingestion/orchestrator.py`, `chunking.py`, die Parser, `src/config/manager.py`, `src/conversation/manager.py`, `src/generation/*` und `ui/LoreKeeper.py`. 43 von 358 Funktionen/Klassen ohne Docstring, vor allem die Config-Modelle in `src/config/manager.py` (17), `src/api/eval_schemas.py` (11) und `prompt_schemas.py` (5). Viele Config-Felder haben keinen Kommentar zu Bedeutung, Einheit und Wirkungszeitpunkt.
 
@@ -516,7 +516,11 @@ int8 verworfen (kaum schneller, anderes Ranking). Modell-Laden DirectML 1,3 s id
 
 **Aufwand**: Gering-Mittel (reine Doku, mehrere Dateien). Last 🟢.
 
-## 7.4 Code-Qualität: Dead Code, Vereinfachung, Clean Code (Review 13.10.) — ✅ Erledigt (D1 läuft mit 7.3)
+**Umgesetzt (13.10.)**: Modul-Docstrings für alle 25 Module ohne (plus `src/__init__.py`): Aufgabe, Platz in der Pipeline, Stolperfallen (z.B. „CLI nur bei gestopptem Backend“, Spieler-Filter in Retriever und BM25, Cosine-Pflicht im Vectorstore). Docstrings für alle 42 fehlenden Klassen/Funktionen (Config-Modelle, Eval-/Prompt-Schemas, verschachtelte UI-Funktionen). Kommentare an allen Config-Feldern ohne (Bedeutung, Einheit, wann es greift); `retrieve()`-Docstring an den heutigen Ablauf angepasst (Deckel, Slot, Expansion). Prüfskript (AST): kein Modul und keine Funktion/Klasse in `src/`, `ui/`, `evaluation/` mehr ohne Docstring. Nur Doku, kein Verhalten geändert; Suite 632 grün.
+
+**7.4 D1 mit erledigt** — falsche Texte korrigiert: `ConfigManager` („legacy migrations“ → Shim gibt es seit Paket B nicht mehr), `Settings`-Reihenfolge ohne `settings.local.yaml`, `logging.suppress` „WARNING“ → ERROR (`settings.yaml`, `configuration.md`), `distance_metric` (`l2`/`ip` als gleichwertig dokumentiert — nur Cosine rechnet richtig), `qa`-Hilfe der Prompts-Seite ohne `history`, `answer_history_max_chars` (kürzt jede Nachricht, nicht nur Antworten; `configuration.md`, `prompts.md`), „Language Learning Model“, deutscher Kommentar an `SourceGroup`. Außerdem in `configuration.md`: Die Default-Spalte zeigte bei `rules_slot.candidates`/`min_score` und Ollama `max_tokens`/`timeout` die Werte aus `settings.yaml` statt der Code-Defaults — jetzt beide wie bei `reranking.backend`. Die übrigen Punkte der Liste (TTL 30 s, `evaluate.py`-Usage, `window_size`-Hilfe) waren schon in A/B erledigt.
+
+## 7.4 Code-Qualität: Dead Code, Vereinfachung, Clean Code (Review 13.10.) — ✅ Erledigt (D1 mit 7.3)
 
 **Ergebnis des Reviews** (Agent, nur lesend; Suite grün, ruff/mypy sauber): Alle Funktionen in `src/`, `ui/`, `evaluation/` haben Aufrufer — toter Code steckt in Config-Feldern, Datenfeldern, Parametern, Zweigen und Altlasten. Komplexeste Stellen laut ruff: `ui/LoreKeeper.py:_render_sidebar` (Komplexität 29), `orchestrator.run` (19), `OllamaProvider.generate_stream` (14), `_rerank` (13), `validate_filters` (13). Geschätzt ~400–450 Zeilen weniger, wenn alle risikoarmen Punkte umgesetzt werden.
 
@@ -603,7 +607,7 @@ Suite: 626 grün (vorher 618).
 
 Tests: `tests/ui/test_backend_errors.py` (Regler-Defaults, 409 als Warnung, fehlgeschlagenes Löschen, URL-Kodierung — gegen die alten Varianten mutationsgeprüft), Eval-Defaults in `tests/unit/test_evaluate_retrieval.py`, 422-Fälle in den Integrationstests; das Fake-Backend der UI-Tests kennt jetzt `DELETE`. Suite: 632 grün (vorher 626).
 
-Offen: D1 (falsche Docstrings/Kommentare) zusammen mit 7.3. `recategorize` importiert weiterhin das private `_resolve_category` aus dem Orchestrator (im Review nicht genannt).
+Offen: `recategorize` importiert weiterhin das private `_resolve_category` aus dem Orchestrator (im Review nicht genannt).
 
 **Aufwand**: Paket A gering-mittel, B gering, C mittel, D gering. Last 🟢 (nur Code + Tests).
 
@@ -631,11 +635,33 @@ Offen: D1 (falsche Docstrings/Kommentare) zusammen mit 7.3. `recategorize` impor
 **Bewertung (13.10.)**: Impact Mittel — am Spielabend ist das Log die einzige Quelle, um einen Fehler hinterher zu verstehen. Bekannt: Fehlerpfade loggen teils ohne Traceback (`logger.error(f"…{e}")` statt `exc_info`), z.B. Streaming- und Eval-Fehler; ein fehlgeschlagener Ingest-Job schreibt den Fehler nur in den Job-Status, nicht ins Log. Vorgehen: alle `logger.`-Aufrufe und `except`-Zweige durchgehen (Agent-Review mit Fokus „error handling“), Ergebnis als Liste hier, dann Fixes in einem Paket.
 
 **Aufwand**: Gering. Last 🟢.
+## 11.0 Architektur-Review: Passt der Aufbau noch, was sollte modularer werden?
+
+**Wann**: nach 10.0 und der Messung aus 8.0, **vor** 9.0 und vor dem Wiederaufnehmen der Features. Begründung:
+- 8.0 kann Umbauten erzwingen (z.B. atomarer Provider-Wechsel, Job-Verwaltung, Warteschlange fürs LLM) — die gehören in denselben Entwurf, nicht in einen zweiten Umbau danach.
+- 9.0 danach, weil die größten Abdeckungslücken genau in den Teilen liegen, die ein Umbau anfassen würde (Admin-Seiten, `main.py`). Tests für Code, der gleich umgebaut wird, wären doppelte Arbeit; die bestehende Suite (632 Tests) sichert den Umbau ab.
+- Vor den Features, weil Bilder (2), Wikilink-Expansion (3.5) und Internet-Zugriff (4.2) neue Suchwege bzw. Zugriffswege bringen — genau dort muss der Spieler-Filter heute an jeder Stelle von Hand mitgegeben werden.
+- 10.0 davor ist unabhängig und billig; ordentliches Logging hilft auch bei 8.0.
+
+**Beobachtungen, die das Review prüfen soll** (Stand 13.10., gezählt bzw. aus dem Code, nicht bewertet):
+- **Dienste als Modul-Globale in `src.main`**: 35 Stellen holen sie per `import src.main as main_module`. Tests müssen `main_module` patchen; ein Provider-Wechsel ersetzt `provider`, `condense_provider` und `generator` einzeln (nicht atomar, relevant für 8.0). Alternative: ein Dienste-Container im `app.state` bzw. per FastAPI-Dependency.
+- **`src/api/routes.py` mit 722 Zeilen** für Query, Ingest-Jobs, Quellen, Provider, Config, Health und Feedback — Kandidat für eigene Router je Bereich (wie schon `eval_routes`/`prompt_routes`).
+- **Job-Verwaltung doppelt**: `_ingest_jobs` (routes) und `_eval_jobs` (eval_routes), beide In-Memory-Dicts ohne Aufräumen; `eval_routes` importiert das private `_spawn_background` aus `routes`.
+- **Spieler-Filter als Konvention**: jeder neue Suchweg muss den Filter selbst durchreichen (CLAUDE.md, Sicherheitstests). Prüfen, ob eine gefilterte Sicht auf den Vectorstore/BM25 das strukturell erzwingen kann.
+- **`retriever.py` (469 Zeilen)** vereint Suche, Fusion, Rerank (inkl. GPU-Fallback), Deckel, Regelwerk-Slot und Expansion — Kandidat für eigene Bausteine (z.B. Reranker, Nachbearbeitungs-Schritte).
+- **UI**: `2_Evaluation.py` 859 Zeilen, Chat und Sources je ~550; 52 direkte `requests`-Aufrufe über alle Seiten. `ui/backend.py` ist der Anfang eines API-Clients — prüfen, ob alle Aufrufe dorthin gehören (ein Ort für URLs, Timeouts, Fehler).
+- **`ConfigManager`** lädt Settings, Quellen und Prompts und schreibt alle drei; Prompt-Varianten verwaltet dagegen `prompt_routes` direkt auf der Platte.
+- Kleinere Kopplungen über private Namen: `recategorize` → `_resolve_category`, `main` → `_health_cache`/`_health_loop`.
+
+**Vorgehen**: Review über `.claude/agents/code-reviewer.md` mit Fokus „architecture“ über die ganze Codebasis → Befunde bewerten (was bringt Nutzen bei einem Einzelnutzer-Projekt, was ist nur Lehrbuch) → Umbauplan in Paketen hier eintragen → erst nach Zustimmung umsetzen. Maßstab aus CLAUDE.md: keine Abstraktion für Einmal-Logik; ein Umbau muss ein konkretes Problem lösen (Testbarkeit, Sicherheit des Spieler-Filters, Nebenläufigkeit, Dateigröße/Übersicht).
+
+**Aufwand**: Review Gering; Umbau je nach Ergebnis Mittel. Last 🟢.
+
 ---
 
 ## Priorisierungsvorschlag
 
-Erledigt: 7.4 Pakete A–D (Fehler, toter Code, Vereinfachung, Clean Code), 7.2 Code-Review + Nachbesserung, 3.10 Regelwerk-Slot, 5.4 Reranker auf der GPU (DirectML), 5.2 Startup-Baseline, 3.3 Chunk-Inspector, 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
+Erledigt: 7.3 Inline-Doku, 7.4 Pakete A–D (Fehler, toter Code, Vereinfachung, Clean Code), 7.2 Code-Review + Nachbesserung, 3.10 Regelwerk-Slot, 5.4 Reranker auf der GPU (DirectML), 5.2 Startup-Baseline, 3.3 Chunk-Inspector, 3.6 Chat-Verlauf im Antwort-Prompt, 3.4 Antwort-Feedback, Spieler-Modus im Backend (aus 4.2), 3.8/3.9 Ingest-Fortschritt, 7.0/7.1 Testlücken + Eval-CLI-Fix, 5.3 UI-Reste (`/config`, `/folders`), 3.11 Spieler-/Spielleiter-Modus (inkl. Sicherheitstests), 4.1 Heimnetz + 3.7 Zugriffsschutz, 1 PDF-Parsing, 3.1 Hybrid Search, 5.1 Stage-Timings, 5.2 Performance-Tests (+ `localhost`-Fix), 5.3 Antwortzeit (Qwen3-Thinking aus, Kontext 16k, Keep-alive 1 h, Section Expansion `top_rank`).
 
 **Offen am Gaming-PC (Nutzer)**: alte Autostart-Aufgabe „LoreKeeper Server“ als Admin entfernen (`Unregister-ScheduledTask -TaskName "LoreKeeper Server" -Confirm:$false`); DHCP-Reservierung für `192.168.178.34` im Router.
 
@@ -645,9 +671,9 @@ Erledigt: 7.4 Pakete A–D (Fehler, toter Code, Vereinfachung, Clean Code), 7.2 
 
 | Reihenfolge | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 1 | 7.3 Inline-Doku + 7.4 D1 | Mittel — Code verständlich ohne Kontext, falsche Docstrings/Hilfetexte weg | Gering-Mittel | 🟢 | 27 Module ohne Modul-Docstring; falsche Texte aus dem Review (Liste in 7.4) gleich mit |
-| 2 | 10.0 Logging prüfen | Mittel — Fehler am Spielabend hinterher nachvollziehbar | Gering | 🟢 | Fehler ohne Traceback, Ingest-Fehler nicht im Log; Review mit Fokus „error handling“ |
-| 3 | 8.0 Gleichzeitige Anfragen | Mittel-Hoch — Spielabend mit mehreren Nutzern | Gering-Mittel | 🟡 | Ungetestet; erst messen (2–4 parallele Streams), dann entscheiden |
+| 1 | 10.0 Logging prüfen | Mittel — Fehler am Spielabend hinterher nachvollziehbar | Gering | 🟢 | Fehler ohne Traceback, Ingest-Fehler nicht im Log; Review mit Fokus „error handling“ |
+| 2 | 8.0 Gleichzeitige Anfragen | Mittel-Hoch — Spielabend mit mehreren Nutzern | Gering-Mittel | 🟡 | Ungetestet; erst messen (2–4 parallele Streams), dann entscheiden |
+| 3 | 11.0 Architektur-Review | Mittel — Grundlage für 9.0 und die ruhenden Features | Gering (Review), Umbau Mittel | 🟢 | Nach 8.0 (dessen Befunde fließen ein), vor 9.0 (keine Tests für Code, der gleich umgebaut wird) und vor neuen Suchwegen |
 | 4 | 9.0 Testabdeckung | Gering-Mittel — Lücken in den Admin-Seiten und `evaluate.py` | Gering-Mittel | 🟢 | 85 % gesamt; gezielt Pfade mit Fehlerrisiko, keine Prozentjagd |
 | 5 | Offene Prüfungen im laufenden Betrieb | Mittel — bestätigt, dass die Neuerungen im echten Chat wirken | Gering | 🟡 | Mit gestartetem LoreKeeper: 3.6 Folgefragen, 👍/👎 + Tabs „Feedback“/„Chunks“, Rerank-Timings (5.4), Regelwerk-Slot an x002/x005 (3.10), `pytest -m live`; gut mit 8.0 kombinierbar |
 | 6 | 5.5 Vektorsuche reproduzierbar machen | Gering-Mittel — verlässliche Eval-Vergleiche | Gering-Mittel | 🟡 | ±2 Abschnitte Schwankung zwischen Prozessen; `ef_search` erhöhen oder exakt suchen |

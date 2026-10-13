@@ -12,6 +12,7 @@ class BackendError(RuntimeError):
     """Non-2xx answer of the backend; ``str()`` is "<code>: <detail>"."""
 
     def __init__(self, status_code: int, detail: str):
+        """Keep code and detail separately so pages can branch on the code."""
         super().__init__(f"{status_code}: {detail}")
         self.status_code = status_code
         self.detail = detail

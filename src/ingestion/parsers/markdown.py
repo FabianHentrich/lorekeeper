@@ -1,3 +1,10 @@
+"""Markdown / Obsidian parser: one ``ParsedDocument`` per heading section.
+
+Obsidian syntax is cleaned before embedding: wikilinks become plain text (targets kept as ``wikilinks``
+metadata), image embeds are removed, callout markers dropped; ``#tags`` and frontmatter ``aliases`` go into
+metadata (the aliases are later prepended to the embedded text). Also used for the Markdown that the PDF
+parser produces. Details: docs/parsing.md.
+"""
 import re
 from pathlib import Path
 

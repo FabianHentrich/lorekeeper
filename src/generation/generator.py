@@ -1,3 +1,8 @@
+"""Answer generation on top of an LLM provider, with an optional fallback provider.
+
+The fallback only steps in before the first streamed token — a retry after that would repeat output the
+client already has. Also runs the condense call that rewrites a follow-up into a standalone question.
+"""
 import logging
 from collections.abc import AsyncGenerator
 
@@ -7,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class Generator:
-    """Manages interaction with Language Learning Model (LLM) providers to generate answers.
+    """Manages interaction with large language model (LLM) providers to generate answers.
 
     This class wraps raw LLM providers (like Ollama or Gemini), handles fallback logic
     if the primary provider fails, and provides streaming and synchronous interfaces
@@ -19,6 +24,7 @@ class Generator:
         provider: BaseLLMProvider,
         fallback_provider: BaseLLMProvider | None = None,
     ):
+        """Keep the main provider and the optional fallback (None = errors are raised)."""
         self.provider = provider
         self.fallback_provider = fallback_provider
 

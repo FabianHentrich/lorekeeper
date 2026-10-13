@@ -1,3 +1,10 @@
+"""ChromaDB access — embedded ``PersistentClient``, only ever opened by one process.
+
+Stored document = the chunk text the LLM sees; embedded text = filename stem + aliases + chunk text
+(``_build_embed_text``). Chunk ids are stable per (source_id, file, chunk index), so re-ingesting a file
+overwrites its chunks. Scores are ``1 - distance`` — only right for cosine, so the collection's space is set
+explicitly and a mismatch with an existing collection is logged.
+"""
 import hashlib
 import logging
 from typing import Any

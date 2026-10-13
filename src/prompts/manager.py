@@ -1,3 +1,7 @@
+"""Renders the Jinja2 prompt templates (system, qa, condense, no_context) from config/prompts.yaml.
+
+The prompt routes replace the whole instance on hot reload. Variables per template: docs/prompts.md.
+"""
 from pathlib import Path
 
 import yaml

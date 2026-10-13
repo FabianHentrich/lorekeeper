@@ -1,3 +1,9 @@
+"""/prompts/* API: edit the active prompts, manage variants, activate one, render previews.
+
+Variants are YAML files in a ``prompts/`` folder next to the active ``prompts.yaml``; their names are
+checked against path traversal (``_variant_path``). Templates are syntax-checked with Jinja2 before
+anything is written (422). Saving or activating hot-reloads the ``PromptManager`` in ``src.main``.
+"""
 import logging
 from pathlib import Path
 

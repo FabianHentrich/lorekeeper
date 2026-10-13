@@ -1,3 +1,11 @@
+"""Chat sessions in memory: role-bound history, the condense heuristic and the answer-prompt history.
+
+Sessions live only in RAM (gone after a restart) and are bound to the role that created them — a player
+request never continues a game-master session. Two histories with different jobs: the sliding window
+(``window_size`` pairs, capped at ``max_context_tokens``) feeds the condense prompt that rewrites follow-ups
+for retrieval; a much shorter one (``answer_history_pairs``) goes into the answer prompt. ``start_gc`` runs
+in the lifespan and drops idle sessions.
+"""
 import asyncio
 import logging
 import re
@@ -41,6 +49,7 @@ def needs_condense(question: str) -> bool:
 
 @dataclass
 class Message:
+    """One chat message of a session."""
     role: str  # "user" or "assistant"
     content: str
 

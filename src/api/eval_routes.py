@@ -1,3 +1,11 @@
+"""/eval/* API: golden set, single-question preview, chunk inspector, eval jobs and stored reports.
+
+Runs in the backend process with the shared retriever — the eval CLI opens ``chroma_data`` itself and must
+not run while the backend does. One eval job at a time (409, check and start under a lock). Retrieval evals
+call the retriever directly; end-to-end evals send every question through this server's own ``/query``.
+Only the newest ``_MAX_RESULTS`` reports per eval type are kept. ``/eval/preview`` takes ``role`` and gets
+the same player filter as ``/query``.
+"""
 import asyncio
 import json
 import logging

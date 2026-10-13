@@ -1,3 +1,6 @@
+"""Parser interface of the ingestion pipeline: one file in, ``ParsedDocument`` sections out, which
+chunking then splits further.
+"""
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path

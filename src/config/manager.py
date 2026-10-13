@@ -1,3 +1,13 @@
+"""Configuration: a Pydantic model per settings section, loading, and the Settings-page allow-list.
+
+Override order (highest wins): environment variables (``LLM__OLLAMA__MODEL`` style, ``__`` = nesting) >
+``.env`` > ``config/settings.local.yaml`` (written by the Settings page) > ``config/settings.yaml`` > the code
+defaults below. The code defaults are only fallbacks — several differ from the shipped settings.yaml (e.g.
+``reranking.backend``, ``rules_slot``, LLM ``max_tokens``/``timeout``). Sources come from the gitignored
+sidecar ``config/sources.yaml``. Only keys in ``_EDITABLE_KEYS`` can be changed via ``PUT /config``;
+``save_settings`` mutates the live objects in place, so services holding references see new values on
+their next call. Full reference: docs/configuration.md.
+"""
 import logging
 from pathlib import Path
 from typing import Literal
@@ -8,7 +18,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _log = logging.getLogger(__name__)
 
-# Allowed source groups. Starr gehalten — Erweiterung erfordert Code-Änderung.
+# Allowed source groups — fixed on purpose, the UI filters are built on exactly these four.
 SourceGroup = Literal["lore", "adventure", "rules", "simulation"]
 
 
@@ -95,22 +105,27 @@ class SourceConfig(BaseModel):
 
 
 class PdfConfig(BaseModel):
-    ocr_enabled: bool = True
-    ocr_language: str = "deu"
-    ocr_dpi: int = 300
-    extract_images: bool = True
+    """PDF parsing (``ingestion.pdf``). Changes need a full reindex — they leave the file hash alone, so an
+    incremental run skips the PDFs."""
+    ocr_enabled: bool = True         # OCR (rapidocr) for areas without extractable text; on failure: text without OCR
+    ocr_language: str = "deu"        # ISO 639-3 language code
+    ocr_dpi: int = 300               # render resolution for OCR
+    extract_images: bool = True      # write embedded images out as image chunks (not retrieved today, roadmap 2)
     image_format: str = "png"
 
 
 class IngestionConfig(BaseModel):
+    """What gets indexed. ``sources`` is filled from config/sources.yaml, not from settings.yaml."""
     sources: list[SourceConfig] = []
-    supported_formats: list[str] = [".md", ".pdf", ".png", ".jpg", ".jpeg", ".webp"]
+    supported_formats: list[str] = [".md", ".pdf", ".png", ".jpg", ".jpeg", ".webp"]  # file suffixes, case-insensitive
+    # fnmatch patterns relative to the source folder, for every source (sources can add their own)
     exclude_patterns: list[str] = [".obsidian/*", ".trash/*", "*alt.md", "*(1).md", "*.draft.*"]
     pdf: PdfConfig = PdfConfig()
 
 
 class ChunkingConfig(BaseModel):
-    strategy: str = "heading_aware"
+    """How parsed sections are split. Takes effect only after a full reindex (``POST /ingest?full=true``)."""
+    strategy: str = "heading_aware"  # heading_aware | recursive | fixed_size
     max_chunk_size: int = 256        # estimated tokens (len/3.5) per prose chunk; tables stay whole
     chunk_overlap: int = 30          # must stay below max_chunk_size — the split loops advance by the difference
     min_chunk_size: int = 20         # smaller chunks are merged into the previous one (same heading only)
@@ -126,50 +141,61 @@ class ChunkingConfig(BaseModel):
 
 
 class EmbeddingsConfig(BaseModel):
-    model: str = "intfloat/multilingual-e5-base"
-    device: str = "auto"
-    batch_size: int = 64
-    normalize: bool = True
+    """Embedding model. Changing ``model`` (or where it runs) needs a full re-index."""
+    model: str = "intfloat/multilingual-e5-base"  # e5 models get query:/passage: prefixes automatically
+    device: str = "auto"             # auto | cpu | cuda | mps — on AMD under Windows it runs on the CPU
+    batch_size: int = 64             # texts per encode call while indexing
+    normalize: bool = True           # L2-normalise vectors — required for cosine scores
 
 
 class VectorStoreConfig(BaseModel):
+    """ChromaDB location and collection."""
     persist_directory: str = "./chroma_data"   # embedded ChromaDB inside the backend process
     collection_name: str = "lorekeeper"
+    # Only "cosine" gives correct scores (score = 1 - distance); fixed when the collection is created
     distance_metric: str = "cosine"
 
 
 class RerankingConfig(BaseModel):
+    """Cross-encoder rerank of the vector/BM25 candidates; editable values apply on the next query."""
     enabled: bool = True
-    model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+    model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"  # multilingual; loaded at startup
     # "directml": GPU via onnxruntime-directml (falls back to torch on the CPU if unavailable)
     backend: Literal["torch", "directml"] = "torch"
-    top_k_rerank: int = 8
-    max_per_source: int = 3          # cap number of chunks from any single file (0 = unlimited)
+    top_k_rerank: int = 8            # chunks after the rerank = LLM context (before section expansion)
+    max_per_source: int = 3          # soft cap per file (0 = unlimited); backfilled from the overflow if short
 
 
 class HybridSearchConfig(BaseModel):
+    """BM25 keyword search fused with the vector hits (RRF). Per request: ``hybrid_search``."""
     enabled: bool = False
     bm25_weight: float = 0.3         # BM25 share in RRF (0.0 = pure vector, 1.0 = pure BM25)
     bm25_top_k: int = 15             # how many BM25 candidates to fetch
 
 
 class SectionExpansionConfig(BaseModel):
+    """≥ 2 hits under one parent heading → the LLM gets the whole section in document order."""
     enabled: bool = True
     max_chunks: int = 25             # sections larger than this are not expanded (protects the LLM context)
     top_rank: int = 3                # only expand if a hit is among the first N ranked chunks (0 = no limit)
 
 
 class RulesSlotConfig(BaseModel):
-    # Questions naming a vault entity *and* a rule term ("Was bewirkt Ritterlichkeit bei Escanor?"):
-    # the entity's file fills every vector candidate, the rulebook never reaches the reranker.
+    """Reserve one final place for the rulebook (roadmap 3.10).
+
+    Questions naming a vault entity *and* a rule term ("Was bewirkt Ritterlichkeit bei Escanor?"): the
+    entity's file fills every vector candidate, the rulebook never reaches the reranker. Values in use
+    (settings.yaml: 5 candidates, min_score -4) come from a golden-set sweep, see docs/configuration.md.
+    """
     enabled: bool = False
     candidates: int = 8              # extra vector candidates from the "rules" group, reranked with the rest
     min_score: float = -5.0          # reserve one top_k_rerank slot for the best rules chunk if it scores ≥ this
 
 
 class RetrievalConfig(BaseModel):
-    top_k: int = 15
-    score_threshold: float = 0.5
+    """Search parameters; ``top_k``/``top_k_rerank``/``max_per_source``/hybrid can be overridden per request."""
+    top_k: int = 15                  # vector candidates before the rerank (keep ≥ 2 × top_k_rerank)
+    score_threshold: float = 0.5     # minimum cosine score — 0.3 lets near-orthogonal chunks in, don't lower
     reranking: RerankingConfig = RerankingConfig()
     hybrid: HybridSearchConfig = HybridSearchConfig()
     section_expansion: SectionExpansionConfig = SectionExpansionConfig()
@@ -177,50 +203,56 @@ class RetrievalConfig(BaseModel):
 
 
 class OllamaConfig(BaseModel):
-    base_url: str = "http://127.0.0.1:11434"
+    """Local Ollama server. Sampling values and timeout are read per call (live edits apply); url and model
+    need a provider rebuild."""
+    base_url: str = "http://127.0.0.1:11434"  # 127.0.0.1, not localhost (~2 s per new connection on Windows)
     model: str = "qwen3:14b"
     temperature: float = 0.3
     top_p: float = 0.9
-    max_tokens: int = 1024
-    timeout: int = 120
+    max_tokens: int = 1024           # output tokens per answer
+    timeout: int = 120               # seconds; the chat derives its read timeout from it
 
 
 class GeminiConfig(BaseModel):
+    """Google Gemini (cloud, paid). The key itself never lives in a settings file."""
     model: str = "gemini-2.5-flash"
-    api_key_env: str = "GEMINI_API_KEY"
+    api_key_env: str = "GEMINI_API_KEY"  # name of the environment variable holding the key
     temperature: float = 0.3
     top_p: float = 0.9
-    max_tokens: int = 1024
-    timeout: int = 30
+    max_tokens: int = 1024           # output tokens per answer
+    timeout: int = 30                # seconds
 
 
 class LLMConfig(BaseModel):
-    provider: str = "ollama"
+    """Active provider at startup (switchable at runtime via ``POST /provider``) and the fallback."""
+    provider: str = "ollama"         # ollama | gemini
     fallback_provider: str | None = "gemini"
-    fallback_enabled: bool = False
+    fallback_enabled: bool = False   # retry with the fallback if the main provider fails before the first token
     ollama: OllamaConfig = OllamaConfig()
     gemini: GeminiConfig = GeminiConfig()
 
 
 class ConversationConfig(BaseModel):
-    window_size: int = 8
-    max_context_tokens: int = 4096
+    """Chat sessions and their history."""
+    window_size: int = 8             # QA pairs of history for rewriting follow-up questions (condense)
+    max_context_tokens: int = 4096   # hard cap on that history in estimated tokens; oldest pairs drop first
     # Answer prompt: last N QA pairs (0 = off); older answers cut at max_chars — more dilutes the sources
     answer_history_pairs: int = 1
     answer_history_max_chars: int = 1500
-    condense_question: bool = True
-    condense_model: str | None = None
-    session_timeout_minutes: int = 60
-    session_gc_interval_seconds: int = 300
+    condense_question: bool = True   # rewrite follow-ups with a reference ("sein Vater") before retrieval
+    condense_model: str | None = None  # separate (faster) Ollama model for condense; None = main model
+    session_timeout_minutes: int = 60  # idle sessions are dropped after this
+    session_gc_interval_seconds: int = 300  # how often the cleanup runs
 
 
 class LoggingConfig(BaseModel):
-    level: str = "INFO"
-    file: str | None = "logs/lorekeeper.log"
+    """Log level, rotating log file and third-party loggers to quieten."""
+    level: str = "INFO"              # DEBUG | INFO | WARNING | ERROR
+    file: str | None = "logs/lorekeeper.log"  # None = console only
     max_bytes: int = 10_485_760  # 10 MB
-    backup_count: int = 5
+    backup_count: int = 5            # rotated files kept
     format: str = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-    suppress: list[str] = [
+    suppress: list[str] = [  # set to ERROR
         "httpx", "httpcore", "chromadb", "huggingface_hub", "sentence_transformers", "safetensors", "model_utils",
     ]
 
@@ -231,7 +263,7 @@ class Settings(BaseSettings):
     Reads and merges configuration from multiple layers:
     1. Environment variables (highest priority, strictly mapped via double-underscore e.g. LLM__PROVIDER)
     2. .env file
-    3. Base YAML file
+    3. YAML: settings.yaml with settings.local.yaml merged over it (passed in by ConfigManager)
     4. Code defaults (lowest priority)
 
     This acts as the unified, strictly-typed configuration object for the entire application.
@@ -266,9 +298,9 @@ class Settings(BaseSettings):
 class ConfigManager:
     """Manages the loading, merging, and saving of application configurations.
 
-    It orchestrates the initialization of the Pydantic Settings layer with the
-    base `settings.yaml`, handles legacy migrations for the ingestion sources via a
-    sidecar `sources.yaml` file, and provides IO methods for updating prompts and sources dynamically.
+    Builds the Pydantic settings from ``settings.yaml`` plus the ``settings.local.yaml`` sidecar, loads the
+    sources from the ``sources.yaml`` sidecar, and writes changes back: Settings page → ``settings.local.yaml``
+    (``settings.yaml`` is never rewritten), sources → ``sources.yaml``, prompts → ``prompts.yaml``.
     """
     def __init__(
         self,

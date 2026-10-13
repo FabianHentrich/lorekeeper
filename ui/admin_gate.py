@@ -46,6 +46,7 @@ def api_url() -> str:
 
 
 def _password() -> str:
+    """The admin password from the environment; empty = no protection (read per call, not cached)."""
     return os.environ.get("LOREKEEPER_ADMIN_PASSWORD", "")
 
 

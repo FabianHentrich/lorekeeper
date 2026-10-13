@@ -1,3 +1,5 @@
+"""Image files as filename stubs — indexed, but never retrieved today (roadmap 2).
+"""
 from pathlib import Path
 
 from .base import BaseParser, ParsedDocument

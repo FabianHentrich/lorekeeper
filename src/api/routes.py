@@ -1,3 +1,12 @@
+"""Core HTTP API: chat queries (sync and SSE), ingestion jobs, sources, provider, config, health, feedback.
+
+Services are module globals of ``src.main`` (set in the lifespan) and are looked up per request via
+``import src.main as main_module``, so a provider switch or prompt reload takes effect on the next request.
+Every query path builds its filter with ``access.effective_filters`` — player mode is enforced here, not in
+the UI. Ingestion runs as a background job in a thread, one at a time (409 while one runs). ``/health`` and
+``/sidebar-state`` only read the cache the background health loop fills. User-facing ``detail`` messages
+are German, log lines English.
+"""
 import asyncio
 import json
 import logging

@@ -1,3 +1,12 @@
+"""Ingestion pipeline: discover files → parse → chunk → embed → store.
+
+Runs as a background job inside the backend (``/ingest``, ``/sources/{id}/reindex``) or as a CLI
+(``python -m src.ingestion.orchestrator``) — the CLI opens ``chroma_data`` itself, so only with the backend
+stopped. Incremental via the SHA-256 content hash, not timestamps (unreliable on Windows mounts and external
+repos); ``full=True`` re-processes everything. Chunks are upserted in batches of ``UPSERT_BATCH_CHUNKS``
+(one file never spans two batches); files gone from disk are deleted from the index. Every chunk carries
+``source_id``, ``group`` and ``content_category`` from its source config.
+"""
 import fnmatch
 import hashlib
 import logging

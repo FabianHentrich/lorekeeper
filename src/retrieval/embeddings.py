@@ -1,3 +1,9 @@
+"""Embedding model (sentence-transformers, multilingual-e5-base) — on the CPU on purpose.
+
+Blocking ``encode`` calls run in the threadpool for requests; ingestion uses the sync variant from its own
+thread. E5 models get ``query:`` / ``passage:`` prefixes. Changing the model — or the backend it runs on —
+shifts the vectors against the stored index, so the whole index must be rebuilt.
+"""
 import logging
 
 import numpy as np

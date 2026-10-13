@@ -1,3 +1,9 @@
+"""Google Gemini provider (google-genai SDK) — the paid cloud option and fallback.
+
+API key order: runtime override from the UI (process memory only, never written to disk) > environment >
+``.env``. Requests are spaced to the free tier's 15 RPM and 429 answers are retried. Building the provider
+without a key raises ``ValueError``.
+"""
 import asyncio
 import logging
 import os

@@ -1,3 +1,6 @@
+"""Logging for backend and CLI: console plus rotating file, noisy third-party loggers set to ERROR,
+uvicorn's access log to WARNING.
+"""
 import io
 import logging
 import sys

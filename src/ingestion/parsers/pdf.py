@@ -1,3 +1,10 @@
+"""PDF parser: pymupdf4llm turns the PDF into Markdown, the Markdown parser splits it by heading.
+
+Repairs on the way: numbered headings normalised and matched against the PDF outline, words hyphenated
+across table-cell line breaks rejoined, table-of-contents sections dropped (they match almost any question).
+OCR and image extraction follow ``PdfConfig``; if OCR fails the page text is extracted without it.
+Details: docs/parsing.md.
+"""
 import logging
 import re
 import tempfile

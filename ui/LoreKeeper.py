@@ -1,3 +1,10 @@
+"""Streamlit chat page — entry point of the UI.
+
+The role (player / game master) is picked before the chat opens; the backend enforces the player filter,
+the UI's own filter is only a second guard. Answers stream from ``/query/stream``; the ``session_id`` of the
+done event ties follow-ups to the backend session. Sidebar data comes from one cached ``/sidebar-state``
+request. Admin pages sit behind ui/admin_gate.py. Details: docs/ui-ux.md.
+"""
 import json
 import uuid
 from pathlib import Path
@@ -192,6 +199,7 @@ def _render_sidebar():
                 st.session_state["_selected_provider"] = current_provider
 
         def _on_provider_change():
+            """Switch the backend provider; on failure the picker falls back to the active provider."""
             new_provider = st.session_state["_selected_provider"]
             try:
                 resp = requests.post(
@@ -234,6 +242,7 @@ def _render_sidebar():
             st.success(msg)
 
         def _post_gemini_key(key: str | None, done: str):
+            """Set (or with None remove) the runtime Gemini key, then rerun with ``done`` as message."""
             try:
                 r = requests.post(f"{API_URL}/provider/gemini/key", json={"api_key": key}, timeout=10)
                 raise_for_status(r)
