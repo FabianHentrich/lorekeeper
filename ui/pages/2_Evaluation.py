@@ -6,6 +6,7 @@ end-to-end eval, and result comparison — all from the UI.
 
 import hashlib
 import math
+import statistics
 import time
 from pathlib import Path
 
@@ -184,19 +185,20 @@ def _poll_eval_job(job_id: str, label: str = "Evaluation"):
 
 
 def _load_stats(details: list[dict]) -> str:
-    """p50/p95 latency and Ø/max chunks per question — what `pytest -m perf` watches against its baseline.
+    """p50/p95 latency and Ø/max chunks per question — what `pytest -m perf` watches against its baseline,
+    computed the same way (median; p95 as nearest rank), so both numbers can be compared directly.
 
     Computed from the per-question details (also works for reports saved before these numbers existed).
-    Chunks = everything handed to the LLM, section expansion included — the number roadmap 5.3 is about.
+    Chunks = everything handed to the LLM, section expansion included — the number roadmap 5.6 is about.
     """
     answered = [d for d in details if "error" not in d]
     if not answered:
         return ""
     latencies = sorted(d.get("latency_ms", 0) for d in answered)
-    p50 = latencies[len(latencies) // 2]
-    p95 = latencies[math.ceil(len(latencies) * 0.95) - 1]   # nearest rank
+    p50 = statistics.median(latencies)
+    p95 = latencies[math.ceil(len(latencies) * 0.95) - 1]   # nearest rank — same as tests/perf
     chunks = [len(d.get("retrieved_files", [])) for d in answered]
-    return (f"Latenz p50 {p50} ms · p95 {p95} ms · Chunks pro Frage Ø {sum(chunks) / len(chunks):.1f} / "
+    return (f"Latenz p50 {p50:.0f} ms · p95 {p95} ms · Chunks pro Frage Ø {sum(chunks) / len(chunks):.1f} / "
             f"max {max(chunks)}")
 
 

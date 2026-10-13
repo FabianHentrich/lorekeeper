@@ -312,6 +312,7 @@ unavailable` im Log.
 | `file` | `str\|null` | `logs/lorekeeper.log` | Logdatei; `null` = nur Konsole |
 | `rotate_hour` | `int` | `6` | Eine Logdatei pro Tag; der Tag wechselt zu dieser Stunde, nicht um Mitternacht — ein Spielabend bleibt in einer Datei. Der laufende Tag steht in `file`, vergangene in `lorekeeper.<JJJJ-MM-TT>.log` (Datum = Beginn des Tages). Läuft das Backend um 6 Uhr nicht, wechselt die Datei mit der ersten Zeile danach |
 | `backup_count` | `int` | `30` | So viele vergangene Tage bleiben, ältere werden gelöscht |
+| `format` | `str` | `%(asctime)s [%(levelname)s] %(name)s: %(message)s` | Zeilenformat (Python-`logging`) für Konsole und Datei |
 | `suppress` | `list[str]` | siehe YAML | Fremd-Logger auf ERROR setzen (der uvicorn-Zugriffslog steht fest auf WARNING). Die YAML-Liste **ersetzt** die im Code — beide gleich halten (ein Test prüft das) |
 
 ---

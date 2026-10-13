@@ -159,6 +159,8 @@ die `timings` pro Anfrage (Log-Zeile `Query timings:` / Zeile unter jeder Antwor
 Fehlerrisiko, nicht nach Prozent: zuerst Pfade, die Daten schreiben oder Zustand umschalten
 (Speichern, Aktivieren, Provider-Wechsel samt Rückfall, Golden Set). Bewusst ungetestet: der
 Ollama-Autostart in `src/main.py` und `stop.ps1` (brauchen echte Prozesse; `stop.ps1` am 13.10.
-von Hand geprüft: Dev- und Server-Modus, Startweg des Buttons unter PowerShell 5.1, Ingest-Sperre,
-`-Force`), das Übernehmen von Feedback per Häkchen im Data-Editor (AppTest kann keine Zellen anklicken; die Logik in `ui/feedback.py` ist getestet) und
+von Hand geprüft: Dev- und Server-Modus, Ingest-Sperre, `-Force`, fremder Server auf 8000 bleibt
+unberührt, ein Strg+C ignorierender Prozess wird nach 20 s beendet; Button-Startweg mit dem Skript
+als Kind des UI-Prozesses — `logs/stop.log` endet nach Sekunden mit „stopped … (clean)“, nicht mit
+„Still running … powershell“), das Übernehmen von Feedback per Häkchen im Data-Editor (AppTest kann keine Zellen anklicken; die Logik in `ui/feedback.py` ist getestet) und
 die CLI-Einstiegspunkte (`main()`).

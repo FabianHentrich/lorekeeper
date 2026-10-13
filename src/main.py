@@ -156,6 +156,8 @@ async def lifespan(app: FastAPI):
         await embedding_service.embed_text("warmup")  # pre-load model before first query
         vectorstore = VectorStoreService(settings.vectorstore, embedding_service)
         vectorstore.health_check()  # pre-connect ChromaDB
+        # Open the collection now, not in the first request: applies hnsw ef_search at startup (as documented)
+        vectorstore.count()
 
         # Retrieval
         bm25_index = BM25Index()

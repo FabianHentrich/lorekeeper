@@ -122,7 +122,8 @@ an, die die Port-Freigabe überstimmt.
 - **Stoppen**: `.\stop.ps1` im Projektordner oder in der UI **⏻ LoreKeeper beenden** (Sidebar,
   nur Admin). Beides schickt Strg+C an das Backend- und das UI-Fenster (wie ein Tastendruck dort),
   wartet bis zu 20 s (`-Timeout`) und beendet dann hart, was noch läuft — samt einem Ollama, das
-  das Backend gestartet hat. Während einer Indizierung verweigert beides (ein harter Abbruch kann
+  das Backend gestartet hat. Erkannt werden nur LoreKeepers eigene Prozesse (`src.main:app`,
+  `ui/LoreKeeper.py`); ein anderer Server auf 8000/8501 bleibt unberührt. Während einer Indizierung verweigert beides (ein harter Abbruch kann
   einen halb geschriebenen Index hinterlassen); `.\stop.ps1 -Force` bricht sie trotzdem ab. Die
   Ausgabe des Buttons steht in `logs/stop.log`.
 - **Nicht die Fenster schließen**: Das X beendet den Prozess, bevor sein Shutdown läuft — ein von

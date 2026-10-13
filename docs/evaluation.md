@@ -246,7 +246,12 @@ lassen. Dabei:
 Evaluation → Retrieval Eval → **🎯 Suchgenauigkeit prüfen** (`POST /eval/search-exactness`, läuft
 im Backend, nur lesend, wenige Sekunden). Für jede Golden-Frage vergleicht sie die Top-K der
 Vektorsuche (HNSW, so wie im Chat: gleicher Filter, `retrieval.top_k`) mit einer exakten Suche über
-alle gespeicherten Vektoren.
+alle gespeicherten Vektoren. Chunks mit gleichem Score an der Top-K-Grenze (gleiche Embeddings, z.B.
+dieselbe Notiz in zwei Quellen) sind austauschbar und zählen nicht als Abweichung.
+
+Geprüft wird nur die Hauptsuche des Spielleiters — nicht die gefilterten Suchen (Regelwerk-Slot,
+Spieler-Modus, Quellenfilter der Sidebar). Gefilterte HNSW-Suchen werden bei wachsendem Index
+zuerst ungenau; bei 4745 Chunks und `ef_search: 1000` durchsucht HNSW ohnehin praktisch alles.
 
 - **„Exakt: 278/278“** — die Suche findet dieselben Kandidaten wie eine exakte Suche; Eval-Läufe sind
   reproduzierbar. Stand 13.10. bei 4745 Chunks mit `hnsw_ef_search: 1000`.

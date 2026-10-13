@@ -19,7 +19,7 @@ mehrere Minuten, nicht parallel zur Simulation). Ein Golden-Set-Lauf dauert ~1 m
 
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 1 | 5.3 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Antwortqualität und Prompt-Größe; mit der Chunk-Prüfung aus 5.2 messbar |
+| 1 | 5.6 Gesamtbudget Section Expansion | Gering-Mittel — max. 49 Chunks pro Frage | Gering | 🟡 | Antwortqualität und Prompt-Größe; mit der Chunk-Prüfung aus 5.2 messbar |
 | 2 | 3.12 Folgefragen ohne Rückbezugswort | Gering-Mittel — passende Quellen bei „fass das kürzer zusammen“ | Gering | 🟢 | Im Live-Test gefunden (13.10.) |
 | 3 | 3.10 Restliche Abschnitt-Misses | Gering-Mittel — Regelfragen präziser | Mittel | 🟡 | Einzelfälle, je Golden-Set-Lauf prüfbar |
 | 4 | 6.0 PnP-Simulation — Abschluss | Mittel — Balance-/Begegnungsfragen im Chat | Gering | 🔴 | Wartet auf einen sauberen Simulationslauf (extern) |
@@ -44,11 +44,13 @@ einmal von Hand bedienen (API-Seite live geprüft, siehe unten).
 
 ## Offene Punkte
 
-### 5.3 Gesamtbudget für Section Expansion
+### 5.6 Gesamtbudget für Section Expansion
 
 Mehrere expandierte Sektionen ergeben zusammen bis zu 49 Chunks (z.B. „Wie wird die Bonusaktion im
 Kampf eingesetzt?“). Ein Budget über alle Sektionen (z.B. max. 20 Chunks) begrenzt das; messbar mit
 der Chunk-Prüfung aus 5.2 (Ø/max Chunks pro Golden-Frage), Abschnitt-Treffer dürfen nicht sinken.
+Stand 13.10.: Budget `retrieval.section_expansion.max_total_chunks` umgesetzt (Default 0 = aus,
+Unit-Tests); offen: Golden-Set-Sweep, Default wählen, Doku, README-Testzahl (707 → aktuell).
 Noch nicht gemessen: Kosten eines UI-Reruns mit langer Chat-Historie und vielen Quellen-Expandern.
 
 ### 3.12 Folgefragen ohne Rückbezugswort
@@ -174,6 +176,7 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 | 9.0 | Testabdeckung nach Risiko 86 → 93 % | 13.10. | `docs/testing.md` |
 | 10.0 | Logging: Fehler mit Traceback in der Datei, wichtige Ereignisse, weniger Rauschen, eine Datei pro Tag, `logs/ollama.log` | 13.10. | `docs/operations.md` |
 | 11.0 | Architektur-Review + Umbau P1–P7 (Recategorize, Fallback-Schalter, Index-Konsistenz, Filter erzwungen, UI-Fehlerpfad, atomares Speichern, Router aufgeteilt) | 13.10. | `ARCHITECTURE.md` 8 |
+| 12.0 | Code-Review seit a3b5d77 + Korrekturen: `stop.ps1` nimmt sich selbst aus dem Prozessbaum (Button wartete 20 s und beendete sich selbst) und lässt fremde Server auf 8000/8501 in Ruhe; `hnsw_ef_search` ≥ 1, `max_total_chunks` ≥ 0; Collection wird beim Start geöffnet (ef_search wirklich beim Start); p50/p95 der Evaluation-Seite wie in `pytest -m perf`; Exaktheitsprüfung zählt Gleichstände an der Top-K-Grenze nicht; Tests für verschachtelte Sektionen und Duplikate (je mutationsgeprüft) | 13.10. | `docs/operations.md`, `docs/evaluation.md`, `docs/testing.md` |
 
 **Live-Prüfungen (13.10., echtes LLM und echter Index)**: Ollama-Autostart findet die Modelle
 (`OLLAMA_MODELS`); Folgefrage „fass das kürzer zusammen“ liefert eine kürzere Antwort zum selben

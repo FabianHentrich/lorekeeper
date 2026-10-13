@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -159,7 +159,8 @@ class VectorStoreConfig(BaseModel):
     # HNSW search breadth. 1000 makes the search exact and identical across processes at our size
     # (4.7 k chunks; 100 missed exact top-15 members for 38 of 278 golden questions and varied per
     # process) for ~2 ms per query — roadmap 5.5. Applied to an existing collection at startup.
-    hnsw_ef_search: int = 1000
+    # ≥ 1: ChromaDB rejects anything else on every collection access (each request would fail with 500)
+    hnsw_ef_search: int = Field(default=1000, ge=1)
 
 
 class RerankingConfig(BaseModel):
@@ -184,6 +185,7 @@ class SectionExpansionConfig(BaseModel):
     enabled: bool = True
     max_chunks: int = 25             # sections larger than this are not expanded (protects the LLM context)
     top_rank: int = 3                # only expand if a hit is among the first N ranked chunks (0 = no limit)
+    max_total_chunks: int = Field(default=0, ge=0)  # cap on the whole result over all expanded sections (0 = no cap)
 
 
 class RulesSlotConfig(BaseModel):

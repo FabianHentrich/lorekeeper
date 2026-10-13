@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 # Chunks per upsert/update call — ChromaDB rejects batches above the client's max_batch_size
 _CHROMA_BATCH = 5000
+# Cosine scores closer than this count as tied (float32 noise) in the exactness check
+_TIE_EPS = 1e-6
 
 
 class VectorStoreService:
@@ -246,6 +248,10 @@ class VectorStoreService:
         The exact side is a brute-force cosine over every stored vector that passes ``where`` (ChromaDB
         applies the filter for both sides). Used by ``/eval/search-exactness`` to show whether
         ``hnsw_ef_search`` is still large enough for the index size (roadmap 5.5). Reads only.
+
+        Only top-K chunks scoring clearly above the best chunk outside the top K must be found: chunks
+        tied across the cut-off (equal embeddings, e.g. the same note in two sources) are interchangeable —
+        counting them reported deviations that no ``ef_search`` could fix.
         """
         collection = self._get_collection()
         hnsw = collection.query(query_embeddings=query_embeddings, n_results=top_k, where=where, include=[])
@@ -260,8 +266,11 @@ class VectorStoreService:
         sims = queries @ stored.T
         missed = []
         for row, found in zip(sims, hnsw["ids"], strict=True):
-            exact = {ids[i] for i in np.argsort(-row)[:top_k]}
-            missed.append(len(exact - set(found)))
+            order = np.argsort(-row)
+            # Score of the best chunk just outside the top K; a member tied with it may be swapped for it
+            outside = row[order[top_k]] if len(order) > top_k else -np.inf
+            must = {ids[i] for i in order[:top_k] if row[i] > outside + _TIE_EPS}
+            missed.append(len(must - set(found)))
         return missed
 
     def get_chunks_for_file(self, source_id: str, source_file: str,

@@ -182,7 +182,7 @@ Zwei Grenzen schützen den Kontext: Sektionen über `max_chunks` (25) bleiben un
 expandiert wird nur, wenn ein Treffer der Sektion unter den ersten `top_rank` (3) liegt — sonst
 ziehen zwei zufällige, schwache Treffer eine fremde Sektion herein. Golden Set mit `top_rank: 3`:
 Ø Chunks 13,9 → 12,6, Abschnitt-Treffer unverändert. Offen: ein Gesamtbudget über mehrere
-expandierte Sektionen (bis zu 49 Chunks sind noch möglich, Roadmap 5.3).
+expandierte Sektionen (bis zu 49 Chunks sind noch möglich, Roadmap 5.6).
 
 ### Warum die Identitäts-Schicht (Dateiname | Aliase)?
 

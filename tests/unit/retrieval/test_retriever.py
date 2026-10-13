@@ -727,6 +727,79 @@ class TestSectionExpansion:
 
         assert ("other", 10) in {(r.metadata["source_id"], r.metadata["chunk_index"]) for r in results}
 
+    _KRIEGER = [_hit("Krieger > Kurzprofil", 0, source_file="klassen.pdf"),
+                _hit("Krieger > Schildwall", 1, source_file="klassen.pdf"),
+                _hit("Krieger > Sturmangriff", 2, source_file="klassen.pdf")]
+    # Waldläufer section (5 chunks, best hit rank 0) and Krieger section (3 chunks, best hit rank 2)
+    _TWO_SECTIONS = [_hit("Waldläufer > Mehrfachschuss", 14, 0.9), _hit("Waldläufer > Kurzprofil", 11, 0.85),
+                     _hit("Krieger > Schildwall", 1, 0.8, source_file="klassen.pdf"),
+                     _hit("Krieger > Sturmangriff", 2, 0.75, source_file="klassen.pdf")]
+
+    def _two_section_retriever(self, embed_service, budget):
+        retriever, vs = self._retriever(embed_service, self._TWO_SECTIONS)
+        retriever.config.section_expansion.max_total_chunks = budget
+        vs.get_chunks_for_file.side_effect = lambda sid, f, where: list(
+            self._KRIEGER if f == "klassen.pdf" else self._SECTION)
+        return retriever
+
+    @staticmethod
+    def _idents(results):
+        return [(r.source_file, r.metadata["chunk_index"]) for r in results]
+
+    @pytest.mark.asyncio
+    async def test_budget_that_fits_expands_every_section(self, embed_service):
+        """4 hits + 3 new Waldläufer chunks + 1 new Krieger chunk = 8 ≤ budget."""
+        retriever = self._two_section_retriever(embed_service, budget=8)
+
+        results = await retriever.retrieve("klassen")
+
+        assert len(results) == 8
+
+    @pytest.mark.asyncio
+    async def test_budget_drops_the_lower_ranked_section(self, embed_service):
+        """Budget 7: the Waldläufer section (best hit first) fits, the Krieger section keeps its two hits."""
+        retriever = self._two_section_retriever(embed_service, budget=7)
+
+        results = await retriever.retrieve("klassen")
+
+        assert self._idents(results) == [("regelbuch.pdf", i) for i in (10, 11, 12, 13, 14)] + [
+            ("klassen.pdf", 1), ("klassen.pdf", 2)]
+
+    @pytest.mark.asyncio
+    async def test_budget_skips_a_section_that_does_not_fit_but_expands_a_smaller_one(self, embed_service):
+        """Budget 5: the Waldläufer section (+3) doesn't fit, the Krieger section (+1) still does."""
+        retriever = self._two_section_retriever(embed_service, budget=5)
+
+        results = await retriever.retrieve("klassen")
+
+        assert self._idents(results) == [("regelbuch.pdf", 14), ("regelbuch.pdf", 11),
+                                         ("klassen.pdf", 0), ("klassen.pdf", 1), ("klassen.pdf", 2)]
+
+    @pytest.mark.asyncio
+    async def test_budget_counts_chunks_of_nested_sections_once(self, embed_service):
+        """Sections 'X > Y' and 'X' overlap: after 'X > Y' (+1 chunk) the outer 'X' costs only the one
+        chunk not loaded yet — 4 hits + 1 + 1 = 6 fits; counting the overlap twice would drop 'X'."""
+        nested = [_hit("X", 0, source_file="n.pdf"), _hit("X > c", 1, source_file="n.pdf"),
+                  _hit("X > d", 2, source_file="n.pdf"), _hit("X > Y > a", 3, source_file="n.pdf"),
+                  _hit("X > Y > b", 4, source_file="n.pdf"), _hit("X > Y > e", 5, source_file="n.pdf")]
+        hits = [nested[3], nested[4], nested[1], nested[2]]
+        retriever, vs = self._retriever(embed_service, hits)
+        retriever.config.section_expansion.max_total_chunks = 6
+        vs.get_chunks_for_file.return_value = nested
+
+        results = await retriever.retrieve("x")
+
+        assert sorted(r.metadata["chunk_index"] for r in results) == [0, 1, 2, 3, 4, 5]
+
+    @pytest.mark.asyncio
+    async def test_budget_never_drops_reranked_hits(self, embed_service):
+        """A budget below the rerank result only blocks expansion — the hits themselves stay."""
+        retriever = self._two_section_retriever(embed_service, budget=2)
+
+        results = await retriever.retrieve("klassen")
+
+        assert len(results) == 4
+
     @pytest.mark.asyncio
     async def test_disabled_expansion_keeps_hits(self, embed_service):
         """Verify section_expansion.enabled=False leaves retrieval untouched."""

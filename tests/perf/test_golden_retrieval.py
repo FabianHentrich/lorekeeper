@@ -4,6 +4,7 @@ Runs the retrieval eval through the running backend (the embedded ChromaDB can't
 opened twice) and compares latency, context size and section hits to the baseline.
 Skipped when no backend answers on 127.0.0.1:8000. Takes a few minutes.
 """
+import math
 import statistics
 import time
 
@@ -36,7 +37,7 @@ def report():
 def test_retrieval_latency(report, baseline):
     """p50/p95 retrieval latency per question (×1.5 + 100 ms slack)."""
     latencies = sorted(d["latency_ms"] for d in report["details"] if "latency_ms" in d)
-    p95 = latencies[int(len(latencies) * 0.95) - 1]
+    p95 = latencies[math.ceil(len(latencies) * 0.95) - 1]   # nearest rank — same as the Evaluation page
     baseline.check("golden_retrieval", "p50_ms", statistics.median(latencies), slack=100)
     baseline.check("golden_retrieval", "p95_ms", p95, slack=100)
 

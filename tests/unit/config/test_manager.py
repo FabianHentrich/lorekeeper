@@ -296,3 +296,16 @@ class TestAtomicWrite:
                               sources_path=sources)
         assert [s.id for s in again.settings.ingestion.sources] == ["welt"]
         assert [p.name for p in sources.parent.iterdir()] == ["sources.yaml"]
+
+
+@pytest.mark.parametrize("section, values", [
+    ("vectorstore", {"hnsw_ef_search": 0}),
+    ("retrieval", {"section_expansion": {"max_total_chunks": -1}}),
+])
+def test_out_of_range_search_settings_are_rejected(section, values):
+    """Caught when the YAML is loaded: ef_search 0 made every ChromaDB access fail (500 per request),
+    a negative budget silently switched section expansion off."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        Settings(**{section: values})

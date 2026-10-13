@@ -68,6 +68,7 @@ def test_lifespan_startup_and_shutdown(patched_lifespan):
         # Startup side-effects happened
         patched_lifespan.embed.embed_text.assert_awaited_once_with("warmup")
         assert patched_lifespan.vs.health_check.call_count >= 1
+        patched_lifespan.vs.count.assert_called_once()   # collection opened at startup → ef_search applied
 
         # App responds to a trivial request (middleware + router wired)
         response = client.get("/openapi.json")

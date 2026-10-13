@@ -141,4 +141,4 @@ def test_retrieval_result_shows_latency_percentiles_and_chunks_per_question(jobs
     at = _ok(open_page("evaluation").run())
     _ok(at.button(key="ret_run").click().run())
 
-    assert "Latenz p50 60 ms · p95 60 ms · Chunks pro Frage Ø 14.0 / max 20" in [c.value for c in at.caption]
+    assert "Latenz p50 50 ms · p95 60 ms · Chunks pro Frage Ø 14.0 / max 20" in [c.value for c in at.caption]

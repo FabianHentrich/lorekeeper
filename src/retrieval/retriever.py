@@ -88,6 +88,13 @@ def _section_key(chunk) -> tuple[str, str, str] | None:
     return (chunk.metadata.get("source_id", ""), chunk.source_file, " > ".join(parts[:-1]))
 
 
+def _chunk_ident(chunk) -> tuple | int:
+    """Identity of a chunk across the rerank result and loaded sections: (source_id, file, chunk_index).
+    source_id too — two sources may contain the same relative file name."""
+    idx = chunk.metadata.get("chunk_index")
+    return (chunk.metadata.get("source_id"), chunk.source_file, idx) if idx is not None else id(chunk)
+
+
 @dataclass
 class RetrievedChunk:
     """A hit as the API and the prompt use it; ``heading`` is the joined heading path ("A > B")."""
@@ -326,6 +333,9 @@ class Retriever:
         two stray mid-ranking hits in an unrelated section (e.g. the Krieger section
         for "was ist überschaden?") would otherwise flood the context with ~20 chunks.
 
+        ``max_total_chunks`` caps the result over all sections: they are expanded in the order of their
+        best hit while the total fits; a section that would exceed it keeps its original hits.
+
         ``where`` is the request's filter (player restriction included) — every loaded section chunk
         must pass it, like every other search path.
         """
@@ -362,6 +372,21 @@ class Retriever:
             expanded[(source_id, source_file, parent)] = [_to_chunk({**it, "score": score}) for it in section]
             logger.debug(f"Expanded section '{parent}' ({source_file}): {len(headings)} hits → {len(section)} chunks")
 
+        budget = self.config.section_expansion.max_total_chunks
+        if budget and expanded:
+            # Cost of a section = its chunks that aren't in the result yet; best-ranked sections first
+            total = len(chunks)
+            present = {_chunk_ident(c) for c in chunks}
+            for key in sorted(expanded, key=best_rank.__getitem__):
+                new = [it for it in expanded[key] if _chunk_ident(it) not in present]
+                if total + len(new) > budget:
+                    logger.debug(f"Section '{key[2]}' ({key[1]}) not expanded — {total} + {len(new)} chunks "
+                                 f"> budget {budget}")
+                    del expanded[key]
+                    continue
+                total += len(new)
+                present.update(_chunk_ident(it) for it in new)
+
         if not expanded:
             return chunks
         logger.info("Section expansion: %s", ", ".join(
@@ -375,9 +400,7 @@ class Retriever:
         for c in chunks:
             key = _section_key(c)
             for item in (expanded.get(key, [c]) if key is not None else [c]):
-                idx = item.metadata.get("chunk_index")
-                # source_id too: two sources may contain the same relative file name
-                ident = (item.metadata.get("source_id"), item.source_file, idx) if idx is not None else id(item)
+                ident = _chunk_ident(item)
                 if ident not in seen:
                     seen.add(ident)
                     result.append(item)

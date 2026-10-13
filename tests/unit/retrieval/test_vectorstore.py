@@ -389,3 +389,22 @@ class TestCompareWithExactSearch:
     def test_a_wide_search_is_exact(self, vs_config, embed_service):
         svc, queries = self._store(vs_config, embed_service, ef=3000)
         assert svc.compare_with_exact_search(queries, 15, {"document_type": {"$ne": "image"}}) == [0] * 40
+
+    def test_tied_chunks_at_the_cut_off_are_not_deviations(self, vs_config, embed_service):
+        """Every vector stored three times, top_k 14: a triple straddles the cut-off for most queries,
+        and which copies HNSW returns is arbitrary. Comparing ID sets reported ~half the queries."""
+        import uuid
+
+        import chromadb
+        import numpy as np
+        cfg = vs_config.model_copy(update={"collection_name": f"tie-{uuid.uuid4().hex[:12]}", "hnsw_ef_search": 3000})
+        svc = VectorStoreService(cfg, embed_service)
+        svc._client = chromadb.EphemeralClient()
+        rng = np.random.default_rng(11)
+        base = rng.normal(size=(300, 24)).astype("float32")
+        svc._get_collection().add(ids=[f"c{i}-{copy}" for i in range(300) for copy in range(3)],
+                                  embeddings=[base[i].tolist() for i in range(300) for _ in range(3)],
+                                  metadatas=[{"document_type": "markdown"}] * 900)
+        queries = rng.normal(size=(40, 24)).astype("float32").tolist()
+
+        assert svc.compare_with_exact_search(queries, 14, None) == [0] * 40

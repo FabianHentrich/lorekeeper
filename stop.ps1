@@ -70,18 +70,29 @@ function Get-Descendants($id) {
 }
 
 $roots = @()
+$ownPorts = @()
 foreach ($port in $BACKEND_PORT, $UI_PORT) {
     $listener = Get-ListenerPid $port
     if ($listener) {
         $root = Get-Root $listener
-        if ($root -and $roots.ProcessId -notcontains $root.ProcessId) { $roots += $root }
+        # Only LoreKeeper's own processes — another dev server on the same port is left alone
+        if (-not $root -or $root.CommandLine -notmatch 'src\.main:app|ui[\\/]LoreKeeper\.py') {
+            Write-Warning "Port $port belongs to PID $listener ($($byId[[int]$listener].Name)), not LoreKeeper - skipped."
+            continue
+        }
+        $ownPorts += $port
+        if ($roots.ProcessId -notcontains $root.ProcessId) { $roots += $root }
     }
 }
 if (-not $roots) {
-    Write-Host "LoreKeeper is not running (nothing listens on ports $BACKEND_PORT/$UI_PORT)." -ForegroundColor Green
+    Write-Host "LoreKeeper is not running (no LoreKeeper process on ports $BACKEND_PORT/$UI_PORT)." -ForegroundColor Green
     exit 0
 }
 $tree = @($roots) + @($roots | ForEach-Object { Get-Descendants $_.ProcessId })
+# Started by the UI button, this script is a descendant of the UI process: without this it would wait
+# the full timeout for itself and then kill itself before reaching a hung python process
+$self = @($PID) + @(Get-Descendants $PID | ForEach-Object { [int]$_.ProcessId })
+$tree = @($tree | Where-Object { $self -notcontains [int]$_.ProcessId })
 # Recorded now: once the backend is gone, an Ollama it started can no longer be traced back to it
 $ollama = @($tree | Where-Object { $_.Name -like "ollama*" })
 
@@ -103,8 +114,9 @@ if ($left) {
     $left | Stop-Process -Force -ErrorAction SilentlyContinue
 }
 
-if ((Get-ListenerPid $BACKEND_PORT) -or (Get-ListenerPid $UI_PORT)) {
-    Write-Warning "A port is still in use - check with: Get-NetTCPConnection -State Listen -LocalPort $BACKEND_PORT,$UI_PORT"
+$busy = @($ownPorts | Where-Object { Get-ListenerPid $_ })
+if ($busy) {
+    Write-Warning "Port $($busy -join ', ') still in use - check with: Get-NetTCPConnection -State Listen -LocalPort $($busy -join ',')"
     exit 1
 }
 Write-Host ("LoreKeeper stopped after {0:N1} s{1}." -f $sw.Elapsed.TotalSeconds, $(if ($left) { " (some processes killed)" } else { " (clean)" })) -ForegroundColor Green
