@@ -7,7 +7,7 @@ without paying for a full re-embed. This rewrites only metadata.
 
 import logging
 
-from src.config.manager import ConfigManager, SourceConfig, config_manager
+from src.config.manager import ConfigManager, SourceConfig
 from src.ingestion.orchestrator import _resolve_category, source_base
 from src.retrieval.vectorstore import VectorStoreService
 
@@ -23,14 +23,16 @@ def _match_source(meta: dict, sources: list[SourceConfig]) -> SourceConfig | Non
     return next((s for s in sources if s.id == meta.get("source_id")), None)
 
 
-def recategorize(config: ConfigManager | None = None, vectorstore: VectorStoreService | None = None) -> dict:
+def recategorize(config: ConfigManager, vectorstore: VectorStoreService | None = None) -> dict:
     """Execute a metadata-only update across the entire vector store to apply new source configurations.
 
     This function reads all currently stored chunks, recalculates their matching category and group
     based on the current rules in sources.yaml, and pushes the updated metadata back to the vector store.
     This avoids the high cost of re-embedding the text content.
+
+    ``config`` is required: the backend passes its live config — with a fallback to a second, cached
+    ConfigManager, source edits made on the Sources page were invisible here (roadmap 11.0 #1).
     """
-    config = config or config_manager
     if vectorstore is None:
         from src.retrieval.embeddings import EmbeddingService
         embed = EmbeddingService(config.settings.embeddings)
@@ -82,7 +84,8 @@ def recategorize(config: ConfigManager | None = None, vectorstore: VectorStoreSe
 
 
 if __name__ == "__main__":
+    from src.config.manager import config_manager
     from src.logging_setup import setup_logging
     setup_logging(config_manager.settings.logging)  # same file, levels and suppress list as the backend
-    result = recategorize()
+    result = recategorize(config=config_manager)
     print(f"Done: {result}")

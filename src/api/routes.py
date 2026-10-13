@@ -674,7 +674,7 @@ async def recategorize_endpoint():
     """Trigger a recategorization task to update metadata for existing configurations."""
     import src.main as main_module
     from src.ingestion.recategorize import recategorize
-    return await run_in_threadpool(recategorize, vectorstore=main_module.vectorstore)
+    return await run_in_threadpool(recategorize, config=main_module.config, vectorstore=main_module.vectorstore)
 
 
 @router.get("/provider/gemini/status")

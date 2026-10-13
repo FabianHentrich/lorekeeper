@@ -706,7 +706,7 @@ Offen: #17 (Umbenennen beim Tageswechsel unter Windows, wenn die Datei anderswo 
 
 **Aufwand**: A gering, B gering, C gering. Last 🟢.
 
-## 11.0 Architektur-Review: Passt der Aufbau noch, was sollte modularer werden?
+## 11.0 Architektur-Review: Passt der Aufbau noch, was sollte modularer werden? — 🔄 Umbau läuft (P1 erledigt)
 
 **Wann**: nach 10.0 und der Messung aus 8.0, **vor** 9.0 und vor dem Wiederaufnehmen der Features. Begründung:
 - 8.0 kann Umbauten erzwingen (z.B. atomarer Provider-Wechsel, Job-Verwaltung, Warteschlange fürs LLM) — die gehören in denselben Entwurf, nicht in einen zweiten Umbau danach.
@@ -728,6 +728,53 @@ Offen: #17 (Umbenennen beim Tageswechsel unter Windows, wenn die Datei anderswo 
 
 **Aufwand**: Review Gering; Umbau je nach Ergebnis Mittel. Last 🟢.
 
+**Review (13.10.)** — Agent mit Fokus „architecture“ über die ganze Codebasis, Suite grün (659). **Urteil: Der Aufbau trägt für ein Haushalts-Projekt; die meisten Beobachtungen oben sind Lehrbuch ohne praktische Kosten.** Die echten Risiken liegen woanders: Zustand, der einmal gebaut und nie neu gebaut wird, und Index-Zustand, der bei Admin-Aktionen und gleichzeitigen Fragen auseinanderläuft. Selbst nachgeprüft: #1 (Repro mit zurückgesetzter Test-Config: Route 0 Chunks aktualisiert, mit richtiger Config 1), #2 (kein Neubau des Generators im Pfad von `PUT /config`), #3 (`invalidate()` nur am Ende eines Ingest-Jobs), #4 (Repro: 20/20 Versuche mit kaputtem Index).
+
+Die Beobachtungen oben, bewertet:
+- **Dienste als Globale / Provider-Wechsel nicht atomar**: Wechsel ist praktisch atomar — drei Zuweisungen ohne `await` dazwischen auf einer Event-Loop, laufende Anfragen arbeiten mit ihrem Schnappschuss weiter. Kein Problem. Das echte Problem ist #2.
+- **`routes.py` (~800 Zeilen)**: kein Fehler, nur Übersicht — aufteilen lohnt vor den Features, die genau dort ansetzen.
+- **Job-Verwaltung doppelt, ohne Aufräumen**: beide Startprüfungen atomar, wenige Einträge pro Tag, weg beim Neustart — kein Problem. Es fehlt aber die Sperre *zwischen* Ingest und Löschen/Wipe/Recategorize/Eval (#5).
+- **Spieler-Filter als Konvention**: heute dicht. Einzige Stelle ohne `where`: Section Expansion (bleibt aber in der Quelle des Treffers) — bricht still, sobald Sichtbarkeit feiner als `source_id` wird oder 3.5 das Muster kopiert (#6).
+- **`retriever.py`**: zusammenhängend; nur Reranker + GPU-Fallback (eigener Zustand, Lock) wäre ein sinnvoller eigener Baustein.
+- **UI**: 57 direkte `requests`-Aufrufe, davon **21 mit `.json()` ohne Statusprüfung** — ein Fehler zeigt dann `KeyError` statt der Meldung des Backends.
+- **`ConfigManager`**: Aufteilung unkritisch; das echte Problem ist eine *zweite* Instanz (#1). Alle 5 YAML-Schreibzugriffe nicht atomar (#9).
+- Private Importe zwischen Modulen: kosmetisch.
+
+**Befunde**:
+1. **„Recategorize“ aus der UI nutzt eine veraltete Config** (Hoch): Die Route ruft `recategorize()` ohne `config` → Fallback auf eine zweite, beim ersten Import gebaute `ConfigManager`-Instanz, die `PUT /sources` nie sieht. Ergebnis: Ordner-Zuordnung geändert → „Recategorize“ → `chunks_updated: 0`. Genau der Zweck des Knopfs geht nicht. Die Routentests mocken `recategorize` komplett.
+2. **`llm.fallback_enabled` auf der Settings-Seite wirkt nie; ein später gesetzter Gemini-Key erreicht den Fallback nicht** (Hoch): Der Fallback wird beim Bau des Generators festgelegt; `PUT /config` baut nichts neu, `set_gemini_key` nur, wenn Gemini aktiv ist. Die Doku verspricht „nächste Frage“.
+3. **BM25 wird nach Quelle löschen, Wipe und Recategorize nicht invalidiert** (Mittel): Mit Hybrid-Suche tauchen gelöschte Inhalte weiter in Antworten auf; nach Recategorize filtert BM25 auf alten Metadaten (Filter-Vertrag zwischen den Suchwegen läuft auseinander). Spieler-Filter nicht betroffen (`source_id` wird live gelesen).
+4. **Gleichzeitiger erster BM25-Aufbau zerstört den Index** (Mittel): kein Lock; zwei Threads füllen dieselbe Dokumentliste → Scores zeigen auf falsche Dokumente, bis zur nächsten Invalidierung. Auslöser: zwei Hybrid-Fragen gleichzeitig nach Start oder nach einem Ingest. Kein Spieler-Leck (Filter prüft das zurückgegebene Dokument).
+5. **Löschen/Wipe/Recategorize/Eval laufen ungesperrt neben einem Ingest** (Mittel): Quelle während eines vollen Ingests entfernen → der laufende Job schreibt ihre Chunks wieder → verwaiste Chunks unter einer ID, die es nicht mehr gibt (nur ein Wipe entfernt sie). Wipe während Ingest → stiller Teil-Index; Eval während Ingest → Zahlen von einem halben Index. In der UI sind nur die Ingest-Knöpfe gesperrt.
+6. **Section Expansion lädt ohne Anfrage-Filter** (Gering, strukturell): heute sicher, siehe oben.
+7. **Health-Cache nach Provider-Wechsel nicht aufgefrischt** (Gering): Sidebar zeigt bis zu 60 s „LLM down“.
+8. **Lifespan ohne `try/finally`** (Gering, plausibel): schlägt der Start nach dem Ollama-Autostart fehl, läuft das gestartete Ollama weiter.
+9. **YAML-Schreibzugriffe nicht atomar** (Gering, plausibel): Absturz beim Schreiben kann `sources.yaml` (gitignored, kein Backup) leeren.
+10. **Reindex löscht die Quelle zuerst** (Gering): Während eines langen Reindex fehlt die Quelle in jeder Antwort; `run(only_source_id, full=True)` ohne vorheriges Löschen würde reichen (vorher gegen den E2E-Test prüfen).
+11. **Jinja2 nicht in der Sandbox** (Gering, Sicherheit): `POST /prompts/preview` rendert beliebige Templates; erreichbar nur lokal hinter dem Admin-Login. `SandboxedEnvironment` genügt.
+
+**Umbauplan** (je Paket ein Commit; Invarianten für alle: API-Pfade und Antwortmodelle, SSE-Format, `effective_filters` auf jedem Suchweg, Reihenfolge der `/sources/…`-Routen, `condense_model` nur Ollama, blockierende Aufrufe im Threadpool):
+
+| Paket | Inhalt | Schutz durch Tests | Aufwand/Risiko |
+|---|---|---|---|
+| **P1 Eine Config** (#1) | Route übergibt `main_module.config`; `config` wird Pflichtparameter in `recategorize()` und `IngestionOrchestrator`, nur die CLIs übergeben die Standard-Instanz | neuer Integrationstest (Ingest → `PUT /sources` → Recategorize → Metadaten geändert), mutationsgeprüft | S / gering |
+| **P2 LLM-Bündel** (#2, #7) | ein `install_llm()` baut Provider, Condense-Provider und Generator (+Fallback), setzt alle drei und frischt Health auf; genutzt von Lifespan, Provider-Wechsel, Gemini-Key (immer) und `PUT /config` bei `llm`-Änderungen | neue Tests: Fallback an/aus über `/config`, Key bei aktivem Ollama | S–M / gering |
+| **P3 Index konsistent** (#3, #4, #5) | BM25: Aufbau unter Lock, Ergebnis auf einmal veröffentlichen; `invalidate()` nach Löschen/Wipe/Recategorize; während eines Ingests 409 für Löschen/Wipe/Recategorize/Eval-Start, Knöpfe in der UI gesperrt; Orchestrator liest die Quellenliste einmal | neue Tests: gleichzeitiger Aufbau (mutationsgeprüft), Invalidierung je Aktion, 409 je Endpoint | S–M / gering |
+| **P4 Filter erzwungen** (#6) | `get_chunks_for_file(…, where)`; Spy-Test: jeder Store-/BM25-Aufruf einer Spieler-Anfrage trägt die Einschränkung | mutationsgeprüft (Filter an einer Stelle weg → Test schlägt fehl) | S / gering |
+| **P5 UI-Fehlerpfad** | `ui/backend.py`: `get_json`/`send_json` mit Statusprüfung und Standard-Timeout; die 21 ungeprüften Aufrufe ersetzen | UI-Tests, Anfrage-Budgets unverändert | S–M / gering |
+| **P6 Kleinkram** (#8, #9, #11) | Lifespan `try/finally`, atomares Schreiben (temp + `os.replace`) für die 5 YAML-Stellen, `SandboxedEnvironment` | Unit-Tests je Helfer | S je Punkt |
+| **P7 `routes.py` aufteilen** | `query_routes` · `sources_routes` (Ingest, Quellen, Wipe) · `system_routes` (Health, Provider, Config, Feedback, Sessions) | alle Integrationstests | M / gering — **Entscheidung**, lohnt vor 3.5/2 |
+| P8 optional | Dienste-Modul `src/services.py` (Globale, `install_llm`, Health-Loop; beseitigt die 35 Lazy-Imports und vereinfacht 17 Test-Dateien); Reranker + GPU-Fallback als `src/retrieval/reranker.py` | volle Suite | M / gering — nur zusammen mit Feature-Arbeit |
+| — | #10 Reindex ohne Löschen vorab | E2E-Test | S / mittel — **Entscheidung** |
+
+**Bewusst nicht**: DI-Container über FastAPI `Depends`/`app.state` (ändert 35 Stellen, löst nichts, was P2/P8 nicht lösen); generische Job-Registry; Aufräumen der Job-Dicts; Prompt-Varianten in den `ConfigManager`; Retriever in Pipeline-Klassen zerlegen; `FilteredVectorStore`-Wrapper (der Spy-Test aus P4 sichert es, neu bewerten bei 3.5); LLM-Warteschlange (Ollama serialisiert, 8.0 zeigt den Hinweis); UI-Seiten aufteilen; typisierter API-Client.
+
+**Reihenfolge-Vorschlag**: P1 → P2 → P3 → P4 (Fehler und Sicherheit, je klein), dann P5, P6; P7 vor den ruhenden Features; P8 nur mit Feature-Arbeit.
+
+**Entscheidungen (13.10.)**: Plan freigegeben. P7 (`routes.py` aufteilen) **ja**. #10 Reindex **ohne** Löschen vorab (`run(only_source_id, full=True)`), abgesichert gegen den E2E-Test — kommt mit P3 (Index-Konsistenz). P8 bleibt optional.
+
+**P1 umgesetzt (13.10.)**: Die Recategorize-Route übergibt die laufende Config; `config` ist Pflichtparameter in `recategorize()` und `IngestionOrchestrator` — keine stille Ersatz-Instanz mehr, nur die beiden CLIs nutzen ausdrücklich die Standard-Config (die auch nicht mehr beim Import gebaut wird). Neuer Integrationstest: Ordner-Zuordnung über `PUT /sources` speichern → Recategorize → gespeicherter Chunk hat die neue Kategorie (echtes `recategorize`, mutationsgeprüft mit der alten Standard-Config). Suite: 660 grün.
+
 ---
 
 ## Priorisierungsvorschlag
@@ -742,7 +789,8 @@ Erledigt: 8.0 Gleichzeitige Anfragen (Messung + Warte-Hinweis), 10.0 Logging (Pa
 
 | Reihenfolge | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 1 | 11.0 Architektur-Review | Mittel — Grundlage für 9.0 und die ruhenden Features | Gering (Review), Umbau Mittel | 🟢 | Nach 8.0 (dessen Befunde fließen ein), vor 9.0 (keine Tests für Code, der gleich umgebaut wird) und vor neuen Suchwegen |
+| 1 | 11.0 Umbau P1–P4 (Fehler + Filter) | Hoch — Recategorize und Fallback-Schalter funktionieren nicht, Hybrid-Index wird bei gleichzeitigen Fragen/Admin-Aktionen falsch | Je S | 🟢 | Zwei High-Fehler (selbst reproduziert); Pakete klein und einzeln committbar |
+| 1b | 11.0 Umbau P5–P7 | Mittel — einheitliche UI-Fehler, robuste Config-Dateien, Übersicht vor den Features | S–M | 🟢 | P7 (Routen aufteilen) ist Entscheidung |
 | 2 | 9.0 Testabdeckung | Gering-Mittel — Lücken in den Admin-Seiten und `evaluate.py` | Gering-Mittel | 🟢 | 85 % gesamt; gezielt Pfade mit Fehlerrisiko, keine Prozentjagd |
 | 3 | Offene Prüfungen im laufenden Betrieb | Mittel — bestätigt, dass die Neuerungen im echten Chat wirken | Gering | 🟡 | Mit gestartetem LoreKeeper: 3.6 Folgefragen, 👍/👎 + Tabs „Feedback“/„Chunks“, Rerank-Timings (5.4), Regelwerk-Slot an x002/x005 (3.10), `pytest -m live`; gut mit 8.0 kombinierbar |
 | 4 | 5.5 Vektorsuche reproduzierbar machen | Gering-Mittel — verlässliche Eval-Vergleiche | Gering-Mittel | 🟡 | ±2 Abschnitte Schwankung zwischen Prozessen; `ef_search` erhöhen oder exakt suchen |

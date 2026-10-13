@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from src.config.manager import ConfigManager, SourceConfig, config_manager
+from src.config.manager import ConfigManager, SourceConfig
 from src.ingestion.chunking import Chunk, chunk_documents
 from src.ingestion.parsers.base import BaseParser
 from src.ingestion.parsers.image import ImageMetaParser
@@ -125,9 +125,14 @@ class IngestionOrchestrator:
     parsing formats, chunking text, computing metadata/hashes, and
     syncing the results (upserts and deletes) with the vector store.
     """
-    def __init__(self, config: ConfigManager | None = None):
-        """Register the built-in parsers (Markdown, PDF, image metadata)."""
-        self.config = config or config_manager
+    def __init__(self, config: ConfigManager):
+        """Register the built-in parsers (Markdown, PDF, image metadata).
+
+        ``config`` is required: the backend passes its own ``main_module.config`` — a second
+        ConfigManager would never see source edits made via ``PUT /sources``. Only the CLI uses the
+        default instance.
+        """
+        self.config = config
         self.parsers: list[BaseParser] = [
             MarkdownParser(),
             PDFParser(pdf_config=self.config.settings.ingestion.pdf),
@@ -314,9 +319,10 @@ class IngestionOrchestrator:
 
 
 if __name__ == "__main__":
+    from src.config.manager import config_manager
     from src.logging_setup import setup_logging
     setup_logging(config_manager.settings.logging)  # same file, levels and suppress list as the backend
-    orchestrator = IngestionOrchestrator()
+    orchestrator = IngestionOrchestrator(config=config_manager)
 
     # Lazy imports to avoid circular dependency at module level
     from src.retrieval.embeddings import EmbeddingService

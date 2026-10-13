@@ -162,7 +162,7 @@ class TestDiscoverFiles:
         """
         from src.config.manager import config_manager
         monkeypatch.setattr(config_manager.settings.ingestion, "sources", sources)
-        return IngestionOrchestrator()
+        return IngestionOrchestrator(config=config_manager)
 
     def test_file_source_yields_single_file(self, tmp_path, monkeypatch):
         """
@@ -254,7 +254,7 @@ class TestRunIncremental:
         monkeypatch.setattr(config_manager.settings.ingestion, "sources", [src])
         f = tmp_path / "Arkenfeld.md"
         f.write_text(_NOTE, encoding="utf-8")
-        return IngestionOrchestrator(), f
+        return IngestionOrchestrator(config=config_manager), f
 
     def test_new_file_is_upserted(self, tmp_path, monkeypatch):
         """Verify a file unknown to the store is parsed, counted as created and upserted."""

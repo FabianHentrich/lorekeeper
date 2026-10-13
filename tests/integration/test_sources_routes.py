@@ -288,7 +288,7 @@ def test_delete_with_slash_id(client, env, slash_source):
 def test_static_source_routes_not_shadowed(client, env, monkeypatch):
     """Verify /sources/scan and /sources/recategorize still win over the :path routes."""
     import src.ingestion.recategorize as recat_module
-    monkeypatch.setattr(recat_module, "recategorize", lambda vectorstore: {"ok": True})
+    monkeypatch.setattr(recat_module, "recategorize", lambda config, vectorstore: {"ok": True})
     assert client.post("/sources/recategorize").json() == {"ok": True}
     assert client.post("/sources/scan", json={"path": str(env.single)}).json()["is_file"] is True
 
@@ -315,8 +315,30 @@ def test_delete_unknown_source_404(client, env):
 
 def test_recategorize_returns_summary(client, env, monkeypatch):
     import src.ingestion.recategorize as recat_module
-    monkeypatch.setattr(recat_module, "recategorize", lambda vectorstore: {"updated": 3})
+    monkeypatch.setattr(recat_module, "recategorize", lambda config, vectorstore: {"updated": 3})
     assert client.post("/sources/recategorize").json() == {"updated": 3}
+
+
+def test_recategorize_applies_a_mapping_saved_on_the_sources_page(client, env, monkeypatch):
+    """Map a folder on the Sources page, click "Recategorize": the stored chunk gets the new category.
+
+    The route used to fall back to a second, cached ConfigManager that never saw ``PUT /sources`` —
+    the button reported 0 updated chunks (roadmap 11.0 #1). The real recategorize runs here."""
+    stored = {"ids": ["c1"], "metadatas": [{"source_id": "vault", "source_file": "NPCs/Malek.md",
+                                            "content_category": "misc", "group": "lore"}]}
+    written = {}
+    monkeypatch.setattr(env.vectorstore, "get_all", lambda include: stored, raising=False)
+    monkeypatch.setattr(env.vectorstore, "update_metadata_batch",
+                        lambda ids, metas: written.update(zip(ids, metas, strict=True)), raising=False)
+
+    sources = client.get("/sources").json()["sources"]
+    sources[0]["category_map"] = {"NPCs": "npc"}
+    assert client.put("/sources", json={"sources": sources}).status_code == 200
+
+    result = client.post("/sources/recategorize").json()
+
+    assert result["chunks_updated"] == 1
+    assert written["c1"]["content_category"] == "npc"
 
 
 # ─── Ingest job lifecycle ─────────────────────────────────────────────────────
