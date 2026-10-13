@@ -292,13 +292,13 @@ class Retriever:
 
         if self.config.section_expansion.enabled and chunks:
             t0 = time.perf_counter()
-            chunks = await self._expand_sections(chunks)
+            chunks = await self._expand_sections(chunks, where)
             stage_ms["expand"] = (time.perf_counter() - t0) * 1000
 
         logger.debug("Retrieved %d chunks", len(chunks))  # the count is in the Query timings line
         return chunks
 
-    async def _expand_sections(self, chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+    async def _expand_sections(self, chunks: list[RetrievedChunk], where: dict | None = None) -> list[RetrievedChunk]:
         """Replace sibling fragments with their complete parent section.
 
         Questions like "which abilities does the ranger have?" match a few of the
@@ -310,6 +310,9 @@ class Retriever:
         Only sections with a hit among the first ``top_rank`` chunks are expanded —
         two stray mid-ranking hits in an unrelated section (e.g. the Krieger section
         for "was ist überschaden?") would otherwise flood the context with ~20 chunks.
+
+        ``where`` is the request's filter (player restriction included) — every loaded section chunk
+        must pass it, like every other search path.
         """
         top_rank = self.config.section_expansion.top_rank
         siblings: dict[tuple[str, str, str], set[str]] = {}
@@ -330,7 +333,7 @@ class Retriever:
                     f"{best_rank[(source_id, source_file, parent)] + 1} > {top_rank}"
                 )
                 continue
-            items = await run_in_threadpool(self.vectorstore.get_chunks_for_file, source_id, source_file)
+            items = await run_in_threadpool(self.vectorstore.get_chunks_for_file, source_id, source_file, where)
             section = [
                 it for it in items
                 if (h := it["metadata"].get("heading_hierarchy", "")) == parent or h.startswith(parent + " > ")

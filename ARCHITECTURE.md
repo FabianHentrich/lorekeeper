@@ -443,6 +443,10 @@ Spieler nutzen LoreKeeper am Tisch (z.B. am Handy) und dürfen keine Spielleiter
   `$eq`/`$ne`/`$in`/`$and`) → 422, für beide Rollen. Default ist `game_master` (CLI,
   Eval-Tools); wird die API je außerhalb von `127.0.0.1` erreichbar, muss der Default auf
   `player` oder eine Authentifizierung her.
+- **Jeder Suchweg** trägt den Filter: Vektorsuche, BM25, die Suche des Regelwerk-Slots und das
+  Nachladen der Section Expansion (`get_chunks_for_file(..., where)`). Ein Spy-Test prüft das für
+  jeden Store-Zugriff einer Spieler-Anfrage — ein neuer Suchweg ohne Filter fällt dort auf, auch wenn
+  die Testdaten zufällig dicht wären.
 - **Die UI** schickt `role` und zusätzlich ihren eigenen Filter als zweite Sicherung; Sessions sind
   rollengebunden (4.5).
 - Es ist ein Spoiler-Schutz, keine Zugangskontrolle: die Rolle wählt jeder selbst. Die Admin-Seiten

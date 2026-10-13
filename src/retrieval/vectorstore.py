@@ -226,11 +226,20 @@ class VectorStoreService:
         for the full scans of the BM25 build and recategorize."""
         return self._get_collection().get(include=include)
 
-    def get_chunks_for_file(self, source_id: str, source_file: str) -> list[dict[str, Any]]:
-        """Return every chunk of one file as ``{id, content, metadata}`` (used for section expansion)."""
+    def get_chunks_for_file(self, source_id: str, source_file: str,
+                            where: dict | None = None) -> list[dict[str, Any]]:
+        """Return every chunk of one file as ``{id, content, metadata}`` (section expansion, chunk inspector).
+
+        ``where`` is AND-ed in: section expansion passes the request's filter, so it can never load more
+        than the search itself may see — today the player filter is per source and expansion stays in
+        the hit's source, but a finer filter (or a new expansion type copying this) must not leak.
+        """
         collection = self._get_collection()
+        conditions: list[dict] = [{"source_id": source_id}, {"source_file": source_file}]
+        if where:
+            conditions.append(where)
         data = collection.get(
-            where={"$and": [{"source_id": source_id}, {"source_file": source_file}]},
+            where={"$and": conditions},
             include=["documents", "metadatas"],
         )
         return [

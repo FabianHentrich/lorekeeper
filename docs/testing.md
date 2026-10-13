@@ -66,6 +66,12 @@ Der Spieler-Modus darf Spielern nie Spielleiter-Inhalte geben. Drei Ebenen:
   Hybrid-Suche, Condense mit einer Köder-Folgefrage. Weder Chunks, Quellen noch der LLM-Prompt
   dürfen ein Geheimnis enthalten.
 
+  Dazu ein **Spy-Test** (`test_every_store_access_of_a_player_request_carries_the_restriction`):
+  Er zeichnet jeden Aufruf von Vektorsuche, BM25-Suche und Section-Expansion-Nachladen während
+  Spieler-Anfragen auf und verlangt in jedem die Einschränkung `source_id $in [freigegeben]`. Er prüft
+  die Struktur statt der Daten: Die Expansion ohne Filter war mit diesen Testdaten dicht (sie bleibt in
+  der Quelle des Treffers), der Spy-Test schlägt trotzdem an. Mutationsgeprüft für alle drei Wege.
+
   Positiv geprüft wird außerdem, dass der Slot für Spieler wirklich greift: Belegt der
   Charakterbogen die oberen Plätze, holt er einen Chunk aus der freigegebenen Regel-Quelle — nie aus
   der Spielleiter-Regel-Quelle, die der Köder-Reranker am höchsten bewertet.

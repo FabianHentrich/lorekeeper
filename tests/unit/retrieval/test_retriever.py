@@ -662,7 +662,7 @@ class TestSectionExpansion:
         assert results[5].source_file == "Arkenfeld.md"           # unrelated hit keeps its place after
         assert len(results) == 6                                  # no duplicates of the original hits
         assert all(r.score == 0.9 for r in results[:5])           # section inherits its best hit score
-        vs.get_chunks_for_file.assert_called_once_with("rules", "regelbuch.pdf")
+        vs.get_chunks_for_file.assert_called_once_with("rules", "regelbuch.pdf", {"document_type": {"$ne": "image"}})
 
     @pytest.mark.asyncio
     async def test_repeated_same_heading_does_not_expand(self, embed_service):

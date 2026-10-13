@@ -430,3 +430,39 @@ async def test_player_rules_slot_brings_the_released_rulebook_not_the_game_maste
     assert {c.metadata.get("source_id") for c in chunks} <= set(PLAYER_SOURCES)
     for c in chunks:
         _no_secret(c.content)
+
+
+
+def _restricted(where) -> bool:
+    """True if ``where`` contains the player restriction (directly or inside an ``$and``)."""
+    if not isinstance(where, dict):
+        return False
+    if where.get("source_id") == {"$in": PLAYER_SOURCES}:
+        return True
+    return any(_restricted(cond) for cond in where.get("$and", []))
+
+
+def test_every_store_access_of_a_player_request_carries_the_restriction(env, monkeypatch):
+    """Structural guarantee (roadmap 11.0 P4): every vector search, BM25 search and section load made
+    for a player request is filtered — not just the paths that exist today. A new retrieval path that
+    forgets the filter fails here even if the test data happens not to leak."""
+    vs, bm25 = env.retriever.vectorstore, env.retriever.bm25_index
+    calls: list[tuple[str, object]] = []
+
+    def spy(name, fn, where_pos):
+        def wrapper(*args, **kwargs):
+            calls.append((name, kwargs.get("where", args[where_pos] if len(args) > where_pos else None)))
+            return fn(*args, **kwargs)
+        return wrapper
+
+    monkeypatch.setattr(vs, "query", spy("vector", vs.query, 2))
+    monkeypatch.setattr(vs, "get_chunks_for_file", spy("expansion", vs.get_chunks_for_file, 2))
+    monkeypatch.setattr(bm25, "query", spy("bm25", bm25.query, 2))
+
+    for question in QUESTIONS:
+        r = env.client.post("/query/stream", json={"question": question, "role": "player", "hybrid_search": True})
+        assert r.status_code == 200
+
+    assert {name for name, _ in calls} == {"vector", "bm25", "expansion"}, "a path was not exercised"
+    unfiltered = [(name, where) for name, where in calls if not _restricted(where)]
+    assert not unfiltered, f"store access without the player restriction: {unfiltered}"
