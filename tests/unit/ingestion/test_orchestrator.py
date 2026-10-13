@@ -228,10 +228,18 @@ _NOTE = (
 class FakeVectorStore:
     """Records sync calls; serves pre-seeded {source_id: {source_file: hash}}."""
 
-    def __init__(self, hashes: dict | None = None):
+    def __init__(self, hashes: dict | None = None, extra_source_ids: set | None = None):
         self.hashes = hashes or {}
+        self.extra_source_ids = extra_source_ids or set()   # sources with chunks but no files (removed sources)
         self.calls: list[tuple] = []
         self.upserted: list = []
+
+    def list_source_ids(self):
+        return set(self.hashes) | self.extra_source_ids
+
+    def delete_by_source_id(self, source_id):
+        self.calls.append(("delete_source", source_id))
+        return 7
 
     def get_content_hashes_for_source(self, source_id):
         return dict(self.hashes.get(source_id, {}))
@@ -322,6 +330,35 @@ class TestRunIncremental:
         assert ("delete", "vault", "Arkenfeld.md") not in vs.calls
         # Counts deleted chunks as reported by the store, not orphaned files
         assert result.chunks_deleted == 3
+
+    def test_chunks_of_removed_sources_are_deleted(self, tmp_path, monkeypatch):
+        """A source removed from sources.yaml by hand left its chunks searchable — a full-scope run deletes them."""
+        orch, f = self._setup(tmp_path, monkeypatch)
+        vs = FakeVectorStore({"vault": {"Arkenfeld.md": _compute_content_hash(f)}}, extra_source_ids={"alt"})
+
+        result = orch.run(vectorstore=vs)
+
+        assert [c for c in vs.calls if c[0] == "delete_source"] == [("delete_source", "alt")]
+        assert result.chunks_deleted == 7
+
+    def test_single_source_run_leaves_other_sources_alone(self, tmp_path, monkeypatch):
+        orch, f = self._setup(tmp_path, monkeypatch)
+        vs = FakeVectorStore({"vault": {"Arkenfeld.md": _compute_content_hash(f)}}, extra_source_ids={"alt"})
+
+        orch.run(vectorstore=vs, only_source_id="vault")
+
+        assert not [c for c in vs.calls if c[0] == "delete_source"]
+
+    def test_empty_source_list_never_wipes_the_index(self, tmp_path, monkeypatch):
+        """A missing or unreadable sources.yaml (no sources) must not delete everything."""
+        from src.config.manager import config_manager
+        orch, _ = self._setup(tmp_path, monkeypatch)
+        monkeypatch.setattr(config_manager.settings.ingestion, "sources", [])
+        vs = FakeVectorStore(extra_source_ids={"vault", "regelbuch"})
+
+        orch.run(vectorstore=vs)
+
+        assert not [c for c in vs.calls if c[0] == "delete_source"]
 
     def test_parse_error_keeps_previous_version(self, tmp_path, monkeypatch):
         """Verify a changed file that fails to parse keeps its old chunks instead of being deleted."""

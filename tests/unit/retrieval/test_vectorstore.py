@@ -326,6 +326,22 @@ class TestHealthCheck:
         assert service.health_check() is False
 
 
+class TestListSourceIds:
+    """The ingest compares these with sources.yaml to delete chunks of removed sources."""
+
+    def test_distinct_ids_without_empty_ones(self, service, mock_collection):
+        mock_collection.get.return_value = {"metadatas": [
+            {"source_id": "vault"}, {"source_id": "regelbuch"}, {"source_id": "vault"}, {"source_id": ""}, {}, None,
+        ]}
+        assert service.list_source_ids() == {"vault", "regelbuch"}
+
+    def test_database_error_is_raised(self, service, mock_collection):
+        """An error must not look like an empty index — the caller would then delete nothing, but must know."""
+        mock_collection.get.side_effect = RuntimeError("locked")
+        with pytest.raises(RuntimeError):
+            service.list_source_ids()
+
+
 class TestListFiles:
     """Chunk inspector: indexed files of one source."""
 

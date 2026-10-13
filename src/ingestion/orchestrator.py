@@ -4,7 +4,8 @@ Runs as a background job inside the backend (``/ingest``, ``/sources/{id}/reinde
 (``python -m src.ingestion.orchestrator``) — the CLI opens ``chroma_data`` itself, so only with the backend
 stopped. Incremental via the SHA-256 content hash, not timestamps (unreliable on Windows mounts and external
 repos); ``full=True`` re-processes everything. Chunks are upserted in batches of ``UPSERT_BATCH_CHUNKS``
-(one file never spans two batches); files gone from disk are deleted from the index. Every chunk carries
+(one file never spans two batches); files gone from disk are deleted from the index, and a run over all
+sources also deletes the chunks of sources no longer in sources.yaml. Every chunk carries
 ``source_id``, ``group`` and ``content_category`` from its source config.
 """
 import fnmatch
@@ -310,6 +311,16 @@ class IngestionOrchestrator:
             # Orphans: anything in existing that wasn't processed this run
             for (sid, src_file) in set(existing.keys()) - processed:
                 result.chunks_deleted += vectorstore.delete_by_source_file(sid, src_file)
+            # Chunks of sources that are no longer configured — an entry removed from sources.yaml by hand
+            # instead of DELETE /sources/{id} stayed searchable (13.10.: 36 chunks of two sim sources).
+            # Only on runs over all sources, and never with an empty list: a missing or unreadable
+            # sources.yaml must not wipe the index.
+            if only_source_id is None and sources:
+                for sid in sorted(vectorstore.list_source_ids() - {s.id for s in sources}):
+                    deleted = vectorstore.delete_by_source_id(sid)
+                    result.chunks_deleted += deleted
+                    logger.warning("Deleted %d chunks of source '%s' — it is no longer in sources.yaml",
+                                   deleted, sid)
 
         result.end_time = datetime.now(UTC)
         logger.info(

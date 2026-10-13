@@ -137,7 +137,9 @@ oder die REST-Endpoints (`GET/PUT /sources`, `POST /sources/{id}/reindex`, `DELE
   nötig nach geänderten Chunking-/Parser-Einstellungen oder `path`. Die Quelle wird nicht vorher
   gelöscht und bleibt während des Laufs durchsuchbar.
 - *Inkrementell* (`POST /ingest`, „⚡ Nur Änderungen indizieren“) — alle Quellen, nur neue,
-  geänderte und gelöschte Dateien. Reicht nach dem Bearbeiten von Notizen.
+  geänderte und gelöschte Dateien. Reicht nach dem Bearbeiten von Notizen. Löscht auch die Chunks von
+  Quellen, die nicht mehr in `sources.yaml` stehen — wer eine Quelle dort nur vorübergehend
+  auskommentiert, muss sie danach neu indizieren (Log-Zeile `Deleted N chunks of source '…'`).
 - *Alles* (`POST /ingest?full=true`, „🔄 Alle Dokumente neu indizieren“) — jede Datei; nötig nach
   Änderungen an Chunking oder PDF-Parsing.
 

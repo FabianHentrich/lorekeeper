@@ -236,6 +236,11 @@ class VectorStoreService:
         ``content_hash``, so the hash lookup lists them all; database errors are raised."""
         return sorted(self.get_content_hashes_for_source(source_id))
 
+    def list_source_ids(self) -> set[str]:
+        """Every ``source_id`` that has chunks in the index — the ingest compares it with sources.yaml."""
+        data = self._get_collection().get(include=["metadatas"])
+        return {sid for m in data.get("metadatas") or [] if (sid := (m or {}).get("source_id"))}
+
     def get_all(self, include: list[str]) -> dict[str, Any]:
         """Every stored chunk as ChromaDB's column dict (``ids`` plus the ``include`` fields) —
         for the full scans of the BM25 build and recategorize."""

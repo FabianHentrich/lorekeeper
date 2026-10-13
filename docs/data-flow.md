@@ -45,7 +45,7 @@ flowchart TD
     EMBED --> E5["e5-base\n'passage: '+Text\n768-dim. Vektor"]
     E5 --> CHROMA[("ChromaDB\nupsert:\nid · document=Inhalt\nembedding · Metadaten")]
 
-    ORCH -.->|"nach allen Dateien"| ORPHAN["von der Platte verschwunden:\nChunks löschen\n(chunks_deleted)"]
+    ORCH -.->|"nach allen Dateien"| ORPHAN["von der Platte verschwunden\noder Quelle nicht mehr konfiguriert:\nChunks löschen\n(chunks_deleted)"]
     ORPHAN -.-> CHROMA
 
     style SKIP fill:#f5f5f5,stroke:#ccc

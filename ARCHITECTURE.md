@@ -284,7 +284,9 @@ Standard (`POST /ingest`, CLI, Button **⚡ Nur Änderungen indizieren**):
 1. Änderungserkennung **nur über den Content-Hash** (SHA-256) — Zeitstempel sind bei Windows-Mounts
    und externen Repos unzuverlässig. Unveränderte Dateien werden vor dem Parsen übersprungen.
 2. Geänderte Dateien: neu parsen → alte Chunks löschen → neu embedden → speichern.
-3. Gelöschte Dateien: verwaiste Chunks entfernen.
+3. Gelöschte Dateien: verwaiste Chunks entfernen. Ein Lauf über alle Quellen löscht außerdem die
+   Chunks von Quellen, die nicht mehr in `sources.yaml` stehen (von Hand entfernt statt über
+   `DELETE /sources/{id}`) — nie bei leerer Quellenliste, damit eine fehlende Datei den Index nicht leert.
 4. Parse-Fehler: die zuvor indizierte Version bleibt erhalten.
 
 **Voll-Reindex** (`?full=true`, Button **🔄 Alle Dokumente neu indizieren**) ist nach Änderungen an
