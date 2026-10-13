@@ -181,8 +181,31 @@ ganze Sektion in Dokumentreihenfolge und setzt sie an der Stelle des besten Tref
 Zwei Grenzen schützen den Kontext: Sektionen über `max_chunks` (25) bleiben unverändert, und
 expandiert wird nur, wenn ein Treffer der Sektion unter den ersten `top_rank` (3) liegt — sonst
 ziehen zwei zufällige, schwache Treffer eine fremde Sektion herein. Golden Set mit `top_rank: 3`:
-Ø Chunks 13,9 → 12,6, Abschnitt-Treffer unverändert. Offen: ein Gesamtbudget über mehrere
-expandierte Sektionen (bis zu 49 Chunks sind noch möglich, Roadmap 5.6).
+Ø Chunks 13,9 → 12,6, Abschnitt-Treffer unverändert.
+
+Drittens begrenzt `max_total_chunks` (30) das ganze Ergebnis über alle Sektionen (Roadmap 5.6):
+Expandiert wird in der Reihenfolge des besten Treffers, solange die Summe passt; eine Sektion, die
+nicht mehr passt, behält ihre ursprünglichen Treffer. Golden-Set-Sweep 13.10. (alle Varianten in
+einem Prozess, zwei Läufe ohne Budget identisch):
+
+| Budget | Datei / Abschnitt | Ø / p95 / max Chunks | Fragen > 20 Chunks | geänderte Fragen |
+|---|---|---|---|---|
+| 0 (aus) | 276/278 · 137/153 | 12,4 / 27 / 49 | 49 | — |
+| 40 | gleich | 12,3 / 27 / 37 | 49 | 1 |
+| **30** | gleich | 12,2 / 27 / 30 | 48 | 3 |
+| 25 | gleich | 10,6 / 23 / 25 | 24 | 25 |
+| 20 | gleich | 9,3 / 17 / 20 | 0 | 49 |
+| 16 | gleich | 8,8 / 14 / 16 | 0 | 63 |
+| 12 | gleich | 8,3 / 11 / 12 | 0 | 77 |
+
+Die Treffer-Metriken sind blind für das Budget: Die gererankten Treffer bleiben immer drin, also
+fast immer auch der erwartete Abschnitt. Was das Budget kostet, ist Vollständigkeit — entschieden
+wurde deshalb nach den geänderten Fragen. **30** trifft genau die drei Fälle mit gestapelten
+Sektionen und streicht jeweils die fremde: „Ass-Regel“ (37 → 17) und „Zauberspeicher“ (49 → 29)
+verlieren die 22 Chunks von „7.3 Legendäre Artefakte > Monolith“, „Blauer Monolith“ (32 → 27) fünf
+Chunks „Prismenhalter“. Eine einzelne Sektion (≤ `max_chunks` 25) plus Treffer passt weiter.
+**Verworfen:** 25 und kleiner schneiden genau die Aufzählungsfragen, für die es die Expansion gibt —
+bei 20 gehen Waldläufer, Krieger, Mönch, Alchemist und die Magieschulen von 23–28 auf 8 Chunks.
 
 ### Warum die Identitäts-Schicht (Dateiname | Aliase)?
 

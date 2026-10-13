@@ -185,7 +185,10 @@ class SectionExpansionConfig(BaseModel):
     enabled: bool = True
     max_chunks: int = 25             # sections larger than this are not expanded (protects the LLM context)
     top_rank: int = 3                # only expand if a hit is among the first N ranked chunks (0 = no limit)
-    max_total_chunks: int = Field(default=0, ge=0)  # cap on the whole result over all expanded sections (0 = no cap)
+    # Cap on the whole result over all expanded sections (0 = no cap). 30 = one full section (≤ max_chunks)
+    # plus the reranked hits still fits; only a second stacked section is blocked. Golden-set sweep 13.10.
+    # (roadmap 5.6): 49 → 30 max chunks, hits unchanged; 25 or less already cut class/magic sections.
+    max_total_chunks: int = Field(default=30, ge=0)
 
 
 class RulesSlotConfig(BaseModel):
