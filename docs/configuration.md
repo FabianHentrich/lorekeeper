@@ -58,6 +58,7 @@ angepasst — kein Neustart.
 | `conversation.{window_size,condense_question,session_timeout_minutes}` | ✅ | nächste Frage / nächster GC-Lauf |
 | `conversation.answer_history_*`, `condense_model` | ❌ nur YAML | nächster Start |
 | `chunking.*` | ✅ | **erst nach Neu-Indizierung** (die UI warnt) |
+| `ingestion.*` (`skip_sections`, `exclude_patterns`, `pdf`) | ❌ nur YAML | nächster Ingest für geänderte Dateien; für alle erst nach **Alles neu indizieren** |
 | `llm.provider` | Provider-Wechsel in der Chat-Sidebar | sofort |
 | Quellen | Seite ⚙ Sources | Neu-Indizierung nötig (Freigabe `player_visible` sofort) |
 | Prompts | Seite ✏ Prompts | sofort |

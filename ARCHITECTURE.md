@@ -256,7 +256,7 @@ rekursiv (`\n\n` → `\n` → `. ` → ` `) mit Overlap geteilt. Tabellen sind a
 Splits nur an Zeilengrenzen mit wiederholtem Kopf). Zu kleine Chunks werden nur **innerhalb
 derselben Überschrift** mit dem Vorgänger zusammengeführt. Tokens werden mit `len(text) / 3,5`
 geschätzt; `max_chunk_size: 256` ≈ 900 Zeichen hält den Embed-Text unter dem 512-Token-Limit von
-`multilingual-e5-base`. Parameter: [docs/configuration.md](docs/configuration.md) → `chunking`.
+`multilingual-e5-base` (die Schätzung ist grob: 6 Simulations-Tabellen liegen darüber, 13.10.). Parameter: [docs/configuration.md](docs/configuration.md) → `chunking`.
 
 #### Chunk-Metadaten
 
@@ -307,7 +307,8 @@ Rechenbibliothek würde die Vektoren gegenüber dem bestehenden Index leicht ver
 > ganzen Event-Loop.
 
 **Embed-Text ≠ gespeicherter Inhalt:** Embedded wird eine angereicherte Fassung (Dateiname,
-Aliase, Überschriftenpfad + Inhalt), gespeichert wird der Inhalt, den später das LLM sieht.
+Aliase, bei Tabellen die Zeilennamen, Überschriftenpfad + Inhalt), gespeichert wird der Inhalt, den
+später das LLM sieht.
 Begründung: [docs/embedding-strategy.md](docs/embedding-strategy.md).
 
 **ChromaDB** läuft `embedded` im FastAPI-Prozess und persistiert nach `./chroma_data`. Weil die Datenbank im
@@ -321,7 +322,7 @@ Backend-Prozess steckt, darf **kein zweiter Prozess** (z.B. die Ingestion-CLI) g
 Ablauf in `Retriever.retrieve()` — alle Parameter in [docs/configuration.md](docs/configuration.md)
 → `retrieval`, die Begründungen in [docs/embedding-strategy.md](docs/embedding-strategy.md):
 
-1. **Vektorsuche** (immer): Frage embedden, `top_k` (15) Kandidaten aus ChromaDB. Bilder sind
+1. **Vektorsuche** (immer): Frage embedden, `top_k` (20) Kandidaten aus ChromaDB. Bilder sind
    ausgeschlossen. `score_threshold` (0,5) greift auf die Cosine-Scores **vor** einer Fusion.
 2. **BM25** (nur Hybrid): In-Memory-Index (`rank_bm25`), lazy aus der Collection gebaut (einmal,
    auch wenn mehrere Fragen gleichzeitig kommen), nach jeder Änderung der Collection verworfen
@@ -329,7 +330,7 @@ Ablauf in `Retriever.retrieve()` — alle Parameter in [docs/configuration.md](d
 3. **Metadaten-Filter** (Gruppe, Quelle, Spieler-Freigabe) gehen an Vektorsuche und BM25.
 4. **Regelwerk-Slot** (`rules_slot`): eine zweite, kleine Vektorsuche nur in Gruppe `rules` (5
    Kandidaten, derselbe Filter) für Fragen wie „Was bewirkt Ritterlichkeit bei Escanor?“, bei denen
-   die NPC-Datei alle 15 Kandidaten belegt.
+   die NPC-Datei alle Kandidaten belegt.
 5. **Reranking** mit dem Cross-Encoder `mmarco-mMiniLMv2-L12-H384-v1` — auf der GPU über ONNX
    Runtime + DirectML (`reranking.backend: directml`, ~50 ms), sonst mit Warnung auf der CPU. Fällt
    die GPU im Betrieb aus, wechselt der Retriever mit Warnung dauerhaft auf die CPU. Das Laden des

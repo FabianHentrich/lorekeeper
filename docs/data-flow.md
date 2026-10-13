@@ -26,7 +26,7 @@ flowchart TD
     HASH -->|"neu / geändert\n(oder full=true)"| PARSE
 
     PARSE{{"Parser nach Endung"}}
-    PARSE -->|".md"| MD[MarkdownParser\nFrontmatter · Überschriften · Obsidian-Syntax]
+    PARSE -->|".md"| MD[MarkdownParser\nskip_sections · Frontmatter · Überschriften · Obsidian-Syntax]
     PARSE -->|".pdf"| PDF[PDFParser\npymupdf4llm · OCR · Inhaltsverzeichnis]
     PARSE -->|".png/.jpg/.webp"| IMG[ImageMetaParser\nDateiname + Ordnerpfad]
 
@@ -40,7 +40,7 @@ flowchart TD
     BATCH --> DEL["geänderte Dateien:\nalte Chunks löschen"]
     DEL --> EMBED
 
-    EMBED["_build_embed_text()\n① Dateiname | Alias1 | Alias2\n② Überschrift > Unter\n③ Inhalt"]
+    EMBED["_build_embed_text()\n① Dateiname | Alias1 | Alias2\n(Tabellen: Einträge: Zeilennamen)\n② Überschrift > Unter\n③ Inhalt"]
 
     EMBED --> E5["e5-base\n'passage: '+Text\n768-dim. Vektor"]
     E5 --> CHROMA[("ChromaDB\nupsert:\nid · document=Inhalt\nembedding · Metadaten")]

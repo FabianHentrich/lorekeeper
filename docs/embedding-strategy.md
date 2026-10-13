@@ -390,8 +390,9 @@ flowchart TD
 - **Schicht 3 — Inhalt:** der eigentliche Text, Tabellen, Listen.
 - **Nur bei Tabellen — Zeilennamen:** zwischen Identität und Inhalt eine Zeile `Einträge: Dolch,
   Kurzschwert, Langschwert, …` mit der ersten Zelle jeder Tabellenzeile (ohne Kopf- und
-  Trennzeile; Fortsetzungszeilen mit leerer erster Zelle zählen nicht). Tabellen bleiben beim
-  Chunking ganz, ein Vektor ist dann der Durchschnitt aller Zeilen — eine Frage nach **einer** Zeile
+  Trennzeile; Fortsetzungszeilen mit leerer erster Zelle zählen nicht). Tabellen werden erst ab
+  etwa 1,5 × `max_chunk_size` an Zeilengrenzen geteilt — eine Waffentabelle ist ein Chunk, ihr
+  Vektor der Durchschnitt aller Zeilen — eine Frage nach **einer** Zeile
   („Wie viel Schaden macht ein Langschwert?“) traf ihn nur schwach. Der gespeicherte Inhalt bleibt
   unverändert.
 
