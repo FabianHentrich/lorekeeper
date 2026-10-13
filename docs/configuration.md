@@ -302,8 +302,8 @@ neu gebaut.
 |-----------|-----|---------|--------------|
 | `level` | `str` | `INFO` | `DEBUG` \| `INFO` \| `WARNING` \| `ERROR` |
 | `file` | `str\|null` | `logs/lorekeeper.log` | Logdatei; `null` = nur Konsole |
-| `max_bytes` | `int` | `10485760` | Größe vor dem Rotieren (10 MB) |
-| `backup_count` | `int` | `5` | Anzahl rotierter Dateien |
+| `rotate_hour` | `int` | `6` | Eine Logdatei pro Tag; der Tag wechselt zu dieser Stunde, nicht um Mitternacht — ein Spielabend bleibt in einer Datei. Der laufende Tag steht in `file`, vergangene in `lorekeeper.<JJJJ-MM-TT>.log` (Datum = Beginn des Tages). Läuft das Backend um 6 Uhr nicht, wechselt die Datei mit der ersten Zeile danach |
+| `backup_count` | `int` | `30` | So viele vergangene Tage bleiben, ältere werden gelöscht |
 | `suppress` | `list[str]` | siehe YAML | Fremd-Logger auf ERROR setzen (der uvicorn-Zugriffslog steht fest auf WARNING). Die YAML-Liste **ersetzt** die im Code — beide gleich halten (ein Test prüft das) |
 
 ---

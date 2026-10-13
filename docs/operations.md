@@ -222,8 +222,13 @@ der GPU.
 ## Logs
 
 ```powershell
-Get-Content logs\lorekeeper.log -Tail 50
+Get-Content logs\lorekeeper.log -Tail 50                                  # laufender Tag
+Select-String -Path logs\lorekeeper*.log -Pattern 'ERROR' | Select-Object -Last 20   # alle Tage
 ```
+
+Eine Datei pro Tag: Der laufende Tag steht in `lorekeeper.log`, vergangene Tage in
+`lorekeeper.<JJJJ-MM-TT>.log`. Der Tag wechselt um 6 Uhr (`logging.rotate_hour`), damit ein
+Spielabend über Mitternacht in einer Datei bleibt; behalten werden 30 Tage (`logging.backup_count`).
 
 Pro Frage stehen auf INFO: `Question (session=… role=…): '…'` (bei Folgefragen mit `→ condensed
 '…'`, die Fassung, mit der gesucht wurde), die Rerank-Zusammenfassung, ggf. `Section expansion: …`

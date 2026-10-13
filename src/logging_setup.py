@@ -1,10 +1,16 @@
-"""Logging for backend and CLI: console plus rotating file, noisy third-party loggers set to ERROR,
+"""Logging for backend and CLI: console plus one log file per day, noisy third-party loggers set to ERROR,
 uvicorn's access log to WARNING.
+
+The day changes at ``logging.rotate_hour`` (06:00), not at midnight, so a game night stays in one file.
+The current day is written to ``lorekeeper.log``; at the change it becomes ``lorekeeper.<YYYY-MM-DD>.log``
+(the day it started) and only the newest ``backup_count`` days are kept. A backend that isn't running at
+06:00 switches files with its first line after that.
 """
 import io
 import logging
 import sys
-from logging.handlers import RotatingFileHandler
+from datetime import time
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
 from src.config.manager import LoggingConfig
@@ -23,8 +29,29 @@ def _reaches_root(logger: logging.Logger) -> bool:
     return True
 
 
+def _dated_name(default_name: str) -> str:
+    """``lorekeeper.log.2026-10-13`` → ``lorekeeper.2026-10-13.log``: sorts by day and keeps the ``.log``
+    extension, so the file still opens in an editor by double-click."""
+    path = Path(default_name)
+    base, _, day = path.name.rpartition(".")
+    return str(path.with_name(f"{Path(base).stem}.{day}{Path(base).suffix}"))
+
+
+def _daily_file_handler(path: Path, config: LoggingConfig) -> TimedRotatingFileHandler:
+    """File handler that starts a new file every day at ``config.rotate_hour``."""
+    handler = TimedRotatingFileHandler(
+        path,
+        when="midnight",                          # daily — atTime moves the change away from midnight
+        atTime=time(hour=config.rotate_hour),
+        backupCount=config.backup_count,
+        encoding="utf-8",
+    )
+    handler.namer = _dated_name
+    return handler
+
+
 def setup_logging(config: LoggingConfig):
-    """Wire up console + rotating file handlers and silence noisy third-party loggers.
+    """Wire up console + daily file handlers and silence noisy third-party loggers.
 
     Under uvicorn, ``uvicorn.error`` stops at the ``uvicorn`` logger (``propagate=False``, console only),
     so tracebacks of 500s and startup crashes would never reach the file — the file handler is attached
@@ -46,21 +73,16 @@ def setup_logging(config: LoggingConfig):
     console.setFormatter(formatter)
     root.addHandler(console)
 
-    # File handler (rotating)
+    # File handler (one file per day)
     if config.file:
         log_path = Path(config.file)
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        file_handler = RotatingFileHandler(
-            log_path,
-            maxBytes=config.max_bytes,
-            backupCount=config.backup_count,
-            encoding="utf-8",
-        )
+        file_handler = _daily_file_handler(log_path, config)
         file_handler.setFormatter(formatter)
         root.addHandler(file_handler)
 
         uvicorn_error = logging.getLogger(_UVICORN_ERROR)
-        for old in [h for h in uvicorn_error.handlers if isinstance(h, RotatingFileHandler)]:
+        for old in [h for h in uvicorn_error.handlers if isinstance(h, logging.FileHandler)]:
             uvicorn_error.removeHandler(old)  # repeated setup (reload) must not write every line twice
             old.close()
         if not _reaches_root(uvicorn_error):

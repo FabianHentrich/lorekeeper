@@ -246,11 +246,12 @@ class ConversationConfig(BaseModel):
 
 
 class LoggingConfig(BaseModel):
-    """Log level, rotating log file and third-party loggers to quieten."""
+    """Log level, daily log file and third-party loggers to quieten."""
     level: str = "INFO"              # DEBUG | INFO | WARNING | ERROR
     file: str | None = "logs/lorekeeper.log"  # None = console only
-    max_bytes: int = 10_485_760  # 10 MB
-    backup_count: int = 5            # rotated files kept
+    # One file per day; the day changes at this hour (after midnight, so a game night stays in one file)
+    rotate_hour: int = 6
+    backup_count: int = 30           # past days kept (lorekeeper.<YYYY-MM-DD>.log), older ones are deleted
     format: str = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
     # Set to ERROR. Keep in sync with config/settings.yaml — the YAML list replaces this one, it doesn't add to it.
     # httpx2: the HTTP client of the openai SDK (one line per Ollama call); google_genai: "AFC is enabled" per call

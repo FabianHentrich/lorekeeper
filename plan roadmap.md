@@ -611,12 +611,39 @@ Offen: `recategorize` importiert weiterhin das private `_resolve_category` aus d
 
 **Aufwand**: Paket A gering-mittel, B gering, C mittel, D gering. Last 🟢 (nur Code + Tests).
 
-## 8.0 Was passiert wenn man an den Server mehrere Anfragen gleichzeitig bzw. nahe zu glecihzeitig schickt?
+## 8.0 Was passiert wenn man an den Server mehrere Anfragen gleichzeitig bzw. nahe zu glecihzeitig schickt? — 🔄 Gemessen, Entscheidungen offen
 - Relevant wenn ich einen Abend mache und sowohl ich als auch meine spieler Lorekeeper nutzen wollen.
 
 **Bewertung (13.10.)**: Impact Mittel-Hoch — das ist der Einsatzfall am Spielabend, und bisher testet nichts gleichzeitige Anfragen. Aus dem Code bekannt: Ingest- und Eval-Jobs sind gegen Parallelstart gesperrt (409); Embedding und Rerank laufen im Threadpool; ein Ingest-Job läuft in einem Thread **neben** laufenden Fragen auf derselben ChromaDB; ein Provider-Wechsel ersetzt `main_module.provider/generator` mitten in laufenden Anfragen. Zu prüfen: (1) Antwortzeit bei 2–4 gleichzeitigen Fragen — arbeitet Ollama Anfragen nacheinander ab (`OLLAMA_NUM_PARALLEL`), wartet die zweite Frage die ganze erste Generierung; (2) Rerank gleichzeitig auf einer DirectML-Session; (3) Fragen während eines Ingests (BM25 wird erst am Jobende invalidiert); (4) Sessions zweier Rollen gleichzeitig. Vorgehen: Lasttest mit 2–4 parallelen Streams gegen das laufende Backend (eigener `perf`-Test), Messwerte festhalten, erst dann entscheiden, ob z.B. eine Warteschlange oder ein Hinweis in der UI nötig ist.
 
 **Aufwand**: Gering-Mittel (Messung), Fixes je nach Befund. Last 🟡 (Backend + LLM).
+
+**Messung (13.10.)** — Skript in der Scratchpad-Ablage (nicht im Repo): N = 1/2/3/4 gleichzeitige `/query/stream`-Fragen, Rollen gemischt (Spielleiter/Spieler), je 3 Runden, qwen3:14b auf der RX 9070 XT, echter Index. 84 Fragen, **0 Fehler, 0 Abbrüche**; die Log-Zeilen ließen sich über `session=` zuordnen (10.0 bewährt).
+
+| `OLLAMA_NUM_PARALLEL` | N | erstes Token Median / Max | Tempo pro Antwort | Gesamtdurchsatz |
+|---|---|---|---|---|
+| **1** (heute) | 1 | 0,2 / 0,3 s | 162 Zeichen/s | 151 Z/s |
+| 1 | 2 | 1,7 / 2,9 s | 185 Z/s | 148 Z/s |
+| 1 | 3 | 2,5 / 15,8 s | 166 Z/s | 149 Z/s |
+| 1 | 4 | 5,0 / 17,0 s | 161 Z/s | 146 Z/s |
+| 2 | 1 | 0,3 / 0,3 s | 119 Z/s | 114 Z/s |
+| 2 | 2 | 0,6 / 0,6 s | 95 Z/s | 137 Z/s |
+| 2 | 3 | 0,9 / 4,7 s | 88 Z/s | 140 Z/s |
+| 2 | 4 | 2,5 / 12,5 s | 87 Z/s | 147 Z/s |
+
+Befunde:
+1. **Das LLM ist der Engpass, nicht LoreKeeper.** Retrieval läuft parallel sauber (135 ms allein → bis ~450 ms bei 4 gleichzeitig, Rerank auf der GPU 70 → ~300 ms). Ollama beantwortet mit `NUM_PARALLEL=1` eine Frage nach der anderen: wer als Vierter fragt, wartet bis zu 17 s auf das erste Token. Der Gesamtdurchsatz bleibt bei ~150 Zeichen/s, egal wie viele fragen.
+2. **`NUM_PARALLEL=2`** gibt jedem schneller das erste Token (bei 2 gleichzeitig 0,6 statt bis 2,9 s), aber jede Antwort läuft langsamer (~90 statt ~165 Z/s) — **auch wenn nur einer fragt** (119 statt 162 Z/s, −27 %). Kein Gewinn beim Durchsatz. VRAM 14,4 statt 11,8 GB von 15,9 GB (KV-Cache 5,1 statt 2,6 GB) — knapp neben dem Reranker auf derselben GPU.
+3. Gemischte Rollen gleichzeitig: keine Auffälligkeit (Sessions sind rollengebunden, jede Anfrage baut ihren Filter selbst; die Spieler-Sicherheitstests decken den Filter ab).
+4. **Nebenbefund — Autostart von Ollama findet keine Modelle**: Die Ollama-Tray-App nutzt `OLLAMA_MODELS=D:\Users\iQ_3_\.ollama\models` (eigene App-Einstellung, keine Umgebungsvariable). Startet LoreKeeper `ollama serve` selbst, sucht es in `C:\Users\iQ_3_\.ollama\models` (leer) → „model not pulled“, LLM down. Sichtbar erst durch `logs/ollama.log` (vorher DEVNULL). Für die Messung `OLLAMA_MODELS` nur für den Prozess gesetzt.
+5. Nicht gemessen: Fragen während eines laufenden Ingests (🔴, Index-Schreibzugriff) und Provider-Wechsel mitten in Anfragen.
+
+**Entscheidungen (13.10.)**: `OLLAMA_NUM_PARALLEL` bleibt **1**. `OLLAMA_MODELS` setzt der Nutzer vorerst nicht (Ollama wird ohnehin vorher manuell gestartet) — dafür eine klare Warnung im Code. Der Warte-Hinweis im Chat wird eingebaut.
+
+**Vorschlag (vor der Entscheidung)**:
+- **`OLLAMA_NUM_PARALLEL` bei 1 lassen** (Empfehlung): Der häufige Fall (einer fragt) bleibt 27 % schneller, der VRAM hat Luft. Am Spielabend warten Gleichzeitige dafür einige Sekunden.
+- **`OLLAMA_MODELS` als Benutzer-Umgebungsvariable** auf `D:\Users\iQ_3_\.ollama\models` setzen (Nutzer), dann sehen Tray-App und LoreKeepers Autostart dieselben Modelle; in `docs/operations.md` dokumentieren. Dazu im Code: Sieht Ollama **gar kein** Modell, nennt die Warnung `OLLAMA_MODELS` als wahrscheinliche Ursache statt nur `ollama pull`.
+- Optional (eher Feature): Hinweis im Chat, wenn eine Antwort auf das LLM wartet („beantwortet gerade eine andere Frage“) — das Backend kennt die Zahl laufender Generierungen.
 
 ## 9.0 Testabdeckung prüfen
 
@@ -669,7 +696,9 @@ Offen: `recategorize` importiert weiterhin das private `_resolve_category` aus d
 
 **Paket C umgesetzt (13.10.)**: #11 Eine Zeile `Question (session=… role=…): '…'` pro Anfrage auf INFO, bei Folgefragen mit `→ condensed '…'`; die alten Zeilen „Condensed question“/„Condense skipped“ und der 60-Zeichen-Fragetext im Retriever sind weg. #9 Retriever: Hybrid-Kandidaten, „Retrieved N chunks“ und jede einzelne Sektion auf DEBUG, dafür eine `Section expansion: …`-Zusammenfassung auf INFO (die Rerank-Zusammenfassung bleibt); erfolgreiche GETs (Seitenaufrufe, Job-Polling alle 1–1,5 s) auf DEBUG, 5xx als WARNING; eine `suppress`-Liste in Code und `settings.yaml` (neu: `httpx2` — der HTTP-Client des openai-SDK, `google_genai`; vorher griffen `safetensors`/`model_utils` nicht, weil die YAML-Liste die im Code ersetzt), Test hält beide gleich. #10 Zeile von `/query/stream` heißt „stream started after … ms“. #12 Von LoreKeeper gestartetes Ollama schreibt nach `logs/ollama.log` (angehängt, ab 10 MB nach `.1`). Geschätzt (nicht gemessen): ~2–3 statt 5–8 INFO-Zeilen pro Chat-Frage. Tests: Frage einmal, Folgefrage in einer Zeile, Level je Request-Art, Stream-Zeile, `ollama.log`, Expansion-Zusammenfassung, `suppress`-Gleichstand — alle mutationsgeprüft. Doku: `docs/operations.md` → Logs, `docs/configuration.md` → `suppress`. Suite: 653 grün.
 
-Offen: #17 (Rotation unter Windows bei geöffneter Datei) nur beobachten. Hinweis bleibt: altes `logs/lorekeeper.log` mit Testausgaben vom 10.10. einmal löschen/rotieren.
+**Nachtrag (13.10.) — eine Logdatei pro Tag** (Wunsch: nicht Monate in einer Datei): `TimedRotatingFileHandler` statt Größenrotation. Der laufende Tag steht in `logs/lorekeeper.log`, vergangene Tage in `lorekeeper.<JJJJ-MM-TT>.log`; der Tag wechselt um **06:00** (`logging.rotate_hour`), nicht um Mitternacht — ein Spielabend bleibt in einer Datei. 30 Tage bleiben (`logging.backup_count`), `logging.max_bytes` entfällt. Pro Session wurde verworfen: mit `--reload` gäbe es viele Starts pro Tag, und ein Spielabend wäre bei einem Neustart auf zwei Dateien verteilt. Tests: Benennung + Löschen alter Tage, Wechsel um 6 Uhr (mutationsgeprüft). Das alte `logs/lorekeeper.log` (Testausgaben vom 10.10.) ist gelöscht.
+
+Offen: #17 (Umbenennen beim Tageswechsel unter Windows, wenn die Datei anderswo offen ist) nur beobachten.
 
 **Hinweis**: `logs/lorekeeper.log` enthält bis Zeile ~1.225 noch Testausgaben vom 10.10. (Ursache seit 03f5c36 behoben) — einmal rotieren/löschen, damit `grep ERROR` nicht in die Irre führt.
 

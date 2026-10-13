@@ -79,3 +79,32 @@ def test_suppress_list_in_code_matches_settings_yaml():
     shipped = yaml.safe_load((Path(__file__).resolve().parents[2] / "config" / "settings.yaml").read_text(
         encoding="utf-8"))["logging"]["suppress"]
     assert shipped == LoggingConfig().suppress
+
+
+def test_one_file_per_day_named_by_date_and_old_days_deleted(tmp_path, restore_root_logger):
+    """At the day change the current file becomes lorekeeper.<day>.log; only backup_count days stay."""
+    for day in ("2026-09-01", "2026-09-02", "2026-09-03"):
+        (tmp_path / f"lorekeeper.{day}.log").write_text("old", encoding="utf-8")
+    (tmp_path / "feedback.jsonl").write_text("{}", encoding="utf-8")   # other files in logs/ stay untouched
+    log = tmp_path / "lorekeeper.log"
+
+    setup_logging(LoggingConfig(file=str(log), backup_count=2))
+    handler = next(h for h in logging.getLogger().handlers if isinstance(h, logging.FileHandler))
+    logging.getLogger("src.test").info("Spielabend")
+    handler.doRollover()
+
+    names = sorted(p.name for p in tmp_path.iterdir())
+    dated = [n for n in names if n.startswith("lorekeeper.") and n != "lorekeeper.log"]
+    assert len(dated) == 2 and "lorekeeper.2026-09-01.log" not in dated
+    assert "feedback.jsonl" in names and "lorekeeper.log" in names
+    newest = tmp_path / dated[-1]
+    assert "Spielabend" in newest.read_text(encoding="utf-8")
+
+
+def test_the_day_changes_at_rotate_hour_not_midnight(tmp_path, restore_root_logger):
+    """A game night past midnight must stay in one file."""
+    setup_logging(LoggingConfig(file=str(tmp_path / "lorekeeper.log"), rotate_hour=6))
+    handler = next(h for h in logging.getLogger().handlers if isinstance(h, logging.FileHandler))
+
+    from datetime import datetime
+    assert datetime.fromtimestamp(handler.rolloverAt).hour == 6
