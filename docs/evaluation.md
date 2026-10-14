@@ -181,10 +181,16 @@ ersten 200 Zeichen, Listenfragen ließen sich damit nicht beurteilen (seither be
 **Golden-Set-Stichwort veraltet oder zu eng** — die Antwort stimmt (p009 sagt „Zauberpunkte …
 Charakterentwicklung“ statt „Fähigkeitspunkte“, p010, a007, a012, a015); **echte Antwortfehler** —
 Aufzählungen unvollständig (p008 Klassen, p036/p037 Basis-Skills/-Zauber, p049, m056), Fakten falsch
-(k001 Langschwert „20 Gold“ statt 10 G, m048 Titel statt Deckname „Solmar“, p091); **Bilder** (i005–i007)
-— Bild-Chunks sind aus der Suche ausgeschlossen (Roadmap 2). Nebenbei gefunden: Das Regelbuch nennt für
-ein meisterliches Langschwert 40 Gold, nach seiner eigenen Tabelle (10 G × 5) wären es 50
-(`07_gegenstaende.tex`, Zeile 1222 gegen 1190/1217).
+(k001 Langschwert „20 Gold“ statt 10 G, m048 Titel statt Deckname „Solmar“, p091; p094 nennt nur
+„das Fünffache“, nicht die Ausnahme „das Doppelte“ für Verbrauchsgüter); **Bilder** (i005–i007)
+— Bild-Chunks sind aus der Suche ausgeschlossen (Roadmap 2). Nebenbei gefunden: Das Regelbuch nannte für
+ein meisterliches Langschwert 40 Gold, nach seiner eigenen Tabelle (10 G × 5) wären es 50 — mit der
+Preisänderung vom 14.10. (schwere Waffe 15 G, Langschwert meisterlich 75 G) stimmig.
+
+**Golden Set nach der Regelbuch-Änderung vom 14.10.** (Preise, magische Gegenstände): alle 139
+Regelbuch-Fragen gegen das alte und neue PDF geprüft (Stichwörter und Abschnitte vorhanden) und die
+Fragen zu geänderten Regeln von Hand. Angepasst: k001 (Langschwert 15 G statt 10 G), p095 (magische
+Gegenstände sind jetzt käuflich, „teurer“ statt „nicht“).
 
 ---
 

@@ -94,13 +94,13 @@ Offen:
 - ~~Bericht speichert nur 200 Zeichen je Antwort~~ — erledigt 14.10.: ganze Antwort, `id` und erwartete
   Stichwörter im Bericht und auf der Evaluation-Seite. Nächster End-to-End-Lauf zeigt die vollen
   Listenantworten.
-- **Golden-Set-Stichwörter veraltet/zu eng** (p009, p010, a007, a012, a015; p094 erwartet „doppel“, das
-  Regelbuch sagt „das Fünffache“) — Nutzer entscheidet, welche Stichwörter angepasst werden.
+- **Golden-Set-Stichwörter veraltet/zu eng** (p009, p010, a007, a012, a015) — Nutzer entscheidet nach dem
+  nächsten Lauf mit ganzen Antworten. (p094 ist kein Golden-Set-Fehler: „das Doppelte“ für Verbrauchsgüter
+  steht im Regelbuch, die Antwort ließ es aus.) k001 und p095 an die Regelbuch-Änderung vom 14.10. angepasst.
 - **Echte Fehler**: Aufzählungen unvollständig (p008 Klassen, p036/p037, p049, m056), Fakten falsch (k001
   Langschwert-Preis, m048 Deckname, p091 Fehlwurf beim Tränkebrauen).
-- **Regelbuch (Nutzer)**: `07_gegenstaende.tex` Zeile 1222 „meisterliches Langschwert 40 Gold“ — nach Zeile 1190
-  (schwere Waffe 10 G) und 1217 (meisterlich = das Fünffache) wären es 50; die Rüstung im selben Satz (200) stimmt.
-  Nach der Korrektur das PDF neu indizieren.
+- ~~Regelbuch: meisterliches Langschwert 40 statt 50 Gold~~ — vom Nutzer am 14.10. mit neuen Preisen behoben
+  (schwere Waffe 15 G, meisterlich 75 G); Regelbuch neu indiziert (548 Chunks, Suche exakt 274/274).
 
 ### 3.14 Rechenfragen zum Regelwerk unzuverlässig ⏸
 

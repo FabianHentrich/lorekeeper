@@ -972,9 +972,9 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["nicht"]
+    expected_answer_contains: ["teurer"]
     expected_section: "7.4"
-    notes: "Kapitel 7.4 — Beute, Auftragslohn oder Zauberschmied-Werk, keine Ladenware."
+    notes: "Kapitel 7.4 — seit 14.10. käuflich: 'Magische Gegenstände variieren im Preis', seltener und häufig teurer als normale (vorher: nicht käuflich, nur Beute/Auftragslohn)."
 
   # ─────────────────────────────────────────
   # REGELWERK — Einzelne Skills & Zauber (p096–p110)
@@ -1446,9 +1446,9 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Langschwert", "10 G"]
+    expected_answer_contains: ["Langschwert", "15 G"]
     expected_section: "7.4"
-    notes: "Keyword-case + Two-Hop: Die Preistabelle (7.4) listet nur Kategorien (Schwere Waffe 10 G); 'Langschwert = schwer' steht in 7.1.1. '10 G' matcht case-insensitiv auch '10 Gold'."
+    notes: "Keyword-case + Two-Hop: Die Preistabelle (7.4) listet nur Kategorien (Schwere Waffe 15 G seit 14.10., vorher 10 G); 'Langschwert = schwer' steht in 7.1.1. '15 G' matcht case-insensitiv auch '15 Gold'. Distraktor: meisterlich 75 Gold im Beispielsatz."
 
   - id: k002
     question: "Was bedeutet Vorteil und Nachteil beim Würfeln?"
