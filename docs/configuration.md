@@ -219,7 +219,7 @@ Ablauf und Begründungen: [embedding-strategy.md](embedding-strategy.md).
 
 | Schlüssel | Typ | Default | Beschreibung |
 |-----------|-----|---------|--------------|
-| `top_k` | `int` | `20` | Kandidaten aus ChromaDB vor dem Reranking. 15 → 20 am 13.10. (Messung: [embedding-strategy.md](embedding-strategy.md#warum-top_k-20)) |
+| `top_k` | `int` | `20` | Kandidaten aus ChromaDB vor dem Reranking. 15 → 20 am 13.10., mit jina am 14.10. bestätigt (Messung: [embedding-strategy.md](embedding-strategy.md#warum-top_k-20)). Größere Werte kosten Rerank-Zeit (in 32er-Batches, 200 Kandidaten ~0,8 s) |
 | `score_threshold` | `float` | `0.5` | Mindest-Cosine. 0,5 ≈ „ähnlich“; 0,3 liefert fast orthogonales Rauschen — nicht senken |
 | `reranking.enabled` | `bool` | `true` | Cross-Encoder-Reranking |
 | `reranking.model` | `str` | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` (`settings.yaml`: `jinaai/jina-reranker-v2-base-multilingual`) | Reranker (mehrsprachig); das Hugging-Face-Repo muss einen ONNX-Export und `tokenizer.json` enthalten. Auswahl und Messung: [embedding-strategy.md](embedding-strategy.md#warum-jina-reranker-v2-entscheidung-1410) |

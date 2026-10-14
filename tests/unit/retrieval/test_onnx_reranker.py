@@ -174,3 +174,25 @@ def test_pads_with_the_default_without_a_pad_token(monkeypatch):
     created = _load(monkeypatch, tokenizer=FakeLoadedTokenizer(vocab={}))
     OnnxCrossEncoder("some/model", gpu=True)
     assert created["tokenizer"].padding == {}
+
+
+def test_predict_splits_large_pools_into_batches(monkeypatch):
+    """top_k is editable in the UI — 200 candidates in one run filled the GPU next to the LLM (14.10.)."""
+    monkeypatch.setattr(onnx_reranker, "BATCH_SIZE", 4)
+
+    class CountingSession(FakeSession):
+        def __init__(self):
+            super().__init__()
+            self.batch_sizes = []
+
+        def run(self, _outputs, feed):
+            n = len(feed["input_ids"])
+            start = sum(self.batch_sizes)
+            self.batch_sizes.append(n)
+            return [np.array([[float(start + i)] for i in range(n)], dtype=np.float32)]
+
+    session = CountingSession()
+    scores = _encoder(session).predict([["q", str(i)] for i in range(10)])
+
+    assert session.batch_sizes == [4, 4, 2]
+    assert scores == [float(i) for i in range(10)]  # one score per pair, in input order

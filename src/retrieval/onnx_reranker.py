@@ -15,6 +15,11 @@ import numpy as np
 DML_PROVIDER = "DmlExecutionProvider"
 CPU_PROVIDER = "CPUExecutionProvider"
 CPU_ONNX_FILE = "onnx/model.onnx"  # fp32 export — fp16 graphs fail to initialise on the CPU provider
+# Pairs per session run. One batch's VRAM grows ~40 MB per pair (jina fp16, ~450 tokens); next to qwen3:14b
+# (11 GB) 100+ pairs fill the 16 GB card, spill into shared memory (rerank 0.3 → 3–8 s) and once failed with
+# a DirectML error that sent the reranker to the CPU for the rest of the run. 32: top_k 20 stays one batch
+# (~90 ms), 200 pairs take ~0.8 s at +0.5 GB (measured 14.10.; 16: 1.2 s, 50: +1.3 GB).
+BATCH_SIZE = 32
 
 
 class DirectMLUnavailable(RuntimeError):
@@ -69,15 +74,20 @@ class OnnxCrossEncoder:
         self._lock = threading.Lock()  # one GPU queue — concurrent requests run one after another
 
     def predict(self, pairs: list[list[str]]) -> list[float]:
-        """Relevance score per (query, passage) pair, higher = more relevant."""
-        if not pairs:
-            return []
-        encoded = self._tokenizer.encode_batch([(q, p) for q, p in pairs])
-        feed = {
-            "input_ids": np.array([e.ids for e in encoded], dtype=np.int64),
-            "attention_mask": np.array([e.attention_mask for e in encoded], dtype=np.int64),
-            "token_type_ids": np.array([e.type_ids for e in encoded], dtype=np.int64),
-        }
-        with self._lock:
-            logits = self._session.run(None, {k: v for k, v in feed.items() if k in self._input_names})[0]
-        return [float(s) for s in np.asarray(logits).reshape(-1)]
+        """Relevance score per (query, passage) pair, higher = more relevant.
+
+        Runs in batches of ``BATCH_SIZE`` so a large candidate pool (``top_k`` is editable in the UI) can't
+        fill the GPU next to the LLM. Padding is per batch; the attention mask keeps scores independent of it.
+        """
+        scores: list[float] = []
+        for start in range(0, len(pairs), BATCH_SIZE):
+            encoded = self._tokenizer.encode_batch([(q, p) for q, p in pairs[start:start + BATCH_SIZE]])
+            feed = {
+                "input_ids": np.array([e.ids for e in encoded], dtype=np.int64),
+                "attention_mask": np.array([e.attention_mask for e in encoded], dtype=np.int64),
+                "token_type_ids": np.array([e.type_ids for e in encoded], dtype=np.int64),
+            }
+            with self._lock:
+                logits = self._session.run(None, {k: v for k, v in feed.items() if k in self._input_names})[0]
+            scores.extend(float(s) for s in np.asarray(logits).reshape(-1))
+        return scores

@@ -78,7 +78,12 @@ fp16 lädt dort nicht; die Scores weichen um höchstens 0,004 ab. torch nutzt de
 jina lädt in torch nur mit `trust_remote_code` (ausgeführter Code aus dem Modell-Repo) und dem
 Zusatzpaket `einops`. Fällt die GPU erst im Betrieb aus
 (Treiber-Reset, VRAM voll), wechselt er ebenso mit Warnung auf die CPU — für den Rest der Laufzeit,
-statt jede weitere Frage scheitern zu lassen. Der Bi-Encoder bleibt bewusst auf der
+statt jede weitere Frage scheitern zu lassen. Der Reranker rechnet in **Batches zu 32 Paaren**: ein
+Batch belegt ~40 MB VRAM pro Paar, und neben `qwen3:14b` (11 GB) füllten 100+ Paare am 14.10. die
+16-GB-Karte — der Rerank wich in geteilten Speicher aus (0,3 → 3–8 s) und brach einmal mit einem
+DirectML-Fehler ab, wonach er bis zum Neustart auf der CPU lief. Mit 32er-Batches: `top_k` 20 bleibt ein
+Batch (~90 ms), 200 Paare ~0,8 s bei +0,5 GB (16er: 1,2 s; 50er: +1,3 GB). Die Scores weichen zwischen
+Batch-Größen nur im fp16-Rundungsrauschen ab (≤ 0,002). Der Bi-Encoder bleibt bewusst auf der
 CPU: ein Query-Embedding kostet ~0,08 s, und eine andere Rechenbibliothek würde die Vektoren
 gegenüber dem bestehenden Index leicht verschieben.
 
@@ -185,6 +190,12 @@ Was mehr Kandidaten **nicht** lösen: Treffer, die tief liegen (Waffentabelle f�
 Rang 37, „Armbrust“ auf Rang 50 hinter „Armdrücker“) und Fälle, in denen der Reranker den richtigen
 Chunk schon sieht, aber anders gewichtet (Würfelsystem, Erlernen von Zaubern, Verbände) — offen in
 Roadmap 3.10.
+
+**Mit jina erneut gemessen (14.10.)**, Golden Set über den laufenden Backend-Prozess: `top_k` 20 →
+Datei 272, Abschnitt 142/149, MRR 0,468, Platz 1 bei 121 Fragen; 25 → 271/142, verliert Datei m062;
+30 → 270/141, verliert zusätzlich k006 und z001; 40 → 271/141. Keine Frage gewinnt — 20 bleibt. Anlass
+war die Waffentabelle: Für „Wie viel Schaden macht ein Dolch-Angriff mit Stärke 4 bei einer Wurfzahl
+von 12?“ liegt sie auf Vektor-Rang 21–25, ab `top_k` 25 setzte jina sie auf Platz 6.
 
 ### Warum ein Deckel pro Datei?
 

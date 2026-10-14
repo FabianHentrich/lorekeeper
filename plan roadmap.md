@@ -81,10 +81,14 @@ gegen gewählt; Skript-Muster: Rang in den Top 200 + `_predict` je Paar):
   Identitäts-Schicht macht den Ortsnamen zum Suchsignal für die NPC-Datei; Antwort trotzdem richtig.
 - Die 22-Chunk-Sektion „7.3 Legendäre Artefakte > Monolith“ landet bei fremden Regelfragen in den
   Top 3 („Ass-Regel“ p011, „Zauberspeicher“ p101); das Budget aus 5.6 streicht sie nur.
-- **Waffe in einer Rechenfrage** (14.10., auch mit jina): „Wie viel Schaden macht ein Dolch-Angriff
-  mit Stärke 4 bei einer Wurfzahl von 12?“ holt „4.6.1 Kritischer Treffer“ und NPC-Kampfwerte, nicht
-  die Zeile der Waffentabelle (Dolch STÄ + 1/2/3) — die Antwort rät den Grundschaden. Der Rechenteil
-  gehört zu 3.14.
+- **Waffentabelle nur bei der nackten Frage** (diagnostiziert 14.10.): „Wie viel Schaden macht ein
+  Dolch?“ findet „7.1.1 Waffen > Nahkampfwaffen“ (Platz 3), „Langschwert“ ebenso (Platz 2). Jedes
+  weitere Wort kippt es: „… Dolch-Angriff?“, „… Angriff mit einem Dolch?“, „… Dolch bei Stärke 4?“,
+  „Unterschied Dolch Kurzschwert“ — Tabelle nicht unter den 8. Die 9-Zeilen-Tabelle trägt als ein
+  Vektor nur ein schwaches „Dolch“-Signal; Kampf- und Krit-Abschnitte gewinnen. Für die Rechenfrage
+  liegt sie auf Vektor-Rang 21–25; `top_k` 25–40 bringt sie in den Pool, kostet aber im Golden Set
+  (m062, k006, z001) — verworfen ([embedding-strategy.md](docs/embedding-strategy.md#warum-top_k-20)).
+  Strukturelle Wege offen (Entscheidung Nutzer). Der Rechenteil gehört zu 3.14.
 
 ### 3.14 Rechenfragen zum Regelwerk unzuverlässig ⏸
 
@@ -203,6 +207,7 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 | 10.0 | Logging: Fehler mit Traceback in der Datei, wichtige Ereignisse, weniger Rauschen, eine Datei pro Tag, `logs/ollama.log` | 13.10. | `docs/operations.md` |
 | 11.0 | Architektur-Review + Umbau P1–P7 (Recategorize, Fallback-Schalter, Index-Konsistenz, Filter erzwungen, UI-Fehlerpfad, atomares Speichern, Router aufgeteilt) | 13.10. | `ARCHITECTURE.md` 8 |
 | 12.0 | Code-Review seit a3b5d77 + Korrekturen: `stop.ps1` nimmt sich selbst aus dem Prozessbaum (Button wartete 20 s und beendete sich selbst) und lässt fremde Server auf 8000/8501 in Ruhe; `hnsw_ef_search` ≥ 1, `max_total_chunks` ≥ 0; Collection wird beim Start geöffnet (ef_search wirklich beim Start); p50/p95 der Evaluation-Seite wie in `pytest -m perf`; Exaktheitsprüfung zählt Gleichstände an der Top-K-Grenze nicht; Tests für verschachtelte Sektionen und Duplikate (je mutationsgeprüft) | 13.10. | `docs/operations.md`, `docs/evaluation.md`, `docs/testing.md` |
+| 12.2 | Reranker rechnet in Batches zu 32 Paaren: 200 Kandidaten füllten neben qwen3:14b die GPU (Rerank 3–8 s, einmal DirectML-Fehler → bis zum Neustart CPU); jetzt ~0,8 s bei +0,5 GB, `top_k` 20 unverändert ein Batch (~90 ms) | 14.10. | `docs/embedding-strategy.md` |
 | 12.1 | Ingest-Lücke: Ein Lauf über alle Quellen löscht Chunks von Quellen, die nicht mehr in `sources.yaml` stehen (vorher blieben sie durchsuchbar, 13.10.: 36 Chunks); nie bei leerer Quellenliste, nicht bei Einzel-Reindex; beide Schutzbedingungen mutationsgeprüft | 13.10. | `ARCHITECTURE.md` 4, `docs/data-flow.md`, `docs/configuration.md` |
 
 **Live-Prüfungen (13.10., echtes LLM und echter Index)**: Ollama-Autostart findet die Modelle
