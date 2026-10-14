@@ -335,7 +335,7 @@ Ablauf in `Retriever.retrieve()` — alle Parameter in [docs/configuration.md](d
    Tabelle per Namenssuche im gespeicherten Text dazu (derselbe Filter, max. 3) — der Reranker
    entscheidet.
 5. **Reranking** mit dem Cross-Encoder `jina-reranker-v2-base-multilingual` — auf der GPU über ONNX
-   Runtime + DirectML (`reranking.backend: directml`, ~110 ms), sonst mit Warnung auf der CPU. Fällt
+   Runtime + DirectML (`reranking.backend: directml`, 70–160 ms pro Frage), sonst mit Warnung auf der CPU. Fällt
    die GPU im Betrieb aus, wechselt der Retriever mit Warnung dauerhaft auf die CPU. Das Laden des
    Modells läuft im Threadpool, nie auf dem Event-Loop.
 6. **Soft-Cap je Datei** (`max_per_source`, 3): erst divers füllen, dann aus dem Überlauf
@@ -475,7 +475,7 @@ Das Backend lauscht nur auf `127.0.0.1:8000`; der Browser spricht ausschließlic
 
 | Methode | Endpoint | Beschreibung |
 |---------|----------|--------------|
-| POST   | `/query`                    | Frage stellen, Antwort + Quellen (synchron). Felder: `question`, `session_id`, `role`, `metadata_filters`, `top_k`, `top_k_rerank`, `max_per_source`, `hybrid_search` |
+| POST   | `/query`                    | Frage stellen, Antwort + Quellen (synchron). Felder: `question` (höchstens 4.000 Zeichen, sonst 422), `session_id`, `role`, `metadata_filters`, `top_k`, `top_k_rerank`, `max_per_source`, `hybrid_search` |
 | POST   | `/query/stream`             | Wie `/query`, Antwort als SSE-Stream (siehe unten) |
 | POST   | `/feedback`                 | 👍/👎 zu einer Antwort → Zeile in `logs/feedback.jsonl` (letzte Zeile je `message_id` gilt) |
 | GET    | `/feedback`                 | Aktuelle Bewertung je Antwort, neueste zuerst |
@@ -500,7 +500,7 @@ Das Backend lauscht nur auf `127.0.0.1:8000`; der Browser spricht ausschließlic
 | GET    | `/stats`                    | Chunk-Anzahl |
 | GET/PUT | `/config`                  | UI-editierbare Settings lesen / Teil-Update (→ `settings.local.yaml`, live angewendet) |
 | GET/PUT | `/eval/qa-pairs`           | Golden Set lesen / speichern |
-| POST   | `/eval/preview`             | Eine Frage gegen den Retriever (ohne LLM), mit `role`; weggelassene `top_k`/`top_k_rerank`/`max_per_source` = Wert aus `settings.yaml` |
+| POST   | `/eval/preview`             | Eine Frage gegen den Retriever (ohne LLM), mit `role` (`question` ≤ 4.000 Zeichen wie bei `/query`); weggelassene `top_k`/`top_k_rerank`/`max_per_source` = Wert aus `settings.yaml` |
 | GET    | `/eval/chunks/files`        | Indizierte Dateien einer Quelle (Chunk-Inspector) |
 | GET    | `/eval/chunks`              | Alle Chunks einer Datei in Dokumentreihenfolge |
 | POST   | `/eval/search-exactness`    | Vektorsuche gegen exakte Suche über alle Golden-Fragen (gleicher Filter und `top_k` wie im Chat; nur lesend; 409 während eines Ingests) |
@@ -560,8 +560,8 @@ Referenzsystem (Gaming-PC): AMD Ryzen 5 5600X (6 Kerne), 32 GB RAM, AMD Radeon R
 
 | Teil | Läuft auf | Modell | Kennzahl |
 |------|-----------|--------|----------|
-| LLM | GPU (Ollama) | `qwen3:14b`, Kontext 16k (`OLLAMA_CONTEXT_LENGTH=16384`), `OLLAMA_KEEP_ALIVE=1h` | ~11 GB VRAM, erster Token ~1 s, Antwort ~3–4 s |
-| Reranker | GPU (ONNX Runtime + DirectML) | `jina-reranker-v2-base-multilingual` (fp16) | ~110 ms für 20 Kandidaten, ~1,7 GB VRAM (CPU-Rückfall fp32: Sekunden) |
+| LLM | GPU (Ollama) | `qwen3:14b`, Kontext 16k (`OLLAMA_CONTEXT_LENGTH=16384`), `OLLAMA_KEEP_ALIVE=1h` | ~11 GB VRAM, erster Token ~2 s, Antwort p50 ~7,6 s (Länge entscheidet, ~54 Token/s; 14.10.) |
+| Reranker | GPU (ONNX Runtime + DirectML) | `jina-reranker-v2-base-multilingual` (fp16) | 70–160 ms pro Frage (20 Kandidaten, live 14.10.), ~1,7 GB VRAM (CPU-Rückfall fp32: Sekunden) |
 | Embedding | CPU | `multilingual-e5-base` | ~0,08 s pro Frage |
 | Fallback | Cloud | Gemini `gemini-2.5-flash` | nur bei Bedarf — kostenpflichtig, Budgets stoppen nicht automatisch |
 

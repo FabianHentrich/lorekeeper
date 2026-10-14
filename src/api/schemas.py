@@ -3,14 +3,18 @@ provider and config).
 """
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.api.access import Role
+
+# Longest question the API accepts (~1,100 tokens) — room for a pasted paragraph, but a whole document can't
+# reach the search: before the entry-slot cap (roadmap 13.0) 12,000 characters crashed the backend.
+MAX_QUESTION_CHARS = 4000
 
 
 class QueryRequest(BaseModel):
     """Payload for submitting a question to the RAG pipeline."""
-    question: str
+    question: str = Field(max_length=MAX_QUESTION_CHARS)  # longer → 422
     session_id: str | None = None
     # "player": the backend restricts the search to player_visible sources itself (metadata_filters can only narrow)
     role: Role = "game_master"

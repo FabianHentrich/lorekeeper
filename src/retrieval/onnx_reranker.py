@@ -4,7 +4,8 @@ or on the CPU as the fallback.
 Loads the model's published ONNX export and tokenizer from the Hugging Face cache and returns raw logits
 (no activation). No torch: the model in use (jina-reranker-v2) only loads in torch with
 ``trust_remote_code`` and an extra package, ONNX needs neither. Measured on the RX 9070 XT (14.10.,
-roadmap 3.10): jina fp16 20 pairs in ~26 ms on the GPU; the fp32 export on the CPU ~2.1 s, scores
+roadmap 3.10): jina fp16 20 pairs of ~220 tokens in ~26 ms on the GPU (~90 ms for 20 chunk-sized
+pairs, 70–160 ms per live query); the fp32 export on the CPU ~2.1 s, scores
 within 0.004 of the GPU. The fp16 export does not load on ONNX Runtime's CPU provider, so the CPU always
 uses ``CPU_ONNX_FILE``.
 """
@@ -71,7 +72,7 @@ class OnnxCrossEncoder:
         if gpu and self._session.get_providers()[0] != DML_PROVIDER:
             raise DirectMLUnavailable(f"session fell back to {self._session.get_providers()}")
         self._input_names = {i.name for i in self._session.get_inputs()}
-        self._lock = threading.Lock()  # one GPU queue — concurrent requests run one after another
+        self._lock = threading.Lock()  # one queue per session (GPU or CPU) — concurrent batches take turns
 
     def predict(self, pairs: list[list[str]]) -> list[float]:
         """Relevance score per (query, passage) pair, higher = more relevant.

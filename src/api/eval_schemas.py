@@ -4,9 +4,10 @@ Retrieval parameters left at None take the value from settings.yaml (resolved by
 """
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.api.access import Role
+from src.api.schemas import MAX_QUESTION_CHARS
 
 
 class QAPair(BaseModel):
@@ -29,7 +30,7 @@ class QAPairList(BaseModel):
 
 class RetrievalPreviewRequest(BaseModel):
     """One question against the retriever without the LLM."""
-    question: str
+    question: str = Field(max_length=MAX_QUESTION_CHARS)  # same bound as /query
     # None = the value from settings.yaml (retrieval.top_k / reranking.top_k_rerank / reranking.max_per_source)
     top_k: int | None = None
     top_k_rerank: int | None = None

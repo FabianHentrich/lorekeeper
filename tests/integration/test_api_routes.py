@@ -780,6 +780,14 @@ def test_query_rejects_malformed_filters_with_422(client, fake_services, bad):
 
 
 
+def test_query_rejects_a_question_longer_than_the_limit_with_422(client, fake_services):
+    """A pasted document crashed the backend via the entry slot (roadmap 13.0) — the API stops it first."""
+    from src.api.schemas import MAX_QUESTION_CHARS
+    for path in ("/query", "/query/stream"):
+        assert client.post(path, json={"question": "a" * (MAX_QUESTION_CHARS + 1)}).status_code == 422, path
+    assert client.post("/query", json={"question": "a" * MAX_QUESTION_CHARS}).status_code == 200
+
+
 # ─── LLM rebuild (roadmap 11.0 P2) ─────────────────────────────────────────────
 
 @pytest.fixture

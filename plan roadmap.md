@@ -19,13 +19,14 @@ mehrere Minuten, nicht parallel zur Simulation). Ein Golden-Set-Lauf dauert ~1 m
 
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 1 | 3.10 Restliche Abschnitt-Misses | Gering-Mittel — Regelfragen präziser | Mittel | 🟡 | Einzelfälle, je Golden-Set-Lauf prüfbar |
+| 1 | 13.0 Korrekturen aus dem Code-Review (Befund 1 kritisch) | Hoch — lange Frage legt das Backend lahm | Gering | 🟢 | Kappung + API-Grenze, Tests; danach Golden Set (🟡) |
+| 2 | 3.10 Restliche Abschnitt-Misses | Gering-Mittel — Regelfragen präziser | Mittel | 🟡 | Einzelfälle, je Golden-Set-Lauf prüfbar |
 | — | 3.14 Rechenfragen zum Regelwerk ⏸ | Mittel — falsche Zahlen bei Regel-Rechnungen | Mittel-Hoch | 🟡 | Vorerst so gelassen (14.10.); nur mit Denken zuverlässiger, das kostet 15–40 s |
 | — | 3.2 Session-History ⏸ | Unklar | Mittel | 🟢 | Erst entscheiden, ob gespeicherte Sessions Nutzen haben |
-| — | 3.4 Kommentar zur Bewertung ⏸ | Gering | Gering | 🟢 | Feature |
+| 3 | 3.4 Kommentar zur Bewertung ⏸ | Gering | Gering | 🟢 | Feature |
 | — | 2 Bilder im Chat (Phase 1/2) ⏸ | Mittel / Nice-to-have | Mittel / Mittel-Hoch | 🔴/🟡 | Feature |
 | — | 4.2 Internet-Zugriff (Tailscale) ⏸ | Mittel | Gering | 🟢 | Vorher die Vertrauensgrenze der API klären |
-| — | 3.5 Wikilink-Expansion ⏸ | Mittel | Mittel | 🔴 | Neuer Suchweg — muss in den Spy-Test |
+| 4 | 3.5 Wikilink-Expansion ⏸ | Mittel | Mittel | 🔴 | Neuer Suchweg — muss in den Spy-Test |
 | — | 11.0 P8 Dienste-/Reranker-Modul (optional) | Gering | Mittel | 🟢 | Nur zusammen mit Feature-Arbeit |
 
 **Entschieden 14.10.**: Der Fähigkeitsbericht bleibt für Spieler freigegeben — er ist eine
@@ -109,6 +110,26 @@ Antworten (Token-Budget aufgebraucht), Schattenklinge 3/3 „X nicht angegeben�
 Waffentabelle für Waffenfragen zuverlässig in den Kontext (3.10). Vorher eine feste Liste von
 Rechenfragen mit Sollwerten anlegen, damit Varianten über mehrere Läufe vergleichbar sind.
 
+### 13.0 Code-Review seit 194be1b — Korrekturplan (14.10.)
+
+Review der vier Commits (jina, Regelkern, Batches, Eintrags-Slot) durch den Review-Agenten; Befund 1
+selbst nachgestellt (eigener Prozess, In-Memory-Chroma).
+
+| # | Befund | Schwere | Status | Korrektur |
+|---|---|---|---|---|
+| 1 | Lange Frage legt das Backend lahm: der Eintrags-Slot macht aus jedem Wort und jeder 2–3-Wort-Folge eine `$contains`-Klausel, ohne Obergrenze. 4.000 Zeichen (1.081 Namen) → `InternalError: Expression tree is too large` (500), 12.000 Zeichen → Prozess stirbt ohne Log (Stack Overflow) — im Heimnetz-Modus für jeden Spieler auslösbar | **Kritisch** | nachgestellt | Namen kappen (z. B. 60) + `max_length` für `question` in `QueryRequest`/`RetrievalPreviewRequest` (Grenze an der API, 422), Test mit sehr langer Frage; Golden Set einmal nachmessen |
+| 2 | Kosten der Namenssuche ∝ Namen × Chunks (je Klausel ein Durchlauf über die Collection): bei 20k Chunks ~1 s für eine normale Frage (synthetisch gemessen) | Mittel | gemessen (synthetisch) | Kappung aus 1 begrenzt es; in `embedding-strategy.md` festhalten, bei wachsendem Index neu messen |
+| 3 | Eintrags-Treffer umgehen `score_threshold` — gewollt (sie werden gefunden, weil ihr Vektor schwach ist), aber undokumentiert | Gering | Code gelesen | Satz in der Doku + Kommentar, Test mit Score unter der Schwelle |
+| 4 | Veraltete Docstrings: `retriever.py` (Modul, `retrieve()` — Eintrags-Slot und Stufe `entry` fehlen), Lock-Kommentar in `onnx_reranker.py` („GPU-Queue“, gilt jetzt auch für die CPU) | Gering | Code gelesen | nachziehen |
+| 5 | Doku-Kleinigkeiten: `onnx_file` fehlt in der UI-Tabelle, drei verschiedene Rerank-Zeiten ohne Kontext (26/90/110 ms), „7 Tests rot“ (Agent maß 5 + 1) | Gering | Code gelesen | angleichen |
+| 6 | Regelkern geht an jede Rolle — heute unkritisch (Regelbuch spielerfreigegeben), ein künftiger Spielleiter-Inhalt dort würde aber ungeprüft an Spieler gehen | Info | — | Satz in `prompts.md`: nur spielerfreigegebene Inhalte |
+
+Als Fehlalarm ausgeschlossen: Sonderzeichen in `$contains` (keine Injektion, `%`/`_` keine Platzhalter),
+Lock pro Batch, GPU→CPU-Rückfall-Race, Reihenfolge von `HF_HUB_OFFLINE`, alter Wert `backend: torch`.
+
+Dazu aus dem Performance-Review: `start.ps1` hielt `TimeWait`-Reste geschlossener Verbindungen für einen
+laufenden Server und startete das Backend nicht — behoben (nur `-State Listen`, wie `stop.ps1`).
+
 ### 2 Bilder im Chat ⏸
 
 Heute werden Bilder nur als Dateiname + Ordner indiziert, und der Retriever schließt Bild-Chunks
@@ -122,7 +143,7 @@ kostenpflichtige Alternative; Beschreibung als Inhalt des Bild-Chunks, Dateiname
 Bild-Ausschluss im Retriever aufheben, Golden-Set-Fragen i001–i010 prüfen. **Vorher klären**: aus PDFs
 extrahierte Bilder liegen in einem temporären Ordner, der nach dem Parsen gelöscht wird — die
 Extraktion muss an einen dauerhaften Ort schreiben. Verworfen: CLIP-Embeddings (eigener
-Vektorraum, eigene Collection), manuelle Captions (selten vorhanden).
+Vektorraum, eigene Collection), manuelle Captions (selten vorhanden). -> ist das überhaupt nötig? beschreiben der Bilder scheint mir ein unnötiger schritt zu sein. einfacher wäre es durch Metadaten und dateiname die ingesten zu machen und dann das zuzurodnen. Zb datei heißt Karte Arkenfeld. dann sollte es bei fragen zur Karte von AKrtenfeld oder generell bei Arken feld auftauchen.  Genauso bei Charakteren die dann im dateinamen auftauchen oder gegeständen.
 
 **Phase 2 — Inline-Anzeige**: `GET /files/{path}` (nur innerhalb der Quellordner) statt lokaler
 Pfade — nötig, sobald die UI von einem anderen Gerät geöffnet wird; System-Prompt erlaubt Bild-
@@ -163,6 +184,9 @@ Dienste-Modul `src/services.py` (Globale, `install_llm`, Health-Loop; beseitigt 
 und vereinfacht die Test-Fixtures) und Reranker + GPU-Rückfall als `src/retrieval/reranker.py`. Nur
 zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 
+
+## xx.0 unter quelle die Chunks öffnen und einsehbar machen
+Idee wenn man es nochmal aus der Quelle nachlesen will kann man das einfach in den quellen amchen. dazu brauchen wir keinen eigenen viewer da nur die chunks, die sowieso geladen wurden, da einsehbar sind. macht das sinn?
 ---
 
 ## Erledigt

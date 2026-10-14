@@ -266,7 +266,9 @@ Folgen aus 2–3 Wörtern (erster Buchstabe groß, Bindestrich-Wörter auch in T
 Tabellenzelle `|**Name**|` im gespeicherten Text gesucht (ChromaDB `where_document`, mit dem Filter der
 Anfrage). Treffer zählen nur, wenn der Name die **erste Zelle einer Zeile** ist — „Dolch“ trifft nicht
 „Dolch der Schatten“ und nicht eine Beute-Tabelle mit Dolch in der zweiten Spalte. Bis zu
-`max_chunks` Tabellen kommen in den Rerank-Pool, mit ihrer echten Cosine-Ähnlichkeit als Score.
+`max_chunks` Tabellen kommen in den Rerank-Pool, mit ihrer echten Cosine-Ähnlichkeit als Score — **ohne**
+`score_threshold`: Sie werden gerade gesucht, weil ihr Vektor schwach ist; die einzige Schranke ist der
+Reranker.
 
 **Kein reservierter Platz** (anders als der Regelwerk-Slot): Der Slot feuert bei 32 von 274
 Golden-Set-Fragen, in 27 schafft es die Tabelle von selbst unter die 8. Von den übrigen 5 sind 4
@@ -278,7 +280,13 @@ Gemessen 14.10. (frisch gebauter Index, gleicher Inhalt wie der laufende, jina):
 Abschnitte 142 → **143**/149 (+x004 „Phönixfeder bei Thalion“), nichts verloren, Datei 272/274
 unverändert. Elf Tabellenfragen vollständig gefunden 5 → **8**/11; Listenfragen („Welche
 Nahkampfwaffen gibt es?“ 9/9) unverändert. `max_chunks` 1, 2 und 3 maßen gleich. Kosten: ~75 ms pro
-Frage (p50, max ~200 ms). Offen: die Rechenfrage „Dolch, STÄ 4, Wurfzahl 12“ und „Unterschied Dolch und
+Frage (p50, max ~200 ms). Die Kosten wachsen mit **Namen × Chunks** — jeder Name ist eine
+`$contains`-Klausel, und jede durchsucht die Collection (synthetisch gemessen: bei 5.000 Chunks ~5 ms
+pro Klausel, eine normale Frage bei 20.000 Chunks ~1 s). Deshalb höchstens **60 Namen** pro Frage, vom
+Anfang der Frage (Golden Set braucht höchstens 48, p95 32): Ohne Grenze ließen ~1.000 Klauseln (eine
+Frage mit ~4.000 Zeichen) die Abfrage scheitern und ~3.000 den Backend-Prozess abstürzen (Code-Review
+14.10., Roadmap 13.0); dazu nimmt die API höchstens 4.000 Zeichen pro Frage an. Wächst der Index stark,
+die Zeit neu messen. Offen: die Rechenfrage „Dolch, STÄ 4, Wurfzahl 12“ und „Unterschied Dolch und
 Kurzschwert“ — der Slot holt die Tabelle, jina bewertet Krit-Regeln bzw. die Schurken-Sektion höher;
 „Langbogen“ — die PDF-Zelle heißt `**l**<br>**Langbogen**` (Parser-Artefakt). Groß-/Kleinschreibung
 innerhalb des Namens zählt: „ap-trank“ findet „AP-Trank“ nicht.
@@ -412,7 +420,7 @@ Roadmap 2.
 flowchart LR
     Q([Frage]) --> BE["Bi-Encoder\ne5-base 'query: '+Text\n~20–80 ms"]
     BE -->|"768-dim.\nFrage-Vektor"| CS["ChromaDB\nCosine-Suche\ntop_k=20\n~5 ms"]
-    CS -->|"20 Kandidaten\n(Score = 1 − Cosine-Distanz)"| CE["Cross-Encoder\njina-reranker-v2\n~110 ms GPU (DirectML)\nCPU-Rückfall: Sekunden"]
+    CS -->|"20 Kandidaten\n(Score = 1 − Cosine-Distanz)"| CE["Cross-Encoder\njina-reranker-v2\n70–160 ms GPU (DirectML)\nCPU-Rückfall: Sekunden"]
     CE -->|"top_k_rerank=8\nnach Relevanz"| LLM([LLM-Kontext])
 
     style BE fill:#dbeafe,stroke:#3b82f6

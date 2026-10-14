@@ -1,7 +1,7 @@
-"""Retrieval: embed → vector search (+ BM25 and RRF) → score threshold → rerank with per-file cap and
+"""Retrieval: embed → vector search (+ BM25 and RRF) → score threshold → entry slot → rerank with per-file cap and
 rules slot → section expansion.
 
-Player-mode safety: every extra search (rules slot) keeps the request's ``where`` filter, and expansion only
+Player-mode safety: every extra search (rules slot, entry slot) keeps the request's ``where`` filter, and expansion only
 loads chunks of files that already passed it (tests/integration/test_player_mode_security.py). Image chunks
 are excluded (filename stubs). The score threshold applies to cosine scores before fusion. The cross-encoder
 runs on the GPU via DirectML when configured and drops to the CPU for the rest of the run if the GPU fails.
@@ -31,6 +31,10 @@ _RERANK_MAX_TOKENS = 512  # cross-encoder input limit (query + chunk); longer pa
 _SLOT_MIN_PLACES = 3  # with fewer final chunks one rules chunk would push out most of the answer's context
 _ENTRY_WORD = re.compile(r"[^\W\d_][\w'’-]*")
 _ENTRY_MAX_WORDS = 3  # longest table entry looked up as a run of words ("Dolch der Schatten")
+# Each name is one $contains clause in a single Chroma query: ~1,000 clauses (a ~4,000-character question)
+# fail with "Expression tree is too large", ~3,000 crash the process (stack overflow, code review 14.10.,
+# roadmap 13.0). Golden-set questions need at most 48 (p95 32), so 60 changes no normal question.
+_ENTRY_MAX_NAMES = 60
 
 
 def _to_chunk(item: dict[str, Any]) -> "RetrievedChunk":
@@ -89,6 +93,8 @@ def _entry_names(query: str) -> list[str]:
     Hyphenated words count whole and per part ("Dolch-Angriff" → also "Dolch", "AP-Trank" stays whole).
     Table cells are written "**Dolch**", so a lower-case question ("dolch") still matches; the store only
     keeps names that really are a row's first cell, so stray words cost one lookup, not a wrong hit.
+    At most ``_ENTRY_MAX_NAMES`` names, from the start of the question — a pasted long text must not turn
+    into thousands of query clauses.
     """
     words = _ENTRY_WORD.findall(query)
     names: list[str] = []
@@ -105,6 +111,8 @@ def _entry_names(query: str) -> list[str]:
         name = name.strip("-'’")
         if len(name) >= 3 and (name := name[0].upper() + name[1:]) not in out:
             out.append(name)
+            if len(out) == _ENTRY_MAX_NAMES:
+                break
     return out
 
 
@@ -230,11 +238,11 @@ class Retriever:
         """Search the vector store for chunks most relevant to the given query.
 
         Vector hits below the score threshold are dropped first; with hybrid search (config or request flag)
-        BM25 hits are fused in via Reciprocal Rank Fusion. The rerank picks ``top_k_rerank`` chunks with the
-        per-file cap and the rules slot, then section expansion may replace fragments with their whole
-        section. Parameters left at None take the config value. ``metadata_filters`` is applied to every
-        search path. When ``timings`` is given, per-stage durations in ms are written into it (embed,
-        search, bm25, rerank, expand).
+        BM25 hits are fused in via Reciprocal Rank Fusion; the entry slot adds tables the question names a
+        row of. The rerank picks ``top_k_rerank`` chunks with the per-file cap and the rules slot, then
+        section expansion may replace fragments with their whole section. Parameters left at None take the
+        config value. ``metadata_filters`` is applied to every search path. When ``timings`` is given,
+        per-stage durations in ms are written into it (embed, search, bm25, entry, rerank, expand).
         """
         stage_ms = timings if timings is not None else {}
         top_k = top_k or self.config.top_k
@@ -336,7 +344,9 @@ class Retriever:
         chunks = [_to_chunk(item) for item in results]
 
         # 2b. Entry slot: tables with a row the question names join the rerank pool (same filter as the
-        # request — player mode included). Only with the reranker, which decides whether they stay.
+        # request — player mode included). Only with the reranker, which decides whether they stay. No
+        # score_threshold on purpose: these tables are looked up by name *because* their vector is weak —
+        # the reranker is the only gate (roadmap 3.10/13.0).
         entry = self.config.entry_slot
         if entry.enabled and entry.max_chunks and self.config.reranking.enabled and (names := _entry_names(query)):
             t0 = time.perf_counter()

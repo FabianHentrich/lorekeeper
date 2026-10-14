@@ -462,6 +462,11 @@ def test_preview_rejects_malformed_filters_with_422(client, bad):
 
 
 
+def test_preview_rejects_a_question_longer_than_the_limit_with_422(client):
+    from src.api.schemas import MAX_QUESTION_CHARS
+    assert client.post("/eval/preview", json={"question": "a" * (MAX_QUESTION_CHARS + 1)}).status_code == 422
+
+
 def test_eval_is_refused_while_an_ingest_runs(client, tmp_eval_dir):
     """Numbers from a half-built index would be meaningless."""
     from src.api import sources_routes as routes

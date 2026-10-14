@@ -171,7 +171,14 @@ Obergrenze“), Dolch 1/3 richtig (12) und 2/3 **leere Antworten** (das Denken v
 Option (Roadmap 3.14).
 
 Vier Lore-Fragen (Arkenfeld, Escanor, Orden der letzten Dämmerung, Malek) blieben gleich gut, kein
-Regeltext in den Antworten; Antwortzeit +0–2 s.
+Regeltext in den Antworten.
+
+**Kosten** (gemessen 14.10., Prompt ganz ohne Cache, gleiche Chunks): Der Regelkern ist ~1.100 Token
+(Prompt p50 2.884 → 3.980 Token), die Prompt-Verarbeitung steigt von 1,34 auf 1,89 s — **~0,56 s mehr
+bis zum ersten Token**. Im Betrieb kommt der Systemprompt aus Ollamas Prefix-Cache, der Regelkern
+nicht: Er steht hinter den Quellen, die sich mit jeder Frage ändern. Ihn vor die Quellen zu stellen
+würde ihn cachebar machen, die Antwortqualität dort ist aber nicht gemessen (im Systemprompt, also
+weit weg von der Frage, wirkte er nicht).
 
 Zwei Formulierungen kamen aus der Messung: „bei jedem Würfel einschließlich W4 (eine 4 auf dem W4 →
 erneut werfen)“ — ohne das Beispiel meinte das Modell, beim W4 gelte die Ass-Regel nicht; „den
@@ -191,7 +198,9 @@ sind ein gemeinsamer Pool für AP und MP.
 
 **Grenzen**: Regeln *anwenden und rechnen* bleibt ohne Denken unzuverlässig (Roadmap 3.14, am 14.10.
 so gelassen). Beim Dolch fehlt zusätzlich die Waffentabelle im Kontext — die Frage holt den Abschnitt
-„Kritischer Treffer“ und NPC-Werte (Roadmap 3.10). **Pflege**: Der Block ist eine Kopie
+„Kritischer Treffer“ und NPC-Werte (Roadmap 3.10). **Nur spielerfreigegebene Inhalte**: Der Block geht an jede Rolle, am Spieler-Filter vorbei — heute
+unkritisch (das Regelbuch ist für Spieler freigegeben), aber Spielleiter-Wissen gehört nie hinein; kein
+Test würde es abfangen. **Pflege**: Der Block ist eine Kopie
 des Regelbuchs — ändert sich dort eine Regel, muss er von Hand nachgezogen werden.
 
 ---

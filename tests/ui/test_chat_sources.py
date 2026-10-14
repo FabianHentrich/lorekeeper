@@ -61,3 +61,10 @@ def test_sidebar_warns_when_the_reranker_fell_back_to_the_cpu(fake_backend, monk
     monkeypatch.setitem(conftest.PAYLOADS, "/sidebar-state", state)
     at = open_page("chat").run()
     assert any("Reranker läuft auf der CPU" in w.value for w in at.sidebar.warning)
+
+
+def test_chat_input_is_bounded_like_the_api(fake_backend):
+    """The field stops at the API's MAX_QUESTION_CHARS — a pasted document never reaches the backend (13.0)."""
+    from src.api.schemas import MAX_QUESTION_CHARS
+    at = open_page("chat").run()
+    assert at.chat_input[0].proto.max_chars == MAX_QUESTION_CHARS

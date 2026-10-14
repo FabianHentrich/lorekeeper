@@ -52,7 +52,7 @@ angepasst — kein Neustart.
 | Bereich | Über die UI | Wirkung |
 |---|---|---|
 | `retrieval.top_k`, `score_threshold`, `reranking.{enabled,top_k_rerank,max_per_source}`, `hybrid.*` | ✅ | nächste Frage |
-| `retrieval.section_expansion.*`, `rules_slot.*`, `entry_slot.*`, `reranking.{model,backend}` | ❌ nur YAML | nächster Start |
+| `retrieval.section_expansion.*`, `rules_slot.*`, `entry_slot.*`, `reranking.{model,onnx_file,backend}` | ❌ nur YAML | nächster Start |
 | `llm.ollama` / `llm.gemini`: `temperature`, `top_p`, `max_tokens`, `timeout` | ✅ | nächste Frage |
 | `llm.fallback_enabled` | ✅ | nächste Frage (Provider, Condense-Provider und Generator werden beim Speichern neu gebaut) |
 | `conversation.{window_size,condense_question,session_timeout_minutes}` | ✅ | nächste Frage / nächster GC-Lauf |
@@ -236,7 +236,7 @@ Ablauf und Begründungen: [embedding-strategy.md](embedding-strategy.md).
 | `section_expansion.max_total_chunks` | `int` (≥ 0) | `30` | Obergrenze für das ganze Ergebnis über alle expandierten Sektionen (0 = keine). Sektionen werden in der Reihenfolge ihres besten Treffers expandiert, solange die Summe passt; eine, die nicht mehr passt, behält ihre ursprünglichen Treffer. 30 lässt eine volle Sektion samt Treffern durch und blockiert nur eine zweite gestapelte — Messung in [embedding-strategy.md](embedding-strategy.md#warum-section-expansion) |
 | `rules_slot.enabled` | `bool` | `false` (`settings.yaml`: `true`) | Fragen mit Vault-Entität *und* Regelbegriff („Was bewirkt Ritterlichkeit bei Escanor?“) füllen alle Kandidaten mit der Datei der Entität. Der Slot sucht zusätzlich nur in Gruppe `rules` (mit demselben Filter wie die Anfrage, der Spieler-Modus bleibt dicht); diese Kandidaten werden mit gereranked, aber nicht in den Haupt-Pool gemischt. Fehlt in den Top-`top_k_rerank` ein `rules`-Chunk, ersetzt der beste mit Score ≥ `min_score` den schwächsten — höchstens einer, und nur ab 3 finalen Chunks (bei 1–2 würde er den Großteil des Kontexts verdrängen) |
 | `rules_slot.candidates` | `int` | `8` (`settings.yaml`: `5`) | Größe der Regelwerk-Suche |
-| `entry_slot.enabled` | `bool` | `false` (`settings.yaml`: `true`) | Nennt die Frage einen Tabelleneintrag (Wörter und Folgen aus 2–3 Wörtern; „Dolch-Angriff“ zählt auch als „Dolch“), kommt die Tabelle mit dieser Zeile in den Rerank-Pool — mit demselben Filter wie die Anfrage. Der Reranker entscheidet, ob sie bleibt; kein reservierter Platz. ~75 ms pro Frage. Begründung und Messung: [embedding-strategy.md](embedding-strategy.md#warum-ein-eintrags-slot) |
+| `entry_slot.enabled` | `bool` | `false` (`settings.yaml`: `true`) | Nennt die Frage einen Tabelleneintrag (Wörter und Folgen aus 2–3 Wörtern; „Dolch-Angriff“ zählt auch als „Dolch“), kommt die Tabelle mit dieser Zeile in den Rerank-Pool — mit demselben Filter wie die Anfrage. Höchstens 60 Namen pro Frage (fest im Code, Roadmap 13.0). Der Reranker entscheidet, ob sie bleibt; kein reservierter Platz. ~75 ms pro Frage. Begründung und Messung: [embedding-strategy.md](embedding-strategy.md#warum-ein-eintrags-slot) |
 | `entry_slot.max_chunks` | `int` | `3` | Höchstens so viele Tabellen pro Frage (0 = aus); 1–3 maßen gleich |
 | `rules_slot.min_score` | `float` | `-5.0` (`settings.yaml`: `-4.0`) | Mindest-Rerank-Score (roher Logit). Golden Set im selben Prozess: aus 132/153 Abschnitte, x001–x008 1/8 · −3: 133, 2/8 · **−4: 136, 5/8** · −5/−6/−8: 136, 5/8, aber mehr Regel-Chunks in reinen Lore-Fragen (64 → 91 → 119 → 136 von 138) |
 

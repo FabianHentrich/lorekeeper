@@ -74,7 +74,7 @@ Der Spieler-Modus darf Spielern nie Spielleiter-Inhalte geben. Drei Ebenen:
   die Struktur statt der Daten: Die Expansion ohne Filter war mit diesen Testdaten dicht (sie bleibt in
   der Quelle des Treffers), der Spy-Test schlägt trotzdem an. Mutationsgeprüft für alle Wege; für den
   Eintrags-Slot liegt eine Spielleiter-Tabelle mit dem Köder-Eintrag „Fluchklinge“ in den Testdaten
-  (ohne Filter: 7 Tests rot, 14.10.).
+  (ohne Filter im Retriever oder im Store: je 5 Sicherheitstests rot, Code-Review 14.10.).
 
   Positiv geprüft wird außerdem, dass der Slot für Spieler wirklich greift: Belegt der
   Charakterbogen die oberen Plätze, holt er einen Chunk aus der freigegebenen Regel-Quelle — nie aus

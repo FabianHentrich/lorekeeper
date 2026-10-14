@@ -334,6 +334,13 @@ class TestEntrySlot:
         assert {"x": "y"} in where["$and"]  # the request's filter (player mode) goes with it
 
     @pytest.mark.asyncio
+    async def test_no_score_threshold_for_named_tables(self, embed_service, vectorstore):
+        """Found by name because the vector is weak — a cosine of 0.1 still reaches the reranker (13.0)."""
+        weak = _slot_hit("weapons", "rules", "regeln.pdf", 0.1)
+        ret = self._retriever(embed_service, vectorstore, [1.0, 0.5, 0.1, 3.0], table=weak)
+        assert (await ret.retrieve("Was macht der Hammer?"))[0].heading == "weapons"
+
+    @pytest.mark.asyncio
     async def test_reranker_can_drop_it(self, embed_service, vectorstore):
         ret = self._retriever(embed_service, vectorstore, [1.0, 0.5, 0.1, -2.0])
         assert [r.heading for r in await ret.retrieve("Was macht der Glücksstein?")] == ["n0", "n1"]
@@ -361,6 +368,14 @@ class TestEntryNames:
     def test_lower_case_question_and_whole_hyphenated_entry(self):
         assert {"Dolch", "AP-Trank"} <= set(_entry_names("was macht ein AP-Trank, und ein dolch"))
         assert "Ap-trank" in _entry_names("ap-trank")  # only the first letter is raised — cells are matched exactly
+
+    def test_a_pasted_document_yields_a_bounded_number_of_names(self):
+        """Each name is one Chroma clause: ~1,000 failed the query, ~3,000 crashed the process (13.0)."""
+        from src.retrieval.retriever import _ENTRY_MAX_NAMES
+        text = " ".join(f"Wort{i} Nummer{i} Eintrag{i}" for i in range(4000))  # ~70,000 characters
+        names = _entry_names(text)
+        assert len(names) == _ENTRY_MAX_NAMES
+        assert names[0] == "Wort0"  # from the start of the question
 
     def test_runs_stop_at_three_words_and_no_duplicates(self):
         names = _entry_names("Dolch der Schatten Dolch der Schatten Klinge")

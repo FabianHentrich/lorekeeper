@@ -459,7 +459,10 @@ for msg in _visible:
 # ─── Chat Input ───────────────────────────────────────────
 _placeholder = "Frag nach den Regeln..." if _ROLE == roles.PLAYER else "Stelle eine Frage über deine Welt..."
 _chat_blocked = _ROLE == roles.PLAYER and not _player_source_ids
-if prompt := st.chat_input(_placeholder, disabled=_chat_blocked):
+# Same bound as the API (MAX_QUESTION_CHARS in src/api/schemas.py) — the field stops typing instead of the
+# backend answering 422
+_MAX_QUESTION_CHARS = 4000
+if prompt := st.chat_input(_placeholder, disabled=_chat_blocked, max_chars=_MAX_QUESTION_CHARS):
     if _category_filter == "__BLOCKED__":
         st.error("Bitte mindestens eine Quellenart in der Seitenleiste auswählen.")
         st.stop()

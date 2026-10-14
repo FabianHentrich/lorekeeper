@@ -36,7 +36,9 @@ if ($Server) {
 }
 
 function Test-PortInUse($port) {
-    $conn = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
+    # Only a listening socket means a running server. Without -State Listen, TimeWait remnants of closed
+    # connections (owner process 0, ~2 min after many requests) made the start report "already running".
+    $conn = Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue
     return $null -ne $conn
 }
 
