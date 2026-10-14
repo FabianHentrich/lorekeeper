@@ -11,7 +11,12 @@ Umsetzung im `git log`. Die Nummern bleiben stabil — die Doku verweist auf sie
 erledigt. Was an Qualität offen ist, sind Einzelfälle (3.10, 3.15) oder bewusst zurückgestellt (3.14)
 — sie werden nur bei Anlass im Spiel angefasst. **Regressionsprüfung** nach größeren
 Inhaltsänderungen (Regelbuch, Vault): Golden Set + End-to-End-Lauf + Holdout
-([evaluation.md](docs/evaluation.md)), kein Tuning. Features sind wieder dran — Reihenfolge unten.
+([evaluation.md](docs/evaluation.md)), kein Tuning.
+
+**Feature-Runde 14.10. abgeschlossen:** 3.16 Chunks unter der Quelle, 2 Bilder im Chat, 3.4 Kommentar zur
+Bewertung, 3.15-Fixes aus dem 👎 (Folgefragen, Schreibweise), 12.3 Auto-Reload, 12.4 `stop.ps1`;
+3.5 Wikilink-Expansion gemessen und verworfen, 3.2 gestrichen. Neu bewertet am 14.10. abends — die
+Liste unten.
 
 ---
 
@@ -24,12 +29,16 @@ End-to-End-Lauf ~35 min (🟡).
 
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
+| 1 | Regressionsprüfung nach dem 14.10. (End-to-End + Holdout) | Mittel — Absicherung | Gering | 🟡 | Regelbuch (Klassenübersicht), Schreibweise vor der Suche, Folgefrage-Wörter und zwei Vault-Re-Indizes kamen nach dem letzten E2E-Lauf; laut Regel oben fällig (~40 min, nur Messen) |
+| 2 | 3.10 Rerank-Paar mit Dateiname/Überschrift | Mittel (ungewiss) | Gering | 🟡 | Der Reranker sieht nur den Chunk-Text; kurze Chunks ohne Namen sind chancenlos (m048 „Deckname: Solmar“ — Chunk existiert, Antwort falsch). Allgemeiner Hebel, nur mit Golden Set + Holdout + E2E |
+| 3 | 3.10 Schattenorden-Kontext (27 > 25 Chunks) | Gering-Mittel | Gering | 🟡 | Kernfrage zu einer Hauptfraktion (m003, m055) bekommt die Datei nicht mehr ganz; Treffer-Metriken sehen es nicht |
+| 4 | 3.15 Tippfehler-Toleranz | Gering-Mittel | Mittel | 🟡 | Am Spieltisch wird auf dem Handy getippt; einziger offener 👎-Fall. Riskant (falsche Korrekturen) — nur gemessen, mit Wörterbuch der Schreibweisen |
+| — | 2 Bilder — Rest (Dateiname-Rückfall, PDF-Bilder) | Gering | Mittel | 🔴 | Einbettungen laufen; Rest nur bei Bedarf |
+| — | 3.10 / 3.15 übrige Einzelfälle | Gering | — | 🟡 | Nur bei Anlass im Spiel |
 | — | 3.5 Wikilink-Expansion ⏸ | Gering | Mittel | 🔴 | Gemessen 14.10.: kein Gewinn, −1/−2 Dateien; nur bei konkreten Link-Fragen neu prüfen |
-| — | 2 Bilder — Rest (Dateiname-Rückfall, PDF-Bilder) | Gering | Mittel | 🔴 | Einbettungen laufen (14.10.); Rest nur bei Bedarf |
 | — | 4.2 Internet-Zugriff (Tailscale) ⏸ | Mittel | Gering | 🟢 | Nur zusammen mit einem Login für die API |
-| — | 3.10 / 3.15 Einzelfälle | Gering | — | 🟡 | Nur bei Anlass im Spiel |
 | — | 3.14 Rechenfragen ⏸ | Mittel | Mittel-Hoch | 🟡 | Nur mit Denken zuverlässig (14–41 s); später mit größerem Modell neu prüfen |
-| — | 11.0 P8 Dienste-/Reranker-Modul | Gering | Mittel | 🟢 | Nur zusammen mit Feature-Arbeit an diesen Stellen |
+| — | 11.0 P8 Dienste-/Reranker-Modul | Gering | Mittel | 🟢 | Nur zusammen mit Feature-Arbeit an diesen Stellen (2 berührt das Reranker-Modul) |
 
 **Entschieden 14.10.**: 3.2 Session-History gestrichen (Nutzer) — Sessions bleiben im RAM; bei einem
 Wissenstool steht die Antwort im Regelbuch/Vault, nicht im Verlauf. Der Fähigkeitsbericht bleibt für Spieler freigegeben (Entscheidungshilfe).
@@ -91,11 +100,18 @@ nichts, eine direkt erreichbare API schon.
 
 ### 3.10 Restliche Abschnitt-Misses — Einzelfälle
 
-Golden Set 14.10.: Datei 272/274, Abschnitt 143/149, Suche exakt. Umgesetzt und verworfen: Tabelle
+Golden Set 14.10. abends: Datei 272/274, Abschnitt 143/149. Suche 273/274 exakt — nach zwei
+In-place-Re-Indizes des Vaults weicht m039 ab (Treffer unverändert); nach dem nächsten Re-Index erneut
+prüfen, bei weiteren Abweichungen den Vault einmal komplett neu aufbauen. Umgesetzt und verworfen: Tabelle
 „Erledigt“ und [embedding-strategy.md](docs/embedding-strategy.md). Offen, nur bei Anlass:
 - **Simulationsberichte** z003, z006, z009, z012 (und z001 mit richtiger Antwort) — die Berichts-Chunks
   sagen weder „Schwierigkeit“ noch „Simulation“; besser in den Berichten selbst lösen (Überschriften).
 - **p009** Zauberpunkte — Abschnitt-Miss im Golden Set, die Antwort ist seit dem Regelkern richtig.
+- **Rerank-Paar ohne Namen** (Priorität 2): `_rerank` bewertet `[Frage, Chunk-Text]`; Dateiname und
+  Aliase stehen nur im Embed-Text. Ein kurzer Kopfabschnitt wie „Deckname: Solmar · Faktion: Bund der
+  Sonne“ (Escanor) nennt die Person nicht und verliert gegen jeden Text, der „Escanor“ enthält. Variante:
+  `Dateiname | Überschrift` vor den Text im Rerank-Paar. Risiko: verschiebt alle Rerank-Scores
+  (Regelwerk-Slot `min_score` −4 neu prüfen).
 - **Name in fremder Identität** — „Wer ist Arkenfeld?“ holt vor allem „Der Armdrücker von Arkenfeld“;
   Antwort trotzdem richtig.
 - **Monolith-Sektion** (22 Chunks) landet bei fremden Regelfragen in den Top 3 (p011, p101).
@@ -121,7 +137,8 @@ Offen, nur bei Anlass:
   „Überschusschaden“ aus dem Simulationsbericht. Möglicher Weg: unbekannte Wörter auf das nächste Wort
   aus dem Wörterbuch der Schreibweisen abbilden (Abstand 1–2, lange Wörter) — riskanter, nur gemessen.
 - **Fakten**: k001 Langschwert „20,5 Gold“ (Spalte „Preis“ der Simulations-Rangliste statt Preistabelle
-  7.4); m048 Deckname „Solmar“ (steht ohne Überschrift neben einem Bild — würde von 2 mit profitieren);
+  7.4); m048 Deckname „Solmar“ (Kopfabschnitt ohne Überschrift und Namen — 2 half nicht, siehe 3.10
+  „Rerank-Paar ohne Namen“);
   p091 Tränke-Fehlwurf (1W8-Tabelle fehlt); x008 Heimkehrpfennig („Kultpriester“ gilt, Antwort nennt
   Thalion).
 
