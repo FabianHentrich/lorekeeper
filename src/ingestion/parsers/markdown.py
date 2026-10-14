@@ -25,6 +25,11 @@ _EMBED_MARK = re.compile(_EMBED_START + "([^" + _EMBED_END + "]+)" + _EMBED_END)
 CALLOUT_PATTERN = re.compile(r"^>\s*\[!(\w+)\]\s*(.*)$", re.MULTILINE)
 TAG_PATTERN = re.compile(r"(?:^|\s)#([A-Za-zÀ-ÿ\w]+)(?=\s|$)")
 HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
+HTML_COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
+# Lines without content: a horizontal rule ("---", "* * *"), an Obsidian block ID ("^bauer-l1", the target of
+# "[[Note#^bauer-l1]]") or nothing but tags ("#Ort #Arkenfeld" — already in ``obsidian_tags``). "#Tag" has no
+# space after the "#", so a heading never matches.
+_MARKUP_LINE = re.compile(r"^(?:[ \t]*([-*_])(?:[ \t]*\1){2,}|[ \t]*\^[A-Za-z0-9-]+|(?:[ \t]*#[^\s#]+)+)[ \t]*$")
 
 
 class MarkdownParser(BaseParser):
@@ -53,12 +58,16 @@ class MarkdownParser(BaseParser):
 
         Extracts YAML frontmatter (like 'aliases') and inline tags into metadata objects
         which are then assigned to every extracted slice. The text content is cleaned
-        of Obsidian-specific markdown artifacts before being split.
+        of Obsidian-specific markdown artifacts before being split. An empty note gives an empty list.
         """
         text = file_path.read_text(encoding="utf-8")
         post = frontmatter.loads(text)
 
         fm_metadata = dict(post.metadata) if post.metadata else {}
+        # Reserved for the image pipeline: a note's own "images: 2" would land in the chunk metadata that the
+        # API splits as a path list (500 for every answer with that note)
+        for reserved in ("images", "image_embeds"):
+            fm_metadata.pop(reserved, None)
         aliases = fm_metadata.pop("aliases", [])
         if isinstance(aliases, str):
             aliases = [aliases]
@@ -68,7 +77,7 @@ class MarkdownParser(BaseParser):
         wikilinks = self._extract_wikilinks(content)
         content = self._clean_obsidian_syntax(content)
 
-        sections = self._split_by_headings(content)
+        sections = self._split_with_levels(content)
 
         source_file = file_path.name
         source_path = str(file_path.resolve())
@@ -76,10 +85,11 @@ class MarkdownParser(BaseParser):
         # Lead images: embeds above the first sub-heading (portrait, map under the title) stand for the whole
         # note — every section carries them, so "Zeig mir Malek" shows the portrait even when the answer came
         # from "Erscheinung" (live 14.10.: per-section only, no question about Malek/Arkenfeld got an image)
-        # (text before the first heading and the first H1 section — a second H1 is another topic)
+        # (text before the first heading and the section of a first heading that is a real H1 — a second H1
+        # is another topic; in a note without H1 the first H2 is an ordinary section, not the title)
         lead_images: list[str] = []
-        for hierarchy, section_content in sections:
-            if len(hierarchy) > 1:
+        for hierarchy, levels, section_content in sections:
+            if hierarchy and levels != [1]:
                 break
             lead_images += _EMBED_MARK.findall(section_content)
             if hierarchy:
@@ -87,7 +97,7 @@ class MarkdownParser(BaseParser):
 
         documents = []
         pending_images: list[str] = []  # embeds of a section without text — the portrait under a title
-        for heading_hierarchy, section_content in sections:
+        for heading_hierarchy, _, section_content in sections:
             images = pending_images + _EMBED_MARK.findall(section_content) + lead_images  # own ones first
             section_content = _EMBED_MARK.sub("", section_content).strip()
             if not section_content:
@@ -116,14 +126,22 @@ class MarkdownParser(BaseParser):
             last = documents[-1].metadata
             last["image_embeds"] = list(dict.fromkeys(last.get("image_embeds", []) + pending_images))
 
-        if not documents:
+        fallback_text = _EMBED_MARK.sub("", content).strip()
+        embeds = _EMBED_MARK.findall(content)
+        # An empty note gives no chunk: an "(empty)" one still matched questions about its name through the
+        # file name in the embedded text and showed up empty in the chat
+        if not documents and (fallback_text or embeds):
+            # A note of headings and images only ("# Weltkarte" + the map) — its images must not get lost
+            fallback_metadata = {"aliases": aliases, "obsidian_tags": tags, "wikilinks": wikilinks}
+            if embeds:
+                fallback_metadata["image_embeds"] = list(dict.fromkeys(embeds))
             documents.append(ParsedDocument(
-                content=_EMBED_MARK.sub("", content).strip() or "(empty)",
+                content=fallback_text or file_path.stem,  # only an image: the note's name is its text
                 source_file=source_file,
                 source_path=source_path,
                 document_type="markdown",
                 heading_hierarchy=[],
-                metadata={"aliases": aliases, "obsidian_tags": tags, "wikilinks": wikilinks},
+                metadata=fallback_metadata,
             ))
 
         return documents
@@ -171,7 +189,13 @@ class MarkdownParser(BaseParser):
         """Strip or convert Obsidian-specific UI formatting into readable plain text.
 
         This prevents things like `> [!abstract]` from appearing verbatim within context window text.
+        HTML comments (``<!-- sim:end -->``) and content-free lines (``_MARKUP_LINE``, outside code fences) are
+        dropped: a section ending in a table + "---" left the rule as a chunk of its own — the heading path
+        and nothing else, so it ranked for the note's name and showed up empty in the chat (14.10.: 251 of
+        4414 chunks were only "---", 5 of them in Arkenfeld.md).
         """
+        text = HTML_COMMENT_PATTERN.sub("", text)
+
         # Image embeds → placeholder; ``parse`` takes them per section into ``image_embeds``
         text = IMAGE_EMBED_PATTERN.sub(lambda m: _EMBED_START + m.group(1).strip() + _EMBED_END, text)
 
@@ -196,7 +220,15 @@ class MarkdownParser(BaseParser):
                 cleaned.append("")
             else:
                 cleaned.append(line)
-        text = "\n".join(cleaned)
+
+        # After the callout markers are gone, so "> ---" inside a callout counts too
+        kept, in_code = [], False
+        for line in cleaned:
+            if line.lstrip().startswith(("```", "~~~")):
+                in_code = not in_code
+            if in_code or not _MARKUP_LINE.match(line):
+                kept.append(line)
+        text = "\n".join(kept)
 
         # Remove inline tags (keep word, remove #)
         text = re.sub(r"(?:^|\s)#([A-Za-zÀ-ÿ\w]+)", r" \1", text)
@@ -204,10 +236,17 @@ class MarkdownParser(BaseParser):
         return text.strip()
 
     def _split_by_headings(self, text: str) -> list[tuple[list[str], str]]:
-        """Slice the cleaned text into hierarchical blocks based on header levels.
+        """Slice the cleaned text into (heading hierarchy, content) blocks — see ``_split_with_levels``."""
+        return [(hierarchy, content) for hierarchy, _, content in self._split_with_levels(text)]
+
+    def _split_with_levels(self, text: str) -> list[tuple[list[str], list[int], str]]:
+        """Slice the cleaned text into (heading hierarchy, heading levels, content) blocks.
 
         As it iterates through lines, it tracks the current H1 -> H2 -> H3 depth.
         When a new heading is encountered, it flushes the previous block and updates the path.
+        An image embed inside a heading line ("## Karte ![[Karte.png]]") leaves the title and opens the
+        section's content, so the image stays with that section; a heading of nothing but embeds is no
+        heading, only its images count.
         """
         sections = []
         current_hierarchy: list[str] = []
@@ -220,28 +259,35 @@ class MarkdownParser(BaseParser):
             if line.lstrip().startswith(("```", "~~~")):
                 in_code = not in_code
             heading_match = None if in_code else HEADING_PATTERN.match(line)
-            if heading_match:
-                # Save previous section
-                if current_content_lines:
-                    sections.append((list(current_hierarchy), "\n".join(current_content_lines)))
-                    current_content_lines = []
-
-                level = len(heading_match.group(1))
-                title = heading_match.group(2).strip()
-
-                # Adjust hierarchy based on level
-                while current_levels and current_levels[-1] >= level:
-                    current_levels.pop()
-                    if current_hierarchy:
-                        current_hierarchy.pop()
-
-                current_levels.append(level)
-                current_hierarchy.append(title)
-            else:
+            if not heading_match:
                 current_content_lines.append(line)
+                continue
+            embeds = "".join(m.group(0) for m in _EMBED_MARK.finditer(heading_match.group(2)))
+            title = _EMBED_MARK.sub("", heading_match.group(2)).strip()
+            if not title:
+                current_content_lines.append(embeds)
+                continue
+
+            # Save previous section
+            if current_content_lines:
+                sections.append((list(current_hierarchy), list(current_levels), "\n".join(current_content_lines)))
+                current_content_lines = []
+
+            level = len(heading_match.group(1))
+
+            # Adjust hierarchy based on level
+            while current_levels and current_levels[-1] >= level:
+                current_levels.pop()
+                if current_hierarchy:
+                    current_hierarchy.pop()
+
+            current_levels.append(level)
+            current_hierarchy.append(title)
+            if embeds:
+                current_content_lines.append(embeds)
 
         # Last section
         if current_content_lines:
-            sections.append((list(current_hierarchy), "\n".join(current_content_lines)))
+            sections.append((list(current_hierarchy), list(current_levels), "\n".join(current_content_lines)))
 
         return sections

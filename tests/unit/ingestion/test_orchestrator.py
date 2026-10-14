@@ -307,6 +307,41 @@ class TestRunIncremental:
         assert IMAGE_PATH_SEPARATOR not in expected
         assert all("image_embeds" not in c.metadata for c in vs.upserted)
 
+    def test_image_embed_with_a_path_resolves_relative_to_the_source(self, tmp_path, monkeypatch):
+        """Ultrareview 13.1 #1: two files named 'Karte.png' — the written path decides, the name is the
+        fallback."""
+        orch, f = self._setup(tmp_path, monkeypatch)
+        for folder in ("Orte", "Spielleiter"):
+            (tmp_path / folder).mkdir()
+            (tmp_path / folder / "Karte.png").write_bytes(b"png")
+        f.write_text("# Arkenfeld\nEine Stadt.\n![[Spielleiter/Karte.png]]\n", encoding="utf-8")
+        vs = FakeVectorStore()
+        orch.run(vectorstore=vs)
+
+        images = [c.metadata.get("images") for c in vs.upserted if c.document_type == "markdown"]
+        assert images == [str((tmp_path / "Spielleiter" / "Karte.png").resolve())]   # not Orte/, first by name
+
+    def test_image_search_has_the_scope_of_the_indexing(self, tmp_path, monkeypatch):
+        """Ultrareview 13.1 #6 (player invariant): excluded images and a file source's parent folder — which
+        may belong to a game-master source — never resolve."""
+        from src.config.manager import config_manager
+        vault = tmp_path / "vault"
+        (vault / "Geheim").mkdir(parents=True)
+        (vault / "Geheim" / "Plan.png").write_bytes(b"png")
+        (vault / "Karte.png").write_bytes(b"png")
+        note = vault / "Arkenfeld.md"
+        note.write_text("# Arkenfeld\nEine Stadt.\n![[Plan.png]]\n![[Karte.png]]\n", encoding="utf-8")
+        monkeypatch.setattr(config_manager.settings.ingestion, "sources", [
+            _folder_source(vault, id="vault", exclude_patterns=["Geheim/*"]),
+            _folder_source(note, id="handout"),
+        ])
+        vs = FakeVectorStore()
+        IngestionOrchestrator(config=config_manager).run(vectorstore=vs)
+
+        images = {c.metadata["source_id"]: c.metadata.get("images")
+                  for c in vs.upserted if c.document_type == "markdown"}
+        assert images == {"vault": str((vault / "Karte.png").resolve()), "handout": None}
+
     def test_unchanged_file_is_skipped(self, tmp_path, monkeypatch):
         """Verify a file whose hash matches the store is neither parsed nor re-embedded."""
         orch, f = self._setup(tmp_path, monkeypatch)

@@ -126,7 +126,7 @@ an, die die Port-Freigabe überstimmt.
   `ui/LoreKeeper.py`); ein anderer Server auf 8000/8501 bleibt unberührt. Während einer Indizierung verweigert beides (ein harter Abbruch kann
   einen halb geschriebenen Index hinterlassen); `.\stop.ps1 -Force` bricht sie trotzdem ab. Die
   Ausgabe des Buttons steht in `logs/stop.log`. `.\stop.ps1 -List` zeigt nur, welche Prozesse
-  gestoppt würden. Kindprozesse zählen nur, wenn sie **nach** ihrem Elternprozess gestartet wurden:
+  gestoppt würden — auch während einer Indizierung. Kindprozesse zählen nur, wenn sie **nach** ihrem Elternprozess gestartet wurden:
   Windows vergibt PIDs neu, und am 14.10. hielt das Skript so den Browser, den `start.ps1` geöffnet
   hatte, für ein Kind des UI-Prozesses und beendete ihn hart.
 - **Nicht die Fenster schließen**: Das X beendet den Prozess, bevor sein Shutdown läuft — ein von

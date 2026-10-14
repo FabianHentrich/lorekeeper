@@ -253,8 +253,10 @@ Details: [docs/parsing.md](docs/parsing.md).
 
 Standard ist `heading_aware`: jede Überschriften-Sektion wird ein Chunk; zu lange Sektionen werden
 rekursiv (`\n\n` → `\n` → `. ` → ` `) mit Overlap geteilt. Tabellen sind atomar (kein Overlap,
-Splits nur an Zeilengrenzen mit wiederholtem Kopf). Zu kleine Chunks werden nur **innerhalb
-derselben Überschrift** mit dem Vorgänger zusammengeführt. Tokens werden mit `len(text) / 3,5`
+Splits nur an Zeilengrenzen mit wiederholtem Kopf). Ein zu kleines Stück einer Sektion (eine
+Beschriftung wie `- L2` vor ihrer Tabelle) geht an das nächste Stück, das letzte an das vorige; Stücke
+ohne Buchstaben/Ziffern fallen weg. Zu kleine Chunks werden nur **innerhalb derselben Überschrift** mit
+dem Vorgänger zusammengeführt. Tokens werden mit `len(text) / 3,5`
 geschätzt; `max_chunk_size: 256` ≈ 900 Zeichen hält den Embed-Text unter dem 512-Token-Limit von
 `multilingual-e5-base` (die Schätzung ist grob: 6 Simulations-Tabellen liegen darüber, 13.10.). Parameter: [docs/configuration.md](docs/configuration.md) → `chunking`.
 

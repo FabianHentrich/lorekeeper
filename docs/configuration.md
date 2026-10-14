@@ -173,7 +173,7 @@ danach „🔄 Alle Dokumente neu indizieren“ oder die Quelle neu indizieren.
 | `strategy` | `str` | `heading_aware` | `heading_aware` \| `recursive` \| `fixed_size` |
 | `max_chunk_size` | `int` | `256` | Höchstgröße in geschätzten Tokens (`len(text) / 3,5`, ≈ 900 Zeichen); gilt für Fließtext, Tabellen bleiben ganz |
 | `chunk_overlap` | `int` | `30` | Überlappung beim Teilen von Fließtext; Tabellen nie. Muss **kleiner als `max_chunk_size`** sein — sonst käme das Teilen nicht voran (Speichern wird mit 422 und Begründung abgelehnt) |
-| `min_chunk_size` | `int` | `20` | Kleinere Chunks werden mit dem Vorgänger zusammengelegt — **nur bei gleicher Überschrift**, sonst würden die Überschrift-Metadaten über den halben Inhalt lügen |
+| `min_chunk_size` | `int` | `20` | Ein kleineres Stück einer Sektion geht an das nächste Stück (Beschriftung vor einer Tabelle), das letzte an das vorige; kleinere Chunks werden mit dem Vorgänger zusammengelegt — **nur bei gleicher Überschrift**, sonst würden die Überschrift-Metadaten über den halben Inhalt lügen |
 
 | Strategie | Verhalten | Geeignet für |
 |-----------|-----------|--------------|

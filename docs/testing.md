@@ -65,7 +65,10 @@ Der Spieler-Modus darf Spielern nie Spielleiter-Inhalte geben. Drei Ebenen:
   Cap-Backfill, Section Expansion ohne Top-Rank-Grenze, Regelwerk-Slot ohne Mindest-Score (seine
   eigene Suche in Gruppe `rules` darf die Spielleiter-Regeln nie erreichen), Vektor- und
   Hybrid-Suche, Condense mit einer Köder-Folgefrage. Weder Chunks, Quellen noch der LLM-Prompt
-  dürfen ein Geheimnis enthalten.
+  dürfen ein Geheimnis enthalten. **Bilder**: Ein Köder-Porträt liegt nur in der Spielleiter-Lore;
+  Charakterbogen und eine freigegebene **Datei-Quelle** (`Aushang.md`, ihr Ordner enthält alle anderen
+  Quellen) betten denselben Namen ein — ihre Chunks dürfen kein `images` bekommen, und kein Bild einer
+  Spieler-Antwort darf außerhalb der freigegebenen Quellen liegen (Ultrareview 13.1, mutationsgeprüft).
 
   Dazu ein **Spy-Test** (`test_every_store_access_of_a_player_request_carries_the_restriction`):
   Er zeichnet jeden Aufruf von Vektorsuche, BM25-Suche, Eintrags-Slot (`get_table_entries`) und

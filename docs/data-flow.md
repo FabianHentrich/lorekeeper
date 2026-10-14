@@ -34,7 +34,8 @@ flowchart TD
     PDF --> CHUNK
     IMG --> CHUNK
 
-    CHUNK["chunk_documents()\nheading_aware: Abschnitt → Chunk\nTabellen atomar (kein Split, kein Overlap)\nzu langer Text → rekursiv teilen\nkleine Chunks → mit Nachbarn gleicher Überschrift"]
+    CHUNK["chunk_documents()\nheading_aware: Abschnitt → Chunk\nTabellen atomar (kein Split, kein Overlap)\nzu langer Text → rekursiv teilen\nkleine Stücke → ans nächste Stück der Sektion
+ohne Buchstaben/Ziffern → kein Chunk"]
 
     CHUNK --> BATCH["Batch\n(Chunks einer Datei nie über Batches verteilt)"]
     BATCH --> DEL["geänderte Dateien:\nalte Chunks löschen"]

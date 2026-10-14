@@ -444,13 +444,25 @@ Tabellen und zerstört das. Chunking nach Überschriften:
 
 1. Teilt zuerst an `#`/`##`/`###`.
 2. Hält Tabellen **atomar** — nie zwischen Zeilen geteilt (eine halbe Zeile ist Müll). Tabellen
-   bleiben bis `max_chunk_size × 3` in einem Chunk; nur sehr große werden an Zeilengrenzen mit
+   bleiben bis `max_chunk_size × 1,5` in einem Chunk; nur sehr große werden an Zeilengrenzen mit
    wiederholtem Kopf geteilt.
 3. Legt zu kleine Abschnitte **nur innerhalb derselben Überschrift** zusammen — eine winzige
    Tabelle unter `### Bruchgraben` schluckt nicht den nächsten Abschnitt, sonst würde
    `heading_hierarchy` über den Inhalt lügen.
 4. Behält den Überschriftenpfad (`Arkenfeld > Geografie`) im Chunk, damit das LLM sieht, woher
    der Inhalt stammt.
+5. Erzeugt **keine Chunks ohne Inhalt** (14.10., nach einem leeren Chunk im Chat zu Arkenfeld): Ein
+   Abschnitt, der auf Tabelle + `---` endete, ergab einen Chunk aus Überschriftenpfad und `---`;
+   Werteblöcke endeten auf Block-ID + `<!-- sim:end -->`, Notizen auf eine Tag-Zeile. Solche Chunks
+   bestehen im Embedding fast nur aus dem Überschriftenpfad, ranken deshalb für den Namen der Notiz und
+   belegen Plätze, die im Chat leer aussehen. Der Parser entfernt diese Zeilen (siehe
+   [parsing.md](parsing.md)); im Chunker geht ein Stück unter `min_chunk_size` an das **nächste**
+   Stück der Sektion — meist die Beschriftung einer Tabelle (`- L2` aus einem eingeklappten Callout,
+   `**Optionen:**`), die vorher allein stand und ihrer Tabelle fehlte —, und ein Stück ohne Buchstaben
+   oder Ziffern fällt weg. **Gemessen** (voller Re-Index, Golden Set im selben Index-Stand): 4414 →
+   3933 Chunks, 251 → 0 ohne Inhalt; Treffer unverändert Datei 272/274, Abschnitt 143/149 (dieselben
+   Misses); doppelt belegte Plätze (gleiche Datei + Überschrift) in den Ergebnissen 738 → 556 —
+   z. B. m001 „Wo liegt Arkenfeld“ bekommt statt des zweiten „Bruchgraben“ „Atmosphäre & Ton“.
 
 Ergebnis: jeder Chunk ist eine inhaltliche Einheit, und seine Überschrift stimmt immer — darauf
 bauen Deckel, Section Expansion und die Abschnittsprüfung der Evaluation.

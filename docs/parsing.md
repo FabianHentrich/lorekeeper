@@ -49,28 +49,46 @@ scheitern.
    Dämonen-Dateien bewahren die Werte von vor dem 30.09. in einem eingeklappten Callout auf
    („nicht mehr maßgeblich“); indiziert konkurrierten sie mit den aktuellen Werten (13.10.).
 1. **YAML-Frontmatter** — über `python-frontmatter`. `aliases` wird gesondert gespeichert (für die
-   Identitäts-Schicht im Embedding), die übrigen Schlüssel gehen als Metadaten durch.
+   Identitäts-Schicht im Embedding), die übrigen Schlüssel gehen als Metadaten durch — außer `images`
+   und `image_embeds`: die sind für die Bilder reserviert und werden verworfen (`images: 2` hätte jede
+   Antwort mit dieser Notiz mit einem 500 scheitern lassen; Ultrareview 13.1).
 2. **Wikilinks** — `[[Ziel]]` und `[[Ziel|Anzeigetext]]` werden erkannt. Die Ziele landen in
    `metadata.wikilinks` (für eine spätere Graph-Expansion, Roadmap 3.5); im Text steht der
    Anzeigetext bzw. der Zielname.
 3. **Bild-Einbettungen** — `![[bild.png]]` und `![[bild.png|300]]` verlassen den Text, der Dateiname
    bleibt aber als `metadata.image_embeds` am Abschnitt, in dem das Bild steht (Roadmap 2, 14.10.).
-   **Titelbilder** — Einbettungen vor der ersten Unterüberschrift (Text vor dem Titel und der erste
-   H1-Abschnitt: Porträt, Karte) stehen für die ganze Notiz und hängen an **jedem** Abschnitt, nach dessen
+   **Titelbilder** — Einbettungen vor der ersten Unterüberschrift (Text vor jeder Überschrift und der
+   Abschnitt der ersten Überschrift, wenn sie eine echte H1 ist: Porträt, Karte; in einer Notiz ohne H1
+   ist die erste H2 ein gewöhnlicher Abschnitt) stehen für die ganze Notiz und hängen an **jedem** Abschnitt, nach dessen
    eigenen Bildern. Grund: live am 14.10. bekam keine Frage zu Malek oder Arkenfeld ein Bild, weil die
    Antwort aus „Erscheinung“ oder „Steckbrief“ kam, das Porträt aber nur am Einleitungsabschnitt hing.
    Ein Abschnitt ohne eigenen Text gibt seine Bilder an den nächsten Abschnitt weiter, Bilder am
-   Dateiende gehen an den letzten. Der Orchestrator löst die Namen
-   **innerhalb derselben Quelle** zu Pfaden auf (wie Obsidian: Dateiname, Groß-/Kleinschreibung egal,
-   ohne `.trash`/`.obsidian`) und speichert sie als `images` — so kommen nie Bilder einer anderen,
-   etwa nicht freigegebenen Quelle in eine Antwort. Die Bilddateien selbst indiziert zusätzlich der
+   Dateiende gehen an den letzten; eine Notiz nur aus Überschrift und Bild (`# Weltkarte` + Karte) gibt
+   sie dem Ersatz-Chunk. Eine Einbettung in einer Überschriftszeile (`## Karte ![[Karte.png]]`) verlässt
+   den Titel und gehört zu diesem Abschnitt; eine Überschrift nur aus Einbettungen ist keine. Der
+   Orchestrator löst die Namen **innerhalb derselben Quelle** zu Pfaden auf und speichert sie als
+   `images`: zuerst der geschriebene Pfad relativ zum Quellordner (`![[Spielleiter/Karte.png]]`), sonst
+   wie Obsidian der Dateiname (Groß-/Kleinschreibung egal; bei gleichen Namen gewinnt eine Datei direkt
+   im Quellordner, sonst der alphabetisch erste Pfad). Gesucht wird im selben Umfang wie bei der
+   Indizierung — `exclude_patterns` gelten, `.trash`/`.obsidian` nie, und eine **Datei-Quelle** hat
+   keine Bilder (ihr Elternordner kann zu einer anderen Quelle gehören). So kommen nie Bilder einer
+   anderen, etwa nicht freigegebenen Quelle in eine Antwort (Sicherheitstest mit Köder-Bild, auch für
+   eine Datei-Quelle; Ultrareview 13.1). Die Bilddateien selbst indiziert zusätzlich der
    `ImageMetaParser`. Der Inhalts-Hash deckt nur die Notiz ab: ein neu abgelegtes Bild erscheint erst
    nach einer Änderung der Notiz oder einem vollen Re-Index der Quelle.
 4. **Callouts** — `> [!abstract] Titel` verliert die Markierung, der Inhalt bleibt als normaler
    Text; Folgezeilen (`> …`) werden ausgerückt.
-5. **Tags** — `#Tag` am Zeilenende wird nach `metadata.obsidian_tags` übernommen, das `#` aus dem
+5. **Zeilen ohne Inhalt** — HTML-Kommentare (`<!-- sim:end -->`), Trennlinien (`---`, `* * *`),
+   Block-IDs (`^bauer-l1`, Ziel von `[[Notiz#^bauer-l1]]`) und Zeilen nur aus Tags fallen weg
+   (außerhalb von Code-Blöcken, nach dem Ausrücken der Callouts). Grund: ein Abschnitt, der auf eine
+   Tabelle und `---` endet, ergab einen eigenen Chunk aus Überschriftenpfad und `---` — er rankte für
+   den Namen der Notiz und erschien im Chat leer (14.10.: 251 von 4414 Chunks, 5 davon in
+   `Arkenfeld.md`). Eine **leere Notiz** (0 Byte) ergibt keinen Chunk mehr (vorher `(empty)`, der über
+   den Dateinamen im Embed-Text zu Fragen nach ihr passte); eine Notiz nur aus einem Bild bekommt ihren
+   Dateinamen als Text.
+6. **Tags** — `#Tag` am Zeilenende wird nach `metadata.obsidian_tags` übernommen, das `#` aus dem
    Text entfernt.
-6. **Aufteilung nach Überschriften** — `#` bis `######`. Jeder Abschnitt wird ein eigenes
+7. **Aufteilung nach Überschriften** — `#` bis `######`. Jeder Abschnitt wird ein eigenes
    `ParsedDocument` mit `heading_hierarchy` (z.B. `["Charakter", "Hintergrund"]` für eine H2 unter
    einer H1).
 

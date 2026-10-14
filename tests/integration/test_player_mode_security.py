@@ -1,7 +1,8 @@
 """Security tests for the player mode (roadmap 3.11): no game-master content for players.
 
 Real pipeline except the LLM: four sources are ingested over HTTP into an in-memory
-ChromaDB — "regeln" (rules) and "bogen" (lore, a character sheet) released for players,
+ChromaDB — "regeln" (rules), "bogen" (lore, a character sheet) and "aushang" (a single file whose
+folder holds every other source) released for players,
 "welt" (lore) and "sl-regeln" (rules) for the game master only. Every
 game-master text carries a secret sentence and is phrased to match rule questions,
 so a leak would show up. The retrieval is configured as permissively as possible:
@@ -13,7 +14,7 @@ so a leak would show up. The retrieval is configured as permissively as possible
   would find the game-master rules source if it dropped the request filter,
 - vector-only and hybrid (BM25) search.
 
-A player question carries ``metadata_filters={"source_id": {"$in": ["regeln", "bogen"]}}``
+A player question carries ``metadata_filters={"source_id": {"$in": ["regeln", "bogen", "aushang"]}}``
 (what ui/roles.py sends). Neither the retrieved chunks, the sources in the done
 event nor the prompt handed to the LLM may contain game-master material.
 """
@@ -54,7 +55,7 @@ from tests.integration.conftest import parse_sse
 
 _REPO = Path(__file__).resolve().parents[2]
 
-PLAYER_SOURCES = ["regeln", "bogen"]
+PLAYER_SOURCES = ["regeln", "bogen", "aushang"]
 PLAYER_FILTER = {"source_id": {"$in": PLAYER_SOURCES}}
 
 # Every game-master text contains one of these — none may reach a player
@@ -204,6 +205,10 @@ def env(tmp_path_factory, embed_service):
     _write(gm_rules_dir, _GM_RULES)
     (world_dir / "Bilder").mkdir()
     (world_dir / "Bilder" / "Rhaz Muell Portrait.png").write_bytes(b"\x89PNG fake")  # embed bait (roadmap 2)
+    # A file source's folder is the parent of all others: the image search must not look there (13.1 #6)
+    notice = tmp / "Aushang.md"
+    notice.write_text("# Aushang\n\nGesucht: ein Händler für die Reise nach Arkenfeld.\n"
+                      "![[Rhaz Muell Portrait.png]]\n", encoding="utf-8")
 
     settings_path = tmp / "settings.yaml"
     settings_path.write_text("", encoding="utf-8")
@@ -213,6 +218,7 @@ def env(tmp_path_factory, embed_service):
         SourceConfig(id="regeln", path=str(rules_dir), group="rules", player_visible=True),
         SourceConfig(id="welt", path=str(world_dir), group="lore"),
         SourceConfig(id="bogen", path=str(sheet_dir), group="lore", player_visible=True),
+        SourceConfig(id="aushang", path=str(notice), group="lore", player_visible=True),
         SourceConfig(id="sl-regeln", path=str(gm_rules_dir), group="rules"),
     ]
 
@@ -267,7 +273,7 @@ def env(tmp_path_factory, embed_service):
             time.sleep(0.1)
         assert info["status"] == "done" and not info["errors"], info
         yield SimpleNamespace(client=client, retriever=retriever, llm=llm, config=config,
-                              player_dirs=(rules_dir, sheet_dir))
+                              player_dirs=(rules_dir, sheet_dir, notice))
 
     for n, v in originals.items():
         setattr(main_module, n, v)
@@ -333,8 +339,11 @@ def test_image_embeds_resolve_only_inside_their_own_source(env):
     gm_images = {img for c in gm for img in c.metadata.get("images", "").split("|") if img}
     assert any(img.endswith("Rhaz Muell Portrait.png") for img in gm_images)   # bait works unfiltered
 
-    sheet = env.retriever.vectorstore._get_collection().get(where={"source_id": "bogen"}, include=["metadatas"])
-    assert sheet["metadatas"] and not any(m.get("images") for m in sheet["metadatas"])
+    # aushang: a file source — the portrait lies in a subfolder of its folder (ultrareview 13.1 #6)
+    for player_source in ("bogen", "aushang"):
+        player = env.retriever.vectorstore._get_collection().get(where={"source_id": player_source},
+                                                                 include=["metadatas"])
+        assert player["metadatas"] and not any(m.get("images") for m in player["metadatas"]), player_source
 
 
 def test_condensed_follow_up_cannot_widen_the_search(env):

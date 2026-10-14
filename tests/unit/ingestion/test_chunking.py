@@ -80,6 +80,27 @@ class TestChunking:
         assert chunks[0].heading_hierarchy == ["A"]
         assert chunks[1].heading_hierarchy == ["B"]
 
+    def test_label_before_a_table_joins_the_table(self):
+        """14.10.: a folded callout's title ("- L2") was cut off from its table by the prose/table split — a
+        chunk of the heading and two characters, and a table without its level. A small tail joins the
+        previous piece."""
+        table = "| | 2 SC | 3 SC |\n|---|---|---|\n" + "\n".join(f"| **LP {i}** | {i} | {i * 2} |" for i in range(30))
+        docs = [_make_doc(f"- L2\n\n{table}\n\nsiehe Silithar", heading=["Silithar", "Kampfwerte"])]
+        config = ChunkingConfig(strategy="heading_aware", max_chunk_size=256, min_chunk_size=20)
+
+        chunks = chunk_documents(docs, config)
+        assert len(chunks) == 1
+        assert chunks[0].content.startswith("Silithar > Kampfwerte\n\n- L2\n\n| | 2 SC")
+        assert chunks[0].content.endswith("siehe Silithar")
+
+    def test_piece_without_letters_or_digits_gives_no_chunk(self):
+        """A piece of only markup ("---" from a PDF, an empty table row) would be the heading path alone."""
+        docs = [_make_doc("---\n\n| | |", heading=["A"]), _make_doc(" ".join(["Wort"] * 30), heading=["B"])]
+        config = ChunkingConfig(strategy="heading_aware", max_chunk_size=512, min_chunk_size=1)
+
+        chunks = chunk_documents(docs, config)
+        assert [c.heading_hierarchy for c in chunks] == [["B"]]
+
     def test_recursive_strategy(self):
         """
         Verify that the naive recursive chunking strategy splits paragraph-based inputs

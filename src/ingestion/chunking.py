@@ -4,6 +4,7 @@ Every chunk starts with its heading path (so a section without the entity's name
 questions about it). Sizes are estimated tokens (``len(text) / 3.5``); ``max_chunk_size`` keeps the
 embed text under the 512-token limit of e5 and the reranker.
 """
+import re
 from dataclasses import dataclass, field
 
 from src.config.manager import ChunkingConfig
@@ -38,6 +39,7 @@ def chunk_documents(documents: list[ParsedDocument], config: ChunkingConfig) -> 
         for doc in documents
         if (text := doc.content.strip())
         for piece in split(text, config)
+        if _HAS_CONTENT.search(piece)  # a piece of only "---" or "|  |" would be the heading path alone
     ]
     chunks = _merge_small_chunks(chunks, config.min_chunk_size)
     _set_indices(chunks)
@@ -58,7 +60,30 @@ def _heading_aware_split(text: str, config: ChunkingConfig) -> list[str]:
                 pieces.extend(_split_table_by_rows(block_text, config.max_chunk_size))
         else:
             pieces.extend(_split_prose(block_text, config.max_chunk_size, config.chunk_overlap))
-    return pieces
+    return _attach_small_pieces(pieces, config.min_chunk_size)
+
+
+def _attach_small_pieces(pieces: list[str], min_size: int) -> list[str]:
+    """Join a piece under ``min_size`` tokens to the next piece of the section — mostly a label that introduces
+    a table ("- L2" from a folded callout, "**Optionen:**"), which the prose/table split cut off: alone it was
+    a chunk of the heading path plus two characters (14.10.: 33 in the vault) and its table lost the label.
+    A small last piece joins the previous one."""
+    merged: list[str] = []
+    carry = ""
+    for piece in pieces:
+        if carry:
+            piece = f"{carry}\n\n{piece}"
+        if _estimate_tokens(piece) < min_size:
+            carry = piece
+        else:
+            merged.append(piece)
+            carry = ""
+    if carry:
+        if merged:
+            merged[-1] += f"\n\n{carry}"
+        else:
+            merged.append(carry)
+    return merged
 
 
 def _recursive_split(text: str, config: ChunkingConfig) -> list[str]:
@@ -78,6 +103,7 @@ _STRATEGIES = {
 }
 
 _SEPARATORS = ["\n\n", "\n", ". ", " "]
+_HAS_CONTENT = re.compile(r"[^\W_]")  # a letter or digit
 
 
 def _word_split(text: str, size: int, overlap: int) -> list[str]:

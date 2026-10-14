@@ -30,6 +30,7 @@ End-to-End-Lauf ~35 min (🟡).
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
 | 1 | Regressionsprüfung nach dem 14.10. (End-to-End + Holdout) | Mittel — Absicherung | Gering | 🟡 | Regelbuch (Klassenübersicht), Schreibweise vor der Suche, Folgefrage-Wörter und zwei Vault-Re-Indizes kamen nach dem letzten E2E-Lauf; laut Regel oben fällig (~40 min, nur Messen) |
+| 1b | 13.1 Ultrareview — Rest | Gering | Gering | 🟢 | ✅ bis auf zwei Handgriffe im laufenden Betrieb: Bilder im Chat ansehen, `stop.ps1 -List` ausprobieren |
 | 2 | 3.10 Rerank-Paar mit Dateiname/Überschrift | Mittel (ungewiss) | Gering | 🟡 | Der Reranker sieht nur den Chunk-Text; kurze Chunks ohne Namen sind chancenlos (m048 „Deckname: Solmar“ — Chunk existiert, Antwort falsch). Allgemeiner Hebel, nur mit Golden Set + Holdout + E2E |
 | 3 | 3.10 Schattenorden-Kontext (27 > 25 Chunks) | Gering-Mittel | Gering | 🟡 | Kernfrage zu einer Hauptfraktion (m003, m055) bekommt die Datei nicht mehr ganz; Treffer-Metriken sehen es nicht |
 | 4 | 3.15 Tippfehler-Toleranz | Gering-Mittel | Mittel | 🟡 | Am Spieltisch wird auf dem Handy getippt; einziger offener 👎-Fall. Riskant (falsche Korrekturen) — nur gemessen, mit Wörterbuch der Schreibweisen |
@@ -65,6 +66,56 @@ Regeln. `HF_HUB_OFFLINE=1` (in `src/__init__.py`): Modelle nur aus dem lokalen C
 ---
 
 ## Offene Punkte
+
+### 13.1 Ultrareview 14.10. (Änderungen seit 1ba1f49) — Korrekturplan
+
+Zehn Befunde, jeder am Code nachvollzogen und am echten Vault geprüft (doppelte Bildnamen,
+Einbettungen mit Pfad, Notizen ohne H1, Einbettungen in Überschriften, Frontmatter-Schlüssel
+`images`, reine Bildnotizen, Datei-Quellen mit Einbettungen). **Heute wirkt keiner im Vault** — alle
+Mechanismen sind aber echt und treten mit der nächsten passenden Notiz ein.
+
+| # | Befund | Bewertung | Vault heute | Korrektur |
+|---|---|---|---|---|
+| 1 | Einbettung mit Ordner (`![[Spielleiter/Karte.png]]`) wird nur über den Dateinamen aufgelöst; bei gleichen Namen gewinnt der alphabetisch erste | bestätigt | 1 Einbettung mit Pfad, keine doppelten Namen | Pfad zuerst relativ zur Quelle auflösen, Name nur als Rückfall |
+| 2 | Notiz nur aus Bildern (`# Weltkarte` + `![[Weltkarte.png]]`): der Ersatz-Chunk bekommt kein `image_embeds` | bestätigt | keine solche Notiz | Bilder in den Ersatz-Chunk übernehmen |
+| 3 | Notiz ohne H1: die erste H2 gilt als „über der ersten Unterüberschrift“, ihre Bilder hängen an jedem Abschnitt | bestätigt | 3 Notizen ohne H1 (Escanor, Liora, Lyssara) — deren erste H2 hat kein Bild, Lyssaras Titelbild steht korrekt vor der ersten Überschrift | Titelbilder nur aus Text vor jeder Überschrift und aus dem Abschnitt einer echten H1 |
+| 4 | Frontmatter-Schlüssel `images`/`image_embeds` landet in denselben Metadaten; `images: 2` → `AttributeError` → 500 für jede Antwort mit dieser Notiz | bestätigt | kein solcher Schlüssel | beide Schlüssel aus dem Frontmatter verwerfen (reserviert) |
+| 5 | Einbettung in einer Überschriftszeile lässt die Platzhalterzeichen in `heading_hierarchy` und das Bild geht verloren | bestätigt | keine | Platzhalter auch aus Überschriften entfernen und sammeln |
+| 6 | Bild-Suche ignoriert `exclude_patterns`; bei Datei-Quellen durchsucht sie den ganzen Elternordner — ein Bild außerhalb der Quelle (z. B. aus einer Spielleiter-Quelle daneben) könnte an Spieler gehen | bestätigt, **Spieler-Invariante** | Datei-Quellen ohne Einbettungen; Ausschluss betrifft nur eine `.md` | gleicher Umfang wie die Indizierung: Ausschlüsse beachten, Datei-Quellen ohne Ordnersuche; Fall in den Sicherheitstest |
+| 7 | Truecasing-Aufbau ohne `try/except` — scheitert der Komplett-Lesezugriff, scheitert jede Frage | plausibel, **nicht ändern** | — | Scheitert ChromaDB beim Lesen, scheitert auch die Suche selbst; kein Fall, den ein Handler sinnvoll abfängt (Regel: nur an Systemgrenzen) |
+| 8 | `stop.ps1 -List`: `Substring` mit der Länge der ungekürzten Zeile (wirft bei mehrfachen Leerzeichen); `-List` wird während einer Indizierung verweigert | bestätigt | heute lange Befehlszeilen, wirft nicht | Länge der gekürzten Zeile; `-List` vor die Indizierungs-Sperre |
+| 9 | Strg+Pause an Ollama scheitert ohne Konsole (`OSError`), dann kein `kill` | plausibel, **nicht ändern** | — | `start.ps1` startet das Backend in beiden Modi mit Konsole; ohne Konsole gibt es keinen dokumentierten Start |
+| 10 | `TrueCaser` wiederholt den Lebenszyklus von `BM25Index`; zwei `invalidate()` an vier Stellen | bestätigt (Wartbarkeit) | — | ein Helfer in `sources_routes.py`, der beide verwirft; der doppelte Komplett-Scan nach einer Indizierung bleibt (einmalig, kein Messbedarf) |
+
+Danach: Unit-Tests je Korrektur (mutationsgeprüft bei 6), Sicherheitstest um eine Datei-Quelle mit
+Bild im Elternordner erweitern, voller Re-Index des Vaults, Golden Set + Live-Bilder prüfen.
+
+**Umgesetzt (14.10., spät)**: Korrekturen 1–6, 8 und 10 wie in der Tabelle (`markdown.py`: Frontmatter-Schlüssel
+reserviert, Titelbilder nur mit echter H1, Ersatz-Chunk mit Bildern, Einbettungen aus Überschriften;
+`orchestrator.py`: `_image_files` im Umfang der Indizierung, `_resolve_embed` Pfad vor Name;
+`sources_routes.py`: `_collection_changed()`; `stop.ps1`). Sechs neue Unit-Tests, der Sicherheitstest
+hat eine freigegebene Datei-Quelle `aushang` mit Köder-Bild im Elternordner — alle sieben schlagen gegen
+den alten Code fehl, #6 zusätzlich gezielt mutationsgeprüft (Datei-Quelle sucht wieder im Elternordner →
+Unit- und Sicherheitstest rot). Doku: `docs/parsing.md`, `docs/testing.md`, `docs/operations.md`.
+Voller Re-Index (14.10.): 215 Dokumente, 0 Fehler, Golden Set unverändert Datei 272/274, Abschnitt
+143/149. **Offen**: Bilder im Chat live ansehen, `stop.ps1 -List` an einem laufenden LoreKeeper
+ausprobieren.
+
+### 13.2 Leere Chunks (14.10.) — ✅ Erledigt
+
+Anlass: leere Chunks im Chat bei einer Frage zu Arkenfeld. **Ursache**: 251 von 4414 Chunks waren nur
+`---` (Abschnitt endet auf Tabelle + Trennlinie; der Chunker trennt Tabelle und Text, und ein kleines
+Stück wurde nur mit einem kleinen Vorgänger zusammengelegt) — im Embedding fast nur der
+Überschriftenpfad, also passend zum Namen der Notiz, im Chat ohne Text. Dazu Block-IDs + `<!-- sim -->`-
+Kommentare am Ende von Werteblöcken, Tag-Zeilen, zwei leere Notizen (`(empty)`) und 33 abgeschnittene
+Beschriftungen (`- L2` aus eingeklappten Callouts) ohne ihre Tabelle. **Umgesetzt**: Parser entfernt
+Trennlinien, Block-IDs, HTML-Kommentare und Tag-Zeilen (nicht in Code-Blöcken), leere Notiz → kein
+Chunk; Chunker hängt ein Stück unter `min_chunk_size` an das nächste der Sektion und verwirft Stücke ohne
+Buchstaben/Ziffern. 5 neue Tests, alle gegen den alten Code rot. **Gemessen** (voller Re-Index): 4414 →
+3933 Chunks, 0 ohne Inhalt (vorher 251), ≤ 20 Zeichen nur noch 8 echte (Zitat, Namensliste); Golden Set
+unverändert 272/274 · 143/149, dieselben Misses; doppelt belegte Plätze (gleiche Datei + Überschrift)
+738 → 556. Doku: `docs/parsing.md`, `docs/embedding-strategy.md`, `ARCHITECTURE.md`,
+`docs/configuration.md`, `docs/data-flow.md`. Offen: Holdout/E2E stehen ohnehin als Punkt 1 an.
 
 ### 2 Bilder im Chat — Rest
 
@@ -158,6 +209,10 @@ Dienste-Modul `src/services.py` (Globale, `install_llm`, Health-Loop; beseitigt 
 und vereinfacht die Test-Fixtures) und Reranker + GPU-Rückfall als `src/retrieval/reranker.py`. Nur
 zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 
+
+## xx.0 UX verbessern
+- Bottun um input erneut zu schicken anstatt die selbe frage nochmla schreiben zu müssen (ist das sinnvoll; gibt dafür einen usecase?)
+- weiteres
 ---
 
 ## Erledigt

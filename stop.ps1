@@ -35,7 +35,8 @@ function Get-ListenerPid($port) {
 
 # --- Refuse during an ingest -------------------------------------------
 # A forced kill mid-ingest can leave a half-written index; waiting is cheap, -Force is explicit.
-if (-not $Force -and (Get-ListenerPid $BACKEND_PORT)) {
+# -List stops nothing, so it also works during an ingest.
+if (-not $Force -and -not $List -and (Get-ListenerPid $BACKEND_PORT)) {
     $job = $null
     try { $job = Invoke-RestMethod -Uri "http://127.0.0.1:$BACKEND_PORT/ingest/active" -TimeoutSec 5 } catch { }
     # .job_id, not just $job: Windows PowerShell 5.1 (what the UI button runs) turns the JSON null of
@@ -103,7 +104,11 @@ $tree = @($tree | Where-Object { $self -notcontains [int]$_.ProcessId })
 $ollama = @($tree | Where-Object { $_.Name -like "ollama*" })
 
 if ($List) {
-    $tree | ForEach-Object { "{0,6} {1,-16} {2}" -f $_.ProcessId, $_.Name, ("$($_.CommandLine)" -replace '\s+', ' ').Substring(0, [math]::Min(70, "$($_.CommandLine)".Length)) }
+    foreach ($p in $tree) {
+        # Shortened after collapsing the spaces — measured on the raw line, Substring overran the shorter one
+        $cmd = "$($p.CommandLine)" -replace '\s+', ' '
+        "{0,6} {1,-16} {2}" -f $p.ProcessId, $p.Name, $cmd.Substring(0, [math]::Min(70, $cmd.Length))
+    }
     exit 0
 }
 

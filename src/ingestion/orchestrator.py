@@ -7,10 +7,11 @@ repos); ``full=True`` re-processes everything. Chunks are upserted in batches of
 (one file never spans two batches); files gone from disk are deleted from the index, and a run over all
 sources also deletes the chunks of sources no longer in sources.yaml. Every chunk carries
 ``source_id``, ``group`` and ``content_category`` from its source config. Image embeds of a note
-(``image_embeds`` from the Markdown parser) are resolved by file name within the same source, as Obsidian
-does, into ``images`` (absolute paths joined by ``IMAGE_PATH_SEPARATOR``) — the chat shows them with the
-answer (roadmap 2). The content hash only covers the note: after adding images to the vault, a note that
-embeds them must change (or ``full=True``) before its chunks carry the new path.
+(``image_embeds`` from the Markdown parser) are resolved within the same source — by the written path,
+else by file name as Obsidian does; excluded files and a file source's folder never count — into ``images``
+(absolute paths joined by ``IMAGE_PATH_SEPARATOR``) — the chat shows them with the answer (roadmap 2). The
+content hash only covers the note: after adding images to the vault, a note that embeds them must change
+(or ``full=True``) before its chunks carry the new path.
 """
 import fnmatch
 import hashlib
@@ -37,14 +38,34 @@ IMAGE_PATH_SEPARATOR = "|"
 _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
 
-def _image_files(base: Path) -> dict[str, str]:
-    """Lower-cased file name → absolute path of every image under ``base`` (Obsidian resolves embeds by
-    name anywhere in the vault; the first one found wins). Trash and settings folders don't count."""
+def _image_files(source: SourceConfig, exclude_patterns: list[str]) -> dict[str, str]:
+    """Image files an embed of this source may resolve to: lower-cased path relative to the source folder
+    (``/``-separated) and lower-cased file name → absolute path.
+
+    The same scope as indexing (player invariant: the chat shows these files to whoever may see the chunk):
+    only a folder source's own files, ``exclude_patterns`` respected; a file source has no images — its
+    parent folder may be another source's. Trash and settings folders never count. Under a bare name, a file
+    directly in the source folder wins, else the alphabetically first path (Obsidian resolves a bare name
+    anywhere in the vault).
+    """
+    base = Path(source.path).resolve()
     found: dict[str, str] = {}
-    for path in sorted(base.rglob("*")) if base.is_dir() else [base]:
-        if path.suffix.lower() in _IMAGE_SUFFIXES and not {".trash", ".obsidian"} & set(path.parts):
-            found.setdefault(path.name.lower(), str(path.resolve()))
+    if not base.is_dir():
+        return found
+    for path in sorted(base.rglob("*")):
+        if (path.suffix.lower() in _IMAGE_SUFFIXES and not {".trash", ".obsidian"} & set(path.parts)
+                and not _is_excluded(path, base, exclude_patterns)):
+            resolved = str(path.resolve())
+            found[path.relative_to(base).as_posix().lower()] = resolved
+            found.setdefault(path.name.lower(), resolved)
     return found
+
+
+def _resolve_embed(name: str, images: dict[str, str]) -> str | None:
+    """Path of an embed: as written relative to the source first ("Spielleiter/Karte.png" — two notes may
+    embed different files of the same name), else by its bare file name."""
+    rel = name.replace("\\", "/").strip("/").lower()
+    return images.get(rel) or images.get(rel.rsplit("/", 1)[-1])
 
 
 def _resolve_category(file_path: Path, source: SourceConfig) -> tuple[str, str]:
@@ -298,9 +319,10 @@ class IngestionOrchestrator:
                     chunk.source_file = relative_path
                     if embeds := chunk.metadata.pop("image_embeds", None):
                         if source.id not in images_by_source:
-                            images_by_source[source.id] = _image_files(base)
+                            images_by_source[source.id] = _image_files(
+                                source, settings.ingestion.exclude_patterns + source.exclude_patterns)
                         paths = [found for name in embeds
-                                 if (found := images_by_source[source.id].get(Path(name).name.lower()))]
+                                 if (found := _resolve_embed(name, images_by_source[source.id]))]
                         if paths:
                             chunk.metadata["images"] = IMAGE_PATH_SEPARATOR.join(dict.fromkeys(paths))
                     chunk.metadata.update({

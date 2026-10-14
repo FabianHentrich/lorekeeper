@@ -110,6 +110,72 @@ class TestMarkdownParser:
         assert docs["Ziele"] == lead
         assert docs["Anhang"] == ["Skizze.png", *lead]
 
+    def test_markup_lines_without_content_are_dropped(self, md_parser, tmp_path):
+        """14.10.: 251 of 4414 chunks were only "---" (a section ending in a table + rule); stat blocks ended
+        in a block ID and a sim comment, notes in a line of tags. All three carry no text; tags stay metadata.
+        Inside a code fence nothing is touched; a heading is no tag line."""
+        f = tmp_path / "Arkenfeld.md"
+        f.write_text("# Arkenfeld\n| A | B |\n|---|---|\n| x | y |\n\n---\n"
+                     "## Kampfwerte\n> [!example]- L1\n> Werte.\n>\n> ---\n\n^arkenfeld-l1\n\n<!-- sim:end -->\n"
+                     "* * *\n```\n---\nx = 1\n```\n#Ort #Arkenfeld\n", encoding="utf-8")
+
+        docs = md_parser.parse(f)
+        text = "\n".join(d.content for d in docs)
+        assert "^arkenfeld" not in text and "sim:end" not in text and "* * *" not in text
+        assert "Ort" not in text and set(docs[0].metadata["obsidian_tags"]) == {"Ort", "Arkenfeld"}
+        assert docs[0].content == "| A | B |\n|---|---|\n| x | y |"
+        assert docs[1].content.startswith("- L1\nWerte.")
+        assert "```\n---\n" in docs[1].content                # a rule inside code stays
+
+    def test_note_of_only_an_image_takes_its_name_as_text(self, md_parser, tmp_path):
+        """No text, no heading: the chunk would be empty — the note's name makes it readable and findable."""
+        image = tmp_path / "Weltkarte.md"
+        image.write_text("![[Weltkarte.png]]\n", encoding="utf-8")
+
+        docs = md_parser.parse(image)
+        assert docs[0].content == "Weltkarte" and docs[0].metadata["image_embeds"] == ["Weltkarte.png"]
+
+    def test_without_h1_the_first_h2_is_no_title(self, md_parser, tmp_path):
+        """Ultrareview 13.1 #3: in a note without H1, the first H2's images are that section's — only the
+        text before any heading counts as lead."""
+        f = tmp_path / "Liora.md"
+        f.write_text("![[Liora.png]]\nEinleitung.\n## Herkunft\nAus dem Norden.\n![[Dorf.png]]\n## Ziele\nRuhm.",
+                     encoding="utf-8")
+
+        docs = {(d.heading_hierarchy or ["—"])[-1]: d.metadata.get("image_embeds") for d in md_parser.parse(f)}
+        assert docs["Herkunft"] == ["Dorf.png", "Liora.png"]
+        assert docs["Ziele"] == ["Liora.png"]           # Dorf.png is no lead image
+
+    def test_note_of_only_a_title_and_an_image_keeps_the_image(self, md_parser, tmp_path):
+        """Ultrareview 13.1 #2: '# Weltkarte' + the map has no text section — the fallback chunk carries it."""
+        f = tmp_path / "Weltkarte.md"
+        f.write_text("# Weltkarte\n![[Weltkarte.png|800]]\n", encoding="utf-8")
+
+        docs = md_parser.parse(f)
+        assert len(docs) == 1 and docs[0].metadata["image_embeds"] == ["Weltkarte.png"]
+        assert "Weltkarte.png" not in docs[0].content
+
+    def test_frontmatter_cannot_set_the_image_metadata(self, md_parser, tmp_path):
+        """Ultrareview 13.1 #4: 'images: 2' in the frontmatter reached the API as a path list (500)."""
+        f = tmp_path / "Malek.md"
+        f.write_text("---\nimages: 2\nimage_embeds: x.png\nstatus: fertig\n---\n# Malek\nEin Soldat.\n",
+                     encoding="utf-8")
+
+        meta = md_parser.parse(f)[0].metadata
+        assert "images" not in meta and "image_embeds" not in meta
+        assert meta["status"] == "fertig"               # other keys stay
+
+    def test_embed_in_a_heading_line_stays_with_its_section(self, md_parser, tmp_path):
+        """Ultrareview 13.1 #5: the embed left placeholder characters in the title and the image was lost."""
+        f = tmp_path / "Arkenfeld.md"
+        f.write_text("# Arkenfeld\nEine Stadt.\n## Karte ![[Karte.png]]\nDer Hafen.\n## ![[Wappen.png]]\nRot.\n",
+                     encoding="utf-8")
+
+        docs = md_parser.parse(f)
+        assert [d.heading_hierarchy for d in docs] == [["Arkenfeld"], ["Arkenfeld", "Karte"]]
+        assert docs[1].metadata["image_embeds"] == ["Karte.png", "Wappen.png"]  # image-only heading: no heading
+        assert "Rot." in docs[1].content
+
     def test_callouts_cleaned(self, md_parser, tmp_path):
         """Verify that Obsidian blockquote structures are stripped leaving plain text payloads."""
         f = tmp_path / "test.md"
@@ -154,12 +220,12 @@ class TestMarkdownParser:
         assert "Nach dem Code." in docs[0].content
 
     def test_empty_file(self, md_parser, tmp_path):
-        """Verify that absolutely blank files still generate an empty document stub."""
+        """A blank note gives no document: two 0-byte notes in the vault gave "(empty)" chunks (14.10.) that
+        matched their names through the file name in the embedded text and showed up empty in the chat."""
         f = tmp_path / "empty.md"
         f.write_text("", encoding="utf-8")
 
-        docs = md_parser.parse(f)
-        assert len(docs) == 1  # Fallback document
+        assert md_parser.parse(f) == []
 
 
 _VAULT_ENEMY = """# Grabeswolf
