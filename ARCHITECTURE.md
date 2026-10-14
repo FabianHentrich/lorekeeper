@@ -85,7 +85,7 @@ flowchart TB
         subgraph CORE[" "]
             direction LR
             ACCESS["🎲 Zugriff nach Rolle<br/>player_visible-Filter"]
-            RETRIEVE["🔍 Retrieval Engine<br/>Vektor (+ BM25) · Rerank (GPU) · Regelwerk-Slot · Section Expansion"]
+            RETRIEVE["🔍 Retrieval Engine<br/>Vektor (+ BM25) · Rerank (GPU) · Regelwerk-/Eintrags-Slot · Section Expansion"]
             GEN["🧠 Generation Engine<br/>Provider-Schicht"]
         end
 
@@ -174,7 +174,7 @@ lorekeeper/
 │   │   ├── embeddings.py          # sentence-transformers (run_in_threadpool!)
 │   │   ├── vectorstore.py         # ChromaDB-Zugriff
 │   │   ├── bm25_index.py          # BM25 für Hybrid Search
-│   │   ├── retriever.py           # Suche, Rerank, Cap, Regelwerk-Slot, Section Expansion
+│   │   ├── retriever.py           # Suche, Rerank, Cap, Regelwerk- und Eintrags-Slot, Section Expansion
 │   │   └── onnx_reranker.py       # Cross-Encoder über ONNX Runtime (GPU via DirectML, CPU-Rückfall)
 │   ├── generation/
 │   │   ├── providers/             # base.py · ollama.py · gemini.py
@@ -331,6 +331,9 @@ Ablauf in `Retriever.retrieve()` — alle Parameter in [docs/configuration.md](d
 4. **Regelwerk-Slot** (`rules_slot`): eine zweite, kleine Vektorsuche nur in Gruppe `rules` (5
    Kandidaten, derselbe Filter) für Fragen wie „Was bewirkt Ritterlichkeit bei Escanor?“, bei denen
    die NPC-Datei alle Kandidaten belegt.
+   **Eintrags-Slot** (`entry_slot`): nennt die Frage eine Tabellenzeile („Dolch-Angriff“), kommt die
+   Tabelle per Namenssuche im gespeicherten Text dazu (derselbe Filter, max. 3) — der Reranker
+   entscheidet.
 5. **Reranking** mit dem Cross-Encoder `jina-reranker-v2-base-multilingual` — auf der GPU über ONNX
    Runtime + DirectML (`reranking.backend: directml`, ~110 ms), sonst mit Warnung auf der CPU. Fällt
    die GPU im Betrieb aus, wechselt der Retriever mit Warnung dauerhaft auf die CPU. Das Laden des
@@ -453,7 +456,7 @@ Spieler nutzen LoreKeeper am Tisch (z.B. am Handy) und dürfen keine Spielleiter
   `$eq`/`$ne`/`$in`/`$and`) → 422, für beide Rollen. Default ist `game_master` (CLI,
   Eval-Tools); wird die API je außerhalb von `127.0.0.1` erreichbar, muss der Default auf
   `player` oder eine Authentifizierung her.
-- **Jeder Suchweg** trägt den Filter: Vektorsuche, BM25, die Suche des Regelwerk-Slots und das
+- **Jeder Suchweg** trägt den Filter: Vektorsuche, BM25, die Suchen von Regelwerk- und Eintrags-Slot und das
   Nachladen der Section Expansion (`get_chunks_for_file(..., where)`). Ein Spy-Test prüft das für
   jeden Store-Zugriff einer Spieler-Anfrage — ein neuer Suchweg ohne Filter fällt dort auf, auch wenn
   die Testdaten zufällig dicht wären.

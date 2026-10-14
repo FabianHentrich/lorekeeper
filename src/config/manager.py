@@ -215,6 +215,17 @@ class RulesSlotConfig(BaseModel):
     min_score: float = -5.0          # reserve one top_k_rerank slot for the best rules chunk if it scores ≥ this
 
 
+class EntrySlotConfig(BaseModel):
+    """Add the table a question names an entry of (roadmap 3.10).
+
+    A table chunk is one vector for all its rows, so "Wie viel Schaden macht ein Dolch-Angriff?" misses the
+    weapon table although "Dolch" is a row. Words of the question (and runs of 2–3 words) that are the first
+    cell of a table row pull that table into the rerank pool; the reranker decides whether it stays.
+    """
+    enabled: bool = False
+    max_chunks: int = Field(default=3, ge=0)  # tables added per question at most (0 = none)
+
+
 class RetrievalConfig(BaseModel):
     """Search parameters; ``top_k``/``top_k_rerank``/``max_per_source``/hybrid can be overridden per request."""
     # Vector candidates before the rerank (keep ≥ 2 × top_k_rerank). 20: right chunks at vector rank 16–20
@@ -225,6 +236,7 @@ class RetrievalConfig(BaseModel):
     hybrid: HybridSearchConfig = HybridSearchConfig()
     section_expansion: SectionExpansionConfig = SectionExpansionConfig()
     rules_slot: RulesSlotConfig = RulesSlotConfig()
+    entry_slot: EntrySlotConfig = EntrySlotConfig()
 
 
 class OllamaConfig(BaseModel):

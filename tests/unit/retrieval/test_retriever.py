@@ -2,9 +2,15 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.config.manager import HybridSearchConfig, RerankingConfig, RetrievalConfig, RulesSlotConfig
+from src.config.manager import (
+    EntrySlotConfig,
+    HybridSearchConfig,
+    RerankingConfig,
+    RetrievalConfig,
+    RulesSlotConfig,
+)
 from src.retrieval.bm25_index import BM25Index
-from src.retrieval.retriever import Retriever, _rrf_merge
+from src.retrieval.retriever import Retriever, _entry_names, _rrf_merge
 
 
 @pytest.fixture
@@ -299,6 +305,67 @@ class TestRulesSlot:
         results = await ret.retrieve("q")
         assert vectorstore.query.call_count == 1
         assert [r.heading for r in results] == ["n0", "n1", "n2"]
+
+
+class TestEntrySlot:
+    """3.10: a question naming a table entry pulls that table into the rerank pool; the reranker decides."""
+
+    MAIN = [_slot_hit(f"n{i}", "lore", "npc.md", 0.9 - i / 100) for i in range(3)]
+    TABLE = _slot_hit("weapons", "rules", "regeln.pdf", 0.7)
+
+    def _retriever(self, embed_service, vectorstore, scores, enabled=True, reranking=True, table=None):
+        cfg = RetrievalConfig(top_k=3, score_threshold=0.5,
+                              reranking=RerankingConfig(enabled=reranking, top_k_rerank=2, max_per_source=0),
+                              entry_slot=EntrySlotConfig(enabled=enabled, max_chunks=3))
+        vectorstore.query.return_value = self.MAIN
+        vectorstore.get_table_entries.return_value = [table or self.TABLE]
+        ret = Retriever(config=cfg, embedding_service=embed_service, vectorstore=vectorstore)
+        ret._reranker = MagicMock()
+        ret._reranker.predict.side_effect = lambda pairs: scores[:len(pairs)]
+        return ret
+
+    @pytest.mark.asyncio
+    async def test_named_table_joins_the_pool_and_can_win(self, embed_service, vectorstore):
+        ret = self._retriever(embed_service, vectorstore, [1.0, 0.5, 0.1, 3.0])  # n0, n1, n2, weapons
+        results = await ret.retrieve("Wie viel Schaden macht ein Dolch-Angriff?", metadata_filters={"x": "y"})
+        assert [r.heading for r in results] == ["weapons", "n0"]
+        names, _emb, where, limit = vectorstore.get_table_entries.call_args.args
+        assert "Dolch" in names and limit == 3
+        assert {"x": "y"} in where["$and"]  # the request's filter (player mode) goes with it
+
+    @pytest.mark.asyncio
+    async def test_reranker_can_drop_it(self, embed_service, vectorstore):
+        ret = self._retriever(embed_service, vectorstore, [1.0, 0.5, 0.1, -2.0])
+        assert [r.heading for r in await ret.retrieve("Was macht der Glücksstein?")] == ["n0", "n1"]
+
+    @pytest.mark.asyncio
+    async def test_hit_already_in_the_pool_is_not_added_twice(self, embed_service, vectorstore):
+        ret = self._retriever(embed_service, vectorstore, [1.0, 0.5, 0.1, 9.0], table=self.MAIN[0])
+        await ret.retrieve("Dolch")
+        assert len(ret._reranker.predict.call_args.args[0]) == 3
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("enabled, reranking", [(False, True), (True, False)])
+    async def test_off_without_the_switch_or_the_reranker(self, embed_service, vectorstore, enabled, reranking):
+        ret = self._retriever(embed_service, vectorstore, [1.0, 0.5, 0.1], enabled=enabled, reranking=reranking)
+        await ret.retrieve("Wie viel Schaden macht ein Dolch?")
+        vectorstore.get_table_entries.assert_not_called()
+
+
+class TestEntryNames:
+    def test_words_runs_and_hyphen_parts(self):
+        names = _entry_names("Wie viel Schaden macht ein Dolch-Angriff im Kampf mit schwere Rüstung?")
+        assert {"Dolch-Angriff", "Dolch", "Angriff", "Schwere Rüstung", "Schaden"} <= set(names)
+        assert "Im" not in names and "Wie" in names  # under 3 letters dropped; the store filters the rest
+
+    def test_lower_case_question_and_whole_hyphenated_entry(self):
+        assert {"Dolch", "AP-Trank"} <= set(_entry_names("was macht ein AP-Trank, und ein dolch"))
+        assert "Ap-trank" in _entry_names("ap-trank")  # only the first letter is raised — cells are matched exactly
+
+    def test_runs_stop_at_three_words_and_no_duplicates(self):
+        names = _entry_names("Dolch der Schatten Dolch der Schatten Klinge")
+        assert "Dolch der Schatten" in names and "Dolch der Schatten Dolch" not in names
+        assert len(names) == len(set(names))
 
 
 class TestRerankerBackend:

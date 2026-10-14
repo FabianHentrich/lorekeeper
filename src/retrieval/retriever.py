@@ -9,6 +9,7 @@ Design decisions and measurements: docs/embedding-strategy.md.
 """
 import asyncio
 import logging
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -28,6 +29,8 @@ RULES_GROUP = "rules"
 IMAGE_EXCLUSION: dict = {"document_type": {"$ne": "image"}}
 _RERANK_MAX_TOKENS = 512  # cross-encoder input limit (query + chunk); longer pairs are truncated
 _SLOT_MIN_PLACES = 3  # with fewer final chunks one rules chunk would push out most of the answer's context
+_ENTRY_WORD = re.compile(r"[^\W\d_][\w'’-]*")
+_ENTRY_MAX_WORDS = 3  # longest table entry looked up as a run of words ("Dolch der Schatten")
 
 
 def _to_chunk(item: dict[str, Any]) -> "RetrievedChunk":
@@ -78,6 +81,31 @@ def _rrf_merge(
         {**items[doc_id], "score": fused_score}
         for doc_id, fused_score in ranked
     ]
+
+
+def _entry_names(query: str) -> list[str]:
+    """Words and runs of 2–3 words of the question as table-entry candidates, first letter upper-cased.
+
+    Hyphenated words count whole and per part ("Dolch-Angriff" → also "Dolch", "AP-Trank" stays whole).
+    Table cells are written "**Dolch**", so a lower-case question ("dolch") still matches; the store only
+    keeps names that really are a row's first cell, so stray words cost one lookup, not a wrong hit.
+    """
+    words = _ENTRY_WORD.findall(query)
+    names: list[str] = []
+    for i in range(len(words)):
+        for n in range(1, _ENTRY_MAX_WORDS + 1):
+            if i + n > len(words):
+                break
+            run = " ".join(words[i:i + n])
+            names.append(run)
+            if n == 1 and "-" in run:
+                names.extend(p for p in run.split("-") if p)
+    out: list[str] = []
+    for name in names:
+        name = name.strip("-'’")
+        if len(name) >= 3 and (name := name[0].upper() + name[1:]) not in out:
+            out.append(name)
+    return out
 
 
 def _section_key(chunk) -> tuple[str, str, str] | None:
@@ -306,6 +334,21 @@ class Retriever:
             results = vector_results
 
         chunks = [_to_chunk(item) for item in results]
+
+        # 2b. Entry slot: tables with a row the question names join the rerank pool (same filter as the
+        # request — player mode included). Only with the reranker, which decides whether they stay.
+        entry = self.config.entry_slot
+        if entry.enabled and entry.max_chunks and self.config.reranking.enabled and (names := _entry_names(query)):
+            t0 = time.perf_counter()
+            entry_hits = await run_in_threadpool(
+                self.vectorstore.get_table_entries, names, query_embedding, where, entry.max_chunks,
+            )
+            known = {r["id"] for r in results}
+            added = [_to_chunk(h) for h in entry_hits if h["id"] not in known]
+            chunks += added
+            stage_ms["entry"] = (time.perf_counter() - t0) * 1000
+            if added:
+                logger.debug("Entry slot: %s", ", ".join(f"{c.source_file} > {c.heading}" for c in added))
 
         if self.config.reranking.enabled and chunks:
             t0 = time.perf_counter()

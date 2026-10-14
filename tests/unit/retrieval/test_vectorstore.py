@@ -456,3 +456,49 @@ class TestCompareWithExactSearch:
         queries = rng.normal(size=(40, 24)).astype("float32").tolist()
 
         assert svc.compare_with_exact_search(queries, 14, None) == [0] * 40
+
+
+class TestGetTableEntries:
+    """Entry slot (roadmap 3.10): find tables by a row's first cell — real in-memory Chroma for $contains."""
+
+    WEAPONS = ("7.1.1 Waffen > Nahkampfwaffen\n\n|**Waffe**|**Kat.**|**normal**|\n|---|---|---|\n"
+               "|**Dolch**|leicht|STÄ + 2|\n|**Kurzschwert**|normal|STÄ + 2|")
+    MAGIC = ("7.2.1 Magische Waffen\n\n|**Waffe**|**Wirkung**|\n|---|---|\n"
+             "|**Dolch der Schatten**|Schattenschaden|")
+    NOT_FIRST = "Loot\n\n|**Fundort**|**Beute**|\n|---|---|\n|**Gruft**|**Dolch**|"
+
+    @pytest.fixture
+    def store(self, vs_config, embed_service):
+        import uuid
+
+        import chromadb
+        svc = VectorStoreService(vs_config, embed_service)
+        svc._collection = chromadb.EphemeralClient().create_collection(
+            f"entries_{uuid.uuid4().hex}", metadata={"hnsw:space": "cosine"})
+        svc._collection.add(
+            ids=["weapons", "magic", "loot"],
+            documents=[self.WEAPONS, self.MAGIC, self.NOT_FIRST],
+            embeddings=[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            metadatas=[{"source_id": "rules"}, {"source_id": "rules"}, {"source_id": "gm"}],
+        )
+        return svc
+
+    def test_finds_the_table_whose_row_starts_with_the_name(self, store):
+        hits = store.get_table_entries(["Dolch"], [1.0, 0.0, 0.0])
+        # not "Dolch der Schatten" (other cell), not the loot table ("Dolch" is not the row's first cell)
+        assert [h["id"] for h in hits] == ["weapons"]
+        assert hits[0]["score"] == pytest.approx(1.0)  # real cosine to the query
+
+    def test_request_filter_is_applied(self, store):
+        """Player mode: the slot may only return what the request's filter allows."""
+        assert store.get_table_entries(["Dolch"], [1.0, 0.0, 0.0], where={"source_id": "gm"}) == []
+        assert store.get_table_entries(["Gruft"], [1.0, 0.0, 0.0], where={"source_id": "gm"})[0]["id"] == "loot"
+        assert store.get_table_entries(["Gruft"], [1.0, 0.0, 0.0], where={"source_id": "rules"}) == []
+
+    def test_more_matched_names_rank_first_and_limit_holds(self, store):
+        hits = store.get_table_entries(["Dolch der Schatten", "Dolch", "Kurzschwert"], [0.0, 1.0, 0.0], limit=1)
+        assert [h["id"] for h in hits] == ["weapons"]  # two names beat a better cosine with one
+
+    def test_no_names_no_lookup(self, service, mock_collection):
+        assert service.get_table_entries([], [1.0]) == []
+        mock_collection.get.assert_not_called()

@@ -55,9 +55,10 @@ durchklicken (Job starten, Seite wechseln und zurück — 3.8/3.9); 👍/👎 un
 
 ### 3.10 Restliche Abschnitt-Misses
 
-Stand 14.10.: Datei 272/274, Abschnitt **142/149**, Suche exakt. Bisher umgesetzt (Tabelle
+Stand 14.10.: Datei 272/274, Abschnitt **143/149**, Suche exakt. Bisher umgesetzt (Tabelle
 „Erledigt“): Regelwerk-Slot, `top_k` 20, „Alte Vault-Werte“ aus dem Index, Zeilennamen für
-Tabellen-Chunks, Reranker jina-reranker-v2; verworfen: Hybrid-Suche, Tabellen als Fließtext.
+Tabellen-Chunks, Reranker jina-reranker-v2, Eintrags-Slot; verworfen: Hybrid-Suche, Tabellen als
+Fließtext, Tabellenzeilen als eigene Chunks, `top_k` > 20.
 
 **Offen, je mit Diagnose** (Rang des richtigen Chunks in der Vektorsuche, Reranker-Score richtig
 gegen gewählt; Skript-Muster: Rang in den Top 200 + `_predict` je Paar):
@@ -74,21 +75,15 @@ gegen gewählt; Skript-Muster: Rang in den Top 200 + `_predict` je Paar):
     einem anderen Chunk als die Tabelle mit den Schwellen.
 - **AP-Pool** (14.10., nebenbei gefunden): „Wie viele Aktionspunkte habe ich?“ → „50 AP“ (0/3, mit
   und ohne Regelkern) — die 50 sind ein gemeinsamer Pool für AP und MP (2.5).
-- **Entität + Regel** — x004 (Phönixfeder bei Thalion: nur Thalions Kampfwerte).
 - **Simulation** — z003, z006, z009, z012 (Fragen zu Berichtsabschnitten).
 - **Name in fremder Identität** — „Wer ist Arkenfeld?“ (live 13.10.): 12 Chunks von „Bargrun
   ‚Zwerg‘ Erkenbrandt“ („Der Armdrücker von Arkenfeld“), nur 5 von `Orte/Arkenfeld.md`. Die
   Identitäts-Schicht macht den Ortsnamen zum Suchsignal für die NPC-Datei; Antwort trotzdem richtig.
 - Die 22-Chunk-Sektion „7.3 Legendäre Artefakte > Monolith“ landet bei fremden Regelfragen in den
   Top 3 („Ass-Regel“ p011, „Zauberspeicher“ p101); das Budget aus 5.6 streicht sie nur.
-- **Waffentabelle nur bei der nackten Frage** (diagnostiziert 14.10.): „Wie viel Schaden macht ein
-  Dolch?“ findet „7.1.1 Waffen > Nahkampfwaffen“ (Platz 3), „Langschwert“ ebenso (Platz 2). Jedes
-  weitere Wort kippt es: „… Dolch-Angriff?“, „… Angriff mit einem Dolch?“, „… Dolch bei Stärke 4?“,
-  „Unterschied Dolch Kurzschwert“ — Tabelle nicht unter den 8. Die 9-Zeilen-Tabelle trägt als ein
-  Vektor nur ein schwaches „Dolch“-Signal; Kampf- und Krit-Abschnitte gewinnen. Für die Rechenfrage
-  liegt sie auf Vektor-Rang 21–25; `top_k` 25–40 bringt sie in den Pool, kostet aber im Golden Set
-  (m062, k006, z001) — verworfen ([embedding-strategy.md](docs/embedding-strategy.md#warum-top_k-20)).
-  Strukturelle Wege offen (Entscheidung Nutzer). Der Rechenteil gehört zu 3.14.
+- **Tabelleneinträge** — seit 14.10. über den Eintrags-Slot (Tabelle „Erledigt“). Offen: „Dolch, STÄ 4,
+  Wurfzahl 12“ und „Unterschied Dolch und Kurzschwert“ (Slot holt die Tabelle, jina wertet anderes
+  höher), „Langbogen“ (PDF-Zelle `**l**<br>**Langbogen**`, Parser-Artefakt). Der Rechenteil gehört zu 3.14.
 
 ### 3.14 Rechenfragen zum Regelwerk unzuverlässig ⏸
 
@@ -185,6 +180,7 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 | 3.10 (Teil) | `top_k` 20 (+2 Abschnitte, Hybrid verworfen), `ingestion.skip_sections` gegen „Alte Vault-Werte“ (Full-Reindex, 4419 Chunks), `ef_search` 1000 → 2000 (nach den Re-Index-Läufen wieder exakt), verwaiste Chunks entfernt, Golden Set 274 Fragen — Datei 272/274, Abschnitt 137/149 | 13.10. | `docs/embedding-strategy.md`, `docs/parsing.md`, `docs/configuration.md`, `docs/evaluation.md` |
 | 3.10 (Teil) | Tabellen-Chunks: Zeilennamen im Embed-Text („Einträge: Dolch, …“) — Langschwert/Armbrust gelöst, Abschnitt 137 → 139/149, nichts verloren (Vektor-Rang 22 → 14, 47 → 2); Fließtext-Variante verworfen; Full-Reindex, Suche exakt | 13.10. | `docs/embedding-strategy.md` |
 | 3.10 (Teil) | Reranker `jina-reranker-v2-base-multilingual` (fp16 auf der GPU, fp32-ONNX als CPU-Rückfall statt torch): Abschnitt 139 → 142/149, Platz-1-Treffer 110 → 121, Datei unverändert 272/274; bge-m3, MiniLM en-de, gte verworfen; VRAM neben qwen3:14b 14,4 statt 14,6 GB, LLM-Tempo gleich | 14.10. | `docs/embedding-strategy.md`, `docs/configuration.md` |
+| 3.10 (Teil) | Eintrags-Slot: nennt die Frage eine Tabellenzeile („Dolch-Angriff“, „Hammer“, „Glücksstein“), kommt die Tabelle per Namenssuche in den Rerank-Pool (Filter der Anfrage, max. 3, kein reservierter Platz). Golden Set Abschnitt 142 → 143/149 (+x004), nichts verloren; Tabellenfragen 5 → 8/11; ~75 ms. Verworfen vorher: `top_k` 25–40 (verliert m062/k006/z001), Zeilen-Chunks (142 → 141, Listenfragen 9/9 → 2/9). Spy-Test + Köder-Tabelle, mutationsgeprüft | 14.10. | `docs/embedding-strategy.md`, `docs/configuration.md` |
 | 3.11 | Spieler-/Spielleiter-Modus inkl. Sicherheitstests (deterministisch, live, Spy-Test) | 11./12.10. | `ARCHITECTURE.md` 4.8, `docs/testing.md` |
 | 3.12 | Folgefragen ohne Inhaltswort („Fass das kürzer zusammen“, „Gib mir ein Beispiel“) gehen durch Condense — Suche und Quellenliste passen zum Thema; Wortliste nur ergänzend (unbekanntes Wort = Inhaltswort), Unit-Tests in beide Richtungen, mutationsgeprüft. Live 13.10.: „Fass das kürzer zusammen“ → „Fasse die Beschreibung von Arkenfeld kurz zusammen.“ (1,2 s), Quellen `Orte/Arkenfeld.md` statt Venthir/Regelbuch | 13.10. | `docs/prompts.md` |
 | 3.13 | Regelkern im `qa`-Prompt (15 Stichpunkte zum Regelwerk, direkt vor der Frage; „Ressourcen vs. Punkte“ ergänzt: p009 Zauberpunkte 0/3 → 3/3): mit mMiniLMv2 Rang-1-Wurfzahl und Rüstung je 0/3 → 3/3, Lore-Fragen unverändert; im Systemprompt wirkungslos. Live mit jina: Rüstung 3/3, Rang-1-Wurfzahl wieder 0/3 (Lead „höchstens 13“). Offen: Rang 1 mit jina, Dolch, Schattenklinge (3.10) | 14.10. | `docs/prompts.md` |

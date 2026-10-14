@@ -82,12 +82,14 @@ flowchart TD
     RET --> VEC[("Vektorsuche\ne5-base 'query: '\nCosine top_k=20, ≥ 0,5")]
     RET -.->|"wenn hybrid"| BM25[("BM25\nrank_bm25 top_k=15\n(lazy gebaut)")]
     RET -.->|"wenn rules_slot"| RULES[("Regelwerk-Suche\ngroup = rules UND gleicher Filter\ntop 5, eigener Pool")]
+    RET -.->|"wenn entry_slot"| ENTRY[("Eintrags-Suche\nTabellenzeile |**Name**| aus der Frage\nUND gleicher Filter, max. 3")]
 
     VEC --> RRF["Reciprocal Rank Fusion\n(nur bei hybrid)"]
     BM25 -.->|"Treffer"| RRF
 
     RRF --> RERANK["Cross-Encoder-Rerank (GPU via DirectML, CPU als Rückfall)\njina-reranker-v2-base-multilingual\n→ top_k_rerank=8\n+ Deckel max_per_source=3 (divers füllen → nachfüllen)\n+ Regelwerk-Slot: kein rules-Chunk in den Top-8 →\nbester mit Score ≥ −4 ersetzt den schwächsten (max. 1)"]
     RULES -.->|"mitbewertet, getrennt"| RERANK
+    ENTRY -.->|"in den Pool"| RERANK
 
     RERANK --> EXP["Section Expansion\n≥ 2 Treffer unter einer Eltern-Überschrift,\neiner davon unter den ersten 3 → ganze Sektion (≤ 25 Chunks)"]
 

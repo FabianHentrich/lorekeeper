@@ -36,6 +36,7 @@ from src.api.eval_routes import eval_router
 from src.api.routes import router
 from src.config.manager import (
     ConfigManager,
+    EntrySlotConfig,
     RerankingConfig,
     RetrievalConfig,
     RulesSlotConfig,
@@ -63,6 +64,7 @@ SECRETS = [
     "Isolde Vaer ist von Nahlith besessen",
     "Die Sterbeprobe wird für Malek heimlich manipuliert",
     "Die Spielleitung würfelt Überschaden verdeckt doppelt",
+    "Die Fluchklinge tötet jeden Spieler sofort",
 ]
 
 _RULES = {
@@ -99,6 +101,13 @@ _GM_RULES = {
         "## Überschaden und Sterbeprobe\n\n"
         "Die Spielleitung würfelt Überschaden verdeckt doppelt. Kampfregeln, Todeszähler "
         "und Sterbeprobe gelten wie im Regelbuch.\n"
+    ),
+    # A table entry — bait for the entry slot, which finds tables by a row's name instead of by vector
+    "Spielleiter-Waffen.md": (
+        "# Spielleiter-Waffen\n\n"
+        "## Verfluchte Waffen\n\n"
+        "|**Waffe**|**Wirkung**|\n|---|---|\n"
+        "|**Fluchklinge**|Die Fluchklinge tötet jeden Spieler sofort|\n"
     ),
 }
 _WORLD = {
@@ -137,6 +146,7 @@ QUESTIONS = [
     "Wer ist Sol Invictus wirklich?",
     "Was ist mit Isolde Vaer los?",
     "Malek Überschaden Todeszähler Sterbeprobe manipuliert",
+    "Was macht die Fluchklinge?",
 ]
 
 _ANSWER = ["Laut ", "Regelwerk ", "…"]
@@ -214,6 +224,7 @@ def env(tmp_path_factory, embed_service):
             reranking=RerankingConfig(enabled=True, top_k_rerank=8, max_per_source=1),
             section_expansion=SectionExpansionConfig(enabled=True, top_rank=0, max_chunks=50),
             rules_slot=RulesSlotConfig(enabled=True, candidates=5, min_score=-100.0),
+            entry_slot=EntrySlotConfig(enabled=True, max_chunks=3),
         ),
         embed, vectorstore, bm25,
     )
@@ -458,11 +469,12 @@ def test_every_store_access_of_a_player_request_carries_the_restriction(env, mon
     monkeypatch.setattr(vs, "query", spy("vector", vs.query, 2))
     monkeypatch.setattr(vs, "get_chunks_for_file", spy("expansion", vs.get_chunks_for_file, 2))
     monkeypatch.setattr(bm25, "query", spy("bm25", bm25.query, 2))
+    monkeypatch.setattr(vs, "get_table_entries", spy("entry", vs.get_table_entries, 2))
 
     for question in QUESTIONS:
         r = env.client.post("/query/stream", json={"question": question, "role": "player", "hybrid_search": True})
         assert r.status_code == 200
 
-    assert {name for name, _ in calls} == {"vector", "bm25", "expansion"}, "a path was not exercised"
+    assert {name for name, _ in calls} == {"vector", "bm25", "expansion", "entry"}, "a path was not exercised"
     unfiltered = [(name, where) for name, where in calls if not _restricted(where)]
     assert not unfiltered, f"store access without the player restriction: {unfiltered}"

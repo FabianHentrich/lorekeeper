@@ -15,6 +15,7 @@ Datei, Regelwerk-Slot, Section Expansion und der Aufbau der Embed-Texte. Die Par
    - [Warum `top_k` 20?](#warum-top_k-20)
    - [Warum ein Deckel pro Datei?](#warum-ein-deckel-pro-datei)
    - [Warum ein Regelwerk-Slot?](#warum-ein-regelwerk-slot)
+   - [Warum ein Eintrags-Slot?](#warum-ein-eintrags-slot)
    - [Warum Section Expansion?](#warum-section-expansion)
    - [Warum die Identitäts-Schicht?](#warum-die-identitäts-schicht-dateiname--aliase)
    - [Warum `ef_search: 2000`?](#warum-ef_search-2000)
@@ -197,6 +198,15 @@ Datei 272, Abschnitt 142/149, MRR 0,468, Platz 1 bei 121 Fragen; 25 → 271/142,
 war die Waffentabelle: Für „Wie viel Schaden macht ein Dolch-Angriff mit Stärke 4 bei einer Wurfzahl
 von 12?“ liegt sie auf Vektor-Rang 21–25, ab `top_k` 25 setzte jina sie auf Platz 6.
 
+**Verworfen: Tabellenzeilen als eigene Chunks (14.10.).** Experiment mit zwei frisch gebauten
+Indizes (gleiche Quellen, jina): B teilt die 28 *Eintragstabellen* des Regelbuchs (Waffen, Rüstungen,
+Tränke, Artefakte, Schadenstypen, Statuseffekte, Tierformen; Fähigkeitskarten und Zahlentabellen
+bleiben ganz) in 146 Zeilen-Chunks mit wiederholtem Tabellenkopf. Golden Set: Abschnitte 142 → 141
+(verliert die Waffenfragen p052 und p086, gewinnt x004). Elf Tabellenfragen: Einzeleinträge gleich oft
+gefunden (je 4 von 8, aber „Wie viel Schaden macht ein Dolch?“ geht verloren), Listenfragen brechen
+ein („Welche Nahkampfwaffen gibt es?“ 9/9 → 2/9, Heiltränke 4/4 → 3/4). Einzelne Zeilen sind zu klein:
+sie konkurrieren untereinander und verlieren gegen längere Chunks.
+
 ### Warum ein Deckel pro Datei?
 
 Cross-Encoder-Scores bewerten nur Frage und Passage — das Modell weiß nicht, dass es schon etwas
@@ -242,6 +252,36 @@ Die Extra-Kandidaten in den Haupt-Pool zu mischen wurde gemessen und verworfen: 
 Abschnitt-Treffer (138 statt 136 von 153), aber Regelwerk-Chunks in 121 von 138 reinen
 Lore-Fragen statt 64. Golden Set mit Slot: Abschnitte 132 → 136/153, Fragen mit Entität + Regel
 (x001–x008) 1 → 5/8.
+
+### Warum ein Eintrags-Slot?
+
+Eine Tabelle ist **ein** Vektor für alle ihre Zeilen. „Wie viel Schaden macht ein Dolch?“ findet die
+Waffentabelle noch, jedes weitere Wort kippt es: „… Dolch-Angriff mit Stärke 4 …“, „… Angriff mit
+einem Dolch?“, „Welche Besonderheit hat der Hammer?“ — die Tabelle liegt auf Vektor-Rang 21–25 oder
+tiefer, Kampf- und Krit-Abschnitte gewinnen. Mehr Kandidaten (`top_k` 25–40) und Zeilen als eigene
+Chunks wurden gemessen und verworfen (siehe [Warum `top_k` 20?](#warum-top_k-20)).
+
+`retrieval.entry_slot` sucht deshalb nicht per Vektor, sondern nach dem Namen: Wörter der Frage und
+Folgen aus 2–3 Wörtern (erster Buchstabe groß, Bindestrich-Wörter auch in Teilen) werden als fette
+Tabellenzelle `|**Name**|` im gespeicherten Text gesucht (ChromaDB `where_document`, mit dem Filter der
+Anfrage). Treffer zählen nur, wenn der Name die **erste Zelle einer Zeile** ist — „Dolch“ trifft nicht
+„Dolch der Schatten“ und nicht eine Beute-Tabelle mit Dolch in der zweiten Spalte. Bis zu
+`max_chunks` Tabellen kommen in den Rerank-Pool, mit ihrer echten Cosine-Ähnlichkeit als Score.
+
+**Kein reservierter Platz** (anders als der Regelwerk-Slot): Der Slot feuert bei 32 von 274
+Golden-Set-Fragen, in 27 schafft es die Tabelle von selbst unter die 8. Von den übrigen 5 sind 4
+Fehlgriffe, die jina zu Recht verwirft — „Fähigkeit“ und „Aktionspunkte“ sind auch Zeilennamen in
+legendären Artefakt-Tabellen —, und bei „Wie viel kostet ein Langschwert?“ steht der Preis nicht in
+der Waffentabelle. Ein reservierter Platz würde genau diese Fehlgriffe erzwingen.
+
+Gemessen 14.10. (frisch gebauter Index, gleicher Inhalt wie der laufende, jina): Golden Set
+Abschnitte 142 → **143**/149 (+x004 „Phönixfeder bei Thalion“), nichts verloren, Datei 272/274
+unverändert. Elf Tabellenfragen vollständig gefunden 5 → **8**/11; Listenfragen („Welche
+Nahkampfwaffen gibt es?“ 9/9) unverändert. `max_chunks` 1, 2 und 3 maßen gleich. Kosten: ~75 ms pro
+Frage (p50, max ~200 ms). Offen: die Rechenfrage „Dolch, STÄ 4, Wurfzahl 12“ und „Unterschied Dolch und
+Kurzschwert“ — der Slot holt die Tabelle, jina bewertet Krit-Regeln bzw. die Schurken-Sektion höher;
+„Langbogen“ — die PDF-Zelle heißt `**l**<br>**Langbogen**` (Parser-Artefakt). Groß-/Kleinschreibung
+innerhalb des Namens zählt: „ap-trank“ findet „AP-Trank“ nicht.
 
 ### Warum Section Expansion?
 

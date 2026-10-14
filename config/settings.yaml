@@ -60,6 +60,9 @@ retrieval:
     enabled: true
     candidates: 5             # separate vector search inside group "rules" (same filters as the request)
     min_score: -4.0           # best rules chunk takes the last place if no rules chunk made it and it scores ≥ this
+  entry_slot:                 # question names a table row ("Dolch-Angriff") → that table joins the rerank pool
+    enabled: true             # golden set 142 → 143 sections, table probes 5 → 8/11 (roadmap 3.10, 14.10.)
+    max_chunks: 3             # tables added per question at most; the reranker decides whether they stay
 
 # LLM
 llm:

@@ -68,10 +68,13 @@ Der Spieler-Modus darf Spielern nie Spielleiter-Inhalte geben. Drei Ebenen:
   dürfen ein Geheimnis enthalten.
 
   Dazu ein **Spy-Test** (`test_every_store_access_of_a_player_request_carries_the_restriction`):
-  Er zeichnet jeden Aufruf von Vektorsuche, BM25-Suche und Section-Expansion-Nachladen während
+  Er zeichnet jeden Aufruf von Vektorsuche, BM25-Suche, Eintrags-Slot (`get_table_entries`) und
+  Section-Expansion-Nachladen während
   Spieler-Anfragen auf und verlangt in jedem die Einschränkung `source_id $in [freigegeben]`. Er prüft
   die Struktur statt der Daten: Die Expansion ohne Filter war mit diesen Testdaten dicht (sie bleibt in
-  der Quelle des Treffers), der Spy-Test schlägt trotzdem an. Mutationsgeprüft für alle drei Wege.
+  der Quelle des Treffers), der Spy-Test schlägt trotzdem an. Mutationsgeprüft für alle Wege; für den
+  Eintrags-Slot liegt eine Spielleiter-Tabelle mit dem Köder-Eintrag „Fluchklinge“ in den Testdaten
+  (ohne Filter: 7 Tests rot, 14.10.).
 
   Positiv geprüft wird außerdem, dass der Slot für Spieler wirklich greift: Belegt der
   Charakterbogen die oberen Plätze, holt er einen Chunk aus der freigegebenen Regel-Quelle — nie aus

@@ -251,6 +251,43 @@ class VectorStoreService:
 
         return items
 
+    def get_table_entries(self, names: list[str], query_embedding: list[float], where: dict | None = None,
+                          limit: int = 3) -> list[dict[str, Any]]:
+        """Table chunks with a row whose first cell is one of ``names`` (entry slot, roadmap 3.10).
+
+        A table is one vector — the average of all its rows — so "Wie viel Schaden macht ein Dolch-Angriff?"
+        misses the weapon table although "Dolch" is a row of it. Matches the bold cell ``|**Name**|`` in the
+        stored text, then keeps only chunks where the name really is a row's first cell (so "Dolch" doesn't
+        match "Dolch der Schatten"). Chunks naming more of ``names`` come first. ``score`` is the real cosine
+        similarity to ``query_embedding``, so these hits read like any other. ``where`` is AND-ed in — the
+        request's filter (player restriction included) applies like on every other search path.
+        """
+        if not names or limit <= 0:
+            return []
+        patterns: list[dict[str, Any]] = [{"$contains": f"|**{n}**|"} for n in names]
+        params: dict[str, Any] = {
+            "where_document": patterns[0] if len(patterns) == 1 else {"$or": patterns},
+            "include": ["documents", "metadatas", "embeddings"],
+        }
+        if where:
+            params["where"] = where
+        data = self._get_collection().get(**params)
+
+        wanted = set(names)
+        q = np.asarray(query_embedding, dtype=np.float32)
+        hits = []
+        for i, doc_id in enumerate(data.get("ids") or []):
+            content = data["documents"][i]
+            matched = wanted & set(_table_row_names(content))
+            if not matched:
+                continue
+            e = np.asarray(data["embeddings"][i], dtype=np.float32)
+            score = float(q @ e / (np.linalg.norm(q) * np.linalg.norm(e)))
+            hits.append({"id": doc_id, "content": content, "metadata": data["metadatas"][i], "score": score,
+                         "_matched": len(matched)})
+        hits.sort(key=lambda h: (h["_matched"], h["score"]), reverse=True)
+        return [{k: v for k, v in h.items() if k != "_matched"} for h in hits[:limit]]
+
     def get_content_hashes_for_source(self, source_id: str) -> dict[str, str]:
         """Return ``{source_file: content_hash}`` for one source, used by ingestion to skip unchanged files.
 
