@@ -45,7 +45,7 @@ tatsächlich geantwortet hat.
 
 | Kriterium | Ollama (lokal) | Gemini (Cloud) |
 |-----------|----------------|----------------|
-| **Antwortzeit** | erster Token ~2 s, gesamt p50 ~7,6 s, je nach Antwortlänge 2,6–18 s (qwen3:14b auf RX 9070 XT, warm, ~54 Token/s; gemessen 14.10., 10 Fragen × 2) | 2–8 s |
+| **Antwortzeit** | erster Token ~2 s, gesamt p50 ~7,6 s, je nach Antwortlänge 2,6–18 s (qwen3:14b auf RX 9070 XT, warm, ~54 Token/s; gemessen 14.10., 10 Fragen × 2; über das ganze Golden Set Ø 6,8 s, [evaluation.md](evaluation.md#kennzahlen-und-ziele)) | 2–8 s |
 | **Kosten** | Strom + GPU | Pro Token — Budgets in Google Cloud warnen nur, sie stoppen nicht |
 | **Datenschutz** | Komplett lokal | Daten verlassen den Rechner |
 | **Kontext** | Über `OLLAMA_CONTEXT_LENGTH` (LoreKeeper: 16384) | 1 Mio. Tokens (Flash) |

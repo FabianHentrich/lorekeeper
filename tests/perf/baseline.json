@@ -1,10 +1,10 @@
 {
   "golden_retrieval": {
-    "avg_chunks": 12.553,
-    "max_chunks": 49,
-    "p50_ms": 783.5,
-    "p95_ms": 1156,
-    "section_hit_rate": 0.891
+    "avg_chunks": 12.274,
+    "max_chunks": 30,
+    "p50_ms": 272.0,
+    "p95_ms": 347,
+    "section_hit_rate": 0.96
   },
   "startup_s": {
     "until_health": 17.683

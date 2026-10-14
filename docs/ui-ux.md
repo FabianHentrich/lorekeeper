@@ -54,6 +54,9 @@ flowchart LR
     class C1,C2,C3,C4,C5 chat
 ```
 
+**Eingabefeld**: höchstens 4.000 Zeichen — dieselbe Grenze wie die API (`MAX_QUESTION_CHARS` in
+`src/api/schemas.py`); das Feld hört auf anzunehmen, statt dass das Backend mit 422 antwortet.
+
 ### Rollenwahl: Spieler / Spielleiter
 
 Bevor der Chat öffnet, fragt `ui/LoreKeeper.py` **„Wer fragt?“** mit zwei Knöpfen (Logik in
@@ -425,10 +428,10 @@ Caches, weil der Chat das LLM-Timeout aus dem gecachten `/sidebar-state` liest.
 | Aktion | Typisch |
 |--------|---------|
 | Rerun der Sidebar | < 0,1 s (gecachte Aufrufe) |
-| Frage mit Ollama qwen3:14b (warm) | erster Token ~1 s, gesamt ~3–4 s |
+| Frage mit Ollama qwen3:14b (warm) | erster Token ~2 s, gesamt je nach Länge 2,6–18 s, lange Listen bis ~34 s (Messwerte: [ARCHITECTURE.md](../ARCHITECTURE.md) → Hardware) |
 | Erste Frage nach > 1 h Pause | +~16 s (Ollama lädt das Modell neu, `OLLAMA_KEEP_ALIVE`) |
 | Frage mit Gemini 2.5 Flash | 3–8 s gesamt |
-| Retrieval | Embedding ~0,08 s + Suche ~0,02 s + Reranking ~50 ms auf der GPU (CPU-Rückfall ~0,8 s); im laufenden Chat noch nicht nachgemessen |
+| Retrieval | p50 ~0,27 s, p95 ~0,36 s (Embedding ~0,04 s, Suche ~0,02 s, Eintrags-Slot 0,03–0,13 s, Reranking 0,07–0,16 s auf der GPU; CPU-Rückfall Sekunden — 14.10.) |
 | Backend-Start | ~18 s bis `/health` |
 
 Embedding-Modell und Reranker werden beim Start geladen — die erste Frage ist nicht langsamer als

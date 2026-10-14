@@ -1,7 +1,7 @@
 # Embedding-Strategie
 
 Wie LoreKeeper sucht und **warum so**: Embedding-Modell, Reranking, Hybrid Search, Deckel pro
-Datei, Regelwerk-Slot, Section Expansion und der Aufbau der Embed-Texte. Die Parameter stehen in
+Datei, Regelwerk- und Eintrags-Slot, Section Expansion und der Aufbau der Embed-Texte. Die Parameter stehen in
 [configuration.md](configuration.md) → `retrieval`, der Ablauf als Diagramm in
 [data-flow.md](data-flow.md).
 
@@ -106,7 +106,8 @@ zerstört), **Windows ML** als Nachfolger von DirectML (Radeon-Pfad aus Python n
 ist bei Microsoft im Wartungsmodus und braucht das Paket `onnxruntime-directml` statt `onnxruntime`
 (Installation: README); ein `pip install -r requirements.txt` kann das CPU-Paket zurückholen — dann
 greift der CPU-Rückfall mit Warnung im Log, falsch wird nichts. Im Betrieb (13.10.) braucht die
-ganze Suche warm 120–170 ms; die erste Frage mit einer neuen Eingabelänge ist auf DirectML einmalig
+ganze Suche warm 120–170 ms (mit mMiniLMv2, ohne Eintrags-Slot; mit jina und Slot 14.10.: p50 ~270 ms,
+p95 ~360 ms); die erste Frage mit einer neuen Eingabelänge ist auf DirectML einmalig
 langsamer (~0,4 s), direkt nach dem Laden des LLM in den Grafikspeicher einmal ~2 s gesehen.
 
 ### Warum jina-reranker-v2? (Entscheidung 14.10.)
@@ -271,7 +272,12 @@ Chunks wurden gemessen und verworfen (siehe [Warum `top_k` 20?](#warum-top_k-20)
 Folgen aus 2–3 Wörtern (erster Buchstabe groß, Bindestrich-Wörter auch in Teilen) werden als fette
 Tabellenzelle `|**Name**|` im gespeicherten Text gesucht (ChromaDB `where_document`, mit dem Filter der
 Anfrage). Treffer zählen nur, wenn der Name die **erste Zelle einer Zeile** ist — „Dolch“ trifft nicht
-„Dolch der Schatten“ und nicht eine Beute-Tabelle mit Dolch in der zweiten Spalte. Bis zu
+„Dolch der Schatten“ und nicht eine Beute-Tabelle mit Dolch in der zweiten Spalte. **Nur PDF-Tabellen**
+(Zelle ohne Leerzeichen `|**Name**|`, so schreibt der PDF-Parser): Obsidian-Tabellen (`| **Typ** |`,
+`| Charakter |`) mitzunehmen wurde am 14.10. gemessen und verworfen — sie sind meist Steckbrief-Tabellen
+mit allgemeinen Bezeichnungen. Golden Set (frisch gebauter Index): nur fette Zellen 143 → 142/149
+(verliert x004), Regelfragen mit Vault-Chunks 86 → 92/120, 56 Fragen mit anderem Kontext; fett + schlicht
+ebenso 142, 91/120, 66 Fragen; die elf Tabellenfragen blieben bei 8/11. Bis zu
 `max_chunks` Tabellen kommen in den Rerank-Pool, mit ihrer echten Cosine-Ähnlichkeit als Score — **ohne**
 `score_threshold`: Sie werden gerade gesucht, weil ihr Vektor schwach ist; die einzige Schranke ist der
 Reranker.
@@ -434,7 +440,7 @@ flowchart LR
     style LLM fill:#d1fae5,stroke:#10b981
 ```
 
-Vollständiger Ablauf mit BM25, Regelwerk-Slot und Section Expansion:
+Vollständiger Ablauf mit BM25, Regelwerk- und Eintrags-Slot und Section Expansion:
 [data-flow.md](data-flow.md#beantwortung-einer-frage).
 
 | | Bi-Encoder (e5-base) | Cross-Encoder (jina-reranker-v2) |

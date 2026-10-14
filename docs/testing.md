@@ -137,7 +137,9 @@ Zwei Arten, damit eine Änderung, die LoreKeeper spürbar langsamer macht, sofor
   - `tests/perf/test_ui_render.py` — Renderzeit je Seite (Fake-Backend).
   - `tests/perf/test_golden_retrieval.py` — Golden Set über das **laufende** Backend
     (`127.0.0.1:8000`, sonst übersprungen): p50/p95 der Retrieval-Latenz, Chunks pro Frage
-    (Ø/max — fängt aufgeblähten Kontext), Abschnitt-Trefferquote darf nicht sinken.
+    (Ø/max — fängt aufgeblähten Kontext), Abschnitt-Trefferquote darf nicht sinken. Baseline erneuert
+    14.10. nach jina und Eintrags-Slot: Abschnitt 0,96, p50/p95 272/347 ms, max. 30 Chunks (vorher
+    0,891, 784/1.156 ms — der alte Wert hätte erst einen großen Rückgang bemerkt).
   - `tests/perf/test_startup.py` — startet ein zweites Backend auf freiem Port gegen die echte
     Config und `chroma_data/` und misst bis zur ersten `/health`-Antwort. **Übersprungen, solange
     LoreKeeper läuft**; auf einem ruhigen Rechner bei gestopptem LoreKeeper ausführen.

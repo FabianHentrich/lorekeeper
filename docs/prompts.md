@@ -28,7 +28,7 @@ Alle Prompts liegen als Jinja2-Templates in `config/prompts.yaml`; der `PromptMa
 ```yaml
 # config/prompts.yaml – Aufbau
 system:     "Du bist LoreKeeper, …"            # Systemprompt
-qa:         "Beantworte die folgende Frage …"  # Antwort-Prompt: Verlauf + Quellen + Frage
+qa:         "Beantworte die folgende Frage …"  # Antwort-Prompt: Verlauf + Quellen + Regelkern + Frage
 condense:   "Gegeben ist ein Chat-Verlauf …"   # Folgefrage → eigenständige Frage
 no_context: "Zu deiner Frage … keine …"        # keine Treffer (ohne LLM)
 ```
@@ -122,7 +122,7 @@ qa: |
 
   ### Regelkern (gilt immer, auch wenn die Quellen ihn nicht wiederholen):
   Bei Würfen, Schaden, Rüstung oder Ausrüstung jede Zahl der Antwort gegen diese Regeln prüfen …
-  - **Probe**: …   - **Ass-Regel**: …   (14 Stichpunkte, ~450 Tokens)
+  - **Probe**: …   - **Ass-Regel**: …   (15 Stichpunkte, ~1.100 Tokens)
 
   ### Frage:
   {{ question }}

@@ -202,9 +202,10 @@ LoreKeeper lädt Modelle seit 14.10. nur aus dem lokalen Cache (`HF_HUB_OFFLINE=
 `src/__init__.py`; [configuration.md](configuration.md#umgebungsvariablen)). Gebraucht werden
 `intfloat/multilingual-e5-base` (~1,1 GB) und vom Reranker `jina-reranker-v2-base-multilingual`
 `tokenizer.json`, `onnx/model_fp16.onnx` (~560 MB, GPU) und `onnx/model.onnx` (~1,1 GB, CPU-Rückfall).
-Fehlt das Embedding-Modell oder `onnx/model.onnx` beim CPU-Rückfall, endet das mit
-`LocalEntryNotFoundError` („… cannot find the requested files in the local cache …“); fehlt nur die
-GPU-Datei, läuft der Reranker mit Warnung auf der CPU.
+Fehlt das Embedding-Modell, bricht der Start mit `OSError: We couldn't connect to
+'https://huggingface.co' … couldn't find them in the cached files` ab; fehlt `onnx/model.onnx` beim
+CPU-Rückfall, mit `LocalEntryNotFoundError` („… cannot find the requested files in the local cache …“);
+fehlt nur die GPU-Datei, läuft der Reranker mit Warnung auf der CPU.
 
 **Beheben**: einmal den Vorab-Download aus README → Schnellstart, Schritt 4 ausführen (der Befehl
 importiert `src` nicht und darf deshalb herunterladen), oder das Backend einmal mit erlaubtem Download

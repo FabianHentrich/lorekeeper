@@ -499,6 +499,25 @@ class TestGetTableEntries:
         hits = store.get_table_entries(["Dolch der Schatten", "Dolch", "Kurzschwert"], [0.0, 1.0, 0.0], limit=1)
         assert [h["id"] for h in hits] == ["weapons"]  # two names beat a better cosine with one
 
+    def test_obsidian_tables_with_padded_cells_are_left_out_on_purpose(self, vs_config, embed_service):
+        """Vault tables ('| **Typ** |', '| Charakter |') are mostly key-value tables with generic labels —
+        matching them lost a golden question and found no extra table (14.10.). Only PDF cells count."""
+        import uuid
+
+        import chromadb
+        svc = VectorStoreService(vs_config, embed_service)
+        svc._collection = chromadb.EphemeralClient().create_collection(
+            f"vault_{uuid.uuid4().hex}", metadata={"hnsw:space": "cosine"})
+        svc._collection.add(
+            ids=["bold", "plain", "prose"],
+            documents=["Ausrüstung\n\n| Gegenstand | Wirkung |\n|---|---|\n| **Dolch** | leicht |",
+                       "Werte\n\n| Eigenschaft | Wert |\n|---|---|\n| Dolch | 3 |",
+                       "Kampf\n\nEr zieht seinen **Dolch** und greift an."],
+            embeddings=[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+        )
+        hits = svc.get_table_entries(["Dolch"], [1.0, 0.0, 0.0])
+        assert hits == []
+
     def test_no_names_no_lookup(self, service, mock_collection):
         assert service.get_table_entries([], [1.0]) == []
         mock_collection.get.assert_not_called()

@@ -114,7 +114,7 @@ Wörter nur im richtigen Abschnitt stehen (z.B. `Todeszähler` für Überschaden
 
 ## `evaluate_retrieval.py` — schneller Durchlauf
 
-Spricht direkt mit dem Retriever (Embedding → ChromaDB → Reranker → Deckel → Slot → Expansion),
+Spricht direkt mit dem Retriever (Embedding → ChromaDB → Eintrags-Slot → Reranker → Deckel → Regelwerk-Slot → Expansion),
 ohne LLM. Für jede Iteration beim Tunen der Suche.
 
 ```powershell
@@ -192,6 +192,22 @@ Regelbuch-Fragen gegen das alte und neue PDF geprüft (Stichwörter und Abschnit
 Fragen zu geänderten Regeln von Hand. Angepasst: k001 (Langschwert 15 G statt 10 G), p095 (magische
 Gegenstände sind jetzt käuflich, Stichwort „teu“ — trifft „teuer“ und „teurer“).
 
+**Stichwörter nach dem zweiten Lauf angepasst (14.10.)** — die Antworten waren richtig, die Stichwörter
+enger als nötig; jedes neue Stichwort ist eine Tatsache aus Regelbuch/Vault, die eine richtige Antwort
+nennen muss, geprüft gegen die gespeicherten Antworten:
+
+| ID | vorher | jetzt | Grund |
+|---|---|---|---|
+| a007 | „Mandate der Macht“ | „Ephraskal“ | richtige Antworten nennen das Ziel, nicht den Akt-Titel |
+| a012 | „Gewahrsam“ | „Monolith“ | Abenteuername statt Inhalt |
+| m042 | „Berechtigung“ | „physisch“ | Phasen richtig beschrieben, ohne das Wort |
+| p009 | „Fähigkeitspunkte“ | „Abenteuer“ | „pro Abenteuer“ ist der Kern; die Antwort sagt „Zauberpunkte, keine Manapunkte“ |
+| p010 | „Fähigkeitspunkt“ | „Rang 1“ | das Regelbuch nennt sie selbst „Zauberpunkte“ |
+| p079 | „halbe“ + „keine Kosten“ | „halbe“ + „10+“ | „keinen Kosten“ scheiterte an der Endung |
+
+Bewusst nicht als Teilstring-Stichwörter: kurze Buchstabenfolgen wie „SP“ oder „10“ — sie träfen
+„Spieler“ bzw. jede Zahl mit 10.
+
 **Zweiter Lauf (14.10., nach der Neu-Indizierung): Answer Contains 0,901** — gleich wie der erste
 (0,905), aber **15 Fragen kippen** (7 von Fehler zu richtig, 8 umgekehrt): Das LLM antwortet bei
 Temperatur 0,3 nicht gleich. Ein einzelner Lauf trennt ±3 % nicht vom Rauschen; Verbesserungen an
@@ -204,7 +220,9 @@ Einträge (Quelle jeweils geprüft). Sie dienen als Gegenprobe, ob eine Änderun
 verbessert — nie beim Tuning benutzen. Ungetunter Stand 14.10.: **9 von 10 Listen vollständig**,
 50 von 53 Einträgen (fehlt: Abenteuer von Akt 2, 1 von 4). Messen mit
 `evaluation.evaluate.evaluate()` gegen den laufenden Server — der Golden-Set-Lauf der UI kennt die
-Datei nicht. Lange Listenantworten brauchen 10–34 s (Länge, ~54 Token/s).
+Datei nicht. Die CLI geht auch (`python -m evaluation.evaluate --qa-pairs evaluation/holdout_lists.yaml`),
+schreibt aber einen `e2e_*`-Bericht, der auf der Evaluation-Seite erscheint und dort einen der drei
+behaltenen Plätze belegt. Lange Listenantworten brauchen 10–34 s (Länge, ~54 Token/s).
 
 ---
 

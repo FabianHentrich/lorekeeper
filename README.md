@@ -62,7 +62,7 @@ Embedding-Modell funktioniert aber auch mit anderen Sprachen.
 
 | | |
 |---|---|
-| 🧠 **Hybride Suche** | E5-Vektorsuche + optional BM25 (Reciprocal Rank Fusion), Cross-Encoder-Reranking, Deckel pro Datei, Regelwerk-Slot, Section Expansion |
+| 🧠 **Hybride Suche** | E5-Vektorsuche + optional BM25 (Reciprocal Rank Fusion), Cross-Encoder-Reranking, Deckel pro Datei, Regelwerk- und Eintrags-Slot (Tabellenzeilen per Name), Section Expansion |
 | ⚡ **Reranking auf der GPU** | ONNX Runtime + DirectML auf jeder DX12-Karte (auch AMD), CPU als Rückfall |
 | 🎲 **Spieler-/Spielleiter-Modus** | Spieler sehen nur freigegebene Quellen — im Backend erzwungen, Sessions je Rolle |
 | 🔀 **Zwei LLM-Provider** | Ollama (lokal) ↔ Gemini (Cloud), Wechsel zur Laufzeit |

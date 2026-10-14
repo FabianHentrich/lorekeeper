@@ -220,7 +220,8 @@ class EntrySlotConfig(BaseModel):
 
     A table chunk is one vector for all its rows, so "Wie viel Schaden macht ein Dolch-Angriff?" misses the
     weapon table although "Dolch" is a row. Words of the question (and runs of 2–3 words) that are the first
-    cell of a table row pull that table into the rerank pool; the reranker decides whether it stays.
+    cell of a table row pull that table into the rerank pool; the reranker decides whether it stays. PDF
+    tables only (cell ``|**Name**|``) — Obsidian key-value tables were measured and left out (14.10.).
     """
     enabled: bool = False
     max_chunks: int = Field(default=3, ge=0)  # tables added per question at most (0 = none)

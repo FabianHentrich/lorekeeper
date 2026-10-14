@@ -258,8 +258,11 @@ class VectorStoreService:
         A table is one vector — the average of all its rows — so "Wie viel Schaden macht ein Dolch-Angriff?"
         misses the weapon table although "Dolch" is a row of it. Matches the bold cell ``|**Name**|`` in the
         stored text, then keeps only chunks where the name really is a row's first cell (so "Dolch" doesn't
-        match "Dolch der Schatten"). Chunks naming more of ``names`` come first. ``score`` is the real cosine
-        similarity to ``query_embedding``, so these hits read like any other. ``where`` is AND-ed in — the
+        match "Dolch der Schatten"). Only the PDF format on purpose: Obsidian tables (``| **Typ** |``,
+        ``| Charakter |``) are mostly key-value tables with generic labels — matching them too lost a golden
+        question, put more vault chunks into rules questions and found no extra table (measured 14.10., 3.10).
+        Chunks naming more of ``names`` come first. ``score`` is the real cosine similarity to
+        ``query_embedding``, so these hits read like any other. ``where`` is AND-ed in — the
         request's filter (player restriction included) applies like on every other search path.
         """
         if not names or limit <= 0:

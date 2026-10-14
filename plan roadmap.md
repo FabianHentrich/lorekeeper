@@ -6,8 +6,12 @@ Hier steht **offene Arbeit**. Erledigtes ist unten eine Zeile mit Verweis; Entsc
 und Begründungen stehen in der zuständigen Doku (Tabelle in `CLAUDE.md` → „Documentation“), die
 Umsetzung im `git log`. Die Nummern bleiben stabil — die Doku verweist auf sie.
 
-**Fokus seit 13.10.: Qualität vor neuen Features.** Features (⏸) ruhen, bis die Qualitätspunkte
-erledigt sind.
+**Qualitätsphase 13.–14.10. abgeschlossen.** Retrieval Datei 272/274, Abschnitt 143/149; Antworten
+~90 % in zwei End-to-End-Läufen; Holdout-Listen 9/10; Code-Review 13.0 und Performance-Review
+erledigt. Was an Qualität offen ist, sind Einzelfälle (3.10, 3.15) oder bewusst zurückgestellt (3.14)
+— sie werden nur bei Anlass im Spiel angefasst. **Regressionsprüfung** nach größeren
+Inhaltsänderungen (Regelbuch, Vault): Golden Set + End-to-End-Lauf + Holdout
+([evaluation.md](docs/evaluation.md)), kein Tuning. Features sind wieder dran — Reihenfolge unten.
 
 ---
 
@@ -15,189 +19,105 @@ erledigt sind.
 
 **Last** = Rechenlast beim Umsetzen/Messen: 🟢 nur Code + Unit-/UI-Tests (geht parallel zur
 Simulation) · 🟡 braucht laufendes Backend oder LLM · 🔴 Indizierung oder Vision-Modell (CPU/GPU,
-mehrere Minuten, nicht parallel zur Simulation). Ein Golden-Set-Lauf dauert ~1 min (🟡).
+mehrere Minuten, nicht parallel zur Simulation). Ein Golden-Set-Lauf dauert ~1 min, ein
+End-to-End-Lauf ~35 min (🟡).
 
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 1 | 3.10 Restliche Abschnitt-Misses | Gering-Mittel — Regelfragen präziser | Mittel | 🟡 | Einzelfälle, je Golden-Set-Lauf prüfbar |
-| — | 3.15 Antwortfehler aus dem End-to-End-Lauf | Gering — Einzelfälle | — | 🟡 | Feintuning beendet (14.10.); nur bei Anlass im Spiel |
-| — | 3.14 Rechenfragen zum Regelwerk ⏸ | Mittel — falsche Zahlen bei Regel-Rechnungen | Mittel-Hoch | 🟡 | Vorerst so gelassen (14.10.); nur mit Denken zuverlässiger, das kostet 15–40 s |
-| — | 3.2 Session-History ⏸ | Unklar | Mittel | 🟢 | Erst entscheiden, ob gespeicherte Sessions Nutzen haben |
-| 3 | 3.4 Kommentar zur Bewertung ⏸ | Gering | Gering | 🟢 | Feature |
-| — | 2 Bilder im Chat (Phase 1/2) ⏸ | Mittel / Nice-to-have | Mittel / Mittel-Hoch | 🔴/🟡 | Feature |
-| — | 4.2 Internet-Zugriff (Tailscale) ⏸ | Mittel | Gering | 🟢 | Vorher die Vertrauensgrenze der API klären |
-| 4 | 3.5 Wikilink-Expansion ⏸ | Mittel | Mittel | 🔴 | Neuer Suchweg — muss in den Spy-Test |
-| — | 11.0 P8 Dienste-/Reranker-Modul (optional) | Gering | Mittel | 🟢 | Nur zusammen mit Feature-Arbeit |
+| 1 | 3.16 Chunks unter der Quelle einsehbar | Mittel — Antworten nachprüfbar | Gering-Mittel | 🟢 | Backend hat die Chunks, die API liefert nur 200 Zeichen Vorschau — Feld + Anzeige + Request-Budgets |
+| 2 | 2 Bilder im Chat (Einbettung + Dateiname) | Mittel-Hoch — Karten, Charaktere am Tisch | Mittel | 🟡 | Ohne Vision-Schritt; Parser-Änderung teilt sich 3.5 |
+| 3 | 3.4 Kommentar zur Bewertung | Gering | Gering | 🟢 | Schneller Gewinn, bessere Rückmeldung für spätere Fixes |
+| 4 | 3.5 Wikilink-Expansion | Mittel | Mittel | 🔴 | Neuer Suchweg (Spy-Test); nutzt dieselbe Parser-Änderung wie 2 |
+| — | 4.2 Internet-Zugriff (Tailscale) ⏸ | Mittel | Gering | 🟢 | Nur zusammen mit einem Login für die API |
+| — | 3.2 Session-History ⏸ | Gering | Mittel | 🟢 | Empfehlung: streichen — Nutzerentscheidung offen |
+| — | 3.10 / 3.15 Einzelfälle | Gering | — | 🟡 | Nur bei Anlass im Spiel |
+| — | 3.14 Rechenfragen ⏸ | Mittel | Mittel-Hoch | 🟡 | Nur mit Denken zuverlässig (14–41 s); später mit größerem Modell neu prüfen |
+| — | 12.3 Auto-Reload im Entwicklungsmodus hängt | Gering | Gering | 🟢 | Nach Code-Änderungen startete das Backend zweimal nicht neu (14.10.) |
+| — | 11.0 P8 Dienste-/Reranker-Modul | Gering | Mittel | 🟢 | Nur zusammen mit Feature-Arbeit an diesen Stellen |
 
-**Entschieden 14.10.**: Der Fähigkeitsbericht bleibt für Spieler freigegeben — er ist eine
-Entscheidungshilfe (Spieler bekommen bei 47 von 124 reinen Regelfragen Ø 2,3 von 8 Chunks daraus).
-`Spielleiter-Tools/potenzielle_anpassungen.md` (Änderungsvorschläge/Errata) wird nicht mehr
-indiziert (`exclude_patterns` in `sources.yaml`, 14 Chunks entfernt) — Vorschläge sind keine
-geltenden Regeln. `HF_HUB_OFFLINE=1` ist gesetzt (in `src/__init__.py`, weil `.env` die
-Modell-Bibliotheken nicht erreicht): Modelle nur aus dem lokalen Cache, kein Hub-Zugriff beim Start;
-Downloads mit `HF_HUB_OFFLINE=0` ([operations.md](docs/operations.md#modelle-fehlen-beim-ersten-start)).
+**Entschieden 14.10.**: Der Fähigkeitsbericht bleibt für Spieler freigegeben (Entscheidungshilfe).
+`Spielleiter-Tools/potenzielle_anpassungen.md` wird nicht indiziert — Vorschläge sind keine geltenden
+Regeln. `HF_HUB_OFFLINE=1` (in `src/__init__.py`): Modelle nur aus dem lokalen Cache, Downloads mit
+`HF_HUB_OFFLINE=0` ([operations.md](docs/operations.md#modelle-fehlen-beim-ersten-start)).
 
-**Offen am Gaming-PC (Nutzer)**: (DHCP-Reservierung für `192.168.178.34` eingestellt, 14.10.) Die alte
-Autostart-Aufgabe „LoreKeeper Server“ war am 13.10. ohne Admin-Rechte nicht mehr zu sehen — einmal
-in einer Admin-PowerShell bestätigen (`Get-ScheduledTask -TaskName "LoreKeeper*"`). Nebenbei
-gesehen: Inbound-Allow-Regeln für `python.exe` im Profil „Öffentlich“ gehören zu anderen
-Python-Installationen (alte LoreKeeper-Kopie unter OneDrive, PortraitForge, globales Python) — ggf.
-selbst aufräumen.
-
-**Offen im Vault (Nutzer)**: `Organisationen/Schattenorden/Schattenorden.md` nennt noch „fünf
-Magiepfade“ (Einleitung, Grundsatz 6, Hierarchie-Tabelle), `Meister der Pfade.md` hat vier Pfade — das
-LLM antwortet „fünf Pfade“ und zählt vier auf. Optional: Simulationsberichte mit fragenahen
-Überschriften und „Kosten je Effekt“ statt „Preis“ (3.15).
-
-**Offen im Browser** (Handprüfung): **⏻ LoreKeeper beenden** einmal klicken — `logs/stop.log` muss
-nach Sekunden mit „stopped … (clean)“ enden (der korrigierte Startweg wurde nur mit einem
-Ersatz-Prozess geprüft, 12.0); bei der nächsten Indizierung über die UI den Fortschritt
-durchklicken (Job starten, Seite wechseln und zurück — 3.8/3.9); 👍/👎 und die Tabs
-„Feedback“/„Chunks“ einmal von Hand bedienen (API-Seite live geprüft).
+**Offen beim Nutzer**:
+- **Gaming-PC**: alte Autostart-Aufgabe „LoreKeeper Server“ einmal in einer Admin-PowerShell prüfen
+  (`Get-ScheduledTask -TaskName "LoreKeeper*"`); Inbound-Allow-Regeln für `python.exe` im Profil
+  „Öffentlich“ gehören zu anderen Python-Installationen — ggf. aufräumen. (DHCP-Reservierung
+  `192.168.178.34` eingestellt, 14.10.)
+- **Vault**: `Organisationen/Schattenorden/Schattenorden.md` nennt noch „fünf Magiepfade“ (Einleitung,
+  Grundsatz 6, Hierarchie-Tabelle), `Meister der Pfade.md` hat vier — das LLM sagt „fünf“ und zählt
+  vier auf. Optional: Simulationsberichte mit fragenahen Überschriften und „Kosten je Effekt“ statt
+  „Preis“ (3.15).
+- **Browser (Handprüfung)**: **⏻ LoreKeeper beenden** einmal klicken — `logs/stop.log` muss nach
+  Sekunden mit „stopped … (clean)“ enden (12.0); bei der nächsten Indizierung über die UI den
+  Fortschritt durchklicken (Job starten, Seite wechseln und zurück — 3.8/3.9); 👍/👎 und die Tabs
+  „Feedback“/„Chunks“ einmal von Hand bedienen.
 
 ---
 
 ## Offene Punkte
 
-### 3.10 Restliche Abschnitt-Misses
+### 3.16 Chunks unter der Quelle einsehbar
 
-Stand 14.10.: Datei 272/274, Abschnitt **143/149**, Suche exakt. Bisher umgesetzt (Tabelle
-„Erledigt“): Regelwerk-Slot, `top_k` 20, „Alte Vault-Werte“ aus dem Index, Zeilennamen für
-Tabellen-Chunks, Reranker jina-reranker-v2, Eintrags-Slot; verworfen: Hybrid-Suche, Tabellen als
-Fließtext, Tabellenzeilen als eigene Chunks, `top_k` > 20.
+Idee des Nutzers (14.10.): Wer eine Antwort nachlesen will, öffnet unter der Quelle die Chunks, die
+das LLM bekommen hat — kein eigener Viewer, denn es geht nur um die ohnehin geladenen Chunks. Heute
+zeigt der Chat je Quelle eine Vorschau von 200 Zeichen (`chunk_preview`).
 
-**Offen, je mit Diagnose** (Rang des richtigen Chunks in der Vektorsuche, Reranker-Score richtig
-gegen gewählt; Skript-Muster: Rang in den Top 200 + `_predict` je Paar):
-- **Seit jina verloren** (diagnostiziert 14.10., Kandidaten mit jina und mMiniLMv2 nachgerechnet):
-  - **p009 Zauberpunkte — Antwort war falsch, über den Regelkern behoben (14.10.).** jina setzt „5.1
-    Fähigkeitspunkte“ auf Rang 15 von 20 (mMiniLMv2: 7) und füllt den Kontext mit Ressourcen-Chunks
-    (2.5 AP/MP, LP, RP); die Antwort hielt Zauberpunkte für verbrauchte, regenerierte Ressourcen.
-    Neuer Regelkern-Stichpunkt „Ressourcen vs. Punkte“: Antwort 0/3 → 3/3, MP-/Talentfragen
-    unverändert richtig ([prompts.md](docs/prompts.md#regelkern)). Im Golden Set (nur Retrieval) bleibt
-    p009 ein Abschnitt-Miss — der Chunk nennt „Zauberpunkte“ nur in Klammern.
-  - **z001 Begegnungsschwierigkeit — Antwort trotzdem richtig** (leicht < 15 % … tödlich ≥ 50 %, aus
-    Begegnungsbaukasten/Bericht). jina setzt Abenteuer-Szenen („Gefährlicher Wald“) nach vorn; die
-    Berichts-Chunks sagen weder „Schwierigkeit“ noch „Simulation“, und „4. Die Einstufung“ steht in
-    einem anderen Chunk als die Tabelle mit den Schwellen.
-- **AP-Pool** (14.10., nebenbei gefunden): „Wie viele Aktionspunkte habe ich?“ → „50 AP“ (0/3, mit
-  und ohne Regelkern) — die 50 sind ein gemeinsamer Pool für AP und MP (2.5).
-- **Simulation** — z003, z006, z009, z012 (Fragen zu Berichtsabschnitten).
-- **Name in fremder Identität** — „Wer ist Arkenfeld?“ (live 13.10.): 12 Chunks von „Bargrun
-  ‚Zwerg‘ Erkenbrandt“ („Der Armdrücker von Arkenfeld“), nur 5 von `Orte/Arkenfeld.md`. Die
-  Identitäts-Schicht macht den Ortsnamen zum Suchsignal für die NPC-Datei; Antwort trotzdem richtig.
-- Die 22-Chunk-Sektion „7.3 Legendäre Artefakte > Monolith“ landet bei fremden Regelfragen in den
-  Top 3 („Ass-Regel“ p011, „Zauberspeicher“ p101); das Budget aus 5.6 streicht sie nur.
-- **Tabelleneinträge** — seit 14.10. über den Eintrags-Slot (Tabelle „Erledigt“). Offen: „Dolch, STÄ 4,
-  Wurfzahl 12“ und „Unterschied Dolch und Kurzschwert“ (Slot holt die Tabelle, jina wertet anderes
-  höher), „Langbogen“ (PDF-Zelle `**l**<br>**Langbogen**`, Parser-Artefakt). Der Rechenteil gehört zu 3.14.
+Plan: `/query` und `/query/stream` liefern je Quelle den ganzen Chunk-Text mit (bisher nur die
+Vorschau); die UI zeigt ihn je Quelle in einem aufklappbaren Bereich, mehrere Chunks derselben Datei
+untereinander. Spieler-Modus unverändert — Spieler bekommen nur Chunks, die sie sehen dürfen. Zu
+prüfen: Größe des `done`-Events (bis 30 Chunks × ~900 Zeichen) und die Request-Budgets der UI-Tests.
+Nutzen nebenbei: falsche Antworten werden sichtbar (z. B. „20,5 Gold“ aus der Simulations-Rangliste,
+3.15).
 
-### 3.15 Antwortfehler aus dem End-to-End-Lauf (14.10.)
+### 2 Bilder im Chat
 
-**Bewertung 14.10. — Feintuning beendet, nur noch Einzelfälle.** Stand: Retrieval Datei 272/274,
-Abschnitt 143/149 (übrige Misses: p009 und z001 mit richtiger Antwort, z003/z006/z009/z012
-Simulationsberichte); Antworten ~90 % in zwei Läufen; Holdout-Listen 9/10. Gründe: (1) Zwischen zwei
-gleichen Läufen kippen ~15 Fragen — größer als jeder Effekt, den ein Einzelfix noch bringen kann, und
-nur über mehrere 30-Minuten-Läufe messbar; (2) die übrigen Fehler haben je eine eigene Ursache, sie
-einzeln zu beheben hieße auf das Golden Set zu tunen; (3) der Holdout zeigt, dass der allgemeine Fall
-funktioniert. Einzige kleine Gruppe: **Simulationsberichte** (4 Retrieval-Misses, dazu k001 — „Preis“ =
-Kosten je Effekt wird als Kaufpreis gelesen); der bessere Hebel liegt in den Berichten selbst
-(Überschriften wie gefragt wird, „Kosten je Effekt“ statt „Preis“), nicht im Retriever.
-**Vorgehen künftig**: nach größeren Inhaltsänderungen (Regelbuch, Vault) ein End-to-End-Lauf + Holdout
-als Regressionsprüfung, kein Tuning; Einzelfälle unten nur bei Anlass im Spiel.
+Ziel: „Wie sieht die Karte von Arkenfeld aus?“ oder eine Frage zu einem Charakter zeigt das passende
+Bild im Chat. Heute werden Bilder nur als Dateiname + Ordner indiziert und aus der Suche
+ausgeschlossen ([embedding-strategy.md](docs/embedding-strategy.md) → „Warum Bilder aus der Suche
+ausschließen?“) — als eigene Chunks verdrängten sie richtige Treffer.
 
-Zwei Läufe: Answer Contains 0,905 und 0,901, aber 15 Fragen kippen zwischen den Läufen (Rauschen bei
-Temperatur 0,3). Die 19 Fragen, die in **beiden** scheitern, mit ganzen Antworten nachgefragt
-([evaluation.md](docs/evaluation.md#evaluatepy--end-to-end)):
+**Neuer Ansatz (Nutzer, 14.10.): ohne Bildbeschreibung.** Bilder werden nicht mehr gesucht, sondern
+**zugeordnet**:
+1. **Einbettung in der Notiz** — Notizen binden Bilder mit `![[Karte Arkenfeld.png]]` ein; der
+   `MarkdownParser` entfernt die Zeile heute nur. Stattdessen als Metadatum am Chunk speichern
+   (z. B. `images`) — ein gefundener Chunk bringt sein Bild mit, genau das, das der Autor dorthin
+   gesetzt hat.
+2. **Dateiname als Rückfall** für Bilder, die nirgends eingebettet sind: „Karte Arkenfeld.png“ passt
+   zu Fragen, die „Arkenfeld“ nennen — ähnlich dem Eintrags-Slot (Namenssuche, Filter der Anfrage).
 
-- **Stichwort zu eng, Antwort richtig** — am 14.10. angepasst (a007 „Ephraskal“, a012 „Monolith“, m042
-  „physisch“, p009 „Abenteuer“, p010 „Rang 1“, p079 „halbe“ + „10+“; geprüft gegen die gespeicherten
-  Antworten). Vorher: a007 („Mandate der Macht“ — Antwort erklärt
-  das Ziel ohne den Akt-Titel), a012 („Gewahrsam“ — Abenteuername), m042 („Berechtigung“ — Phasen richtig
-  beschrieben), p009 („Fähigkeitspunkte“ — Antwort richtig, sagt „Zauberpunkte … nicht Manapunkte“),
-  p010 („Fähigkeitspunkt“ — Antwort sagt „Zauberpunkt“, wie das Regelbuch auch), p079 („keine Kosten“ —
-  Antwort „keinen Kosten“, inhaltlich vollständig).
-- **Aufzählungen unvollständig** (größte Gruppe; der richtige Abschnitt wird gefunden, aber nur 8 Chunks
-  davon erreichen das LLM — Section Expansion greift nicht; Hybrid-Suche hilft nicht, 14.10. gemessen): p008 Klassen („keine konkreten Klassen
-  genannt“), p036 Basis-Skills (nur einer), p037 Basis-Zauber („Magischer Schlag“ fehlt), p114 Eigenheiten
-  Magie („Manaschwäche“ beschrieben, aber ohne Namen), p014 Benchmark-Werte fehlen, a030 Beweis-Tabelle
-  nicht gefunden, p049 Überheilung (Seelenentzug fehlt, dafür geratene Zauber aus NPC-Dateien).
-  **Tuning pausiert (14.10.)**: Der Holdout aus zehn neuen Listenfragen ist ungetunt zu 9/10 vollständig
-  — Listen klappen allgemein, die Golden-Set-Fälle sind Einzelfälle (sehr große Kapitel, schlecht
-  geschnittene Abschnitte). Ein allgemeiner Mechanismus (mehr Kontext, andere Expansion) hätte
-  Overfitting-Risiko bei kleinem Gewinn; Einzelfälle nur bei Anlass.
-- **Fakten falsch**: k001 Langschwert „20,5 Gold“ — Zahl aus der Fähigkeiten-Rangliste der Simulation
-  (Spalte „Preis“ = Kosten je Effekt), die Preistabelle 7.4 fehlt im Kontext; m048 Deckname „Solmar“
-  (steht ohne Überschrift neben einem Bild); p091 Tränke-Fehlwurf (1W8-Tabelle fehlt).
-- **x008 Heimkehrpfennig** — Antwort „bei Thalion, Endzustand B“ (Kampagnenstruktur), erwartet
-  „Kultpriester“ (Beutetabelle I-2); Nutzer 14.10.: „Kultpriester“ gilt — echter Antwortfehler. z009 ist ein bekannter
-  Retrieval-Miss (3.10).
+Verworfen: Vision-Beschreibungen beim Ingest (eigenes Modell, GPU-Zeit je Bild, neue
+Fehlerquellen), CLIP-Embeddings (eigener Vektorraum), manuelle Captions. Braucht einen Re-Ingest
+des Vaults.
 
-- ~~m056 — Widerspruch im Vault~~ — Nutzer 14.10.: Kaelvorr + Serynthia gelten, Pfad-Tabelle aus
-  `Schattenorden.md` gelöscht; Vault inkrementell neu indiziert (1 Datei, 27 Chunks, Suche exakt), m056
-  live richtig. Holdout h009 zeigt jetzt auf `Meister der Pfade.md`.
+**Anzeige**: `GET /files/{path}` statt lokaler Pfade — nötig, sobald die UI von einem anderen Gerät
+geöffnet wird. Neue Angriffsfläche: nur Dateien innerhalb der Quellordner, nur Bilder, und im
+Spieler-Modus nur Bilder aus freigegebenen Quellen (Sicherheitstest + Spy-Test). Rückfall: Bild im
+Quellen-Bereich. **Vorher klären**: Aus PDFs extrahierte Bilder liegen in einem temporären Ordner, der
+nach dem Parsen gelöscht wird.
 
-### 3.14 Rechenfragen zum Regelwerk unzuverlässig ⏸
+### 12.3 Auto-Reload im Entwicklungsmodus hängt
 
-Entdeckt 14.10. beim Regelkern (3.13). Fragen, bei denen das Modell Regeln **anwenden und rechnen**
-muss, beantwortet qwen3:14b ohne Denken oft falsch, auch wenn Regel und Werte im Prompt stehen. Live
-mit jina, je 3 Läufe ([prompts.md](docs/prompts.md#regelkern)):
-- „Welche Wurfzahl kann ich mit Rang 1 höchstens erreichen?“ — Lead „höchstens 4“ bzw. „13“, richtig
-  wäre „nach oben offen“ (Ass-Regel). Das Modell hängt sich an „höchstens“ + W4; das Ass-Regel-Beispiel
-  im Chunk ist nicht die Ursache (ohne es 0/3). Starke Streuung zwischen Läufen (0–3/3).
-- „Dolch, STÄ 4, Wurfzahl 12“ — 0/3: Krit-Schwelle (15 statt 10 bei leichten Waffen) und Grundschaden
-  verwechselt; dazu fehlt die Waffentabelle im Kontext (3.10).
-- „Schattenklinge auf Rang 6 maximal?“ — mit jina kommt die Fähigkeitskarte (1W10 + X), aber X wird
-  falsch oder gar nicht bestimmt (richtig: + 10). Mit mMiniLMv2 kam stattdessen der
-  Simulations-Durchschnitt 29,94 als „Maximum“.
-- Richtig dagegen: Rüstungswerte (3/3), Erklärung des Würfelsystems (3/3).
+`.\start.ps1` startet uvicorn mit `--reload`. Am 14.10. blieb das Backend nach einer Code-Änderung
+zweimal hängen statt neu zu laden: um 14:13 fuhr es herunter (samt Ollama) und kam nicht wieder hoch
+— ein laufender End-to-End-Job ging verloren —, um ~17:15 lud es die Änderung nicht und ließ sich nur
+mit `.\stop.ps1` nach 20 s hart beenden. Ursache offen (Verdacht: Reload während GPU-Session oder
+Hintergrund-Job, oder das Herunterfahren von Ollama im Lifespan). Bis dahin: nach Code-Änderungen
+`.\stop.ps1` + `.\start.ps1`, und nie Code ändern, während ein Job im Backend läuft.
 
-**Gemessen: Qwen3-Denken** (nur im Test): Rang 1 3/3 richtig, Dolch 1/3 richtig und 2/3 leere
-Antworten (Token-Budget aufgebraucht), Schattenklinge 3/3 „X nicht angegeben“; 14–41 s statt
-2–5 s pro Antwort — als Standard ungeeignet.
-
-**Entschieden 14.10.: vorerst so lassen.** Mögliche Wege für später: Denken nur für Rechenfragen
-(braucht eine Erkennung solcher Fragen und mehr `max_tokens`, Antworten 15–40 s); größeres Modell;
-Waffentabelle für Waffenfragen zuverlässig in den Kontext (3.10). Vorher eine feste Liste von
-Rechenfragen mit Sollwerten anlegen, damit Varianten über mehrere Läufe vergleichbar sind.
-
-### 2 Bilder im Chat ⏸
-
-Heute werden Bilder nur als Dateiname + Ordner indiziert, und der Retriever schließt Bild-Chunks
-komplett aus ([embedding-strategy.md](docs/embedding-strategy.md) → „Warum Bilder aus der Suche
-ausschließen?“). Ziel: „Wie sieht die Karte von Arkenfeld aus?“ zeigt das Bild im Chat.
-
-**Phase 1 — Bilder beschreiben**: optionaler Vision-Schritt beim Ingest (`ingestion.image_description:
-none | local | gemini`), bevorzugt lokal über Ollama (Qwen2.5-VL / Gemma 3 — verdrängt beim
-Indizieren das Chat-Modell aus dem VRAM, also nur als Ingest-Schritt); Gemini Flash als
-kostenpflichtige Alternative; Beschreibung als Inhalt des Bild-Chunks, Dateiname als Rückfall. Dann
-Bild-Ausschluss im Retriever aufheben, Golden-Set-Fragen i001–i010 prüfen. **Vorher klären**: aus PDFs
-extrahierte Bilder liegen in einem temporären Ordner, der nach dem Parsen gelöscht wird — die
-Extraktion muss an einen dauerhaften Ort schreiben. Verworfen: CLIP-Embeddings (eigener
-Vektorraum, eigene Collection), manuelle Captions (selten vorhanden). -> ist das überhaupt nötig? beschreiben der Bilder scheint mir ein unnötiger schritt zu sein. einfacher wäre es durch Metadaten und dateiname die ingesten zu machen und dann das zuzurodnen. Zb datei heißt Karte Arkenfeld. dann sollte es bei fragen zur Karte von AKrtenfeld oder generell bei Arken feld auftauchen.  Genauso bei Charakteren die dann im dateinamen auftauchen oder gegeständen.
-
-**Phase 2 — Inline-Anzeige**: `GET /files/{path}` (nur innerhalb der Quellordner) statt lokaler
-Pfade — nötig, sobald die UI von einem anderen Gerät geöffnet wird; System-Prompt erlaubt Bild-
-Verweise, die UI ersetzt sie durch `st.image()`; Rückfall: Bild im Quellen-Bereich.
-
-Optional, für PDFs mit schwierigem Layout: Docling statt pymupdf4llm (braucht PyTorch).
-
-### 3.2 Session-History ⏸
-
-Sessions leben nur im RAM und sind nach einem Neustart weg. Idee: in SQLite/JSON speichern,
-Liste „Letzte Gespräche“ in der Sidebar, Export als Markdown. Zurückgestellt (12.10.): erst
-entscheiden, ob gespeicherte Sessions bei einem Wissenstool Nutzen haben.
-
-### 3.4 Kommentar zur Bewertung ⏸
+### 3.4 Kommentar zur Bewertung
 
 👍/👎 um einen kurzen Freitext-Kommentar erweitern (landet in `logs/feedback.jsonl` und im Tab
 „Feedback“).
 
-### 3.5 Wikilink-Expansion ⏸
+### 3.5 Wikilink-Expansion
 
 Wikilinks (`[[Malek]]`) stehen als Metadaten am Chunk, werden aber nicht genutzt. Idee: nach dem
-Retrieval die Wikilinks der Top-Chunks auflösen und die verlinkten Chunks nachladen. Ist ein neuer
-Suchweg: muss den Anfrage-Filter tragen und in den Spy-Test der Sicherheitstests — dann ggf. einen
-gefilterten Store statt Konvention ([ARCHITECTURE.md](ARCHITECTURE.md#8-architektur-entscheidungen)).
+Retrieval die Wikilinks der Top-Chunks auflösen und die verlinkten Chunks nachladen — könnte
+Einzelfälle aus 3.15 lösen (NPC → Gegenstand, Entität → Regel). Ist ein neuer Suchweg: muss den
+Anfrage-Filter tragen und in den Spy-Test der Sicherheitstests. Teilt sich mit 2 die Parser-Änderung
+(Links und Einbettungen als Metadaten). Messen mit Golden Set, End-to-End und Holdout.
 
 ### 4.2 Internet-Zugriff ⏸
 
@@ -208,15 +128,60 @@ Rolle des Aufrufers und hat keinen eigenen Login ([ARCHITECTURE.md](ARCHITECTURE
 → „Bewusste Grenze“) — solange nur Streamlit sie erreicht, reicht das; Tailscale ändert daran
 nichts, eine direkt erreichbare API schon.
 
+### 3.2 Session-History ⏸
+
+Sessions leben nur im RAM und sind nach einem Neustart weg. Idee: in SQLite/JSON speichern, Liste
+„Letzte Gespräche“ in der Sidebar, Export als Markdown. Empfehlung (14.10.): streichen — bei einem
+Wissenstool steht die Antwort im Regelbuch/Vault, nicht im Verlauf. Nutzerentscheidung offen.
+
+### 3.10 Restliche Abschnitt-Misses — Einzelfälle
+
+Golden Set 14.10.: Datei 272/274, Abschnitt 143/149, Suche exakt. Umgesetzt und verworfen: Tabelle
+„Erledigt“ und [embedding-strategy.md](docs/embedding-strategy.md). Offen, nur bei Anlass:
+- **Simulationsberichte** z003, z006, z009, z012 (und z001 mit richtiger Antwort) — die Berichts-Chunks
+  sagen weder „Schwierigkeit“ noch „Simulation“; besser in den Berichten selbst lösen (Überschriften).
+- **p009** Zauberpunkte — Abschnitt-Miss im Golden Set, die Antwort ist seit dem Regelkern richtig.
+- **Name in fremder Identität** — „Wer ist Arkenfeld?“ holt vor allem „Der Armdrücker von Arkenfeld“;
+  Antwort trotzdem richtig.
+- **Monolith-Sektion** (22 Chunks) landet bei fremden Regelfragen in den Top 3 (p011, p101).
+- **Tabellen**: „Dolch, STÄ 4, Wurfzahl 12“ und „Unterschied Dolch und Kurzschwert“ (Eintrags-Slot holt
+  die Tabelle, jina wertet anderes höher); „Langbogen“ (PDF-Zelle `**l**<br>**Langbogen**`).
+- **Schattenorden-Kontext** (14.10., Bug-Review): `Organisationen/Schattenorden/Schattenorden.md` hat nach der
+  Vault-Änderung 27 Chunks, über `section_expansion.max_chunks` (25) — m003 „Was ist der Schattenorden?“ und
+  m055 „Wie ist er aufgebaut?“ bekommen die Datei nicht mehr ganz; Treffer-Metriken zeigen das nicht.
+- **AP-Pool**: „Wie viele Aktionspunkte habe ich?“ → „50 AP“ — die 50 sind ein gemeinsamer Pool für AP
+  und MP (2.5).
+
+### 3.15 Antwortfehler aus dem End-to-End-Lauf — Einzelfälle
+
+Feintuning beendet (14.10.): zwischen zwei gleichen Läufen kippen ~15 Fragen, die übrigen Fehler haben
+je eine eigene Ursache, und der Holdout zeigt, dass Listen allgemein funktionieren (9/10). Messungen,
+Gründe und die angepassten Golden-Set-Stichwörter: [evaluation.md](docs/evaluation.md#evaluatepy--end-to-end).
+Offen, nur bei Anlass:
+- **Aufzählungen über große Kapitel** — der richtige Abschnitt wird gefunden, aber nur 8 Chunks
+  erreichen das LLM: p008 Klassen, p036 Basis-Skills, p037 Basis-Zauber, p114 Eigenheiten Magie, p014
+  Benchmark, a030 Beweis-Tabelle, p049 Überheilung.
+- **Fakten**: k001 Langschwert „20,5 Gold“ (Spalte „Preis“ der Simulations-Rangliste statt Preistabelle
+  7.4); m048 Deckname „Solmar“ (steht ohne Überschrift neben einem Bild — würde von 2 mit profitieren);
+  p091 Tränke-Fehlwurf (1W8-Tabelle fehlt); x008 Heimkehrpfennig („Kultpriester“ gilt, Antwort nennt
+  Thalion).
+
+### 3.14 Rechenfragen zum Regelwerk ⏸
+
+Fragen, bei denen das Modell Regeln **anwenden und rechnen** muss (höchste Wurfzahl mit Rang 1,
+Dolch-Schaden bei Wurfzahl 12, Schattenklinge auf Rang 6), beantwortet qwen3:14b ohne Denken oft
+falsch, auch wenn Regel und Werte im Prompt stehen. Mit Qwen3-Denken richtiger, aber 14–41 s pro
+Antwort und teils leere Antworten (Token-Budget) — als Standard ungeeignet. Messungen:
+[prompts.md](docs/prompts.md#regelkern). **Entschieden 14.10.: vorerst so lassen.** Später: Denken nur
+für Rechenfragen (braucht eine Erkennung und mehr `max_tokens`) oder ein größeres Modell; vorher eine
+feste Liste von Rechenfragen mit Sollwerten anlegen.
+
 ### 11.0 P8 — optional
 
 Dienste-Modul `src/services.py` (Globale, `install_llm`, Health-Loop; beseitigt die Lazy-Imports
 und vereinfacht die Test-Fixtures) und Reranker + GPU-Rückfall als `src/retrieval/reranker.py`. Nur
 zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 
-
-## xx.0 unter quelle die Chunks öffnen und einsehbar machen
-Idee wenn man es nochmal aus der Quelle nachlesen will kann man das einfach in den quellen amchen. dazu brauchen wir keinen eigenen viewer da nur die chunks, die sowieso geladen wurden, da einsehbar sind. macht das sinn?
 ---
 
 ## Erledigt
@@ -236,6 +201,7 @@ Idee wenn man es nochmal aus der Quelle nachlesen will kann man das einfach in d
 | 3.10 (Teil) | Reranker `jina-reranker-v2-base-multilingual` (fp16 auf der GPU, fp32-ONNX als CPU-Rückfall statt torch): Abschnitt 139 → 142/149, Platz-1-Treffer 110 → 121, Datei unverändert 272/274; bge-m3, MiniLM en-de, gte verworfen; VRAM neben qwen3:14b 14,4 statt 14,6 GB, LLM-Tempo gleich | 14.10. | `docs/embedding-strategy.md`, `docs/configuration.md` |
 | 3.10 (Teil) | Eintrags-Slot: nennt die Frage eine Tabellenzeile („Dolch-Angriff“, „Hammer“, „Glücksstein“), kommt die Tabelle per Namenssuche in den Rerank-Pool (Filter der Anfrage, max. 3, kein reservierter Platz). Golden Set Abschnitt 142 → 143/149 (+x004), nichts verloren; Tabellenfragen 5 → 8/11; ~75 ms. Verworfen vorher: `top_k` 25–40 (verliert m062/k006/z001), Zeilen-Chunks (142 → 141, Listenfragen 9/9 → 2/9). Spy-Test + Köder-Tabelle, mutationsgeprüft | 14.10. | `docs/embedding-strategy.md`, `docs/configuration.md` |
 | 13.0 | Code-Review seit 194be1b (jina, Regelkern, Batches, Eintrags-Slot) + Korrekturen: **kritisch** — eine lange Frage machte den Eintrags-Slot zu einer `$contains`-Abfrage ohne Grenze (4.000 Zeichen → 500, 12.000 → Backend-Prozess stirbt ohne Log, im Heimnetz für jeden Spieler auslösbar); jetzt höchstens 60 Namen (Golden Set braucht ≤ 48, nichts ändert sich) und `question` ≤ 4.000 Zeichen an `/query`, `/query/stream`, `/eval/preview` (422) sowie im Chat-Feld — beides mutationsgeprüft, 50.000 Zeichen laufen durch. Dazu: Kostenmodell Namen × Chunks dokumentiert, Schwellen-Umgehung des Slots dokumentiert und per Test festgehalten, Docstrings/Kommentare nachgezogen, Rerank-Zeiten mit Kontext, Regelkern nur mit spielerfreigegebenem Inhalt. Aus dem Performance-Review: `start.ps1` hielt `TimeWait`-Reste für einen laufenden Server und startete das Backend nicht (jetzt `-State Listen`). Performance 14.10.: Retrieval p50 278 ms / p95 364 ms (Baseline 784/1.156), erster Token ~2 s (Regelkern +0,56 s), Antwort p50 7,6 s je nach Länge | 14.10. | `docs/embedding-strategy.md`, `docs/prompts.md`, `docs/provider-strategy.md`, `ARCHITECTURE.md` |
+| 3.15 (Teil) | End-to-End-Basis: zwei Läufe (Answer Contains 0,905 / 0,901, ~15 Fragen kippen zwischen Läufen), `evaluate.py` speichert ganze Antwort, `id` und Stichwörter (Evaluation-Seite zeigt sie), Holdout `evaluation/holdout_lists.yaml` (10 Listenfragen, ungetunt 9/10), acht Golden-Set-Stichwörter angepasst (k001, p095 an die Regelbuch-Änderung, sechs zu enge), Hybrid mit jina neu gemessen (bleibt aus), Eintrags-Slot für Obsidian-Tabellen gemessen und verworfen; Feintuning danach beendet | 14.10. | `docs/evaluation.md`, `docs/embedding-strategy.md`, `docs/ui-ux.md` |
 | 3.11 | Spieler-/Spielleiter-Modus inkl. Sicherheitstests (deterministisch, live, Spy-Test) | 11./12.10. | `ARCHITECTURE.md` 4.8, `docs/testing.md` |
 | 3.12 | Folgefragen ohne Inhaltswort („Fass das kürzer zusammen“, „Gib mir ein Beispiel“) gehen durch Condense — Suche und Quellenliste passen zum Thema; Wortliste nur ergänzend (unbekanntes Wort = Inhaltswort), Unit-Tests in beide Richtungen, mutationsgeprüft. Live 13.10.: „Fass das kürzer zusammen“ → „Fasse die Beschreibung von Arkenfeld kurz zusammen.“ (1,2 s), Quellen `Orte/Arkenfeld.md` statt Venthir/Regelbuch | 13.10. | `docs/prompts.md` |
 | 3.13 | Regelkern im `qa`-Prompt (15 Stichpunkte zum Regelwerk, direkt vor der Frage; „Ressourcen vs. Punkte“ ergänzt: p009 Zauberpunkte 0/3 → 3/3): mit mMiniLMv2 Rang-1-Wurfzahl und Rüstung je 0/3 → 3/3, Lore-Fragen unverändert; im Systemprompt wirkungslos. Live mit jina: Rüstung 3/3, Rang-1-Wurfzahl wieder 0/3 (Lead „höchstens 13“). Offen: Rang 1 mit jina, Dolch, Schattenklinge (3.10) | 14.10. | `docs/prompts.md` |
