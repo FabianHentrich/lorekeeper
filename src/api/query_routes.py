@@ -157,13 +157,14 @@ async def _prepare_query(request: QueryRequest, timings: dict):
 
 
 def _chunk_to_source_dict(c) -> dict:
-    """Format a retrieved chunk into a source dictionary for the API response."""
+    """Format a retrieved chunk into a source dictionary for the API response (preview and full text)."""
     return {
         "file": c.source_file,
         "source_path": c.metadata.get("source_path", ""),
         "document_type": c.document_type,
         "heading": c.heading,
         "chunk_preview": c.content[:_SOURCE_PREVIEW_CHARS],
+        "content": c.content,
         "score": c.score,
     }
 

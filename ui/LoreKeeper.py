@@ -18,11 +18,22 @@ from backend import get_json, raise_for_status
 from shutdown import render_stop_button
 
 
+def _chunk_text(c: dict) -> str:
+    """The chunk text to read under a source: without the heading path the chunk starts with (it is the
+    label already), PDF line breaks ``<br>`` as real breaks. Older messages without ``content`` show the preview.
+    """
+    text = c.get("content") or c.get("chunk_preview", "")
+    heading = c.get("heading") or ""
+    if heading and text.startswith(heading):
+        text = text[len(heading):].lstrip("\n")
+    return text.replace("<br>", "  \n")
+
+
 def _render_sources(sources: list[dict]):
     """
     Render retrieved source documents inline within the chat interface.
-    Groups identical file origins and displays respective semantic chunk extracts
-    beneath their document headers alongside confidence scores.
+    Groups identical file origins under one header with the best score; each chunk is a collapsible line
+    (heading · score) holding the text the LLM got, so an answer can be checked against it (roadmap 3.16).
     """
     # Render images individually first
     images = [s for s in sources if s.get("document_type") == "image"]
@@ -57,10 +68,8 @@ def _render_sources(sources: list[dict]):
         for c in chunks:
             heading = c.get("heading") or "—"
             score = c.get("score", 0)
-            preview = c.get("chunk_preview", "")
-            st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;↳ *{heading}* (Score: {score:.2f})", unsafe_allow_html=True)
-            if preview:
-                st.caption(preview)
+            with st.expander(f"↳ {heading} · Score {score:.2f}"):
+                st.markdown(_chunk_text(c) or "*(kein Text)*")
 
 def _fmt_timings(t: dict) -> str:
     """Format per-query stage timings (seconds) and context size for the caption under an answer."""

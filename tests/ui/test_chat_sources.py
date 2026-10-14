@@ -4,11 +4,12 @@ from tests.ui.conftest import open_page
 
 SOURCES = [
     {"file": "Arkenfeld.md", "source_path": r"C:\Vault\Orte\Arkenfeld Stadt.md", "document_type": "markdown",
-     "heading": "Arkenfeld > Lage", "chunk_preview": "Liegt im Norden.", "score": 0.9},
+     "heading": "Arkenfeld > Lage", "chunk_preview": "Liegt im Norden.",
+     "content": "Arkenfeld > Lage\n\nLiegt im Norden, am Fluss Veren.", "score": 0.9},
     {"file": "Arkenfeld.md", "source_path": r"C:\Vault\Orte\Arkenfeld Stadt.md", "document_type": "markdown",
-     "heading": "Arkenfeld > Rat", "chunk_preview": "Sieben Magier.", "score": 0.7},
+     "heading": "Arkenfeld > Rat", "chunk_preview": "Sieben Magier.", "score": 0.7},  # no content: older message
     {"file": "regeln.pdf", "source_path": "", "document_type": "pdf", "heading": None,
-     "chunk_preview": "", "score": 0.5},
+     "chunk_preview": "", "content": "|**Dolch**<br>**leicht**|STÄ + 2|", "score": 0.5},
     {"file": "karte.png", "source_path": r"C:\gibt-es-nicht\karte.png", "document_type": "image",
      "heading": None, "chunk_preview": "", "score": 0.4},
 ]
@@ -34,9 +35,18 @@ def test_sources_are_grouped_per_file_with_a_link_and_best_score(fake_backend, m
     assert ("📄 [**Arkenfeld.md**](file:///C:/Vault/Orte/Arkenfeld%20Stadt.md) — Best Score: 0.90 · 2 Chunks"
             in texts)
     assert "📄 **regeln.pdf** — Best Score: 0.50" in texts               # no path → no link
-    assert any("↳ *Arkenfeld > Rat* (Score: 0.70)" in t for t in texts)
-    assert any("↳ *—* (Score: 0.50)" in t for t in texts)                # chunk without heading
+    labels = [e.label for e in at.expander]
+    assert "↳ Arkenfeld > Rat · Score 0.70" in labels
+    assert "↳ — · Score 0.50" in labels                                    # chunk without heading
     assert "Bild nicht gefunden: karte.png" in [w.value for w in at.warning]
+
+
+def test_each_chunk_can_be_read_under_its_source(fake_backend, monkeypatch):
+    """Roadmap 3.16: the text the LLM got, under the source — heading line cut, PDF <br> as a line break."""
+    texts = [m.value for m in _ask(monkeypatch).markdown]
+    assert "Liegt im Norden, am Fluss Veren." in texts                    # heading prefix removed
+    assert "Sieben Magier." in texts                                      # no content → the preview
+    assert "|**Dolch**  \n**leicht**|STÄ + 2|" in texts
 
 
 def test_token_and_timing_caption_under_the_answer(fake_backend, monkeypatch):

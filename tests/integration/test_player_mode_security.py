@@ -314,6 +314,8 @@ def test_player_answer_path_is_clean(env, question):
     for src in done["sources"]:
         assert _is_player_file(env, src["source_path"]), src
         _no_secret(src["chunk_preview"])
+        assert src["content"], src            # the full chunk text the chat shows (3.16) is really checked
+        _no_secret(src["content"])
     _no_secret(env.llm.prompts[-1])
 
 

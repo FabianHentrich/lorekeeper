@@ -245,6 +245,7 @@ def test_query_returns_answer_and_sources(client, fake_services):
     assert len(body["sources"]) == 1
     assert body["sources"][0]["file"] == "Arkenfeld.md"
     assert body["sources"][0]["score"] == pytest.approx(0.87)
+    assert body["sources"][0]["content"] == "Arkenfeld ist ein Zeitmagier aus der Akademie."
     assert body["retrieval_scores"] == [pytest.approx(0.87)]
     assert body["latency_ms"] >= 0
 
@@ -384,6 +385,20 @@ def test_query_stream_yields_tokens_and_done_event(client, fake_services):
     assert done["model_used"] == "qwen3:8b"
     assert len(done["sources"]) == 1
     assert done["sources"][0]["file"] == "Arkenfeld.md"
+    assert done["sources"][0]["content"] == "Arkenfeld ist ein Zeitmagier aus der Akademie."
+
+
+def test_sources_carry_the_whole_chunk_next_to_the_short_preview():
+    """Roadmap 3.16: the chat shows the text the LLM got — a long chunk must not be cut to the preview."""
+    from types import SimpleNamespace
+
+    from src.api.query_routes import _SOURCE_PREVIEW_CHARS, _chunk_to_source_dict
+    text = "Arkenfeld > Lage\n\n" + "Liegt im Norden am Fluss Veren. " * 30
+    chunk = SimpleNamespace(source_file="Arkenfeld.md", document_type="markdown", heading="Arkenfeld > Lage",
+                            content=text, score=0.9, metadata={"source_path": "Orte/Arkenfeld.md"})
+    src = _chunk_to_source_dict(chunk)
+    assert src["content"] == text
+    assert src["chunk_preview"] == text[:_SOURCE_PREVIEW_CHARS]
 
 
 def test_query_returns_stage_timings(client, fake_services):

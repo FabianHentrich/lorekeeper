@@ -24,10 +24,9 @@ End-to-End-Lauf ~35 min (🟡).
 
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 1 | 3.16 Chunks unter der Quelle einsehbar | Mittel — Antworten nachprüfbar | Gering-Mittel | 🟢 | Backend hat die Chunks, die API liefert nur 200 Zeichen Vorschau — Feld + Anzeige + Request-Budgets |
-| 2 | 2 Bilder im Chat (Einbettung + Dateiname) | Mittel-Hoch — Karten, Charaktere am Tisch | Mittel | 🟡 | Ohne Vision-Schritt; Parser-Änderung teilt sich 3.5 |
-| 3 | 3.4 Kommentar zur Bewertung | Gering | Gering | 🟢 | Schneller Gewinn, bessere Rückmeldung für spätere Fixes |
-| 4 | 3.5 Wikilink-Expansion | Mittel | Mittel | 🔴 | Neuer Suchweg (Spy-Test); nutzt dieselbe Parser-Änderung wie 2 |
+| 1 | 2 Bilder im Chat (Einbettung + Dateiname) | Mittel-Hoch — Karten, Charaktere am Tisch | Mittel | 🟡 | Ohne Vision-Schritt; Parser-Änderung teilt sich 3.5 |
+| 2 | 3.4 Kommentar zur Bewertung | Gering | Gering | 🟢 | Schneller Gewinn, bessere Rückmeldung für spätere Fixes |
+| 3 | 3.5 Wikilink-Expansion | Mittel | Mittel | 🔴 | Neuer Suchweg (Spy-Test); nutzt dieselbe Parser-Änderung wie 2 |
 | — | 4.2 Internet-Zugriff (Tailscale) ⏸ | Mittel | Gering | 🟢 | Nur zusammen mit einem Login für die API |
 | — | 3.2 Session-History ⏸ | Gering | Mittel | 🟢 | Empfehlung: streichen — Nutzerentscheidung offen |
 | — | 3.10 / 3.15 Einzelfälle | Gering | — | 🟡 | Nur bei Anlass im Spiel |
@@ -52,24 +51,12 @@ Regeln. `HF_HUB_OFFLINE=1` (in `src/__init__.py`): Modelle nur aus dem lokalen C
 - **Browser (Handprüfung)**: **⏻ LoreKeeper beenden** einmal klicken — `logs/stop.log` muss nach
   Sekunden mit „stopped … (clean)“ enden (12.0); bei der nächsten Indizierung über die UI den
   Fortschritt durchklicken (Job starten, Seite wechseln und zurück — 3.8/3.9); 👍/👎 und die Tabs
-  „Feedback“/„Chunks“ einmal von Hand bedienen.
+  „Feedback“/„Chunks“ einmal von Hand bedienen (👍/👎 vom Nutzer am 14.10. getestet, erste Bewertungen liegen
+  in `logs/feedback.jsonl`). Neu zu sehen: die Chunk-Ausklapper unter den Quellen (3.16).
 
 ---
 
 ## Offene Punkte
-
-### 3.16 Chunks unter der Quelle einsehbar
-
-Idee des Nutzers (14.10.): Wer eine Antwort nachlesen will, öffnet unter der Quelle die Chunks, die
-das LLM bekommen hat — kein eigener Viewer, denn es geht nur um die ohnehin geladenen Chunks. Heute
-zeigt der Chat je Quelle eine Vorschau von 200 Zeichen (`chunk_preview`).
-
-Plan: `/query` und `/query/stream` liefern je Quelle den ganzen Chunk-Text mit (bisher nur die
-Vorschau); die UI zeigt ihn je Quelle in einem aufklappbaren Bereich, mehrere Chunks derselben Datei
-untereinander. Spieler-Modus unverändert — Spieler bekommen nur Chunks, die sie sehen dürfen. Zu
-prüfen: Größe des `done`-Events (bis 30 Chunks × ~900 Zeichen) und die Request-Budgets der UI-Tests.
-Nutzen nebenbei: falsche Antworten werden sichtbar (z. B. „20,5 Gold“ aus der Simulations-Rangliste,
-3.15).
 
 ### 2 Bilder im Chat
 
@@ -202,6 +189,7 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 | 3.10 (Teil) | Eintrags-Slot: nennt die Frage eine Tabellenzeile („Dolch-Angriff“, „Hammer“, „Glücksstein“), kommt die Tabelle per Namenssuche in den Rerank-Pool (Filter der Anfrage, max. 3, kein reservierter Platz). Golden Set Abschnitt 142 → 143/149 (+x004), nichts verloren; Tabellenfragen 5 → 8/11; ~75 ms. Verworfen vorher: `top_k` 25–40 (verliert m062/k006/z001), Zeilen-Chunks (142 → 141, Listenfragen 9/9 → 2/9). Spy-Test + Köder-Tabelle, mutationsgeprüft | 14.10. | `docs/embedding-strategy.md`, `docs/configuration.md` |
 | 13.0 | Code-Review seit 194be1b (jina, Regelkern, Batches, Eintrags-Slot) + Korrekturen: **kritisch** — eine lange Frage machte den Eintrags-Slot zu einer `$contains`-Abfrage ohne Grenze (4.000 Zeichen → 500, 12.000 → Backend-Prozess stirbt ohne Log, im Heimnetz für jeden Spieler auslösbar); jetzt höchstens 60 Namen (Golden Set braucht ≤ 48, nichts ändert sich) und `question` ≤ 4.000 Zeichen an `/query`, `/query/stream`, `/eval/preview` (422) sowie im Chat-Feld — beides mutationsgeprüft, 50.000 Zeichen laufen durch. Dazu: Kostenmodell Namen × Chunks dokumentiert, Schwellen-Umgehung des Slots dokumentiert und per Test festgehalten, Docstrings/Kommentare nachgezogen, Rerank-Zeiten mit Kontext, Regelkern nur mit spielerfreigegebenem Inhalt. Aus dem Performance-Review: `start.ps1` hielt `TimeWait`-Reste für einen laufenden Server und startete das Backend nicht (jetzt `-State Listen`). Performance 14.10.: Retrieval p50 278 ms / p95 364 ms (Baseline 784/1.156), erster Token ~2 s (Regelkern +0,56 s), Antwort p50 7,6 s je nach Länge | 14.10. | `docs/embedding-strategy.md`, `docs/prompts.md`, `docs/provider-strategy.md`, `ARCHITECTURE.md` |
 | 3.15 (Teil) | End-to-End-Basis: zwei Läufe (Answer Contains 0,905 / 0,901, ~15 Fragen kippen zwischen Läufen), `evaluate.py` speichert ganze Antwort, `id` und Stichwörter (Evaluation-Seite zeigt sie), Holdout `evaluation/holdout_lists.yaml` (10 Listenfragen, ungetunt 9/10), acht Golden-Set-Stichwörter angepasst (k001, p095 an die Regelbuch-Änderung, sechs zu enge), Hybrid mit jina neu gemessen (bleibt aus), Eintrags-Slot für Obsidian-Tabellen gemessen und verworfen; Feintuning danach beendet | 14.10. | `docs/evaluation.md`, `docs/embedding-strategy.md`, `docs/ui-ux.md` |
+| 3.16 | Chunks unter der Quelle einsehbar (Idee des Nutzers): `sources` liefern zusätzlich `content` (ganzer Chunk-Text), der Chat zeigt je Chunk einen Ausklapper „↳ Überschrift · Score“ mit dem Text (Überschriftenzeile gekürzt, `<br>` → Umbruch, ältere Nachrichten: Vorschau). Spieler-Sicherheitstest prüft auch `content` auf Geheimnisse; UI-, API- und Langtext-Test. Keine zusätzliche Backend-Anfrage | 14.10. | `docs/ui-ux.md`, `ARCHITECTURE.md` |
 | 3.11 | Spieler-/Spielleiter-Modus inkl. Sicherheitstests (deterministisch, live, Spy-Test) | 11./12.10. | `ARCHITECTURE.md` 4.8, `docs/testing.md` |
 | 3.12 | Folgefragen ohne Inhaltswort („Fass das kürzer zusammen“, „Gib mir ein Beispiel“) gehen durch Condense — Suche und Quellenliste passen zum Thema; Wortliste nur ergänzend (unbekanntes Wort = Inhaltswort), Unit-Tests in beide Richtungen, mutationsgeprüft. Live 13.10.: „Fass das kürzer zusammen“ → „Fasse die Beschreibung von Arkenfeld kurz zusammen.“ (1,2 s), Quellen `Orte/Arkenfeld.md` statt Venthir/Regelbuch | 13.10. | `docs/prompts.md` |
 | 3.13 | Regelkern im `qa`-Prompt (15 Stichpunkte zum Regelwerk, direkt vor der Frage; „Ressourcen vs. Punkte“ ergänzt: p009 Zauberpunkte 0/3 → 3/3): mit mMiniLMv2 Rang-1-Wurfzahl und Rüstung je 0/3 → 3/3, Lore-Fragen unverändert; im Systemprompt wirkungslos. Live mit jina: Rüstung 3/3, Rang-1-Wurfzahl wieder 0/3 (Lead „höchstens 13“). Offen: Rang 1 mit jina, Dolch, Schattenklinge (3.10) | 14.10. | `docs/prompts.md` |

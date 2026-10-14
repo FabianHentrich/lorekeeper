@@ -253,16 +253,20 @@ genau eine Backend-Anfrage.
 
 ```
 📄 Orte/Arkenfeld.md — Best Score: 0.82 · 2 Chunks
-    ↳ Arkenfeld > Überblick (Score: 0.82)
-       Arkenfeld ist eine mittelgroße Handelsstadt...
-    ↳ Arkenfeld > Geschichte (Score: 0.71)
-       Gegründet während der Salzkriege...
+    ▸ ↳ Arkenfeld > Überblick · Score 0.82      (aufklappbar: ganzer Chunk-Text)
+    ▸ ↳ Arkenfeld > Geschichte · Score 0.71
 ```
+
+Jeder Chunk ist ein eigener Ausklapper mit dem **ganzen Text, den das LLM bekommen hat** (seit 14.10.,
+Roadmap 3.16) — so lässt sich eine Antwort direkt an der Quelle nachprüfen. Die Überschriftenzeile am
+Anfang des Chunks entfällt (sie steht schon im Titel), `<br>` aus PDF-Tabellen wird zum Zeilenumbruch.
+Ältere Nachrichten ohne Volltext zeigen die 100-Zeichen-Vorschau. Kein eigener Viewer: angezeigt werden
+nur die Chunks dieser Antwort, im Spieler-Modus also nur freigegebene.
 
 | Typ | Darstellung |
 |---|---|
-| Markdown / PDF (ein Chunk) | `📄 [Dateiname](file:///...) — Best Score` + Vorschau |
-| Markdown / PDF (mehrere) | Dieselbe Zeile mit `· N Chunks`; jeder Chunk eingerückt als `↳ Überschrift (Score)` + Vorschau |
+| Markdown / PDF (ein Chunk) | `📄 [Dateiname](file:///...) — Best Score`, darunter der Chunk als Ausklapper `↳ Überschrift · Score` |
+| Markdown / PDF (mehrere) | Dieselbe Zeile mit `· N Chunks`; je Chunk ein Ausklapper `↳ Überschrift · Score` mit dem ganzen Text |
 | Bild | `st.image(source_path)` mit Dateiname (vor den gruppierten Dokumenten) |
 
 Links öffnen die Originaldatei lokal (z.B. in Obsidian); fehlt `source_path`, erscheint eine Warnung.

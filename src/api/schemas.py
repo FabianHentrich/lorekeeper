@@ -26,12 +26,15 @@ class QueryRequest(BaseModel):
 
 
 class SourceReference(BaseModel):
-    """Metadata about a retrieved chunk used to generate the final answer."""
+    """A retrieved chunk the answer was generated from — what the chat shows under the answer."""
     file: str
     source_path: str = ""
     document_type: str
     heading: str | None = None
     chunk_preview: str
+    # The whole chunk text the LLM got (heading path first) — the chat lets the user read it under the
+    # source (roadmap 3.16). Players only ever receive chunks they may see, so this adds no exposure.
+    content: str = ""
     score: float
 
 
