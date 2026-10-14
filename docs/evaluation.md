@@ -198,6 +198,14 @@ Temperatur 0,3 nicht gleich. Ein einzelner Lauf trennt ±3 % nicht vom Rauschen;
 den Fragen messen, die in **beiden** Läufen scheitern (19), oder mehrere Läufe vergleichen. Die 19 sind
 mit ganzen Antworten nachgefragt und sortiert (Roadmap 3.15).
 
+**Holdout für Aufzählungsfragen** (`evaluation/holdout_lists.yaml`, 14.10.): zehn Listenfragen aus
+Kapiteln ohne Listenfrage im Golden Set, vor jedem Tuning geschrieben, erwartet werden **alle**
+Einträge (Quelle jeweils geprüft). Sie dienen als Gegenprobe, ob eine Änderung Listen allgemein
+verbessert — nie beim Tuning benutzen. Ungetunter Stand 14.10.: **9 von 10 Listen vollständig**,
+50 von 53 Einträgen (fehlt: Abenteuer von Akt 2, 1 von 4). Messen mit
+`evaluation.evaluate.evaluate()` gegen den laufenden Server — der Golden-Set-Lauf der UI kennt die
+Datei nicht. Lange Listenantworten brauchen 10–34 s (Länge, ~54 Token/s).
+
 ---
 
 ## Kennzahlen und Ziele

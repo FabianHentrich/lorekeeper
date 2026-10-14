@@ -168,6 +168,12 @@ Varianten in einem Prozess): Hybrid war bei jedem `top_k` schlechter als reine V
 richtige Kandidaten aus dem Pool, bevor der Reranker sie sieht. Die Fälle, für die BM25 gedacht
 war (Waffentabelle mit „Langschwert“), löst Hybrid ebenfalls nicht.
 
+**Mit jina erneut gemessen (14.10.)**, Golden Set über den laufenden Backend-Prozess, `top_k` 20: Hybrid
+Datei 271 statt 272/274, Abschnitt 141 statt 143/149 (gewinnt z009, verliert p108, k006, x004), Retrieval
+p50 356 statt 270 ms. Bleibt aus. Für die Aufzählungsfragen, deren Antworten im End-to-End-Lauf
+unvollständig sind (Basis-Skills, Basis-Zauber, Benchmark), hilft es nicht: Dort trifft schon die
+Vektorsuche den richtigen Abschnitt — es kommen nur 8 Chunks davon beim LLM an (Roadmap 3.15).
+
 ### Warum `top_k` 20?
 
 `top_k` ist die Zahl der Vektor-Kandidaten, aus denen der Reranker die `top_k_rerank` (8) wählt. Bei

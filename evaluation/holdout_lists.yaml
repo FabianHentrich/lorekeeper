@@ -1,0 +1,99 @@
+# ─────────────────────────────────────────
+# Holdout: Aufzählungsfragen (Roadmap 3.15)
+#
+# Geschrieben am 14.10., BEVOR an den Aufzählungsfragen getunt wird. Nicht beim Tuning
+# benutzen — erst am Ende messen, ob eine Änderung für Listen allgemein wirkt und nicht
+# nur für die Golden-Set-Fragen p008/p014/p036/p037/p049/p114/a030.
+# Nur Kapitel ohne bestehende Listenfrage im Golden Set. Erwartet werden ALLE Einträge
+# der Liste (Vollständigkeit ist das Ziel), Quelle jeweils aus dem Text abgeschrieben.
+# Gleiches Schema wie evaluation/qa_pairs.yaml.
+# ─────────────────────────────────────────
+
+pairs:
+  - id: h001
+    question: "Welche Zauber hat die Elementarmagie?"
+    source_type: pdf
+    category: list
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Flammenheilung", "Froststrahl", "Steinwall", "Elektrische Entladung", "Windstoß", "Blendlicht"]
+    expected_section: "5.5.2"
+    notes: "Klassenzauber 5.5.2, sechs Einträge."
+
+  - id: h002
+    question: "Welche Zauber gehören zur Dunklen Magie?"
+    source_type: pdf
+    category: list
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Tote beschwören", "Dunkler Fluch", "Verfluchte Klinge", "Schattenklinge", "Schattenhaft", "Seelenentzug"]
+    expected_section: "5.5.6"
+    notes: "Klassenzauber 5.5.6, sechs Einträge."
+
+  - id: h003
+    question: "Welche Talente gibt es?"
+    source_type: pdf
+    category: list
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Stärke", "Gewandtheit", "Kampf", "Wahrnehmung", "Heimlichkeit", "Wissen", "Gesellschaft", "Wildnisleben"]
+    expected_section: "3.2"
+    notes: "Kapitel 3 'Bedeutung der einzelnen Talente', acht Talente."
+
+  - id: h004
+    question: "Welche Fernkampfwaffen gibt es?"
+    source_type: pdf
+    category: list
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Wurfmesser", "Kurzbogen", "Wurfspeer", "Reflexbogen", "Langbogen", "Armbrust"]
+    expected_section: "7.1.1"
+    notes: "Tabelle Fernkampfwaffen. Im PDF steht die Langbogen-Zelle als '**l**<br>**Langbogen**' (Parser-Artefakt)."
+
+  - id: h005
+    question: "Welche Offensivtränke gibt es?"
+    source_type: pdf
+    category: list
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Gifttrank", "Explosiver Trank", "Eissturm-Phiole", "Antimagisches Serum", "Trank des gefangenen Sturms"]
+    expected_section: "7.1.5"
+    notes: "Tabelle 'Offensivtränke und Spezialeffekte', fünf Einträge. Im PDF steht 'Gift rank' (Parser-Artefakt)."
+
+  - id: h006
+    question: "Welche magischen Schriftrollen und Runensteine gibt es?"
+    source_type: pdf
+    category: list
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Feuerball-Schriftrolle", "Notfall-Schriftrolle", "Runenstein des Blitzes", "Runenstein der Heilung", "Schriftrolle des Schutzes", "Frostschriftrolle", "Schriftrolle des Erlernens", "Schriftrolle der Erkenntnis"]
+    expected_section: "7.2.5"
+    notes: "Tabelle 7.2.5, acht Einträge."
+
+  - id: h007
+    question: "Welche Heilgegenstände und Kräuter gibt es?"
+    source_type: pdf
+    category: list
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Bandagen", "Heilkräuter", "Fokuskraut", "Stärkungskräuter"]
+    expected_section: "7.1.4"
+    notes: "Tabelle 'Heilgegenstände und Kräuter', vier Einträge."
+
+  - id: h008
+    question: "Welche Varianten gibt es für die Initiative-Reihenfolge?"
+    source_type: pdf
+    category: list
+    expected_sources: ["pnp_regelbuch.pdf"]
+    expected_answer_contains: ["Einzelinitiative", "Gruppeninitiative"]
+    expected_section: "4.1"
+    notes: "Kampfregeln 'Varianten für die Initiativereihenfolge', zwei Varianten."
+
+  - id: h009
+    question: "Welche fünf Pfade hat der Schattenorden?"
+    source_type: markdown
+    category: list
+    expected_sources: ["Organisationen/Schattenorden/Schattenorden.md"]
+    expected_answer_contains: ["Nekromantie", "Chaosmagie", "Verbotene Runen", "Astrale Manipulation"]
+    notes: "Tabelle 'Die fünf Pfade' (Chaosmagie I und II zählen als ein Stichwort)."
+
+  - id: h010
+    question: "Welche Abenteuer gehören zu Akt 2 der Söldner-Kampagne?"
+    source_type: markdown
+    category: list
+    expected_sources: ["Geschichte - Söldner"]
+    expected_answer_contains: ["Chronos-Protokoll", "Gelber Gewahrsam", "Grüne Treppe", "Schwarze Fakultät"]
+    notes: "Ordner 'Akt 2 - Züge auf dem Zeitbrett', vier Abenteuer (II-1 bis II-4)."

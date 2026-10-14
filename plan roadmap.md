@@ -21,7 +21,7 @@ mehrere Minuten, nicht parallel zur Simulation). Ein Golden-Set-Lauf dauert ~1 m
 |---|---|---|---|---|---|
 | 1 | 13.0 Korrekturen aus dem Code-Review (Befund 1 kritisch) | Hoch — lange Frage legt das Backend lahm | Gering | 🟢 | Kappung + API-Grenze, Tests; danach Golden Set (🟡) |
 | 2 | 3.10 Restliche Abschnitt-Misses | Gering-Mittel — Regelfragen präziser | Mittel | 🟡 | Einzelfälle, je Golden-Set-Lauf prüfbar |
-| 2 | 3.15 Antwortfehler aus dem End-to-End-Lauf | Mittel — 19 Fragen scheitern stabil | Mittel | 🟡 | Größte Gruppe: Aufzählungsfragen (Retrieval) |
+| 2 | 3.15 Antwortfehler aus dem End-to-End-Lauf | Gering-Mittel — Einzelfälle | Mittel | 🟡 | Listen-Tuning pausiert (Holdout 9/10); Fakten-Fehler einzeln |
 | — | 3.14 Rechenfragen zum Regelwerk ⏸ | Mittel — falsche Zahlen bei Regel-Rechnungen | Mittel-Hoch | 🟡 | Vorerst so gelassen (14.10.); nur mit Denken zuverlässiger, das kostet 15–40 s |
 | — | 3.2 Session-History ⏸ | Unklar | Mittel | 🟢 | Erst entscheiden, ob gespeicherte Sessions Nutzen haben |
 | 3 | 3.4 Kommentar zur Bewertung ⏸ | Gering | Gering | 🟢 | Feature |
@@ -100,16 +100,25 @@ Temperatur 0,3). Die 19 Fragen, die in **beiden** scheitern, mit ganzen Antworte
   beschrieben), p009 („Fähigkeitspunkte“ — Antwort richtig, sagt „Zauberpunkte … nicht Manapunkte“),
   p010 („Fähigkeitspunkt“ — Antwort sagt „Zauberpunkt“, wie das Regelbuch auch), p079 („keine Kosten“ —
   Antwort „keinen Kosten“, inhaltlich vollständig).
-- **Aufzählungen unvollständig** (größte Gruppe, Retrieval): p008 Klassen („keine konkreten Klassen
+- **Aufzählungen unvollständig** (größte Gruppe; der richtige Abschnitt wird gefunden, aber nur 8 Chunks
+  davon erreichen das LLM — Section Expansion greift nicht; Hybrid-Suche hilft nicht, 14.10. gemessen): p008 Klassen („keine konkreten Klassen
   genannt“), p036 Basis-Skills (nur einer), p037 Basis-Zauber („Magischer Schlag“ fehlt), p114 Eigenheiten
   Magie („Manaschwäche“ beschrieben, aber ohne Namen), p014 Benchmark-Werte fehlen, a030 Beweis-Tabelle
   nicht gefunden, p049 Überheilung (Seelenentzug fehlt, dafür geratene Zauber aus NPC-Dateien).
+  **Tuning pausiert (14.10.)**: Der Holdout aus zehn neuen Listenfragen ist ungetunt zu 9/10 vollständig
+  — Listen klappen allgemein, die Golden-Set-Fälle sind Einzelfälle (sehr große Kapitel, schlecht
+  geschnittene Abschnitte). Ein allgemeiner Mechanismus (mehr Kontext, andere Expansion) hätte
+  Overfitting-Risiko bei kleinem Gewinn; Einzelfälle nur bei Anlass.
 - **Fakten falsch**: k001 Langschwert „20,5 Gold“ — Zahl aus der Fähigkeiten-Rangliste der Simulation
   (Spalte „Preis“ = Kosten je Effekt), die Preistabelle 7.4 fehlt im Kontext; m048 Deckname „Solmar“
   (steht ohne Überschrift neben einem Bild); p091 Tränke-Fehlwurf (1W8-Tabelle fehlt).
 - **x008 Heimkehrpfennig** — Antwort „bei Thalion, Endzustand B“ (Kampagnenstruktur), erwartet
   „Kultpriester“ (Beutetabelle I-2); Nutzer 14.10.: „Kultpriester“ gilt — echter Antwortfehler. z009 ist ein bekannter
   Retrieval-Miss (3.10).
+
+- **m056 — Widerspruch im Vault (Nutzer entscheidet)**: `Schattenorden/Meister der Pfade.md` nennt Kaelvorr
+  Eryndrak und Serynthia Kaevellis als Meister der Verbotenen Runen, `Schattenorden.md` (Pfad-Tabelle)
+  Elyndar Vaelis und Kaelvorr/Serynthia „Pfad unklar“. Golden Set erwartet bisher Kaelvorr + Serynthia.
 
 ### 3.14 Rechenfragen zum Regelwerk unzuverlässig ⏸
 
