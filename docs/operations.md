@@ -198,16 +198,17 @@ Fehler, statt still alle Dateien für neu zu halten und alte Chunks liegen zu la
 
 ### Modelle fehlen beim ersten Start
 
-Beim ersten Start lädt LoreKeeper `intfloat/multilingual-e5-base` (~1,1 GB) und
-`mmarco-mMiniLMv2-L12-H384-v1` (~120 MB) von Hugging Face, mit `reranking.backend: directml` auch
-den ONNX-Export des Rerankers (`onnx/model.onnx`, ~450 MB). Danach liegt alles in
+Beim ersten Start lädt LoreKeeper `intfloat/multilingual-e5-base` (~1,1 GB) und den Reranker
+`jina-reranker-v2-base-multilingual` von Hugging Face — auf der GPU `onnx/model_fp16.onnx`
+(~560 MB); den CPU-Export `onnx/model.onnx` (~1,1 GB) erst beim ersten CPU-Rückfall. Danach liegt alles in
 `~/.cache/huggingface/`. Vorab laden: README → Schnellstart, Schritt 4.
 
 ### Reranker läuft auf der CPU (DirectML-Warnung)
 
 Sichtbar als Warnung in der Chat-Sidebar („Reranker läuft auf der CPU statt der GPU“) und als
-Log-Zeile `DirectML reranker unavailable (…) — falling back to the CPU (torch)`: Die Antworten
-bleiben gleich, nur die Suche ist langsamer (~0,8 s statt ~0,05 s, unter CPU-Last viel mehr).
+Log-Zeile `DirectML reranker unavailable (…) — falling back to the CPU`: Die Antworten
+bleiben praktisch gleich (fp32 statt fp16), nur die Suche ist langsamer (Sekunden statt ~0,1 s,
+unter CPU-Last mehr). Ohne Internet und ohne `onnx/model.onnx` im Cache scheitert der Rückfall.
 Übliche Ursache: ein `pip install -r requirements.txt` hat das normale `onnxruntime` wieder über
 `onnxruntime-directml` gelegt (beide teilen das Modul `onnxruntime/`). Prüfen und beheben:
 
@@ -220,7 +221,7 @@ pip install --force-reinstall --no-deps onnxruntime-directml
 `pip check` meldet danach, dass chromadb, pymupdf-layout und rapidocr `onnxruntime` vermissen — das
 ist erwartet, das Modul ist da. Bei Erfolg steht im Log `Reranker loaded on the GPU (DirectML)`.
 
-Steht stattdessen `DirectML reranker failed (…) — switching to the CPU (torch) for this run`, ist
+Steht stattdessen `DirectML reranker failed (…) — switching to the CPU for this run`, ist
 die GPU **im Betrieb** ausgefallen (Treiber-Reset, VRAM voll — z.B. ein Spiel neben Ollama). Die
 Antworten laufen auf der CPU weiter; nach einem Neustart des Backends ist der Reranker wieder auf
 der GPU.

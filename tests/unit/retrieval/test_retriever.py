@@ -302,48 +302,57 @@ class TestRulesSlot:
 
 
 class TestRerankerBackend:
-    """reranking.backend picks the GPU model; any DirectML failure falls back to torch with a warning."""
+    """reranking.backend picks the GPU model; any DirectML failure falls back to the CPU with a warning."""
 
     @staticmethod
     def _retriever(backend):
-        cfg = RetrievalConfig(reranking=RerankingConfig(backend=backend))
+        cfg = RetrievalConfig(reranking=RerankingConfig(backend=backend, onnx_file="onnx/model_fp16.onnx"))
         return Retriever(config=cfg, embedding_service=AsyncMock(), vectorstore=MagicMock())
 
-    def test_directml_backend_uses_gpu_model(self, monkeypatch):
+    @staticmethod
+    def _patch(monkeypatch, load_gpu, load_cpu):
+        """OnnxCrossEncoder(..., gpu=True) → ``load_gpu(model)``, gpu=False → ``load_cpu(model)``.
+        Returns the recorded calls as (onnx_file, gpu)."""
         import src.retrieval.onnx_reranker as onnx_reranker
+        calls = []
+
+        def _load(model, onnx_file, max_length, gpu):
+            calls.append((onnx_file, gpu))
+            return load_gpu(model) if gpu else load_cpu(model)
+
+        monkeypatch.setattr(onnx_reranker, "OnnxCrossEncoder", _load)
+        return calls
+
+    def test_directml_backend_uses_gpu_model(self, monkeypatch):
         gpu = MagicMock()
-        monkeypatch.setattr(onnx_reranker, "DirectMLCrossEncoder", lambda model, max_length: gpu)
-        torch_loader = MagicMock()
-        monkeypatch.setattr("sentence_transformers.CrossEncoder", torch_loader)
+        calls = self._patch(monkeypatch, lambda m: gpu, lambda m: MagicMock())
 
         assert self._retriever("directml").get_reranker() is gpu
-        torch_loader.assert_not_called()
+        assert calls == [("onnx/model_fp16.onnx", True)]
 
-    def test_directml_failure_falls_back_to_torch(self, monkeypatch, caplog):
+    def test_directml_failure_falls_back_to_the_cpu(self, monkeypatch, caplog):
         import src.retrieval.onnx_reranker as onnx_reranker
 
-        def _unavailable(model, max_length):
+        def _unavailable(model):
             raise onnx_reranker.DirectMLUnavailable("DmlExecutionProvider missing")
 
-        monkeypatch.setattr(onnx_reranker, "DirectMLCrossEncoder", _unavailable)
         cpu = MagicMock()
-        monkeypatch.setattr("sentence_transformers.CrossEncoder", lambda model, max_length: cpu)
+        calls = self._patch(monkeypatch, _unavailable, lambda m: cpu)
 
         with caplog.at_level("WARNING"):
             assert self._retriever("directml").get_reranker() is cpu
         assert "falling back to the CPU" in caplog.text
+        assert calls[-1] == (onnx_reranker.CPU_ONNX_FILE, False)  # fp32 — the fp16 GPU file can't run there
 
     @pytest.mark.asyncio
     async def test_gpu_failure_at_runtime_switches_to_the_cpu(self, monkeypatch, caplog):
         """A DirectML error during a query (driver reset, out of VRAM) must not fail every query until a
         restart: warn, load the CPU model, score again — and stay on the CPU."""
-        import src.retrieval.onnx_reranker as onnx_reranker
         gpu = MagicMock()
         gpu.predict.side_effect = RuntimeError("DXGI_ERROR_DEVICE_REMOVED")
-        monkeypatch.setattr(onnx_reranker, "DirectMLCrossEncoder", lambda model, max_length: gpu)
         cpu = MagicMock()
         cpu.predict.side_effect = lambda pairs: [float(len(pairs) - i) for i in range(len(pairs))]
-        monkeypatch.setattr("sentence_transformers.CrossEncoder", lambda model, max_length: cpu)
+        self._patch(monkeypatch, lambda m: gpu, lambda m: cpu)
         vs = MagicMock()
         vs.query.return_value = [
             {"id": str(i), "content": f"c{i}", "score": 0.9,
@@ -368,7 +377,6 @@ class TestRerankerBackend:
         import asyncio
         import threading
 
-        import src.retrieval.onnx_reranker as onnx_reranker
         both_inside = threading.Barrier(2, timeout=10)
 
         def _gpu_predict(pairs):
@@ -377,16 +385,15 @@ class TestRerankerBackend:
 
         gpu = MagicMock()
         gpu.predict.side_effect = _gpu_predict
-        monkeypatch.setattr(onnx_reranker, "DirectMLCrossEncoder", lambda model, max_length: gpu)
         cpu_loads = []
 
-        def _load_cpu(model, max_length):
+        def _load_cpu(model):
             cpu_loads.append(model)
             cpu = MagicMock()
             cpu.predict.side_effect = lambda pairs: [float(len(pairs) - i) for i in range(len(pairs))]
             return cpu
 
-        monkeypatch.setattr("sentence_transformers.CrossEncoder", _load_cpu)
+        self._patch(monkeypatch, lambda m: gpu, _load_cpu)
         vs = MagicMock()
         vs.query.return_value = [
             {"id": str(i), "content": f"c{i}", "score": 0.9,
@@ -405,22 +412,23 @@ class TestRerankerBackend:
     @pytest.mark.asyncio
     async def test_cpu_reranker_errors_are_not_swallowed(self, embed_service, vectorstore):
         """Only the GPU gets a fallback — a failing CPU model is a real error."""
-        ret = Retriever(config=RetrievalConfig(reranking=RerankingConfig(backend="torch")),
+        ret = Retriever(config=RetrievalConfig(reranking=RerankingConfig(backend="cpu")),
                         embedding_service=embed_service, vectorstore=vectorstore)
         ret._reranker = MagicMock()
         ret._reranker.predict.side_effect = RuntimeError("boom")
         with pytest.raises(RuntimeError, match="boom"):
             await ret.retrieve("where is arkenfeld")
 
-    def test_torch_backend_never_tries_directml(self, monkeypatch):
-        import src.retrieval.onnx_reranker as onnx_reranker
-        gpu_loader = MagicMock()
-        monkeypatch.setattr(onnx_reranker, "DirectMLCrossEncoder", gpu_loader)
+    def test_cpu_backend_never_tries_directml(self, monkeypatch):
         cpu = MagicMock()
-        monkeypatch.setattr("sentence_transformers.CrossEncoder", lambda model, max_length: cpu)
+        calls = self._patch(monkeypatch, lambda m: MagicMock(), lambda m: cpu)
 
-        assert self._retriever("torch").get_reranker() is cpu
-        gpu_loader.assert_not_called()
+        assert self._retriever("cpu").get_reranker() is cpu
+        assert [gpu_flag for _, gpu_flag in calls] == [False]
+
+    def test_old_torch_backend_value_means_cpu(self):
+        """settings.local.yaml / env from before 14.10. may still say torch."""
+        assert RerankingConfig(backend="torch").backend == "cpu"
 
 
 class TestRRFMerge:
@@ -821,7 +829,7 @@ class TestRerankerDevice:
         (True, "directml", False, False, "not_loaded"),
         (True, "directml", True, True, "gpu"),
         (True, "directml", True, False, "cpu_fallback"),
-        (True, "torch", True, False, "cpu"),
+        (True, "cpu", True, False, "cpu"),
     ])
     def test_device(self, embed_service, enabled, backend, loaded, on_gpu, expected):
         from src.config.manager import RerankingConfig, RetrievalConfig

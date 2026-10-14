@@ -170,9 +170,17 @@ class VectorStoreConfig(BaseModel):
 class RerankingConfig(BaseModel):
     """Cross-encoder rerank of the vector/BM25 candidates; editable values apply on the next query."""
     enabled: bool = True
-    model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"  # multilingual; loaded at startup
-    # "directml": GPU via onnxruntime-directml (falls back to torch on the CPU if unavailable)
-    backend: Literal["torch", "directml"] = "torch"
+    model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"  # HF repo with an ONNX export; loaded at startup
+    # ONNX file of that repo used on the GPU (fp16 is faster there); the CPU always uses the fp32 onnx/model.onnx
+    onnx_file: str = "onnx/model.onnx"
+    # "directml": GPU via onnxruntime-directml (falls back to the CPU if unavailable) | "cpu"
+    backend: Literal["cpu", "directml"] = "cpu"
+
+    @field_validator("backend", mode="before")
+    @classmethod
+    def _torch_means_cpu(cls, v):
+        """Configs from before 14.10. say ``torch`` — the CPU path is ONNX Runtime now, same meaning."""
+        return "cpu" if v == "torch" else v
     top_k_rerank: int = 8            # chunks after the rerank = LLM context (before section expansion)
     max_per_source: int = 3          # soft cap per file (0 = unlimited); backfilled from the overflow if short
 

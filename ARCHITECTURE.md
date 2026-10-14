@@ -175,7 +175,7 @@ lorekeeper/
 │   │   ├── vectorstore.py         # ChromaDB-Zugriff
 │   │   ├── bm25_index.py          # BM25 für Hybrid Search
 │   │   ├── retriever.py           # Suche, Rerank, Cap, Regelwerk-Slot, Section Expansion
-│   │   └── onnx_reranker.py       # Cross-Encoder auf der GPU (ONNX Runtime + DirectML)
+│   │   └── onnx_reranker.py       # Cross-Encoder über ONNX Runtime (GPU via DirectML, CPU-Rückfall)
 │   ├── generation/
 │   │   ├── providers/             # base.py · ollama.py · gemini.py
 │   │   ├── provider_factory.py    # Config → Provider-Instanz
@@ -331,8 +331,8 @@ Ablauf in `Retriever.retrieve()` — alle Parameter in [docs/configuration.md](d
 4. **Regelwerk-Slot** (`rules_slot`): eine zweite, kleine Vektorsuche nur in Gruppe `rules` (5
    Kandidaten, derselbe Filter) für Fragen wie „Was bewirkt Ritterlichkeit bei Escanor?“, bei denen
    die NPC-Datei alle Kandidaten belegt.
-5. **Reranking** mit dem Cross-Encoder `mmarco-mMiniLMv2-L12-H384-v1` — auf der GPU über ONNX
-   Runtime + DirectML (`reranking.backend: directml`, ~50 ms), sonst mit Warnung auf der CPU. Fällt
+5. **Reranking** mit dem Cross-Encoder `jina-reranker-v2-base-multilingual` — auf der GPU über ONNX
+   Runtime + DirectML (`reranking.backend: directml`, ~110 ms), sonst mit Warnung auf der CPU. Fällt
    die GPU im Betrieb aus, wechselt der Retriever mit Warnung dauerhaft auf die CPU. Das Laden des
    Modells läuft im Threadpool, nie auf dem Event-Loop.
 6. **Soft-Cap je Datei** (`max_per_source`, 3): erst divers füllen, dann aus dem Überlauf
@@ -558,7 +558,7 @@ Referenzsystem (Gaming-PC): AMD Ryzen 5 5600X (6 Kerne), 32 GB RAM, AMD Radeon R
 | Teil | Läuft auf | Modell | Kennzahl |
 |------|-----------|--------|----------|
 | LLM | GPU (Ollama) | `qwen3:14b`, Kontext 16k (`OLLAMA_CONTEXT_LENGTH=16384`), `OLLAMA_KEEP_ALIVE=1h` | ~11 GB VRAM, erster Token ~1 s, Antwort ~3–4 s |
-| Reranker | GPU (ONNX Runtime + DirectML) | `mmarco-mMiniLMv2-L12-H384-v1` | ~50 ms für 15 Paare (CPU: ~840 ms, unter Last ~14 s) |
+| Reranker | GPU (ONNX Runtime + DirectML) | `jina-reranker-v2-base-multilingual` (fp16) | ~110 ms für 20 Kandidaten, ~1,7 GB VRAM (CPU-Rückfall fp32: Sekunden) |
 | Embedding | CPU | `multilingual-e5-base` | ~0,08 s pro Frage |
 | Fallback | Cloud | Gemini `gemini-2.5-flash` | nur bei Bedarf — kostenpflichtig, Budgets stoppen nicht automatisch |
 
@@ -592,7 +592,7 @@ LoreKeeper läuft ausschließlich lokal unter Windows; ChromaDB steckt im Backen
 | Neuer LLM-Provider | `BaseLLMProvider` implementieren (`generate_stream` als `async def` mit `yield`, `usage` in `stream_result`), `self.model` setzen, in `ProviderFactory` registrieren |
 | Neue Quellengruppe | `SourceGroup` in `src/config/manager.py`, Filter in Chat-Sidebar und Sources-Seite |
 | Neues Prompt-Template | Schlüssel in `prompts.yaml`, Render-Methode im `PromptManager` |
-| Anderer Reranker | Modell in `reranking.model`; für die GPU braucht es einen ONNX-Export (`onnx/model.onnx`) |
+| Anderer Reranker | Modell in `reranking.model`, GPU-Datei in `reranking.onnx_file`; das Repo braucht einen ONNX-Export (`onnx/model.onnx` für die CPU) und `tokenizer.json` |
 
 Geplante Arbeit: [plan roadmap.md](plan%20roadmap.md).
 

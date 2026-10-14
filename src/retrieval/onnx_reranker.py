@@ -1,55 +1,69 @@
-"""Cross-encoder reranker on ONNX Runtime + DirectML — runs on any DirectX 12 GPU, including AMD.
+"""Cross-encoder reranker on ONNX Runtime — on the GPU via DirectML (any DirectX 12 GPU, including AMD),
+or on the CPU as the fallback.
 
-Same model and tokenizer as the torch ``CrossEncoder``, so the scores match to rounding
-(raw logits, no activation — like ``CrossEncoder.predict`` for this model). Measured on the
-RX 9070 XT: 15 pairs in ~50 ms instead of ~840 ms on the CPU, and ~70 ms instead of ~14 s
-while the CPU is fully loaded (roadmap 5.4).
+Loads the model's published ONNX export and tokenizer from the Hugging Face cache and returns raw logits
+(no activation). No torch: the model in use (jina-reranker-v2) only loads in torch with
+``trust_remote_code`` and an extra package, ONNX needs neither. Measured on the RX 9070 XT (14.10.,
+roadmap 3.10): jina fp16 20 pairs in ~26 ms on the GPU; the fp32 export on the CPU ~2.1 s, scores
+within 0.004 of the GPU. The fp16 export does not load on ONNX Runtime's CPU provider, so the CPU always
+uses ``CPU_ONNX_FILE``.
 """
 import threading
 
 import numpy as np
 
 DML_PROVIDER = "DmlExecutionProvider"
+CPU_PROVIDER = "CPUExecutionProvider"
+CPU_ONNX_FILE = "onnx/model.onnx"  # fp32 export — fp16 graphs fail to initialise on the CPU provider
 
 
 class DirectMLUnavailable(RuntimeError):
-    """DirectML can't run the model — the caller falls back to the torch reranker on the CPU."""
+    """DirectML can't run the model — the caller falls back to the CPU."""
 
 
-class DirectMLCrossEncoder:
-    """Drop-in for ``sentence_transformers.CrossEncoder.predict`` on the GPU via DirectML."""
+class OnnxCrossEncoder:
+    """Drop-in for ``sentence_transformers.CrossEncoder.predict`` on ONNX Runtime."""
 
-    def __init__(self, model_name: str, max_length: int = 512):
-        """Load the model's published ONNX export and tokenizer from the Hugging Face cache.
+    def __init__(self, model_name: str, onnx_file: str = CPU_ONNX_FILE, max_length: int = 512, gpu: bool = True):
+        """Load ``onnx_file`` of ``model_name`` and its tokenizer, on the GPU (DirectML) or the CPU.
 
-        Raises ``DirectMLUnavailable`` when the DirectML provider is missing — e.g. the plain
-        ``onnxruntime`` package was installed over ``onnxruntime-directml`` — or the model has
-        no ONNX export.
+        With ``gpu=True`` it raises ``DirectMLUnavailable`` when the DirectML provider is missing — e.g. the
+        plain ``onnxruntime`` package was installed over ``onnxruntime-directml`` —, the session ends up on
+        the CPU, or the file can't be downloaded. On the CPU, download errors propagate unchanged.
         """
         import onnxruntime as ort
         from huggingface_hub import hf_hub_download
         from tokenizers import Tokenizer
 
-        if DML_PROVIDER not in ort.get_available_providers():
+        if gpu and DML_PROVIDER not in ort.get_available_providers():
             raise DirectMLUnavailable(
                 f"{DML_PROVIDER} missing (available: {ort.get_available_providers()}) — "
                 "is onnxruntime-directml installed? See docs/configuration.md → reranking.backend"
             )
         try:
-            model_path = hf_hub_download(model_name, "onnx/model.onnx")
+            model_path = hf_hub_download(model_name, onnx_file)
             tokenizer_path = hf_hub_download(model_name, "tokenizer.json")
         except Exception as e:
-            raise DirectMLUnavailable(f"no ONNX export for {model_name}: {e}") from e
+            if not gpu:
+                raise
+            raise DirectMLUnavailable(f"no ONNX export {onnx_file} for {model_name}: {e}") from e
 
         self._tokenizer = Tokenizer.from_file(tokenizer_path)
         self._tokenizer.enable_truncation(max_length)
-        self._tokenizer.enable_padding()
+        # tokenizer.json has no padding preset; the default pad id 0 is "<s>" in XLM-R vocabularies. The
+        # attention mask hides padding either way, the model's own pad token keeps it like the reference.
+        pad = next((t for t in ("<pad>", "[PAD]") if self._tokenizer.token_to_id(t) is not None), None)
+        if pad:
+            self._tokenizer.enable_padding(pad_id=self._tokenizer.token_to_id(pad), pad_token=pad)
+        else:
+            self._tokenizer.enable_padding()
 
         options = ort.SessionOptions()
         options.enable_mem_pattern = False  # required by the DirectML provider
         options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-        self._session = ort.InferenceSession(model_path, options, providers=[DML_PROVIDER, "CPUExecutionProvider"])
-        if self._session.get_providers()[0] != DML_PROVIDER:
+        providers = [DML_PROVIDER, CPU_PROVIDER] if gpu else [CPU_PROVIDER]
+        self._session = ort.InferenceSession(model_path, options, providers=providers)
+        if gpu and self._session.get_providers()[0] != DML_PROVIDER:
             raise DirectMLUnavailable(f"session fell back to {self._session.get_providers()}")
         self._input_names = {i.name for i in self._session.get_inputs()}
         self._lock = threading.Lock()  # one GPU queue — concurrent requests run one after another

@@ -40,7 +40,8 @@ no_context: "Zu deiner Frage … keine …"        # keine Treffer (ohne LLM)
 ### `system` — Systemprompt
 
 Geht bei jedem LLM-Aufruf als Systemnachricht mit. Legt Rolle, Sprache, **Antwortformat im
-Telegram-Stil**, Längenregeln und Quellenangaben fest. **Keine Variablen.**
+Telegram-Stil**, Längenregeln und Quellenangaben fest. **Keine Variablen.** Antworten stützen sich
+auf die Quellen und den [Regelkern](#regelkern) im `qa`-Prompt.
 
 Der Prompt verlangt:
 
@@ -119,11 +120,67 @@ qa: |
   {{ chunk.content }}
   {% endfor %}
 
+  ### Regelkern (gilt immer, auch wenn die Quellen ihn nicht wiederholen):
+  Bei Würfen, Schaden, Rüstung oder Ausrüstung jede Zahl der Antwort gegen diese Regeln prüfen …
+  - **Probe**: …   - **Ass-Regel**: …   (14 Stichpunkte, ~450 Tokens)
+
   ### Frage:
   {{ question }}
 
   ### Antwort:
 ```
+
+#### Regelkern
+
+Ein fester Block mit 14 Stichpunkten zum Regelwerk, verdichtet aus dem Regelbuch (Kapitel
+Grundregeln, Kampfregeln, Gegenstände, Ressourcen): Probe und Würfel je Rang, Ass-Regel, Angriff,
+kritischer Treffer, Waffenkategorien, Qualität, Schadensreihenfolge SP → RP → LP, Rüstungswerte,
+Schadenstypen, magische Waffen, Zug, Statuseffekte, Lesart der Simulationsberichte. Die
+Einleitung des Blocks sagt dem Modell, nur die zur Frage passenden Punkte zu nutzen und ihn bei
+reinen Lore-Fragen nicht zu erwähnen; konkrete Werte aus den Quellen haben Vorrang.
+
+**Warum**: Grundregeln gelten für jeden Würfelwert, passen aber zu keiner konkreten Frage — die
+Suche holt zu „Wie viel Schaden macht Schattenklinge?“ die Fähigkeitskarte, nicht die Ass-Regel
+(Kapitel 1) oder den kritischen Treffer (Kapitel 4). Das Modell las „1W10 + 10“ deshalb als
+„höchstens 20“. Besseres Retrieval löst das nicht.
+
+**Warum im `qa`-Prompt und nicht im Systemprompt** (gemessen 14.10., qwen3:14b, je Frage dieselben
+Chunks, nur der Prompt verschieden, noch mit dem alten Reranker mMiniLMv2): Im Systemprompt änderte der Block fast nichts — „höchste
+Wurfzahl mit Rang 1“ wurde sogar schlechter (3 statt 4, richtig wäre „nach oben offen“). Direkt vor
+der Frage wirkt er. Fünf Regelfragen, je 3 Läufe (Temperatur 0,3), richtig vorher → nachher:
+
+| Frage | vorher | nachher | nachher, live mit jina-Reranker |
+|---|---|---|---|
+| Höchste Wurfzahl mit Rang 1 | 0/3 („höchstens 4“) | 3/3 („nach oben offen, z. B. 4 + 3 = 7“) | 0/3 sauber — Lead „höchstens 13“ (2×) bzw. „4“, darunter jeweils „unbegrenzt“ |
+| Was fängt eine normale mittlere Rüstung ab? | 0/3 („2 je RP“) | 3/3 („3 RP → 6 Schaden“) | 3/3 |
+| Wie funktioniert das Würfelsystem? | 3/3 | 3/3, beim Thema | 3/3, einmal doch der ganze Block (10,8 s) |
+| Schattenklinge auf Rang 6 „maximal“ | 0/3 | 0/3 — Simulations-Durchschnitt 29,94 als Maximum | 0/3 — jetzt Fähigkeitskarte (1W10 + X), 2× „nach oben offen“, X falsch (richtig +10) |
+| Dolch, STÄ 4, Wurfzahl 12 (richtig: 12) | 0/3 | 0/3 — Krit-Schwelle und Grundschaden verwechselt | 0/3 (6 / 10 / 10) |
+
+Der Reranker ändert die Chunks und damit das Ergebnis: Mit jina (seit 14.10.) kippt die Rang-1-Frage.
+Gegenprobe mit den festen jina-Chunks (je 3 Läufe): wie abgerufen 1/3 richtig, ohne das Ass-Regel-Beispiel
+„W8 mit 8, dann 5 → 13“ 0/3, Ass-Regel-Chunk ans Ende verschoben 0/3 — das Beispiel ist nicht die
+Ursache; das Modell hängt sich ohne Denken an „höchstens“ + W4 („höchstens 4“). Die Streuung zwischen
+Läufen ist groß, das 3/3 mit mMiniLMv2 war zum Teil Glück.
+
+**Mit Qwen3-Denken** (nur im Test, gleiche jina-Chunks, je 3 Läufe): Rang 1 3/3 richtig („keine
+Obergrenze“), Dolch 1/3 richtig (12) und 2/3 **leere Antworten** (das Denken verbraucht das Token-Budget,
+~40 s), Schattenklinge 3/3 „X ist in den Quellen nicht angegeben“ — ehrlich statt falsch. Kosten:
+14–41 s pro Antwort statt 2–5 s. Als Standard ungeeignet; Denken nur für Rechenfragen wäre eine
+Option (Roadmap 3.14).
+
+Vier Lore-Fragen (Arkenfeld, Escanor, Orden der letzten Dämmerung, Malek) blieben gleich gut, kein
+Regeltext in den Antworten; Antwortzeit +0–2 s.
+
+Zwei Formulierungen kamen aus der Messung: „bei jedem Würfel einschließlich W4 (eine 4 auf dem W4 →
+erneut werfen)“ — ohne das Beispiel meinte das Modell, beim W4 gelte die Ass-Regel nicht; „den
+Regelkern nie als Ganzes wiedergeben“ — sonst schrieb es bei der Würfelsystem-Frage alle 14 Punkte
+ab (17 s). Verworfen: „waffenlos“ als eigener Stichpunkt (Dolch weiter 0/3).
+
+**Grenzen**: Regeln *anwenden und rechnen* bleibt ohne Denken unzuverlässig (Roadmap 3.14, am 14.10.
+so gelassen). Beim Dolch fehlt zusätzlich die Waffentabelle im Kontext — die Frage holt den Abschnitt
+„Kritischer Treffer“ und NPC-Werte (Roadmap 3.10). **Pflege**: Der Block ist eine Kopie
+des Regelbuchs — ändert sich dort eine Regel, muss er von Hand nachgezogen werden.
 
 ---
 

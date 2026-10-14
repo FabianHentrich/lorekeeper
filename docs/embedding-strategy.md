@@ -10,6 +10,7 @@ Datei, Regelwerk-Slot, Section Expansion und der Aufbau der Embed-Texte. Die Par
 2. [Warum diese Entscheidungen?](#warum-diese-entscheidungen)
    - [Warum `multilingual-e5-base`?](#warum-multilingual-e5-base)
    - [Warum ein Cross-Encoder-Reranking?](#warum-ein-cross-encoder-reranking)
+   - [Warum jina-reranker-v2?](#warum-jina-reranker-v2-entscheidung-1410)
    - [Warum BM25-Hybrid-Suche?](#warum-bm25-hybrid-suche)
    - [Warum `top_k` 20?](#warum-top_k-20)
    - [Warum ein Deckel pro Datei?](#warum-ein-deckel-pro-datei)
@@ -64,16 +65,18 @@ Bi-Encoder kodieren Frage und Dokument **getrennt** und vergleichen per Cosine �
 Modell sieht das Paar nie zusammen. So entstehen plausibel wirkende Top-Treffer, die von der
 falschen Entität handeln.
 
-Der Cross-Encoder (`mmarco-mMiniLMv2-L12-H384-v1`) kodiert **beides zusammen** und bewertet die
-Relevanz direkt. Pro Paar ist er ~20× langsamer, deshalb läuft er nur über die 15 Kandidaten der
-Vektorsuche und wählt die finalen 8. Kurz: Der Bi-Encoder findet 90 % der richtigen Kandidaten,
+Der Cross-Encoder (`jina-reranker-v2-base-multilingual`, bis 14.10. `mmarco-mMiniLMv2-L12-H384-v1`)
+kodiert **beides zusammen** und bewertet die Relevanz direkt. Pro Paar ist er viel langsamer,
+deshalb läuft er nur über die 20 Kandidaten der Vektorsuche und wählt die finalen 8. Kurz: Der Bi-Encoder findet 90 % der richtigen Kandidaten,
 der Cross-Encoder bringt sie in die richtige Reihenfolge.
 
 **Wo er läuft:** Mit `reranking.backend: directml` auf der GPU über ONNX Runtime + DirectML (jede
-DX12-Karte, auch AMD), mit dem veröffentlichten ONNX-Export des Modells — identische Scores, ~50 ms
-für 15 Paare statt ~840 ms auf der CPU und unabhängig von CPU-Last (~70 ms statt ~14 s, während
-eine Simulation alle Kerne belegt). Ist DirectML nicht verfügbar, schreibt der Retriever eine
-Warnung ins Log und nimmt das torch-Modell auf der CPU; fällt die GPU erst im Betrieb aus
+DX12-Karte, auch AMD), mit dem veröffentlichten ONNX-Export des Modells (`reranking.onnx_file`, für
+jina die fp16-Datei) — unabhängig von CPU-Last. Ist DirectML nicht verfügbar, schreibt der Retriever
+eine Warnung ins Log und nimmt den fp32-Export (`onnx/model.onnx`) mit ONNX Runtime auf der CPU —
+fp16 lädt dort nicht; die Scores weichen um höchstens 0,004 ab. torch nutzt der Reranker nicht mehr:
+jina lädt in torch nur mit `trust_remote_code` (ausgeführter Code aus dem Modell-Repo) und dem
+Zusatzpaket `einops`. Fällt die GPU erst im Betrieb aus
 (Treiber-Reset, VRAM voll), wechselt er ebenso mit Warnung auf die CPU — für den Rest der Laufzeit,
 statt jede weitere Frage scheitern zu lassen. Der Bi-Encoder bleibt bewusst auf der
 CPU: ein Query-Embedding kostet ~0,08 s, und eine andere Rechenbibliothek würde die Vektoren
@@ -90,7 +93,8 @@ Produktionsgröße, 30 Wiederholungen; „Last“ = 12 Busy-Loop-Prozesse (≈ l
 | **DirectML fp32 (GPU)** | **50 ms** | **68 ms** | ✅ identisch (max. Abweichung 6·10⁻⁶) |
 | DirectML fp16 | — | — | lädt nicht |
 
-Golden Set mit GPU-Reranker in ~1 min statt ~12 min, gleiche Treffer. Verworfen bzw. später neu zu
+Golden Set mit GPU-Reranker in ~1 min statt ~12 min, gleiche Treffer. (Die Tabelle gilt für
+mMiniLMv2; jina fp16 lädt auf DirectML.) Verworfen bzw. später neu zu
 prüfen: **PyTorch + ROCm unter Windows** (die RX 9070 XT lieferte still Nullen — hätte den Index
 zerstört), **Windows ML** als Nachfolger von DirectML (Radeon-Pfad aus Python nicht belegt). DirectML
 ist bei Microsoft im Wartungsmodus und braucht das Paket `onnxruntime-directml` statt `onnxruntime`
@@ -98,6 +102,30 @@ ist bei Microsoft im Wartungsmodus und braucht das Paket `onnxruntime-directml` 
 greift der CPU-Rückfall mit Warnung im Log, falsch wird nichts. Im Betrieb (13.10.) braucht die
 ganze Suche warm 120–170 ms; die erste Frage mit einer neuen Eingabelänge ist auf DirectML einmalig
 langsamer (~0,4 s), direkt nach dem Laden des LLM in den Grafikspeicher einmal ~2 s gesehen.
+
+### Warum jina-reranker-v2? (Entscheidung 14.10.)
+
+Die verbliebenen Abschnitt-Misses (Roadmap 3.10) waren überwiegend Reranker-Fälle: der richtige
+Chunk unter den Kandidaten, aber ein Nachbarabschnitt vorn (p003 Würfelsystem, p099 Verbände auf
+Vektor-Rang 1). Golden Set, alle Kandidaten in einem Prozess auf demselben Index, ONNX auf
+DirectML, Regelwerk-Slot je Kandidat gesweept (−2 bis −8):
+
+| Reranker | Datei | Abschnitt | MRR | Platz 1 | Rerank p50 | Bemerkung |
+|---|---|---|---|---|---|---|
+| mMiniLMv2-L12 (bis 14.10.) | 272/274 | 139/149 | 0,438 | 110 | — | |
+| **jina-reranker-v2 fp16** | **272** | **142** | **0,468** | **121** | **107 ms** | + p003, p010, p099, p108, x003 · − p009, z001 |
+| bge-reranker-v2-m3 fp16 | 271 | 143 | 0,452 | 113 | 249 ms | verliert Datei m048; 2,3 GB |
+| msmarco-MiniLM-L12-en-de | 271 | 143 | 0,414 | 101 | 101 ms | 13 Fragen ≥ 3 Plätze schlechter |
+| gte-multilingual-reranker | — | — | — | — | — | läuft mit transformers 5.x nicht |
+
+jina gewinnt bei der Reihenfolge (MRR, Platz-1-Treffer) deutlich und verliert keine Datei. Der
+Regelwerk-Slot bleibt bei −4: von −2 bis −8 gleiche Treffer; wie oft reine Lore-Fragen damit
+Regelwerk-Chunks bekommen, ist für jina nicht gemessen. Grafikspeicher neben `qwen3:14b` (16 GB
+Karte, gemessen 14.10.): qwen3 allein 12,6 GB, mit mMiniLMv2 14,6 GB, mit jina 14,4 GB — das LLM
+bleibt ganz im VRAM (11,0/11,0 GB), Generierung unverändert 53,6 Token/s. Rerankt der Reranker
+ununterbrochen parallel (nur bei gleichzeitigen Fragen), sinkt sie bei beiden auf ~14 Token/s.
+Lizenz CC-BY-NC — für den privaten Einsatz in Ordnung. Nach dem Einbau im Golden Set wieder
+272/274 und 142/149.
 
 ### Warum BM25-Hybrid-Suche?
 
@@ -333,7 +361,7 @@ Roadmap 2.
 flowchart LR
     Q([Frage]) --> BE["Bi-Encoder\ne5-base 'query: '+Text\n~20–80 ms"]
     BE -->|"768-dim.\nFrage-Vektor"| CS["ChromaDB\nCosine-Suche\ntop_k=20\n~5 ms"]
-    CS -->|"15 Kandidaten\n(Score = 1 − Cosine-Distanz)"| CE["Cross-Encoder\nmmarco-mMiniLMv2\n~50 ms GPU (DirectML)\n~800 ms CPU-Rückfall"]
+    CS -->|"20 Kandidaten\n(Score = 1 − Cosine-Distanz)"| CE["Cross-Encoder\njina-reranker-v2\n~110 ms GPU (DirectML)\nCPU-Rückfall: Sekunden"]
     CE -->|"top_k_rerank=8\nnach Relevanz"| LLM([LLM-Kontext])
 
     style BE fill:#dbeafe,stroke:#3b82f6
@@ -344,7 +372,7 @@ flowchart LR
 Vollständiger Ablauf mit BM25, Regelwerk-Slot und Section Expansion:
 [data-flow.md](data-flow.md#beantwortung-einer-frage).
 
-| | Bi-Encoder (e5-base) | Cross-Encoder (mMiniLMv2) |
+| | Bi-Encoder (e5-base) | Cross-Encoder (jina-reranker-v2) |
 |---|---|---|
 | **Funktionsweise** | Frage und Dokument getrennt → Cosine | Frage + Dokument zusammen → direkte Bewertung |
 | **Vorteil** | Vektoren vorberechnet → sehr schnell | Versteht die Beziehung zwischen Frage und Text |

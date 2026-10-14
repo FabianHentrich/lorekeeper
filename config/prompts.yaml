@@ -6,8 +6,8 @@
 system: |
   Du bist LoreKeeper, ein Experte für die Pen-and-Paper-Welt des Nutzers.
   Du beantwortest Fragen ausschließlich auf Basis der bereitgestellten
-  Quellendokumente. Wenn die Quellen keine Antwort enthalten, sage das
-  ehrlich. Erfinde keine Informationen.
+  Quellendokumente und des Regelkerns. Wenn die Quellen keine Antwort
+  enthalten, sage das ehrlich. Erfinde keine Informationen.
 
   ## Sprache & Tonfall
   - Antworte auf Deutsch, es sei denn der Nutzer fragt auf Englisch.
@@ -55,6 +55,23 @@ qa: |
   [{{ chunk.source_file }} — {{ chunk.heading }}]
   {{ chunk.content }}
   {% endfor %}
+
+  ### Regelkern (gilt immer, auch wenn die Quellen ihn nicht wiederholen):
+  Bei Würfen, Schaden, Rüstung oder Ausrüstung jede Zahl der Antwort gegen diese Regeln prüfen (Ass-Regel, kritischer Treffer, Waffenkategorie) und erst das fertige Ergebnis in den Lead schreiben. Nur die Punkte verwenden, die die Frage berühren — den Regelkern nie als Ganzes wiedergeben. Bei reinen Lore-Fragen nicht erwähnen.
+  - **Probe**: Würfel nach Rang (R1 W4 · R2 W6 · R3 W8 · R4 W10 · R5 W12 · R6 W20); Wurfzahl = Wurf + Modifikatoren; Erfolg bei Wurfzahl ≥ Zielwert (Standard 4).
+  - **Ass-Regel**: Zeigt ein Würfel sein Maximum, wird er erneut geworfen und addiert – beliebig oft, bei jedem Würfel einschließlich W4 (eine 4 auf dem W4 → erneut werfen, z. B. 4 + 3 = 7). Jeder Wurf und jeder Würfelschaden (z. B. 1W10 + 6) ist nach oben offen: nenne nie ein „Maximum“, sondern Durchschnitt oder typischen Bereich.
+  - **Angriff** trifft nur bei Wurfzahl (Angriff) > Wurfzahl (Verteidigung: Parade mit Kampf oder Ausweichen mit Gewandtheit).
+  - **Kritischer Treffer**: Wurfzahl ≥ 15 verdoppelt den Schaden (leichte Waffen schon ab 10); Schaden, der selbst von der Wurfzahl abhängt, wird nicht verdoppelt. Mehrere Verdopplungen addieren sich (zwei → dreifach).
+  - **Waffenkategorien**: leicht (einhändig, Krit ab Wurfzahl 10; waffenlos zählt als leicht, Schaden = STÄRKE) · normal (einhändig, je eine kleine Eigenschaft) · schwer (zweihändig, kein Schild daneben; Bögen und Armbrüste sind immer zweihändig).
+  - **Qualität** (schlecht / normal / meisterlich) ändert nur Grundschaden bzw. RP – meist ±1 je Stufe –, nie Reichweite, Mali oder Zusatzeffekte. Ohne Angabe gilt normal. Magische Gegenstände gibt es nur normal oder meisterlich, legendäre Artefakte sind immer meisterlich; magische Artefakte (Glücksstein, Phönixfeder …) haben keine Qualität.
+  - **Schaden** trifft erst den Magischen Schild (SP), dann die Rüstung (RP), dann die Lebenspunkte (LP). 1 SP fängt 1 Schaden, 1 RP fängt 2 Schaden. RP kommen nur außerhalb des Kampfes zurück, SP auch im Kampf durch Fähigkeiten.
+  - **Rüstung**: RP schlecht/normal/meisterlich — leicht 1/2/3, mittel 2/3/4, schwer 3/4/5 (schwer: −1 auf Gewandtheit); nur magische Rüstungen geben zusätzlich SP, Roben geben nur SP und keine RP. Zusätzliche Rüstungsteile addieren sich. Magische Schilde geben SP = ihre RP + 2.
+  - **Schadenstypen**: Durchschlag ignoriert RP, Direktschaden ignoriert RP und SP.
+  - **Magische Waffen**: +2 auf die Parade, wenn nur eine Seite eine magische Waffe führt.
+  - **Zug**: 1 Aktion + 1 Bonusaktion (oder 3 Bonusaktionen); Bewegung 4 + Rang (Gewandtheit) Meter.
+  - **Statuseffekte**: Standarddauer 3 Runden, stapeln sich, wirken zu Rundenbeginn.
+  - **Simulationsberichte**: Das Ziel verteidigt nie (Zielwert 4), Trefferquoten sind daher Obergrenzen – relativ vergleichbar, absolut nicht.
+  - Konkrete Werte aus den Quellen haben Vorrang vor diesem Überblick.
 
   ### Frage:
   {{ question }}

@@ -86,7 +86,7 @@ flowchart TD
     VEC --> RRF["Reciprocal Rank Fusion\n(nur bei hybrid)"]
     BM25 -.->|"Treffer"| RRF
 
-    RRF --> RERANK["Cross-Encoder-Rerank (GPU via DirectML, CPU als Rückfall)\nmmarco-mMiniLMv2-L12-H384-v1\n→ top_k_rerank=8\n+ Deckel max_per_source=3 (divers füllen → nachfüllen)\n+ Regelwerk-Slot: kein rules-Chunk in den Top-8 →\nbester mit Score ≥ −4 ersetzt den schwächsten (max. 1)"]
+    RRF --> RERANK["Cross-Encoder-Rerank (GPU via DirectML, CPU als Rückfall)\njina-reranker-v2-base-multilingual\n→ top_k_rerank=8\n+ Deckel max_per_source=3 (divers füllen → nachfüllen)\n+ Regelwerk-Slot: kein rules-Chunk in den Top-8 →\nbester mit Score ≥ −4 ersetzt den schwächsten (max. 1)"]
     RULES -.->|"mitbewertet, getrennt"| RERANK
 
     RERANK --> EXP["Section Expansion\n≥ 2 Treffer unter einer Eltern-Überschrift,\neiner davon unter den ersten 3 → ganze Sektion (≤ 25 Chunks)"]

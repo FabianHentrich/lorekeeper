@@ -1,6 +1,6 @@
 # LoreKeeper — Roadmap
 
-Stand: 13.10.2026
+Stand: 14.10.2026
 
 Hier steht **offene Arbeit**. Erledigtes ist unten eine Zeile mit Verweis; Entscheidungen, Messwerte
 und Begründungen stehen in der zuständigen Doku (Tabelle in `CLAUDE.md` → „Documentation“), die
@@ -20,6 +20,7 @@ mehrere Minuten, nicht parallel zur Simulation). Ein Golden-Set-Lauf dauert ~1 m
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
 | 1 | 3.10 Restliche Abschnitt-Misses | Gering-Mittel — Regelfragen präziser | Mittel | 🟡 | Einzelfälle, je Golden-Set-Lauf prüfbar |
+| — | 3.14 Rechenfragen zum Regelwerk ⏸ | Mittel — falsche Zahlen bei Regel-Rechnungen | Mittel-Hoch | 🟡 | Vorerst so gelassen (14.10.); nur mit Denken zuverlässiger, das kostet 15–40 s |
 | — | 3.2 Session-History ⏸ | Unklar | Mittel | 🟢 | Erst entscheiden, ob gespeicherte Sessions Nutzen haben |
 | — | 3.4 Kommentar zur Bewertung ⏸ | Gering | Gering | 🟢 | Feature |
 | — | 2 Bilder im Chat (Phase 1/2) ⏸ | Mittel / Nice-to-have | Mittel / Mittel-Hoch | 🔴/🟡 | Feature |
@@ -27,9 +28,13 @@ mehrere Minuten, nicht parallel zur Simulation). Ein Golden-Set-Lauf dauert ~1 m
 | — | 3.5 Wikilink-Expansion ⏸ | Mittel | Mittel | 🔴 | Neuer Suchweg — muss in den Spy-Test |
 | — | 11.0 P8 Dienste-/Reranker-Modul (optional) | Gering | Mittel | 🟢 | Nur zusammen mit Feature-Arbeit |
 
+**Entschieden 14.10.**: Der Fähigkeitsbericht bleibt für Spieler freigegeben — er ist eine
+Entscheidungshilfe (Spieler bekommen bei 47 von 124 reinen Regelfragen Ø 2,3 von 8 Chunks daraus).
+`Spielleiter-Tools/potenzielle_anpassungen.md` (Änderungsvorschläge/Errata) wird nicht mehr
+indiziert (`exclude_patterns` in `sources.yaml`, 14 Chunks entfernt) — Vorschläge sind keine
+geltenden Regeln.
+
 **Zu entscheiden (Nutzer)**:
-- Fähigkeitsbericht für Spieler freigegeben lassen? Bei 47 von 124 reinen Regelfragen bekommen
-  Spieler Ø 2,3 von 8 Chunks daraus (selten in den Top 3) — Häkchen auf der Seite ⚙ Sources.
 - `HF_HUB_OFFLINE=1` (`.env`/`start.ps1`)? Jeder Modell-Start fragt Hugging Face; bei 429/500 von
   dort kosten die Wiederholungen Startzeit, alle Modelle liegen ohnehin im lokalen Cache.
 
@@ -52,22 +57,50 @@ durchklicken (Job starten, Seite wechseln und zurück — 3.8/3.9); 👍/👎 un
 
 ### 3.10 Restliche Abschnitt-Misses
 
-Stand 13.10.: Datei 272/274, Abschnitt **139/149**, Suche exakt. Bisher umgesetzt (Tabelle
+Stand 14.10.: Datei 272/274, Abschnitt **142/149**, Suche exakt. Bisher umgesetzt (Tabelle
 „Erledigt“): Regelwerk-Slot, `top_k` 20, „Alte Vault-Werte“ aus dem Index, Zeilennamen für
-Tabellen-Chunks; verworfen: Hybrid-Suche, Tabellen als Fließtext.
+Tabellen-Chunks, Reranker jina-reranker-v2; verworfen: Hybrid-Suche, Tabellen als Fließtext.
 
 **Offen, je mit Diagnose** (Rang des richtigen Chunks in der Vektorsuche, Reranker-Score richtig
 gegen gewählt; Skript-Muster: Rang in den Top 200 + `_predict` je Paar):
-- **Reranker wählt anders** — Würfelsystem (p003, 1.1 auf Rang 6, −5,6 gegen −4,7), Erlernen
-  neuer Zauber (p010, 5.1 gegen 5.3), Verbände (p099, Rang 1, verliert im Rerank), Flammenheilung
-  (p108, Rang 22).
-- **Entität + Regel** — x003 (Mordlust bei Malek), x004 (Phönixfeder bei Thalion).
+- **Seit jina verloren** — Zauberpunkte (p009, 5.1: „2.6 Skill- und Zauberpunkte“ und „5.3
+  Basis-Zauber“ vorn), Schwierigkeit einer Begegnung (z001, Begegnungsbaukasten statt
+  `llm_report.md`). Noch nicht diagnostiziert.
+- **Entität + Regel** — x004 (Phönixfeder bei Thalion: nur Thalions Kampfwerte).
 - **Simulation** — z003, z006, z009, z012 (Fragen zu Berichtsabschnitten).
 - **Name in fremder Identität** — „Wer ist Arkenfeld?“ (live 13.10.): 12 Chunks von „Bargrun
   ‚Zwerg‘ Erkenbrandt“ („Der Armdrücker von Arkenfeld“), nur 5 von `Orte/Arkenfeld.md`. Die
   Identitäts-Schicht macht den Ortsnamen zum Suchsignal für die NPC-Datei; Antwort trotzdem richtig.
 - Die 22-Chunk-Sektion „7.3 Legendäre Artefakte > Monolith“ landet bei fremden Regelfragen in den
   Top 3 („Ass-Regel“ p011, „Zauberspeicher“ p101); das Budget aus 5.6 streicht sie nur.
+- **Waffe in einer Rechenfrage** (14.10., auch mit jina): „Wie viel Schaden macht ein Dolch-Angriff
+  mit Stärke 4 bei einer Wurfzahl von 12?“ holt „4.6.1 Kritischer Treffer“ und NPC-Kampfwerte, nicht
+  die Zeile der Waffentabelle (Dolch STÄ + 1/2/3) — die Antwort rät den Grundschaden. Der Rechenteil
+  gehört zu 3.14.
+
+### 3.14 Rechenfragen zum Regelwerk unzuverlässig ⏸
+
+Entdeckt 14.10. beim Regelkern (3.13). Fragen, bei denen das Modell Regeln **anwenden und rechnen**
+muss, beantwortet qwen3:14b ohne Denken oft falsch, auch wenn Regel und Werte im Prompt stehen. Live
+mit jina, je 3 Läufe ([prompts.md](docs/prompts.md#regelkern)):
+- „Welche Wurfzahl kann ich mit Rang 1 höchstens erreichen?“ — Lead „höchstens 4“ bzw. „13“, richtig
+  wäre „nach oben offen“ (Ass-Regel). Das Modell hängt sich an „höchstens“ + W4; das Ass-Regel-Beispiel
+  im Chunk ist nicht die Ursache (ohne es 0/3). Starke Streuung zwischen Läufen (0–3/3).
+- „Dolch, STÄ 4, Wurfzahl 12“ — 0/3: Krit-Schwelle (15 statt 10 bei leichten Waffen) und Grundschaden
+  verwechselt; dazu fehlt die Waffentabelle im Kontext (3.10).
+- „Schattenklinge auf Rang 6 maximal?“ — mit jina kommt die Fähigkeitskarte (1W10 + X), aber X wird
+  falsch oder gar nicht bestimmt (richtig: + 10). Mit mMiniLMv2 kam stattdessen der
+  Simulations-Durchschnitt 29,94 als „Maximum“.
+- Richtig dagegen: Rüstungswerte (3/3), Erklärung des Würfelsystems (3/3).
+
+**Gemessen: Qwen3-Denken** (nur im Test): Rang 1 3/3 richtig, Dolch 1/3 richtig und 2/3 leere
+Antworten (Token-Budget aufgebraucht), Schattenklinge 3/3 „X nicht angegeben“; 14–41 s statt
+2–5 s pro Antwort — als Standard ungeeignet.
+
+**Entschieden 14.10.: vorerst so lassen.** Mögliche Wege für später: Denken nur für Rechenfragen
+(braucht eine Erkennung solcher Fragen und mehr `max_tokens`, Antworten 15–40 s); größeres Modell;
+Waffentabelle für Waffenfragen zuverlässig in den Kontext (3.10). Vorher eine feste Liste von
+Rechenfragen mit Sollwerten anlegen, damit Varianten über mehrere Läufe vergleichbar sind.
 
 ### 2 Bilder im Chat ⏸
 
@@ -139,8 +172,10 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 | 3.10 (Teil) | Regelwerk-Slot (eigene Suche in `rules`, Mindest-Score −4) | 13.10. | `docs/embedding-strategy.md`, `docs/configuration.md` |
 | 3.10 (Teil) | `top_k` 20 (+2 Abschnitte, Hybrid verworfen), `ingestion.skip_sections` gegen „Alte Vault-Werte“ (Full-Reindex, 4419 Chunks), `ef_search` 1000 → 2000 (nach den Re-Index-Läufen wieder exakt), verwaiste Chunks entfernt, Golden Set 274 Fragen — Datei 272/274, Abschnitt 137/149 | 13.10. | `docs/embedding-strategy.md`, `docs/parsing.md`, `docs/configuration.md`, `docs/evaluation.md` |
 | 3.10 (Teil) | Tabellen-Chunks: Zeilennamen im Embed-Text („Einträge: Dolch, …“) — Langschwert/Armbrust gelöst, Abschnitt 137 → 139/149, nichts verloren (Vektor-Rang 22 → 14, 47 → 2); Fließtext-Variante verworfen; Full-Reindex, Suche exakt | 13.10. | `docs/embedding-strategy.md` |
+| 3.10 (Teil) | Reranker `jina-reranker-v2-base-multilingual` (fp16 auf der GPU, fp32-ONNX als CPU-Rückfall statt torch): Abschnitt 139 → 142/149, Platz-1-Treffer 110 → 121, Datei unverändert 272/274; bge-m3, MiniLM en-de, gte verworfen; VRAM neben qwen3:14b 14,4 statt 14,6 GB, LLM-Tempo gleich | 14.10. | `docs/embedding-strategy.md`, `docs/configuration.md` |
 | 3.11 | Spieler-/Spielleiter-Modus inkl. Sicherheitstests (deterministisch, live, Spy-Test) | 11./12.10. | `ARCHITECTURE.md` 4.8, `docs/testing.md` |
 | 3.12 | Folgefragen ohne Inhaltswort („Fass das kürzer zusammen“, „Gib mir ein Beispiel“) gehen durch Condense — Suche und Quellenliste passen zum Thema; Wortliste nur ergänzend (unbekanntes Wort = Inhaltswort), Unit-Tests in beide Richtungen, mutationsgeprüft. Live 13.10.: „Fass das kürzer zusammen“ → „Fasse die Beschreibung von Arkenfeld kurz zusammen.“ (1,2 s), Quellen `Orte/Arkenfeld.md` statt Venthir/Regelbuch | 13.10. | `docs/prompts.md` |
+| 3.13 | Regelkern im `qa`-Prompt (14 Stichpunkte zum Regelwerk, direkt vor der Frage): mit mMiniLMv2 Rang-1-Wurfzahl und Rüstung je 0/3 → 3/3, Lore-Fragen unverändert; im Systemprompt wirkungslos. Live mit jina: Rüstung 3/3, Rang-1-Wurfzahl wieder 0/3 (Lead „höchstens 13“). Offen: Rang 1 mit jina, Dolch, Schattenklinge (3.10) | 14.10. | `docs/prompts.md` |
 | 4.1 | Heimnetz-Betrieb (`start.ps1 -Server`, Firewall-Skript, kein Autostart) | 11.10. | `docs/operations.md` |
 | 4.2 (Teil) | Spieler-Filter im Backend erzwungen (`role`) | 12.10. | `ARCHITECTURE.md` 4.8 |
 | 4.3 | Sauberes Beenden: `stop.ps1` (Strg+C an beide Fenster, nach 20 s hart, samt Ollama; Sperre während Ingest) und **⏻ LoreKeeper beenden** in der Sidebar (Admin). Gemessen: Strg+C ist in allen Lagen sauber (Backend 1,3–1,6 s, UI 0,2 s, auch bei Stream/Eval) — 7 von 10 Starts endeten durch Fenster-Schließen ohne Shutdown; die verzögerte Strg+C-Reaktion war nicht reproduzierbar (Verdacht: markierter Text im Konsolenfenster hält den Prozess an) | 13.10. | `docs/operations.md`, `docs/ui-ux.md` |

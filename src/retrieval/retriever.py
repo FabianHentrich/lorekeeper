@@ -120,7 +120,7 @@ class Retriever:
         self.embedding_service = embedding_service
         self.vectorstore = vectorstore
         self.bm25_index = bm25_index or BM25Index()
-        self._reranker: Any = None  # CrossEncoder (CPU) or DirectMLCrossEncoder (GPU), loaded lazily
+        self._reranker: Any = None  # OnnxCrossEncoder on the GPU or the CPU, loaded lazily
         self._reranker_on_gpu = False
         self._fallback_lock = asyncio.Lock()  # one GPU→CPU switch even if several queries fail at once
 
@@ -139,30 +139,31 @@ class Retriever:
     def get_reranker(self):
         """Lazy-load and cache the cross-encoder reranking model.
 
-        ``reranking.backend: directml`` runs it on the GPU; if DirectML can't run it, a warning
-        is logged and the torch model on the CPU is used — same scores, only slower.
+        ``reranking.backend: directml`` runs ``reranking.onnx_file`` on the GPU; if DirectML can't run it, a
+        warning is logged and the model's fp32 export runs on the CPU — same ranking, only slower.
         """
         if self._reranker is None:
             model = self.config.reranking.model
             if self.config.reranking.backend == "directml":
-                from src.retrieval.onnx_reranker import DirectMLCrossEncoder
+                from src.retrieval.onnx_reranker import OnnxCrossEncoder
                 try:
-                    self._reranker = DirectMLCrossEncoder(model, max_length=_RERANK_MAX_TOKENS)
+                    self._reranker = OnnxCrossEncoder(model, self.config.reranking.onnx_file,
+                                                      max_length=_RERANK_MAX_TOKENS, gpu=True)
                     self._reranker_on_gpu = True
                     logger.info(f"Reranker loaded on the GPU (DirectML): {model}")
                 except Exception as e:
-                    logger.warning(f"DirectML reranker unavailable ({e}) — falling back to the CPU (torch)")
+                    logger.warning(f"DirectML reranker unavailable ({e}) — falling back to the CPU")
             if self._reranker is None:
                 self._reranker = self._load_cpu_reranker()
         return self._reranker
 
     def _load_cpu_reranker(self):
-        """The torch cross-encoder on the CPU — default backend and the fallback for DirectML."""
-        from sentence_transformers import CrossEncoder
+        """The cross-encoder on the CPU (ONNX Runtime, fp32 export) — ``cpu`` backend and the DirectML fallback."""
+        from src.retrieval.onnx_reranker import CPU_ONNX_FILE, OnnxCrossEncoder
         model = self.config.reranking.model
-        logger.info(f"Loading reranker model: {model}")
-        reranker = CrossEncoder(model, max_length=_RERANK_MAX_TOKENS)
-        logger.info("Reranker loaded (CPU, torch)")
+        logger.info(f"Loading reranker model on the CPU: {model}")
+        reranker = OnnxCrossEncoder(model, CPU_ONNX_FILE, max_length=_RERANK_MAX_TOKENS, gpu=False)
+        logger.info("Reranker loaded (CPU, ONNX Runtime)")
         return reranker
 
     async def _predict(self, pairs: list[list[str]]) -> list[float]:
@@ -182,7 +183,7 @@ class Retriever:
                 raise
             async with self._fallback_lock:
                 if self._reranker is reranker:   # nobody switched yet
-                    logger.warning(f"DirectML reranker failed ({e}) — switching to the CPU (torch) for this run")
+                    logger.warning(f"DirectML reranker failed ({e}) — switching to the CPU for this run")
                     self._reranker = await run_in_threadpool(self._load_cpu_reranker)
                     self._reranker_on_gpu = False
                 cpu = self._reranker

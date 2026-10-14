@@ -175,12 +175,12 @@ Voraussetzungen: Windows, Python 3.11+ (`winget install Python.Python.3.12`),
    schreiben (Vorlage `config/sources_example.yaml`). Alle Einstellungen:
    [docs/configuration.md](docs/configuration.md).
 
-4. **Modelle vorab laden** *(empfohlen — sonst lädt der erste Start ~1,6 GB herunter)*
+4. **Modelle vorab laden** *(empfohlen — sonst lädt der erste Start ~1,7 GB herunter)*
    ```powershell
-   python -c "from sentence_transformers import SentenceTransformer, CrossEncoder; SentenceTransformer('intfloat/multilingual-e5-base'); CrossEncoder('cross-encoder/mmarco-mMiniLMv2-L12-H384-v1'); print('Fertig.')"
+   python -c "from sentence_transformers import SentenceTransformer; from huggingface_hub import hf_hub_download as d; SentenceTransformer('intfloat/multilingual-e5-base'); [d('jinaai/jina-reranker-v2-base-multilingual', f) for f in ('tokenizer.json', 'onnx/model_fp16.onnx', 'onnx/model.onnx')]; print('Fertig.')"
    ```
-   Der ONNX-Export des Rerankers (`onnx/model.onnx`, ~450 MB) wird beim ersten Start mit
-   `backend: directml` automatisch nachgeladen. Alles liegt danach in `~/.cache/huggingface/hub/`.
+   Lädt Embedding-Modell und Reranker (GPU-Datei fp16, CPU-Rückfall fp32). Alles liegt danach in
+   `~/.cache/huggingface/hub/`.
 
 5. **Backend und UI starten**
    ```powershell
@@ -244,7 +244,7 @@ Weiter: Bedienung → [docs/ui-ux.md](docs/ui-ux.md) · Betrieb und Fehlersuche 
 | Backend | FastAPI + Pydantic v2 |
 | UI | Streamlit |
 | Embeddings | sentence-transformers (`intfloat/multilingual-e5-base`, 768 Dim., asymmetrisch), CPU |
-| Reranker | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` — ONNX Runtime + DirectML auf der GPU, sentence-transformers auf der CPU als Rückfall |
+| Reranker | `jinaai/jina-reranker-v2-base-multilingual` (Lizenz CC-BY-NC, privat) — ONNX Runtime + DirectML auf der GPU, ONNX Runtime auf der CPU als Rückfall |
 | Vektordatenbank | ChromaDB (embedded) + `rank_bm25` für Hybrid Search |
 | LLM | Ollama (`qwen3:14b`) oder Google Gemini (`gemini-2.5-flash`) |
 | Prompts | Jinja2 + YAML |

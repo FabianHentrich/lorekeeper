@@ -139,8 +139,8 @@ Zwei Arten, damit eine Änderung, die LoreKeeper spürbar langsamer macht, sofor
     Config und `chroma_data/` und misst bis zur ersten `/health`-Antwort. **Übersprungen, solange
     LoreKeeper läuft**; auf einem ruhigen Rechner bei gestopptem LoreKeeper ausführen.
     Baseline (12.10.): 17,7 s — ~9,6 s Python-Imports, ~6,7 s Lifespan.
-  - `tests/perf/test_reranker_gpu.py` — echtes Modell auf GPU vs. CPU: identisches Ranking, GPU
-    mindestens 3× schneller. Übersprungen ohne `onnxruntime-directml`.
+  - `tests/perf/test_reranker_gpu.py` — echtes Modell auf der GPU (fp16) vs. CPU-Rückfall (fp32):
+    gleiches Ranking, Scores ±0,02, GPU mindestens 3× schneller. Übersprungen ohne `onnxruntime-directml`.
 
 ```powershell
 pytest -m perf                                # gegen die Baseline prüfen
