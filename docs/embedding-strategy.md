@@ -16,7 +16,9 @@ Datei, Regelwerk- und Eintrags-Slot, Section Expansion und der Aufbau der Embed-
    - [Warum ein Deckel pro Datei?](#warum-ein-deckel-pro-datei)
    - [Warum ein Regelwerk-Slot?](#warum-ein-regelwerk-slot)
    - [Warum ein Eintrags-Slot?](#warum-ein-eintrags-slot)
+   - [Warum Groß-/Kleinschreibung wiederherstellen?](#warum-gro%C3%9F-kleinschreibung-wiederherstellen)
    - [Warum Section Expansion?](#warum-section-expansion)
+   - [Warum keine Wikilink-Expansion?](#warum-keine-wikilink-expansion)
    - [Warum die Identitäts-Schicht?](#warum-die-identitäts-schicht-dateiname--aliase)
    - [Warum `ef_search: 2000`?](#warum-ef_search-2000)
    - [Warum Chunking nach Überschriften?](#warum-chunking-nach-überschriften)
@@ -260,6 +262,29 @@ Abschnitt-Treffer (138 statt 136 von 153), aber Regelwerk-Chunks in 121 von 138 
 Lore-Fragen statt 64. Golden Set mit Slot: Abschnitte 132 → 136/153, Fragen mit Entität + Regel
 (x001–x008) 1 → 5/8.
 
+### Warum Groß-/Kleinschreibung wiederherstellen?
+
+Embedding-Modell und Reranker unterscheiden Groß- und Kleinschreibung, die Quellen schreiben deutsche
+Substantive groß — im Chat wird oft klein getippt. Alle 👎 vom 13./14.10. waren klein geschrieben:
+„was ist überschaden?“ fand nur „Überheilung“ (4.11), „Was ist Überschaden?“ setzt 4.10 auf Platz 1.
+Das Golden Set komplett kleingeschrieben verliert 8 von 149 Abschnitten (143 → 135) und einen
+Datei-Treffer — ein systematischer Verlust, kein Einzelfall.
+
+`src/retrieval/truecase.py` baut aus allen Chunks ein Wörterbuch „klein → Schreibweise der Quellen“:
+Ein Wort kommt hinein, wenn es mindestens zweimal vorkommt und zu ≥ 80 % großgeschrieben ist; alle
+großgeschriebenen Formen zählen („Kampf“ 450× und „KAMPF“ 235× aus Talentnamen gegen „kampf“ 42×),
+gewählt wird die normale Schreibweise. Vor der Suche werden nur **ganz kleingeschriebene** Wörter der
+Frage ersetzt, und die Frage beginnt mit einem Großbuchstaben; was der Nutzer groß oder gemischt
+schrieb, bleibt. Gebaut beim ersten Suchaufruf, verworfen nach jedem Ingest (wie der BM25-Index).
+**Nur intern**: Die korrigierte Frage geht nie an den Client — das Wörterbuch enthält auch
+Spielleiter-Chunks, eine geänderte Schreibweise verriete einem Spieler, dass ein Wort dort vorkommt.
+
+Gemessen 14.10. (frisch gebauter Index, jina): Golden Set wie geschrieben 143 → 143 (unverändert),
+kleingeschrieben 135 → **142**/149 (übrig: „würfeln“ — in den Quellen 3× klein, 2× groß — und
+„Decknamen“, das dort nicht vorkommt); Holdout kleingeschrieben 6/8 → 7/8 Abschnitte (= wie
+geschrieben). Erste Fassung ohne die Großschreibung am Fragenanfang und mit nur der häufigsten
+Großform: 140/149. Tippfehler („üebrschaden“) behebt das nicht.
+
 ### Warum ein Eintrags-Slot?
 
 Eine Tabelle ist **ein** Vektor für alle ihre Zeilen. „Wie viel Schaden macht ein Dolch?“ findet die
@@ -338,6 +363,28 @@ verlieren die 22 Chunks von „7.3 Legendäre Artefakte > Monolith“, „Blauer
 Chunks „Prismenhalter“. Eine einzelne Sektion (≤ `max_chunks` 25) plus Treffer passt weiter.
 **Verworfen:** 25 und kleiner schneiden genau die Aufzählungsfragen, für die es die Expansion gibt —
 bei 20 gehen Waldläufer, Krieger, Mönch, Alchemist und die Magieschulen von 23–28 auf 8 Chunks.
+
+### Warum keine Wikilink-Expansion?
+
+Idee (Roadmap 3.5): Die Notizen, auf die die besten Treffer per `[[Link]]` verweisen, kommen mit ihren
+besten Chunks in den Rerank-Pool (wie der Eintrags-Slot, Filter der Anfrage, der Reranker entscheidet).
+Gemessen am 14.10. auf einer Index-Kopie (jina, eine Prozess-Sitzung), Links der ersten N Treffer,
+je Frage K Chunks aus den verlinkten Notizen:
+
+| Variante | Golden Set Datei | Abschnitt | Holdout (Datei / Abschnitt) |
+|---|---|---|---|
+| ohne | 272/274 | 143/149 | 10/10 · 7/8 |
+| N 3, K 3 | 270 (−a009, −m062) | 143 | 10/10 · 7/8 |
+| N 5, K 3 | 271 (−a009) | 143 | 10/10 · 7/8 |
+| N 3, K 5 | 270 (−a009, −m062) | 143 | 10/10 · 7/8 |
+| N 8, K 5 | 271 (−a009) | 143 | 10/10 · 7/8 |
+
+**Nicht umgesetzt:** kein Gewinn, nur Verluste — die zusätzlichen Chunks verdrängen im Rerank richtige
+Treffer. Alle sechs verbleibenden Fehlschläge (p009, z001, z003, z006, z009, z012) liegen im Regelbuch
+oder in Simulationsberichten, die keine Wikilinks haben; ein Suchweg über Links kann sie gar nicht
+erreichen. Dazu sind die Links grob: `wikilinks` ist eine Liste je **Notiz**, nicht je Abschnitt
+(Malek Nocthar: 26 Ziele an jedem Chunk). Neu prüfen erst bei Fragen, die nachweislich über einen Link
+gehen (NPC → Gegenstand) und heute scheitern — dann mit Links je Abschnitt (Parser + Re-Index).
 
 ### Warum die Identitäts-Schicht (Dateiname | Aliase)?
 
@@ -421,8 +468,10 @@ bauen Deckel, Section Expansion und die Abschnittsprüfung der Evaluation.
 Bild-„Chunks“ sind Platzhalter wie `"Bild: Malek Nocthar 1 (Pfad: NPCs)"`. Sie ranken schlecht und
 **verdrängen** schlimmer noch inhaltsreiche Chunks. Ein harter Filter `document_type != image` im
 Retriever hält sie aus dem LLM-Kontext. Fragen nach Bildern funktionieren trotzdem über die
-zugehörige `.md`-Datei (siehe [Dokumenttypen](#dokumenttypen)). Echte Bildbeschreibungen sind
-Roadmap 2.
+zugehörige `.md`-Datei (siehe [Dokumenttypen](#dokumenttypen)). Gezeigt werden Bilder seit 14.10.
+ohne Suche: ein gefundener Abschnitt bringt die Bilder mit, die seine Notiz an dieser Stelle einbettet
+(`images`, [parsing.md](parsing.md)). Bildbeschreibungen per Vision-Modell wurden dafür verworfen
+(Roadmap 2).
 
 ---
 
@@ -513,8 +562,8 @@ flowchart TD
 | Bild | — | ❌ |
 
 **Fragen nach Bildern** wie „Zeig mir ein Bild von Malek Nocthar“ liefern die zugehörige
-`.md`-Datei (`NPCs/Malek Nocthar.md`). Bild-Quellen rendert die UI per `st.image()`, wenn
-`document_type == "image"` gesetzt ist. Das Golden Set bildet das ab: Bildfragen erwarten die
+`.md`-Datei (`NPCs/Malek Nocthar.md`); deren eingebettete Bilder zeigt der Chat unter „🖼️ Bilder“.
+Bild-Quellen rendert die UI per `st.image()`, wenn `document_type == "image"` gesetzt ist. Das Golden Set bildet das ab: Bildfragen erwarten die
 `.md`-Datei.
 
 ---

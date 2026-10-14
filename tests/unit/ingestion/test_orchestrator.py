@@ -288,6 +288,25 @@ class TestRunIncremental:
             orch.run(vectorstore=vs)
         assert vs.calls == [] and vs.upserted == []
 
+    def test_image_embeds_resolve_to_paths_in_the_same_source(self, tmp_path, monkeypatch):
+        """Obsidian finds '![[karte.png]]' anywhere in the vault by name — the chunk gets the absolute path."""
+        from src.ingestion.orchestrator import IMAGE_PATH_SEPARATOR
+        orch, f = self._setup(tmp_path, monkeypatch)
+        (tmp_path / "Bilder").mkdir()
+        (tmp_path / "Bilder" / "Arkenfeld_Karte.png").write_bytes(b"png")
+        (tmp_path / ".trash").mkdir()
+        (tmp_path / ".trash" / "Alt.png").write_bytes(b"png")
+        f.write_text("# Arkenfeld\nEine Stadt.\n![[arkenfeld_karte.png]]\n![[Alt.png]]\n![[Fehlt.png]]\n",
+                     encoding="utf-8")
+        vs = FakeVectorStore()
+        orch.run(vectorstore=vs)
+
+        images = [c.metadata.get("images") for c in vs.upserted if c.document_type == "markdown"]  # not the png's stub
+        expected = str((tmp_path / "Bilder" / "Arkenfeld_Karte.png").resolve())
+        assert images == [expected]   # case-insensitive name, trash and missing files left out
+        assert IMAGE_PATH_SEPARATOR not in expected
+        assert all("image_embeds" not in c.metadata for c in vs.upserted)
+
     def test_unchanged_file_is_skipped(self, tmp_path, monkeypatch):
         """Verify a file whose hash matches the store is neither parsed nor re-embedded."""
         orch, f = self._setup(tmp_path, monkeypatch)

@@ -1,10 +1,11 @@
 """Markdown / Obsidian parser: one ``ParsedDocument`` per heading section.
 
 Obsidian syntax is cleaned before embedding: wikilinks become plain text (targets kept as ``wikilinks``
-metadata), image embeds are removed, callout markers dropped; ``#tags`` and frontmatter ``aliases`` go into
-metadata (the aliases are later prepended to the embedded text). Also used for the Markdown that the PDF
-parser produces. Sections named in ``ingestion.skip_sections`` (e.g. outdated stat blocks kept in the vault)
-are dropped from the raw text before anything else. Details: docs/parsing.md.
+metadata), image embeds leave the text but are kept per section as ``image_embeds`` metadata (file names;
+the orchestrator resolves them to paths — roadmap 2), callout markers dropped; ``#tags`` and frontmatter
+``aliases`` go into metadata (the aliases are later prepended to the embedded text). Also used for the
+Markdown that the PDF parser produces. Sections named in ``ingestion.skip_sections`` (e.g. outdated stat
+blocks kept in the vault) are dropped from the raw text before anything else. Details: docs/parsing.md.
 """
 import re
 from pathlib import Path
@@ -15,7 +16,12 @@ from .base import BaseParser, ParsedDocument
 
 # Obsidian syntax patterns
 WIKILINK_PATTERN = re.compile(r"!?\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
-IMAGE_EMBED_PATTERN = re.compile(r"!\[\[([^\]]+\.(png|jpg|jpeg|webp|gif))\]\]", re.IGNORECASE)
+# "![[Karte.png]]" or with a size "![[Karte.png|300]]" — without the size part the wikilink rule turned
+# the latter into the text "300"
+IMAGE_EMBED_PATTERN = re.compile(r"!\[\[([^\]|]+\.(?:png|jpg|jpeg|webp|gif))(?:\|[^\]]*)?\]\]", re.IGNORECASE)
+# Placeholder for an embed while the text is split into sections (private-use characters, never in a note)
+_EMBED_START, _EMBED_END = "\ue000", "\ue001"
+_EMBED_MARK = re.compile(_EMBED_START + "([^" + _EMBED_END + "]+)" + _EMBED_END)
 CALLOUT_PATTERN = re.compile(r"^>\s*\[!(\w+)\]\s*(.*)$", re.MULTILINE)
 TAG_PATTERN = re.compile(r"(?:^|\s)#([A-Za-zÀ-ÿ\w]+)(?=\s|$)")
 HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
@@ -67,11 +73,27 @@ class MarkdownParser(BaseParser):
         source_file = file_path.name
         source_path = str(file_path.resolve())
 
+        # Lead images: embeds above the first sub-heading (portrait, map under the title) stand for the whole
+        # note — every section carries them, so "Zeig mir Malek" shows the portrait even when the answer came
+        # from "Erscheinung" (live 14.10.: per-section only, no question about Malek/Arkenfeld got an image)
+        # (text before the first heading and the first H1 section — a second H1 is another topic)
+        lead_images: list[str] = []
+        for hierarchy, section_content in sections:
+            if len(hierarchy) > 1:
+                break
+            lead_images += _EMBED_MARK.findall(section_content)
+            if hierarchy:
+                break
+
         documents = []
+        pending_images: list[str] = []  # embeds of a section without text — the portrait under a title
         for heading_hierarchy, section_content in sections:
-            section_content = section_content.strip()
+            images = pending_images + _EMBED_MARK.findall(section_content) + lead_images  # own ones first
+            section_content = _EMBED_MARK.sub("", section_content).strip()
             if not section_content:
+                pending_images = images
                 continue
+            pending_images = []
 
             metadata = {
                 **fm_metadata,
@@ -79,6 +101,8 @@ class MarkdownParser(BaseParser):
                 "obsidian_tags": tags,
                 "wikilinks": wikilinks,
             }
+            if images:
+                metadata["image_embeds"] = list(dict.fromkeys(images))
 
             documents.append(ParsedDocument(
                 content=section_content,
@@ -88,10 +112,13 @@ class MarkdownParser(BaseParser):
                 heading_hierarchy=heading_hierarchy,
                 metadata=metadata,
             ))
+        if pending_images and documents:  # images after the last text belong to the last section
+            last = documents[-1].metadata
+            last["image_embeds"] = list(dict.fromkeys(last.get("image_embeds", []) + pending_images))
 
         if not documents:
             documents.append(ParsedDocument(
-                content=content.strip() or "(empty)",
+                content=_EMBED_MARK.sub("", content).strip() or "(empty)",
                 source_file=source_file,
                 source_path=source_path,
                 document_type="markdown",
@@ -145,8 +172,8 @@ class MarkdownParser(BaseParser):
 
         This prevents things like `> [!abstract]` from appearing verbatim within context window text.
         """
-        # Remove image embeds
-        text = IMAGE_EMBED_PATTERN.sub("", text)
+        # Image embeds → placeholder; ``parse`` takes them per section into ``image_embeds``
+        text = IMAGE_EMBED_PATTERN.sub(lambda m: _EMBED_START + m.group(1).strip() + _EMBED_END, text)
 
         # Replace wikilinks with display text
         def replace_wikilink(m):

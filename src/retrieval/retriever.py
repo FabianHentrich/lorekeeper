@@ -19,6 +19,7 @@ from fastapi.concurrency import run_in_threadpool
 from src.config.manager import RetrievalConfig
 from src.retrieval.bm25_index import BM25Index
 from src.retrieval.embeddings import EmbeddingService
+from src.retrieval.truecase import TrueCaser
 from src.retrieval.vectorstore import VectorStoreService
 
 logger = logging.getLogger(__name__)
@@ -156,6 +157,7 @@ class Retriever:
         self.embedding_service = embedding_service
         self.vectorstore = vectorstore
         self.bm25_index = bm25_index or BM25Index()
+        self.truecaser = TrueCaser()  # dropped with the BM25 index after every ingest (sources_routes)
         self._reranker: Any = None  # OnnxCrossEncoder on the GPU or the CPU, loaded lazily
         self._reranker_on_gpu = False
         self._fallback_lock = asyncio.Lock()  # one GPU→CPU switch even if several queries fail at once
@@ -246,6 +248,10 @@ class Retriever:
         """
         stage_ms = timings if timings is not None else {}
         top_k = top_k or self.config.top_k
+        # Lower-cased words in their source spelling ("überschaden" → "Überschaden") for every search step —
+        # lower-case questions lost 8 of 149 sections (14.10.). Internal only, never returned to the client.
+        await run_in_threadpool(self.truecaser.ensure_built, self.vectorstore)
+        query = self.truecaser.apply(query)
         t0 = time.perf_counter()
         query_embedding = await self.embedding_service.embed_text(query)
         stage_ms["embed"] = (time.perf_counter() - t0) * 1000

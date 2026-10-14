@@ -322,6 +322,9 @@ Backend-Prozess steckt, darf **kein zweiter Prozess** (z.B. die Ingestion-CLI) g
 Ablauf in `Retriever.retrieve()` — alle Parameter in [docs/configuration.md](docs/configuration.md)
 → `retrieval`, die Begründungen in [docs/embedding-strategy.md](docs/embedding-strategy.md):
 
+0. **Schreibweise** (immer): klein getippte Wörter der Frage in ihre Schreibweise aus den Quellen
+   („überschaden“ → „Überschaden“), Fragenanfang groß — nur für die Suche, nie an den Client
+   (`src/retrieval/truecase.py`).
 1. **Vektorsuche** (immer): Frage embedden, `top_k` (20) Kandidaten aus ChromaDB. Bilder sind
    ausgeschlossen. `score_threshold` (0,5) greift auf die Cosine-Scores **vor** einer Fusion.
 2. **BM25** (nur Hybrid): In-Memory-Index (`rank_bm25`), lazy aus der Collection gebaut (einmal,
@@ -477,7 +480,7 @@ Das Backend lauscht nur auf `127.0.0.1:8000`; der Browser spricht ausschließlic
 |---------|----------|--------------|
 | POST   | `/query`                    | Frage stellen, Antwort + Quellen (synchron). Felder: `question` (höchstens 4.000 Zeichen, sonst 422), `session_id`, `role`, `metadata_filters`, `top_k`, `top_k_rerank`, `max_per_source`, `hybrid_search` |
 | POST   | `/query/stream`             | Wie `/query`, Antwort als SSE-Stream (siehe unten) |
-| POST   | `/feedback`                 | 👍/👎 zu einer Antwort → Zeile in `logs/feedback.jsonl` (letzte Zeile je `message_id` gilt) |
+| POST   | `/feedback`                 | 👍/👎 zu einer Antwort, optional `comment` (≤ 1.000 Zeichen) → Zeile in `logs/feedback.jsonl` (letzte Zeile je `message_id` gilt) |
 | GET    | `/feedback`                 | Aktuelle Bewertung je Antwort, neueste zuerst |
 | POST   | `/ingest`                   | Ingestion-Job starten (inkrementell; `?full=true` = alles). 409, solange ein Job läuft |
 | GET    | `/ingest/status/{job_id}`   | Fortschritt eines Jobs |
@@ -530,8 +533,9 @@ data: {"type": "error", "content": "..."}                       (bei Abbruch)
   nach der anderen, `OLLAMA_NUM_PARALLEL=1`; Messung und Entscheidung: [provider-strategy.md](docs/provider-strategy.md)). Nur bei Ollama.
 - `session_id` kommt im `done`-Event — ohne sie kann der Client keine Folgefrage zuordnen.
 - `sources`: je Chunk `file`, `source_path`, `document_type`, `heading`, `score`, `chunk_preview` (100
-  Zeichen) und `content` (ganzer Chunk-Text, den das LLM bekam — der Chat zeigt ihn unter der Quelle,
-  Roadmap 3.16). Gleich bei `/query`.
+  Zeichen), `content` (ganzer Chunk-Text, den das LLM bekam — der Chat zeigt ihn unter der Quelle,
+  Roadmap 3.16) und `images` (Pfade der Bilder, die der Abschnitt in seiner Notiz einbettet, aufgelöst
+  in derselben Quelle — der Chat zeigt sie unter „🖼️ Bilder“, Roadmap 2). Gleich bei `/query`.
 - `model_used` ist das Modell, das tatsächlich geantwortet hat (nach Fallback das Fallback-Modell).
 - `timings`: Dauer je Stufe in ms (`condense_ms`, `retrieval_ms` mit Stufen embed/search/bm25/entry/rerank/expand,
   `first_token_ms`, `total_ms`), Chunk-Anzahl, Prompt-Größe — auch als Log-Zeile `Query timings: …`.

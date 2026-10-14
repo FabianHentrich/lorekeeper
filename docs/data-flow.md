@@ -77,7 +77,7 @@ flowchart TD
 
     COND --> RET
 
-    RET["Retrieval"]
+    RET["Retrieval\n(klein getippte Wörter in Quellen-Schreibweise,\nnur intern)"]
 
     RET --> VEC[("Vektorsuche\ne5-base 'query: '\nCosine top_k=20, ≥ 0,5")]
     RET -.->|"wenn hybrid"| BM25[("BM25\nrank_bm25 top_k=15\n(lazy gebaut)")]

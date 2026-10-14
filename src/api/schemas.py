@@ -10,6 +10,8 @@ from src.api.access import Role
 # Longest question the API accepts (~1,100 tokens) — room for a pasted paragraph, but a whole document can't
 # reach the search: before the entry-slot cap (roadmap 13.0) 12,000 characters crashed the backend.
 MAX_QUESTION_CHARS = 4000
+# A remark on a rating, not an essay — every line of logs/feedback.jsonl is read back by GET /feedback
+MAX_FEEDBACK_COMMENT_CHARS = 1000
 
 
 class QueryRequest(BaseModel):
@@ -35,6 +37,9 @@ class SourceReference(BaseModel):
     # The whole chunk text the LLM got (heading path first) — the chat lets the user read it under the
     # source (roadmap 3.16). Players only ever receive chunks they may see, so this adds no exposure.
     content: str = ""
+    # Images the note embeds in this section (absolute paths on the server) — shown under the answer
+    # (roadmap 2). Only ever from chunks the role may see.
+    images: list[str] = []
     score: float
 
 
@@ -63,6 +68,7 @@ class FeedbackRequest(BaseModel):
     search_query: str = ""
     session_id: str | None = None
     timings: dict = {}
+    comment: str = Field("", max_length=MAX_FEEDBACK_COMMENT_CHARS)  # optional free text (roadmap 3.4); longer → 422
 
 
 class IngestJobResponse(BaseModel):

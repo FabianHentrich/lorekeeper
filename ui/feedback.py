@@ -5,8 +5,8 @@ def pairs_from_feedback(entries: list[dict], existing: list[dict]) -> list[dict]
     """Golden-set pairs for rated answers. 👍 keeps the answer's sources as expected sources;
     👎 leaves them empty — those sources were likely wrong, the right one is entered by hand.
     A condensed follow-up is taken in its standalone form (``search_query``) — "Und wer ist sein
-    Vater?" means nothing without the chat. Questions already in the golden set are skipped; ids
-    continue as f001, f002, …"""
+    Vater?" means nothing without the chat. The rater's comment goes into the notes. Questions
+    already in the golden set are skipped; ids continue as f001, f002, …"""
     known = {p.get("question", "").strip() for p in existing}
     used = {p.get("id", "") for p in existing}
     n = 0
@@ -32,6 +32,7 @@ def pairs_from_feedback(entries: list[dict], existing: list[dict]) -> list[dict]
             "notes": (f"Aus Feedback 👍 ({e.get('ts', '')}, {e.get('role', '')})" if up else
                       f"Aus Feedback 👎 ({e.get('ts', '')}, {e.get('role', '')}) — erwartete Quelle eintragen; "
                       f"damals gefunden: {', '.join(sources) or '—'}")
-                     + (f" — im Chat gefragt: „{asked}“" if asked and asked != question else ""),
+                     + (f" — im Chat gefragt: „{asked}“" if asked and asked != question else "")
+                     + (f" — Kommentar: „{e['comment']}“" if e.get("comment") else ""),
         })
     return pairs

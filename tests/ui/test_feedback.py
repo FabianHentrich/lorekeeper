@@ -42,6 +42,42 @@ def test_withdrawing_a_rating_is_sent_as_none(chat):
     assert [b["rating"] for b in chat.bodies["POST /feedback"]] == ["up", None]
 
 
+def test_comment_field_appears_after_rating_and_is_sent_with_it(chat):
+    """Roadmap 3.4: the comment is saved together with the current rating (the last entry counts),
+    and a later rating change keeps it."""
+    at = _ask(roles.PLAYER)
+    msg_id = at.session_state["messages"][-1]["id"]
+    assert f"fbc_{msg_id}" not in [t.key for t in at.text_input]   # no field before a rating
+
+    at.feedback(key=f"fb_{msg_id}").set_value(0).run()
+    at.text_input(key=f"fbc_{msg_id}").input("  Quelle fehlte  ").run()
+    at.feedback(key=f"fb_{msg_id}").set_value(1).run()
+
+    bodies = chat.bodies["POST /feedback"]
+    assert [(b["rating"], b["comment"]) for b in bodies] == \
+        [("down", ""), ("down", "Quelle fehlte"), ("up", "Quelle fehlte")]
+
+
+def test_comment_field_is_bounded_like_the_api(chat):
+    from src.api.schemas import MAX_FEEDBACK_COMMENT_CHARS
+    at = _ask(roles.PLAYER)
+    msg_id = at.session_state["messages"][-1]["id"]
+    at.feedback(key=f"fb_{msg_id}").set_value(1).run()
+    assert at.text_input(key=f"fbc_{msg_id}").proto.max_chars == MAX_FEEDBACK_COMMENT_CHARS
+
+
+def test_withdrawn_rating_drops_the_comment(chat):
+    at = _ask(roles.GAME_MASTER)
+    msg_id = at.session_state["messages"][-1]["id"]
+    at.feedback(key=f"fb_{msg_id}").set_value(0).run()
+    at.text_input(key=f"fbc_{msg_id}").input("falsch").run()
+    at.feedback(key=f"fb_{msg_id}").set_value(None).run()
+
+    last = chat.bodies["POST /feedback"][-1]
+    assert (last["rating"], last["comment"]) == (None, "")
+    assert f"fbc_{msg_id}" not in [t.key for t in at.text_input]
+
+
 def test_no_request_without_a_click(chat):
     """Rendering the thumbs must not cost a backend call (request budgets in test_backend_calls)."""
     at = _ask(roles.PLAYER)
@@ -84,6 +120,10 @@ class TestPairsFromFeedback:
         assert pair["question"] == "Wer ist der Vater von Kalen?"
         assert "Und wer ist sein Vater?" in pair["notes"]
 
+    def test_comment_goes_into_the_notes(self):
+        [pair] = feedback.pairs_from_feedback([{**DOWN, "comment": "Kalen ist der Schmied"}], [])
+        assert "Kommentar: „Kalen ist der Schmied“" in pair["notes"]
+
     def test_ids_continue_and_known_questions_are_skipped(self):
         existing = [{"id": "f001", "question": "Alt"}, {"id": "m001", "question": "Was ist Überschaden?"}]
         pairs = feedback.pairs_from_feedback([UP, DOWN, DOWN], existing)
@@ -100,3 +140,9 @@ def test_tab_shows_thumbs_down_and_thumbs_up_on_request(fake_backend, monkeypatc
 
     at.toggle(key="fb_show_up").set_value(True).run()
     assert list(at.dataframe[-1].value["question"]) == ["Wer ist Kalen?", "Was ist Überschaden?"]
+
+
+def test_tab_shows_the_comment(fake_backend, monkeypatch):
+    monkeypatch.setitem(conftest.PAYLOADS, "/feedback", [{**DOWN, "comment": "Falsche Person"}])
+    at = open_page("evaluation").run()
+    assert list(at.dataframe[-1].value["comment"]) == ["Falsche Person"]

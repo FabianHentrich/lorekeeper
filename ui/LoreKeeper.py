@@ -29,6 +29,21 @@ def _chunk_text(c: dict) -> str:
     return text.replace("<br>", "  \n")
 
 
+_MAX_ANSWER_IMAGES = 6
+
+
+def _answer_images(sources: list[dict]) -> list[str]:
+    """Images the notes behind this answer embed (roadmap 2), in source order, each once, at most
+    ``_MAX_ANSWER_IMAGES``. The paths are on this machine — the UI runs where the vault is, and Streamlit
+    sends the image itself to the browser, also for players in the LAN. Missing files are skipped."""
+    seen: list[str] = []
+    for src in sources:
+        for path in src.get("images", []):
+            if path not in seen and Path(path).is_file():
+                seen.append(path)
+    return seen[:_MAX_ANSWER_IMAGES]
+
+
 def _render_sources(sources: list[dict]):
     """
     Render retrieved source documents inline within the chat interface.
@@ -403,9 +418,16 @@ if _ROLE == roles.PLAYER:
                    "Sources-Seite in der Spalte „🎲 Spieler“ einstellen.")
 
 # ─── Answer feedback (thumbs up/down, both roles) ─────────
-def _send_feedback(msg: dict):
-    """Post the rating of one answer; withdrawing it is sent as rating None (the last entry counts)."""
+# Same bound as the API (MAX_FEEDBACK_COMMENT_CHARS in src/api/schemas.py)
+_MAX_COMMENT_CHARS = 1000
+
+
+def _send_feedback(msg: dict, comment_only: bool = False):
+    """Post the rating of one answer; withdrawing it is sent as rating None (the last entry counts).
+    Every entry carries the current rating *and* comment — the last one per answer replaces the
+    earlier ones, so neither may get lost when only the other changes."""
     rating = {1: "up", 0: "down"}.get(st.session_state.get(f"fb_{msg['id']}"))
+    comment = (st.session_state.get(f"fbc_{msg['id']}") or "").strip() if rating else ""
     try:
         r = requests.post(f"{API_URL}/feedback", json={
             "message_id": msg["id"],
@@ -418,18 +440,26 @@ def _send_feedback(msg: dict):
             "search_query": msg.get("search_query", ""),
             "session_id": st.session_state.get("session_id"),
             "timings": msg.get("timings", {}),
+            "comment": comment,
         }, timeout=5)
         raise_for_status(r)
-        if rating:
+        if comment_only:
+            st.toast("Kommentar gespeichert.")
+        elif rating:
             st.toast("Danke für die Bewertung!")
     except Exception as e:
         st.toast(f"Bewertung nicht gespeichert: {e}", icon="⚠️")
 
 
 def _render_feedback(msg: dict):
-    """Thumbs under an answer — only answers with an id (not errors, not older messages)."""
+    """Thumbs under an answer — only answers with an id (not errors, not older messages). Once rated,
+    an optional comment field appears; Enter saves it (roadmap 3.4)."""
     if msg.get("id"):
         st.feedback("thumbs", key=f"fb_{msg['id']}", on_change=_send_feedback, args=(msg,))
+        if st.session_state.get(f"fb_{msg['id']}") is not None:
+            st.text_input("Kommentar zur Bewertung", key=f"fbc_{msg['id']}", max_chars=_MAX_COMMENT_CHARS,
+                          placeholder="Optional: Was war falsch oder gut? (Enter speichert)",
+                          label_visibility="collapsed", on_change=_send_feedback, args=(msg, True))
 
 
 def _render_extras(msg: dict):
@@ -440,6 +470,10 @@ def _render_extras(msg: dict):
         st.caption(_fmt_usage(msg["usage"]))
     if msg.get("timings"):
         st.caption(_fmt_timings(msg["timings"]))
+    images = _answer_images(msg.get("sources", []))
+    if images:
+        with st.expander(f"🖼️ Bilder ({len(images)})"):
+            st.image(images, caption=[Path(p).stem for p in images], width=300)
     if msg.get("sources"):
         with st.expander("📎 Quellen"):
             _render_sources(msg["sources"])

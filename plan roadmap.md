@@ -24,14 +24,13 @@ End-to-End-Lauf ~35 min (🟡).
 
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 1 | 2 Bilder im Chat (Einbettung + Dateiname) | Mittel-Hoch — Karten, Charaktere am Tisch | Mittel | 🟡 | Ohne Vision-Schritt; Parser-Änderung teilt sich 3.5 |
-| 2 | 3.4 Kommentar zur Bewertung | Gering | Gering | 🟢 | Schneller Gewinn, bessere Rückmeldung für spätere Fixes |
-| 3 | 3.5 Wikilink-Expansion | Mittel | Mittel | 🔴 | Neuer Suchweg (Spy-Test); nutzt dieselbe Parser-Änderung wie 2 |
+| — | 3.5 Wikilink-Expansion ⏸ | Gering | Mittel | 🔴 | Gemessen 14.10.: kein Gewinn, −1/−2 Dateien; nur bei konkreten Link-Fragen neu prüfen |
+| — | 2 Bilder — Rest (Dateiname-Rückfall, PDF-Bilder) | Gering | Mittel | 🔴 | Einbettungen laufen (14.10.); Rest nur bei Bedarf |
 | — | 4.2 Internet-Zugriff (Tailscale) ⏸ | Mittel | Gering | 🟢 | Nur zusammen mit einem Login für die API |
 | — | 3.2 Session-History ⏸ | Gering | Mittel | 🟢 | Empfehlung: streichen — Nutzerentscheidung offen |
 | — | 3.10 / 3.15 Einzelfälle | Gering | — | 🟡 | Nur bei Anlass im Spiel |
 | — | 3.14 Rechenfragen ⏸ | Mittel | Mittel-Hoch | 🟡 | Nur mit Denken zuverlässig (14–41 s); später mit größerem Modell neu prüfen |
-| — | 12.3 Auto-Reload im Entwicklungsmodus hängt | Gering | Gering | 🟢 | Nach Code-Änderungen startete das Backend zweimal nicht neu (14.10.) |
+| — | 12.3 Auto-Reload im Entwicklungsmodus hängt | Gering | Gering | 🟢 | Nach Code-Änderungen lud das Backend dreimal nicht neu (14.10., auch ohne Job) |
 | — | 11.0 P8 Dienste-/Reranker-Modul | Gering | Mittel | 🟢 | Nur zusammen mit Feature-Arbeit an diesen Stellen |
 
 **Entschieden 14.10.**: Der Fähigkeitsbericht bleibt für Spieler freigegeben (Entscheidungshilfe).
@@ -52,59 +51,45 @@ Regeln. `HF_HUB_OFFLINE=1` (in `src/__init__.py`): Modelle nur aus dem lokalen C
   Sekunden mit „stopped … (clean)“ enden (12.0); bei der nächsten Indizierung über die UI den
   Fortschritt durchklicken (Job starten, Seite wechseln und zurück — 3.8/3.9); 👍/👎 und die Tabs
   „Feedback“/„Chunks“ einmal von Hand bedienen (👍/👎 vom Nutzer am 14.10. getestet, erste Bewertungen liegen
-  in `logs/feedback.jsonl`). Neu zu sehen: die Chunk-Ausklapper unter den Quellen (3.16).
+  in `logs/feedback.jsonl`). Neu zu sehen: die Chunk-Ausklapper unter den Quellen (3.16), „🖼️ Bilder“ unter einer Antwort
+  zu Malek oder Arkenfeld (2), das Kommentarfeld nach 👍/👎 (3.4).
 
 ---
 
 ## Offene Punkte
 
-### 2 Bilder im Chat
+### 2 Bilder im Chat — Rest
 
-Ziel: „Wie sieht die Karte von Arkenfeld aus?“ oder eine Frage zu einem Charakter zeigt das passende
-Bild im Chat. Heute werden Bilder nur als Dateiname + Ordner indiziert und aus der Suche
-ausgeschlossen ([embedding-strategy.md](docs/embedding-strategy.md) → „Warum Bilder aus der Suche
-ausschließen?“) — als eigene Chunks verdrängten sie richtige Treffer.
+Einbettungen in Notizen laufen seit 14.10. (siehe „Erledigt“ 2). Offen, nur bei Bedarf:
+- **Dateiname als Rückfall** für Bilder, die nirgends eingebettet sind (40 Bilddateien, 20 Einbettungen):
+  „Karte Arkenfeld.png“ passt zu Fragen, die „Arkenfeld“ nennen — wie der Eintrags-Slot (Namenssuche,
+  Filter der Anfrage, Spy-Test).
+- **Bilder aus PDFs** liegen nur in einem temporären Ordner, der nach dem Parsen gelöscht wird — zum
+  Anzeigen müssten sie dauerhaft abgelegt werden.
+- Ein neu abgelegtes Bild erscheint erst nach einer Änderung der Notiz oder einem vollen Re-Index der
+  Quelle (der Inhalts-Hash deckt nur die Notiz ab).
 
-**Neuer Ansatz (Nutzer, 14.10.): ohne Bildbeschreibung.** Bilder werden nicht mehr gesucht, sondern
-**zugeordnet**:
-1. **Einbettung in der Notiz** — Notizen binden Bilder mit `![[Karte Arkenfeld.png]]` ein; der
-   `MarkdownParser` entfernt die Zeile heute nur. Stattdessen als Metadatum am Chunk speichern
-   (z. B. `images`) — ein gefundener Chunk bringt sein Bild mit, genau das, das der Autor dorthin
-   gesetzt hat.
-2. **Dateiname als Rückfall** für Bilder, die nirgends eingebettet sind: „Karte Arkenfeld.png“ passt
-   zu Fragen, die „Arkenfeld“ nennen — ähnlich dem Eintrags-Slot (Namenssuche, Filter der Anfrage).
-
-Verworfen: Vision-Beschreibungen beim Ingest (eigenes Modell, GPU-Zeit je Bild, neue
-Fehlerquellen), CLIP-Embeddings (eigener Vektorraum), manuelle Captions. Braucht einen Re-Ingest
-des Vaults.
-
-**Anzeige**: `GET /files/{path}` statt lokaler Pfade — nötig, sobald die UI von einem anderen Gerät
-geöffnet wird. Neue Angriffsfläche: nur Dateien innerhalb der Quellordner, nur Bilder, und im
-Spieler-Modus nur Bilder aus freigegebenen Quellen (Sicherheitstest + Spy-Test). Rückfall: Bild im
-Quellen-Bereich. **Vorher klären**: Aus PDFs extrahierte Bilder liegen in einem temporären Ordner, der
-nach dem Parsen gelöscht wird.
+Verworfen: Vision-Beschreibungen beim Ingest, CLIP-Embeddings, manuelle Captions; ein Endpunkt
+`/files/{path}` ist unnötig, weil `st.image` die Datei auf dem Streamlit-Server liest (auch im Heimnetz).
 
 ### 12.3 Auto-Reload im Entwicklungsmodus hängt
 
 `.\start.ps1` startet uvicorn mit `--reload`. Am 14.10. blieb das Backend nach einer Code-Änderung
 zweimal hängen statt neu zu laden: um 14:13 fuhr es herunter (samt Ollama) und kam nicht wieder hoch
 — ein laufender End-to-End-Job ging verloren —, um ~17:15 lud es die Änderung nicht und ließ sich nur
-mit `.\stop.ps1` nach 20 s hart beenden. Ursache offen (Verdacht: Reload während GPU-Session oder
-Hintergrund-Job, oder das Herunterfahren von Ollama im Lifespan). Bis dahin: nach Code-Änderungen
+mit `.\stop.ps1` nach 20 s hart beenden. Um ~20:20 dasselbe nach einer Parser-Änderung **ohne**
+laufenden Job (Backend im Leerlauf) — ein Hintergrund-Job ist also nicht nötig. Ursache offen
+(Verdacht: Reload während GPU-Session oder das Herunterfahren von Ollama im Lifespan). Bis dahin: nach Code-Änderungen
 `.\stop.ps1` + `.\start.ps1`, und nie Code ändern, während ein Job im Backend läuft.
 
-### 3.4 Kommentar zur Bewertung
+### 3.5 Wikilink-Expansion ⏸
 
-👍/👎 um einen kurzen Freitext-Kommentar erweitern (landet in `logs/feedback.jsonl` und im Tab
-„Feedback“).
-
-### 3.5 Wikilink-Expansion
-
-Wikilinks (`[[Malek]]`) stehen als Metadaten am Chunk, werden aber nicht genutzt. Idee: nach dem
-Retrieval die Wikilinks der Top-Chunks auflösen und die verlinkten Chunks nachladen — könnte
-Einzelfälle aus 3.15 lösen (NPC → Gegenstand, Entität → Regel). Ist ein neuer Suchweg: muss den
-Anfrage-Filter tragen und in den Spy-Test der Sicherheitstests. Teilt sich mit 2 die Parser-Änderung
-(Links und Einbettungen als Metadaten). Messen mit Golden Set, End-to-End und Holdout.
+Gemessen am 14.10. (Index-Kopie, Golden Set + Holdout, Messung und Begründung in
+[embedding-strategy.md](docs/embedding-strategy.md#warum-keine-wikilink-expansion)): Die verlinkten
+Notizen der besten Treffer im Rerank-Pool bringen nichts — Golden Set Datei 272 → 270/271, Abschnitt
+unverändert 143/149, Holdout unverändert. Alle sechs Fehlschläge liegen in Regelbuch und
+Simulationsberichten ohne Links. **Nicht umgesetzt.** Neu prüfen nur, wenn Fragen über einen Link
+(NPC → Gegenstand) nachweislich scheitern — dann mit Links je Abschnitt statt je Notiz.
 
 ### 4.2 Internet-Zugriff ⏸
 
@@ -148,6 +133,10 @@ Offen, nur bei Anlass:
 - **Aufzählungen über große Kapitel** — der richtige Abschnitt wird gefunden, aber nur 8 Chunks
   erreichen das LLM: p008 Klassen, p036 Basis-Skills, p037 Basis-Zauber, p114 Eigenheiten Magie, p014
   Benchmark, a030 Beweis-Tabelle, p049 Überheilung.
+- **👎 aus dem Chat (14.10.)** — 5 Bewertungen, 4 Fälle: drei behoben (siehe „Erledigt“ 3.15 Teil, Feedback);
+  offen **Tippfehler** „was ist üebrschaden?“ — findet nichts Passendes, das Modell erfindet
+  „Überschusschaden“ aus dem Simulationsbericht. Möglicher Weg: unbekannte Wörter auf das nächste Wort
+  aus dem Wörterbuch der Schreibweisen abbilden (Abstand 1–2, lange Wörter) — riskanter, nur gemessen.
 - **Fakten**: k001 Langschwert „20,5 Gold“ (Spalte „Preis“ der Simulations-Rangliste statt Preistabelle
   7.4); m048 Deckname „Solmar“ (steht ohne Überschrift neben einem Bild — würde von 2 mit profitieren);
   p091 Tränke-Fehlwurf (1W8-Tabelle fehlt); x008 Heimkehrpfennig („Kultpriester“ gilt, Antwort nennt
@@ -190,6 +179,10 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 | 13.0 | Code-Review seit 194be1b (jina, Regelkern, Batches, Eintrags-Slot) + Korrekturen: **kritisch** — eine lange Frage machte den Eintrags-Slot zu einer `$contains`-Abfrage ohne Grenze (4.000 Zeichen → 500, 12.000 → Backend-Prozess stirbt ohne Log, im Heimnetz für jeden Spieler auslösbar); jetzt höchstens 60 Namen (Golden Set braucht ≤ 48, nichts ändert sich) und `question` ≤ 4.000 Zeichen an `/query`, `/query/stream`, `/eval/preview` (422) sowie im Chat-Feld — beides mutationsgeprüft, 50.000 Zeichen laufen durch. Dazu: Kostenmodell Namen × Chunks dokumentiert, Schwellen-Umgehung des Slots dokumentiert und per Test festgehalten, Docstrings/Kommentare nachgezogen, Rerank-Zeiten mit Kontext, Regelkern nur mit spielerfreigegebenem Inhalt. Aus dem Performance-Review: `start.ps1` hielt `TimeWait`-Reste für einen laufenden Server und startete das Backend nicht (jetzt `-State Listen`). Performance 14.10.: Retrieval p50 278 ms / p95 364 ms (Baseline 784/1.156), erster Token ~2 s (Regelkern +0,56 s), Antwort p50 7,6 s je nach Länge | 14.10. | `docs/embedding-strategy.md`, `docs/prompts.md`, `docs/provider-strategy.md`, `ARCHITECTURE.md` |
 | 3.15 (Teil) | End-to-End-Basis: zwei Läufe (Answer Contains 0,905 / 0,901, ~15 Fragen kippen zwischen Läufen), `evaluate.py` speichert ganze Antwort, `id` und Stichwörter (Evaluation-Seite zeigt sie), Holdout `evaluation/holdout_lists.yaml` (10 Listenfragen, ungetunt 9/10), acht Golden-Set-Stichwörter angepasst (k001, p095 an die Regelbuch-Änderung, sechs zu enge), Hybrid mit jina neu gemessen (bleibt aus), Eintrags-Slot für Obsidian-Tabellen gemessen und verworfen; Feintuning danach beendet | 14.10. | `docs/evaluation.md`, `docs/embedding-strategy.md`, `docs/ui-ux.md` |
 | 3.16 | Chunks unter der Quelle einsehbar (Idee des Nutzers): `sources` liefern zusätzlich `content` (ganzer Chunk-Text), der Chat zeigt je Chunk einen Ausklapper „↳ Überschrift · Score“ mit dem Text (Überschriftenzeile gekürzt, `<br>` → Umbruch, ältere Nachrichten: Vorschau). Spieler-Sicherheitstest prüft auch `content` auf Geheimnisse; UI-, API- und Langtext-Test. Keine zusätzliche Backend-Anfrage | 14.10. | `docs/ui-ux.md`, `ARCHITECTURE.md` |
+| 3.15 (Teil) | 👎 aus dem Chat ausgewertet (5 Bewertungen, 4 Fälle, alle live nachgestellt): **Folgefragen** wie „bitte mehr infos“ wurden nicht umgeschrieben — „Info/Infos/Informationen/erzähl/hast“ ergänzt, Tests in beide Richtungen, keine Golden-Frage neu als Folgefrage; **Kleinschreibung** kostete systematisch (Golden Set klein 143 → 135/149) — klein getippte Wörter vor der Suche in die Schreibweise der Quellen (`src/retrieval/truecase.py`, nur intern): klein 135 → 142, wie geschrieben unverändert 143, Holdout klein 6 → 7/8; **Klassenübersicht** vom Nutzer im Regelbuch ergänzt (5.4/5.5), neu indiziert: „welche klassen gibt es?“ nennt alle 12. Offen: Tippfehler | 14.10. | `docs/embedding-strategy.md`, `docs/prompts.md`, `ARCHITECTURE.md` |
+| 12.4 | `stop.ps1` beendete den Browser: Windows vergibt PIDs neu, der Browser, den `start.ps1` geöffnet hatte, galt als Kind des UI-Prozesses und wurde nach 20 s hart beendet. Kinder zählen nur noch, wenn sie nach dem Elternprozess gestartet wurden; neu `.\stop.ps1 -List` zeigt die Prozesse, ohne zu stoppen | 14.10. | `docs/operations.md` |
+| 2 | Bilder im Chat ohne Bildbeschreibung (Ansatz des Nutzers): Der Markdown-Parser behält `![[bild.png]]` / `![[bild.png\|300]]` je Abschnitt; **Titelbilder** (vor der ersten Unterüberschrift) hängen an jedem Abschnitt der Notiz — nur je Abschnitt bekam live keine Frage zu Malek/Arkenfeld ein Bild. Der Orchestrator löst die Namen **innerhalb derselben Quelle** zu Pfaden auf (`images`), `sources` liefern sie, der Chat zeigt „🖼️ Bilder (n)“ (zugeklappt, max. 6, nur existierende Dateien). Spieler-Sicherheitstest mit Köder-Bild in einer Spielleiter-Quelle, mutationsgeprüft (quellübergreifende Auflösung → 7 Fehlschläge). Zwei volle Re-Indizes des Vaults (je ~8 min); Golden Set unverändert Datei 272/274, Abschnitt 143/149. Live: Malek → Porträt, Arkenfeld-Karte → `arkenfeld.png`, Isolde Vaer → 2 Bilder. Suche danach 273/274 exakt (m039 weicht ab, Treffer unverändert) — nach weiteren In-place-Re-Indizes neu prüfen. Rest offen (Dateiname-Rückfall, PDF-Bilder) | 14.10. | `docs/parsing.md`, `docs/ui-ux.md`, `ARCHITECTURE.md`, `docs/embedding-strategy.md` |
+| 3.4 | Kommentar zur Bewertung: nach 👍/👎 ein optionales Feld (Enter speichert, ≤ 1.000 Zeichen, API antwortet sonst 422); jede Zeile in `logs/feedback.jsonl` trägt Bewertung und Kommentar zusammen, Zurücknehmen löscht ihn. Tab „Feedback“ mit Spalte „Kommentar“, beim Übernehmen ins Golden Set landet er in der Notiz. UI-, API- und Grenztests; kein zusätzlicher Backend-Aufruf beim Anzeigen | 14.10. | `docs/ui-ux.md`, `docs/operations.md`, `ARCHITECTURE.md` |
 | 3.11 | Spieler-/Spielleiter-Modus inkl. Sicherheitstests (deterministisch, live, Spy-Test) | 11./12.10. | `ARCHITECTURE.md` 4.8, `docs/testing.md` |
 | 3.12 | Folgefragen ohne Inhaltswort („Fass das kürzer zusammen“, „Gib mir ein Beispiel“) gehen durch Condense — Suche und Quellenliste passen zum Thema; Wortliste nur ergänzend (unbekanntes Wort = Inhaltswort), Unit-Tests in beide Richtungen, mutationsgeprüft. Live 13.10.: „Fass das kürzer zusammen“ → „Fasse die Beschreibung von Arkenfeld kurz zusammen.“ (1,2 s), Quellen `Orte/Arkenfeld.md` statt Venthir/Regelbuch | 13.10. | `docs/prompts.md` |
 | 3.13 | Regelkern im `qa`-Prompt (15 Stichpunkte zum Regelwerk, direkt vor der Frage; „Ressourcen vs. Punkte“ ergänzt: p009 Zauberpunkte 0/3 → 3/3): mit mMiniLMv2 Rang-1-Wurfzahl und Rüstung je 0/3 → 3/3, Lore-Fragen unverändert; im Systemprompt wirkungslos. Live mit jina: Rüstung 3/3, Rang-1-Wurfzahl wieder 0/3 (Lead „höchstens 13“). Offen: Rang 1 mit jina, Dolch, Schattenklinge (3.10) | 14.10. | `docs/prompts.md` |

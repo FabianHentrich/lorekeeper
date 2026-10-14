@@ -53,8 +53,19 @@ scheitern.
 2. **Wikilinks** — `[[Ziel]]` und `[[Ziel|Anzeigetext]]` werden erkannt. Die Ziele landen in
    `metadata.wikilinks` (für eine spätere Graph-Expansion, Roadmap 3.5); im Text steht der
    Anzeigetext bzw. der Zielname.
-3. **Bild-Einbettungen** — `![[bild.png]]` wird aus dem Text entfernt; Bilder indiziert der
-   `ImageMetaParser` separat.
+3. **Bild-Einbettungen** — `![[bild.png]]` und `![[bild.png|300]]` verlassen den Text, der Dateiname
+   bleibt aber als `metadata.image_embeds` am Abschnitt, in dem das Bild steht (Roadmap 2, 14.10.).
+   **Titelbilder** — Einbettungen vor der ersten Unterüberschrift (Text vor dem Titel und der erste
+   H1-Abschnitt: Porträt, Karte) stehen für die ganze Notiz und hängen an **jedem** Abschnitt, nach dessen
+   eigenen Bildern. Grund: live am 14.10. bekam keine Frage zu Malek oder Arkenfeld ein Bild, weil die
+   Antwort aus „Erscheinung“ oder „Steckbrief“ kam, das Porträt aber nur am Einleitungsabschnitt hing.
+   Ein Abschnitt ohne eigenen Text gibt seine Bilder an den nächsten Abschnitt weiter, Bilder am
+   Dateiende gehen an den letzten. Der Orchestrator löst die Namen
+   **innerhalb derselben Quelle** zu Pfaden auf (wie Obsidian: Dateiname, Groß-/Kleinschreibung egal,
+   ohne `.trash`/`.obsidian`) und speichert sie als `images` — so kommen nie Bilder einer anderen,
+   etwa nicht freigegebenen Quelle in eine Antwort. Die Bilddateien selbst indiziert zusätzlich der
+   `ImageMetaParser`. Der Inhalts-Hash deckt nur die Notiz ab: ein neu abgelegtes Bild erscheint erst
+   nach einer Änderung der Notiz oder einem vollen Re-Index der Quelle.
 4. **Callouts** — `> [!abstract] Titel` verliert die Markierung, der Inhalt bleibt als normaler
    Text; Folgezeilen (`> …`) werden ausgerückt.
 5. **Tags** — `#Tag` am Zeilenende wird nach `metadata.obsidian_tags` übernommen, das `#` aus dem
@@ -73,6 +84,7 @@ scheitern.
 | `metadata.aliases` | Aus dem Frontmatter |
 | `metadata.obsidian_tags` | Gefundene `#Tags` |
 | `metadata.wikilinks` | Gefundene `[[Link]]`-Ziele |
+| `metadata.image_embeds` | Eingebettete Bilder des Abschnitts (Dateinamen; im Index als `images` = Pfade) |
 
 ### Obsidian-Syntax
 
@@ -80,7 +92,7 @@ scheitern.
 |--------|------------|
 | `[[Wikilink]]` | Ziel in `wikilinks`, im Text als Klartext |
 | `[[Link\|Alias]]` | `Link` in `wikilinks`, im Text `Alias` |
-| `![[bild.png]]` | Aus dem Text entfernt (Bild separat indiziert) |
+| `![[bild.png]]` / `![[bild.png\|300]]` | Aus dem Text entfernt, Name nach `image_embeds` (Bild separat indiziert) |
 | `> [!abstract] Titel` | Marker weg, Inhalt als Text |
 | `#Tag` | Nach `obsidian_tags`, `#` aus dem Text |
 | `aliases:` im Frontmatter | Zusätzliche Suchbegriffe |

@@ -23,6 +23,7 @@ from src.api.schemas import (
 )
 from src.conversation.manager import needs_condense
 from src.generation.providers.base import StreamResult
+from src.ingestion.orchestrator import IMAGE_PATH_SEPARATOR
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +166,7 @@ def _chunk_to_source_dict(c) -> dict:
         "heading": c.heading,
         "chunk_preview": c.content[:_SOURCE_PREVIEW_CHARS],
         "content": c.content,
+        "images": [p for p in c.metadata.get("images", "").split(IMAGE_PATH_SEPARATOR) if p],
         "score": c.score,
     }
 

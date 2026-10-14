@@ -74,6 +74,42 @@ class TestMarkdownParser:
         assert "portrait.png" not in full_text
         assert "Text vor Bild" in full_text
 
+    def test_image_embeds_kept_per_section(self, md_parser, tmp_path):
+        """Roadmap 2: the chat shows the images the note embeds — per section, also '![[x.png|300]]'."""
+        f = tmp_path / "Malek.md"
+        f.write_text("# Malek\n## Hintergrund\nEin Soldat.\n![[Karte.png|300]]\n## Ziele\nMacht.",
+                     encoding="utf-8")
+
+        docs = {d.heading_hierarchy[-1]: d for d in md_parser.parse(f)}
+        assert docs["Hintergrund"].metadata["image_embeds"] == ["Karte.png"]
+        assert "300" not in docs["Hintergrund"].content          # the size part is no text either
+        assert "image_embeds" not in docs["Ziele"].metadata
+
+    def test_image_of_a_section_without_text_moves_to_the_next_one(self, md_parser, tmp_path):
+        """The portrait right under the title has no text of its own — it belongs to what follows."""
+        f = tmp_path / "Malek.md"
+        f.write_text("# Malek\n![[Malek_1.png]]\n## Hintergrund\nEin Soldat.\n## Galerie\n![[Malek_2.png]]",
+                     encoding="utf-8")
+
+        docs = md_parser.parse(f)
+        assert [d.heading_hierarchy[-1] for d in docs] == ["Hintergrund"]
+        assert docs[0].metadata["image_embeds"] == ["Malek_1.png", "Malek_2.png"]  # trailing one too
+
+    def test_lead_image_under_the_title_goes_to_every_section(self, md_parser, tmp_path):
+        """The portrait/map above the first sub-heading stands for the whole note; a section's own
+        images come first. Embeds under a second H1 are that topic's, not the note's."""
+        f = tmp_path / "Malek.md"
+        f.write_text("![[Banner.png]]\nVorwort.\n# Malek\n![[Malek_1.png]]\nDer Monarch.\n"
+                     "## Rolle\nAnführer.\n![[Malek_2.png]]\n## Ziele\nMacht.\n# Anhang\n![[Skizze.png]]\nNotizen.",
+                     encoding="utf-8")
+
+        docs = {(d.heading_hierarchy or ["—"])[-1]: d.metadata.get("image_embeds") for d in md_parser.parse(f)}
+        lead = ["Banner.png", "Malek_1.png"]
+        assert docs["—"] == lead and docs["Malek"] == ["Malek_1.png", "Banner.png"]
+        assert docs["Rolle"] == ["Malek_2.png", *lead]
+        assert docs["Ziele"] == lead
+        assert docs["Anhang"] == ["Skizze.png", *lead]
+
     def test_callouts_cleaned(self, md_parser, tmp_path):
         """Verify that Obsidian blockquote structures are stripped leaving plain text payloads."""
         f = tmp_path / "test.md"

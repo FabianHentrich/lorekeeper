@@ -204,8 +204,16 @@ keine Backend-Anfrage — die Ingest-Prüfung läuft erst beim Bestätigen.
   - bei umgeschriebener Folgefrage „🔎 Gesucht nach: …“,
   - 👍/👎 (`st.feedback("thumbs")`) für Spieler und Spielleiter. Ein Klick schickt
     `POST /feedback` mit Frage, Antwort, Quelldateien, Modell, Rolle, Session und Zeiten;
-    Zurücknehmen als `rating: null`. Fehlermeldungen und ausgeblendete ältere Nachrichten haben
-    keine Daumen. Anzeigen kostet keinen Backend-Aufruf — nur der Klick.
+    Zurücknehmen als `rating: null`. Nach einer Bewertung erscheint ein Feld für einen
+    **Kommentar** (optional, höchstens 1.000 Zeichen, Enter speichert — Roadmap 3.4, 14.10.); jede
+    Zeile trägt Bewertung und Kommentar zusammen, sodass eine spätere Änderung des einen das andere
+    nicht verliert, Zurücknehmen löscht den Kommentar mit. Fehlermeldungen und ausgeblendete ältere
+    Nachrichten haben keine Daumen. Anzeigen kostet keinen Backend-Aufruf — nur Klick und Enter.
+- **🖼️ Bilder (n)** (zugeklappt, vor den Quellen): die Bilder, die die gefundenen Abschnitte in
+  ihrer Notiz einbetten (`images` je Quelle, Roadmap 2) — jedes Bild einmal, in Quellen-Reihenfolge,
+  höchstens 6, nur existierende Dateien, 300 px breit mit Dateiname. `st.image` liest die Datei auf
+  dem Streamlit-Server, daher klappt es auch von einem anderen Gerät im Heimnetz. Im Spieler-Modus
+  kommen nur Bilder freigegebener Quellen an (Auflösung je Quelle, siehe [parsing.md](parsing.md)).
 - Quellen im Ausklapper **📎 Quellen**, nach Datei gruppiert (siehe unten).
 
 ### Streaming
@@ -377,7 +385,7 @@ unberührten Reglern misst also, was der Chat nutzt. Ist `/config` nicht erreich
 | **3 Retrieval Eval** | Ganzes Golden Set ohne LLM als Hintergrund-Job (`POST /eval/run`, `GET /eval/status/{id}`); Trefferquote, Abschnitt-Trefferquote, Aufschlüsselung nach Typ, Details je Frage (⚠️ = richtige Datei, falscher Abschnitt); **⚖ A/B starten (Vektor vs. Hybrid)**; unter den Kennzahlen eine Zeile **Latenz p50/p95 · Chunks pro Frage Ø/max** (aus den Details berechnet, auch für alte Ergebnisse; Chunks inkl. Section Expansion); **🎯 Suchgenauigkeit prüfen** (`POST /eval/search-exactness`): „Exakt: N/N Golden-Fragen …“ oder eine Warnung mit den Fragen, bei denen die Vektorsuche Chunks der exakten Top-K verpasst, und dem Hinweis, `hnsw_ef_search` zu erhöhen |
 | **4 End-to-End** | Golden Set mit LLM: Trefferquote, Answer-Contains-Quote, mittlere Latenz, je Frage die ganze Antwort und darunter die erwarteten Stichwörter (seit 14.10.; ältere Berichte haben nur 200 Zeichen und keine Stichwörter). Langsam |
 | **5 Ergebnisse** | Gespeicherte Läufe (max. 3 je Typ) mit Kennzahlen und Config, löschen; zwei Läufe vergleichen (Differenz + Fragen, deren Treffer sich geändert hat) |
-| **6 Feedback** | Aktuelle 👍/👎 je Chat-Antwort (`GET /feedback`, letzte Bewertung je `message_id`, zurückgenommene ausgelassen). Standard nur 👎, 👍 per Schalter. Ausgewählte Zeilen werden zu Golden-Set-Fragen `f###` (`ui/feedback.py`): 👍 behält die Quellen der Antwort, 👎 bleibt leer mit Notiz zum Nachtragen; umgeschriebene Folgefragen gehen in ihrer eigenständigen Form ein; Fragen, die schon im Golden Set stehen, werden übersprungen. Ändert sich die angezeigte Liste (👍-Schalter, neue Bewertungen), werden die Häkchen zurückgesetzt, damit keins auf eine andere Antwort rutscht |
+| **6 Feedback** | Aktuelle 👍/👎 je Chat-Antwort (`GET /feedback`, letzte Bewertung je `message_id`, zurückgenommene ausgelassen). Standard nur 👎, 👍 per Schalter; Spalte „Kommentar“ mit dem Freitext. Ausgewählte Zeilen werden zu Golden-Set-Fragen `f###` (`ui/feedback.py`): 👍 behält die Quellen der Antwort, 👎 bleibt leer mit Notiz zum Nachtragen; der Kommentar steht in der Notiz; umgeschriebene Folgefragen gehen in ihrer eigenständigen Form ein; Fragen, die schon im Golden Set stehen, werden übersprungen. Ändert sich die angezeigte Liste (👍-Schalter, neue Bewertungen), werden die Häkchen zurückgesetzt, damit keins auf eine andere Antwort rutscht |
 | **7 Chunks** | Chunk-Inspector: Quelle wählen (`GET /sources`, 60 s gecacht), dann Datei (`GET /eval/chunks/files`), dann alle Chunks der Datei in Dokumentreihenfolge (`GET /eval/chunks`). Anzahl und min/Ø/max-Länge (unter 100 Zeichen markiert), Tabelle (Index, Überschriftenpfad, Länge, Textanfang), voller Text + Metadaten eines gewählten Chunks. Dateien und Chunks werden erst nach der Auswahl geladen; ein ChromaDB-Fehler erscheint als Fehlermeldung, nicht als leere Liste |
 
 **Gemeinsame Bausteine:** `_render_tuning_sliders(prefix)` — drei gekoppelte Regler (Kandidaten,

@@ -399,6 +399,20 @@ def test_sources_carry_the_whole_chunk_next_to_the_short_preview():
     src = _chunk_to_source_dict(chunk)
     assert src["content"] == text
     assert src["chunk_preview"] == text[:_SOURCE_PREVIEW_CHARS]
+    assert src["images"] == []
+
+
+def test_sources_list_the_images_the_section_embeds():
+    """Roadmap 2: 'images' metadata (paths joined by IMAGE_PATH_SEPARATOR) becomes a list per source."""
+    from types import SimpleNamespace
+
+    from src.api.query_routes import _chunk_to_source_dict
+    from src.ingestion.orchestrator import IMAGE_PATH_SEPARATOR
+    paths = [r"C:\Vault\Bilder\Karte.png", r"C:\Vault\Bilder\Malek 1.png"]
+    chunk = SimpleNamespace(source_file="Arkenfeld.md", document_type="markdown", heading="Arkenfeld",
+                            content="Arkenfeld", score=0.9,
+                            metadata={"source_path": "", "images": IMAGE_PATH_SEPARATOR.join(paths)})
+    assert _chunk_to_source_dict(chunk)["images"] == paths
 
 
 def test_query_returns_stage_timings(client, fake_services):
@@ -718,6 +732,22 @@ def test_feedback_is_appended_as_json_lines(client, tmp_path, monkeypatch):
     assert [(e["message_id"], e["rating"]) for e in lines] == [("m1", "down"), ("m1", None)]
     assert lines[0]["question"] == "Was ist Überschaden?" and lines[0]["role"] == "player"
     assert lines[0]["ts"]
+
+
+def test_feedback_comment_is_stored_and_bounded(client, tmp_path, monkeypatch):
+    """Roadmap 3.4: the free-text comment lands in the line; an over-long one is refused (422), not cut."""
+    import src.api.system_routes as system_routes_module
+    from src.api.schemas import MAX_FEEDBACK_COMMENT_CHARS
+    path = tmp_path / "feedback.jsonl"
+    monkeypatch.setattr(system_routes_module, "_FEEDBACK_PATH", path)
+    body = {"message_id": "m1", "rating": "down", "comment": "Kalen ist der Schmied"}
+
+    assert client.post("/feedback", json=body).status_code == 200
+    too_long = {**body, "comment": "x" * (MAX_FEEDBACK_COMMENT_CHARS + 1)}
+    assert client.post("/feedback", json=too_long).status_code == 422
+
+    assert [json.loads(line)["comment"] for line in path.read_text(encoding="utf-8").splitlines()] == \
+        ["Kalen ist der Schmied"]
 
 
 def test_feedback_rejects_unknown_ratings(client, tmp_path, monkeypatch):

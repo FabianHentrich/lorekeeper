@@ -6,7 +6,11 @@ stopped. Incremental via the SHA-256 content hash, not timestamps (unreliable on
 repos); ``full=True`` re-processes everything. Chunks are upserted in batches of ``UPSERT_BATCH_CHUNKS``
 (one file never spans two batches); files gone from disk are deleted from the index, and a run over all
 sources also deletes the chunks of sources no longer in sources.yaml. Every chunk carries
-``source_id``, ``group`` and ``content_category`` from its source config.
+``source_id``, ``group`` and ``content_category`` from its source config. Image embeds of a note
+(``image_embeds`` from the Markdown parser) are resolved by file name within the same source, as Obsidian
+does, into ``images`` (absolute paths joined by ``IMAGE_PATH_SEPARATOR``) — the chat shows them with the
+answer (roadmap 2). The content hash only covers the note: after adding images to the vault, a note that
+embeds them must change (or ``full=True``) before its chunks carry the new path.
 """
 import fnmatch
 import hashlib
@@ -27,6 +31,20 @@ logger = logging.getLogger(__name__)
 # Pending chunks are embedded + upserted once this many have accumulated — gives
 # progress during embedding and keeps finished work if a later file crashes the run.
 UPSERT_BATCH_CHUNKS = 500
+# Between the paths in a chunk's ``images`` metadata — ChromaDB keeps only scalars, "|" never occurs in a
+# Windows path
+IMAGE_PATH_SEPARATOR = "|"
+_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+
+
+def _image_files(base: Path) -> dict[str, str]:
+    """Lower-cased file name → absolute path of every image under ``base`` (Obsidian resolves embeds by
+    name anywhere in the vault; the first one found wins). Trash and settings folders don't count."""
+    found: dict[str, str] = {}
+    for path in sorted(base.rglob("*")) if base.is_dir() else [base]:
+        if path.suffix.lower() in _IMAGE_SUFFIXES and not {".trash", ".obsidian"} & set(path.parts):
+            found.setdefault(path.name.lower(), str(path.resolve()))
+    return found
 
 
 def _resolve_category(file_path: Path, source: SourceConfig) -> tuple[str, str]:
@@ -247,6 +265,7 @@ class IngestionOrchestrator:
             _report()
 
         total_files = len(files)
+        images_by_source: dict[str, dict[str, str]] = {}  # source id → image files, scanned on first embed
         for idx, (file_path, source) in enumerate(files, 1):
             parser = self._get_parser(file_path)
             if parser is None:
@@ -277,6 +296,13 @@ class IngestionOrchestrator:
 
                 for chunk in chunks:
                     chunk.source_file = relative_path
+                    if embeds := chunk.metadata.pop("image_embeds", None):
+                        if source.id not in images_by_source:
+                            images_by_source[source.id] = _image_files(base)
+                        paths = [found for name in embeds
+                                 if (found := images_by_source[source.id].get(Path(name).name.lower()))]
+                        if paths:
+                            chunk.metadata["images"] = IMAGE_PATH_SEPARATOR.join(dict.fromkeys(paths))
                     chunk.metadata.update({
                         "content_hash": content_hash,
                         "content_category": content_category,

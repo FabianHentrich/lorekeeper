@@ -92,6 +92,8 @@ _SHEET = {
         "Waffen, Rüstung und Tränke mit ihren Werten; Überschaden durch Waffen notierst du hier.\n\n"
         "## Notizen\n\n"
         "Platz für Sterbeproben, Todeszähler und Überschaden aus vergangenen Kämpfen.\n"
+        # The file only exists in the game-master source: embeds resolve per source, never across
+        "![[Rhaz Muell Portrait.png]]\n"
     ),
 }
 _GM_RULES = {
@@ -131,6 +133,7 @@ _WORLD = {
         "Kampfregeln, Überschaden und Sterbeprobe gelten für ihn nicht.\n\n"
         "## Erscheinung\n\n"
         "Rhaz'Muell ist der wahre Sol Invictus — eine Gestalt aus Licht und Glut.\n"
+        "![[Rhaz Muell Portrait.png]]\n"
     ),
     "NPCs/Isolde Vaer.md": (
         "# Isolde Vaer\n\n"
@@ -199,6 +202,8 @@ def env(tmp_path_factory, embed_service):
     _write(world_dir, _WORLD)
     _write(sheet_dir, _SHEET)
     _write(gm_rules_dir, _GM_RULES)
+    (world_dir / "Bilder").mkdir()
+    (world_dir / "Bilder" / "Rhaz Muell Portrait.png").write_bytes(b"\x89PNG fake")  # embed bait (roadmap 2)
 
     settings_path = tmp / "settings.yaml"
     settings_path.write_text("", encoding="utf-8")
@@ -316,7 +321,20 @@ def test_player_answer_path_is_clean(env, question):
         _no_secret(src["chunk_preview"])
         assert src["content"], src            # the full chunk text the chat shows (3.16) is really checked
         _no_secret(src["content"])
+        assert all(_is_player_file(env, img) for img in src["images"]), src
     _no_secret(env.llm.prompts[-1])
+
+
+def test_image_embeds_resolve_only_inside_their_own_source(env):
+    """Roadmap 2: the game-master note shows its portrait; the character sheet embeds the same name,
+    but the file lives only in the game-master source — the player's chunk must stay without it."""
+    import asyncio
+    gm = asyncio.run(env.retriever.retrieve("Wie sieht Rhaz'Muell aus? Erscheinung"))
+    gm_images = {img for c in gm for img in c.metadata.get("images", "").split("|") if img}
+    assert any(img.endswith("Rhaz Muell Portrait.png") for img in gm_images)   # bait works unfiltered
+
+    sheet = env.retriever.vectorstore._get_collection().get(where={"source_id": "bogen"}, include=["metadatas"])
+    assert sheet["metadatas"] and not any(m.get("images") for m in sheet["metadatas"])
 
 
 def test_condensed_follow_up_cannot_widen_the_search(env):

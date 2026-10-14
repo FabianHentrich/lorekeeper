@@ -42,7 +42,7 @@ _NON_TOPIC_WORDS = frozenset({
     # prepositions, question words, auxiliaries
     "in", "im", "zu", "zum", "zur", "mit", "für", "über", "von", "vom", "auf", "an", "am", "als", "wie",
     "was", "wer", "welche", "welcher", "welches", "warum", "wieso", "weshalb",
-    "ist", "sind", "gibt", "kannst", "könntest", "kann",
+    "ist", "sind", "gibt", "kannst", "könntest", "kann", "hast", "hat",
     # what to do with the answer
     "fass", "fasse", "zusammen", "erklär", "erkläre", "erklären", "beschreib", "beschreibe", "nenn", "nenne",
     "gib", "zeig", "zeige", "sag", "sage", "schreib", "schreibe", "formulier", "formuliere", "wiederhole",
@@ -50,6 +50,8 @@ _NON_TOPIC_WORDS = frozenset({
     "kürzer", "knapper", "kurz", "länger", "ausführlicher", "ausführlich", "genauer", "detaillierter",
     "einfacher", "verständlicher", "mehr", "weniger", "details", "beispiel", "beispiele",
     "stichpunkte", "stichpunkten", "punkte", "tabelle", "zusammenfassung", "anders", "andere", "weitere",
+    # asking for more of the same ("bitte mehr infos" was searched literally — 👎 13./14.10.)
+    "info", "infos", "information", "informationen", "erzähl", "erzähle", "erzählen",
 })
 
 

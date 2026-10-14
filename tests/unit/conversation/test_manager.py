@@ -179,6 +179,10 @@ class TestNeedsCondense:
         "Welche gibt es noch?",
         "Schreib das als Tabelle",
         "Mach eine Zusammenfassung in Stichpunkten",
+        "bitte mehr infos",                # 👎 13.10./14.10.: searched literally, answer "zu vage"
+        "Hast du weitere Informationen?",
+        "Erzähl mir mehr",
+        "Gibt es noch mehr Infos dazu?",
     ])
     def test_requests_without_a_topic_word_need_condense(self, question):
         """Requests about the previous answer name no topic — searching their words finds nothing related."""
@@ -190,6 +194,8 @@ class TestNeedsCondense:
         "Gib mir ein Beispiel für eine Marke",
         "Welche Waffen kann ein Krieger tragen?",
         "Nenne alle Fähigkeiten des Waldläufers",
+        "Gib mir Infos zu Arkenfeld",
+        "Erzähl mir von Malek Nocthar",
     ])
     def test_answer_verbs_with_a_topic_stay_standalone(self, question):
         """The same verbs with a topic word are standalone — no extra LLM call, retrieval gets the wording."""

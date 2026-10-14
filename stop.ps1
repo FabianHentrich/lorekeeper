@@ -2,6 +2,7 @@
 #
 #   .\stop.ps1                Stop backend and UI cleanly; kill whatever still runs after -Timeout seconds
 #   .\stop.ps1 -Force         Also while an ingest is running (the run is aborted; the next ingest redoes it)
+#   .\stop.ps1 -List          Only print the processes that would be stopped, stop nothing
 #
 # Finds the processes by the ports start.ps1 uses and sends Ctrl+C to their console windows — the
 # same as pressing it there, so uvicorn runs its shutdown and the backend stops the Ollama it started.
@@ -9,7 +10,7 @@
 # LoreKeeper then keeps running). Also run by the "LoreKeeper beenden" button in the UI sidebar
 # (ui/shutdown.py); its output then goes to logs/stop.log.
 
-param([switch]$Force, [int]$Timeout = 20)
+param([switch]$Force, [switch]$List, [int]$Timeout = 20)
 
 $ROOT         = $PSScriptRoot
 $PYTHON       = Join-Path $ROOT ".venv\Scripts\python.exe"
@@ -63,7 +64,12 @@ function Get-Root($id) {
 }
 
 function Get-Descendants($id) {
+    # Windows reuses PIDs: a process whose parent has exited still names that PID, and if LoreKeeper's
+    # python later gets it, the orphan looks like its child. A real child starts after its parent — the
+    # check keeps e.g. the browser start.ps1 opened out of the kill list (it was killed on 14.10.).
+    $parent = $byId[[int]$id]
     foreach ($child in $all | Where-Object { $_.ParentProcessId -eq $id -and $_.ProcessId -ne $id }) {
+        if ($parent -and $child.CreationDate -lt $parent.CreationDate) { continue }
         $child
         Get-Descendants $child.ProcessId
     }
@@ -95,6 +101,11 @@ $self = @($PID) + @(Get-Descendants $PID | ForEach-Object { [int]$_.ProcessId })
 $tree = @($tree | Where-Object { $self -notcontains [int]$_.ProcessId })
 # Recorded now: once the backend is gone, an Ollama it started can no longer be traced back to it
 $ollama = @($tree | Where-Object { $_.Name -like "ollama*" })
+
+if ($List) {
+    $tree | ForEach-Object { "{0,6} {1,-16} {2}" -f $_.ProcessId, $_.Name, ("$($_.CommandLine)" -replace '\s+', ' ').Substring(0, [math]::Min(70, "$($_.CommandLine)".Length)) }
+    exit 0
+}
 
 # --- Ctrl+C, wait, kill ----------------------------------------------
 $sw = [Diagnostics.Stopwatch]::StartNew()

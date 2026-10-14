@@ -125,7 +125,10 @@ an, die die Port-Freigabe überstimmt.
   das Backend gestartet hat. Erkannt werden nur LoreKeepers eigene Prozesse (`src.main:app`,
   `ui/LoreKeeper.py`); ein anderer Server auf 8000/8501 bleibt unberührt. Während einer Indizierung verweigert beides (ein harter Abbruch kann
   einen halb geschriebenen Index hinterlassen); `.\stop.ps1 -Force` bricht sie trotzdem ab. Die
-  Ausgabe des Buttons steht in `logs/stop.log`.
+  Ausgabe des Buttons steht in `logs/stop.log`. `.\stop.ps1 -List` zeigt nur, welche Prozesse
+  gestoppt würden. Kindprozesse zählen nur, wenn sie **nach** ihrem Elternprozess gestartet wurden:
+  Windows vergibt PIDs neu, und am 14.10. hielt das Skript so den Browser, den `start.ps1` geöffnet
+  hatte, für ein Kind des UI-Prozesses und beendete ihn hart.
 - **Nicht die Fenster schließen**: Das X beendet den Prozess, bevor sein Shutdown läuft — ein von
   LoreKeeper gestartetes Ollama läuft dann weiter, und im Log fehlt „Shutting down“ (13.10.: 7 von
   10 Starts endeten so). Strg+C im Fenster ist sauber; gemessen am 13.10.: Backend 1,3–1,6 s,
@@ -316,10 +319,11 @@ Was im Log steht:
 
 Bewertungen (👍/👎 im Chat) landen in `logs/feedback.jsonl`, ein JSON-Objekt pro Zeile. Eine
 geänderte oder zurückgenommene Bewertung ist eine neue Zeile mit derselben `message_id` — die letzte
-Zeile je `message_id` gilt (`rating: null` = zurückgenommen). Auswerten geht am einfachsten über
+Zeile je `message_id` gilt (`rating: null` = zurückgenommen); `comment` enthält den optionalen
+Freitext zur Bewertung. Auswerten geht am einfachsten über
 Evaluation → **Feedback**, oder:
 
 ```powershell
 Get-Content logs\feedback.jsonl | ConvertFrom-Json | Where-Object rating -eq 'down' |
-  Select-Object ts, role, question, sources
+  Select-Object ts, role, question, comment, sources
 ```

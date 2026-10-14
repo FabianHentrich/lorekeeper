@@ -21,6 +21,7 @@ from src.api import sources_routes as sources_routes_module
 from src.api.routes import router
 from src.config.manager import ConfigManager, SourceConfig
 from src.ingestion.orchestrator import IngestionOrchestrator, IngestionResult
+from src.retrieval.truecase import TrueCaser
 
 
 class FakeVectorStore:
@@ -74,7 +75,7 @@ def env(tmp_path):
     originals = {n: getattr(main_module, n) for n in names}
     fakes = SimpleNamespace(
         config=config, vectorstore=FakeVectorStore(), bm25_index=FakeBM25(),
-        retriever=SimpleNamespace(reranker_device="gpu"),
+        retriever=SimpleNamespace(reranker_device="gpu", truecaser=TrueCaser()),
         vault=vault, single=single, sources_path=sources_path,
     )
     for n in names:

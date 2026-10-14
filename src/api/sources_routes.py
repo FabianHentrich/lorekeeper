@@ -81,6 +81,7 @@ def _start_ingest_job(run_sync, label: str) -> str:
             _ingest_jobs[job_id].status = "done"
             _ingest_jobs[job_id].errors = result.errors
             main_module.bm25_index.invalidate()
+            main_module.retriever.truecaser.invalidate()  # vocabulary of the changed collection
             logger.info("Ingest job %s done (%s): %d file errors", job_id, label, len(result.errors))
         except Exception as e:
             logger.exception("Ingest job %s failed (%s)", job_id, label)
@@ -265,6 +266,7 @@ async def delete_source(source_id: str):
 
     deleted = vs.delete_by_source_id(source_id)
     main_module.bm25_index.invalidate()  # else hybrid search keeps finding the deleted chunks
+    main_module.retriever.truecaser.invalidate()  # vocabulary of the changed collection
     main_module.config.settings.ingestion.sources = [s for s in sources if s.id != source_id]
     main_module.config.save_sources()
     logger.info("Source removed: %s (%d chunks deleted)", source_id, deleted)
@@ -279,6 +281,7 @@ async def recategorize_endpoint():
     refuse_during_ingest()
     stats = await run_in_threadpool(recategorize, config=main_module.config, vectorstore=main_module.vectorstore)
     main_module.bm25_index.invalidate()  # BM25 holds its own copy of the metadata the filters check
+    main_module.retriever.truecaser.invalidate()  # vocabulary of the changed collection
     return stats
 
 
@@ -291,4 +294,5 @@ async def wipe_collection(payload: dict):
     refuse_during_ingest()
     main_module.vectorstore.wipe_collection()
     main_module.bm25_index.invalidate()
+    main_module.retriever.truecaser.invalidate()  # vocabulary of the changed collection
     return {"status": "wiped"}
