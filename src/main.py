@@ -10,6 +10,7 @@ configured as the LLM provider.
 import asyncio
 import logging
 import shutil
+import signal
 import subprocess
 import time
 from contextlib import asynccontextmanager
@@ -76,9 +77,13 @@ async def _ensure_ollama(base_url: str, timeout: float = 30.0) -> subprocess.Pop
     _OLLAMA_LOG.parent.mkdir(parents=True, exist_ok=True)
     if _OLLAMA_LOG.exists() and _OLLAMA_LOG.stat().st_size > _OLLAMA_LOG_MAX_BYTES:
         _OLLAMA_LOG.replace(_OLLAMA_LOG.with_name(_OLLAMA_LOG.name + ".1"))
-    # The child keeps its own handle — ours can be closed right after the start
+    # The child keeps its own handle — ours can be closed right after the start. Own process group: a
+    # console Ctrl+C reaches every process of the console, and uvicorn's dev reloader restarts the worker
+    # with exactly that — Ollama died mid-answer (503) with every code change (roadmap 12.3). It is
+    # stopped on purpose in _shutdown instead.
     with _OLLAMA_LOG.open("ab") as out:
-        proc = subprocess.Popen([ollama_bin, "serve"], stdout=out, stderr=subprocess.STDOUT)
+        proc = subprocess.Popen([ollama_bin, "serve"], stdout=out, stderr=subprocess.STDOUT,
+                                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
 
     # Wait until it's ready
     deadline = time.monotonic() + timeout
@@ -108,7 +113,9 @@ async def _shutdown(tasks: list[asyncio.Task]) -> None:
     await asyncio.gather(*tasks, return_exceptions=True)
     if _ollama_process:
         logger.info(f"Stopping Ollama (PID {_ollama_process.pid})")
-        _ollama_process.terminate()
+        # Ctrl+Break to Ollama's own process group: it shuts down with its llama-server runner, which a
+        # TerminateProcess of ollama.exe alone could leave running with the model in VRAM
+        _ollama_process.send_signal(signal.CTRL_BREAK_EVENT)
         try:
             _ollama_process.wait(timeout=10)
         except subprocess.TimeoutExpired:

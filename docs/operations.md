@@ -135,6 +135,19 @@ an, die die Port-Freigabe überstimmt.
   UI 0,2 s, auch während eines Streams oder einer Evaluation.
 - **Am Gaming-PC entwickeln**: Server stoppen (`.\stop.ps1`), dann `.\start.ps1`. Der Server-Modus lädt Code-
   Änderungen **nicht** nach: nach einem Update stoppen und neu starten.
+- **Auto-Reload (`.\start.ps1`)**: Nur Änderungen unter `src/` lösen ihn aus (`--reload-dir src`);
+  Code in `evaluation/` lädt das Backend erst beim nächsten Start. Uvicorn startet den Worker unter
+  Windows per Strg+C an die ganze Konsole neu. Deshalb läuft ein vom Backend gestartetes Ollama in
+  einer **eigenen Prozessgruppe** (sonst starb es mitten in einer Antwort, 503) und wird beim
+  Herunterfahren gezielt per Strg+Pause beendet — samt `llama-server`, das Modell bleibt nicht im
+  VRAM. Eine laufende Antwort wird vor dem Neustart zu Ende geschickt. Ein laufender
+  End-to-End-Lauf bricht beim Neustart ab (Daemon-Thread; vorher hielt er den alten Prozess am
+  Leben, und der Neustart hing ohne Ende), eine laufende Indizierung wird dagegen fertig geschrieben
+  — der Neustart wartet so lange (Roadmap 12.3, 14.10.).
+- **`stop.ps1` während eines Neustarts**: Startet der Reloader in den 20 s noch einen neuen Worker,
+  bekommt der kein Strg+C mehr. `stop.ps1` sucht deshalb vor dem harten Beenden noch einmal nach
+  Kindprozessen und beendet auch diesen samt seinem Ollama (vorher blieb er ohne Fenster übrig und
+  hielt Port 8000). Ausgabe dann „some processes killed“ nach ~20 s.
 - `start.ps1` überspringt einen Teil, dessen Port schon belegt ist („already running“) — ein
   übriger Teil aus dem anderen Modus erst beenden (`.\stop.ps1`).
 

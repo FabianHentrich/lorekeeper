@@ -119,7 +119,17 @@ foreach ($root in $roots) {
 
 $ids = @($tree | Where-Object { $_.Name -notlike "ollama*" } | ForEach-Object { [int]$_.ProcessId })
 Wait-Process -Id $ids -Timeout $Timeout -ErrorAction SilentlyContinue
-$left = @(Get-Process -Id ($ids + @($ollama | ForEach-Object { [int]$_.ProcessId })) -ErrorAction SilentlyContinue)
+# Scan again before killing: the dev reloader can start a new worker (and its Ollama) during the wait,
+# e.g. for a code change pending when the Ctrl+C came. That worker never got the Ctrl+C, the first scan
+# missed it, and it stayed behind as an orphan holding port 8000 (14.10., roadmap 12.3). Only from
+# processes that are still the same ones (start time) — a reused PID must not bring in strangers.
+$all = @(Get-CimInstance Win32_Process)
+$byId = @{}
+foreach ($p in $all) { $byId[[int]$p.ProcessId] = $p }
+$late = @($tree | Where-Object { ($now = $byId[[int]$_.ProcessId]) -and $now.CreationDate -eq $_.CreationDate } |
+    ForEach-Object { Get-Descendants $_.ProcessId } | ForEach-Object { [int]$_.ProcessId } |
+    Where-Object { $self -notcontains $_ })
+$left = @(Get-Process -Id ($ids + @($ollama | ForEach-Object { [int]$_.ProcessId }) + $late | Select-Object -Unique) -ErrorAction SilentlyContinue)
 if ($left) {
     Write-Warning "Still running after $Timeout s - killing: $(($left | ForEach-Object { "$($_.Id) $($_.ProcessName)" }) -join ', ')"
     $left | Stop-Process -Force -ErrorAction SilentlyContinue

@@ -75,7 +75,9 @@ def _start_ingest_job(run_sync, label: str) -> str:
         """Run the sync orchestrator off-thread and update job state on success/error."""
         _ingest_jobs[job_id].status = "running"
         try:
-            # asyncio.to_thread, not run_in_threadpool: the job outlives the request that started it
+            # asyncio.to_thread, not run_in_threadpool: the job outlives the request that started it.
+            # A pool thread on purpose (unlike the e2e eval): the process waits for it at exit, so a stop or
+            # dev reload during an ingest lets it finish instead of cutting writes off (roadmap 12.3)
             result = await asyncio.to_thread(run_sync, _update_progress)
             _update_progress(result)
             _ingest_jobs[job_id].status = "done"

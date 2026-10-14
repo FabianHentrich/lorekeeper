@@ -199,8 +199,8 @@ async def test_started_ollama_writes_into_its_log_file(tmp_path, monkeypatch):
     class FakePopen:
         pid = 1
 
-        def __init__(self, args, stdout, stderr):
-            started.update(stdout=stdout, stderr=stderr)
+        def __init__(self, args, stdout, stderr, creationflags=0):
+            started.update(stdout=stdout, stderr=stderr, creationflags=creationflags)
 
     calls = []
 
@@ -225,6 +225,8 @@ async def test_started_ollama_writes_into_its_log_file(tmp_path, monkeypatch):
     assert isinstance(proc, FakePopen)
     assert started["stdout"].name == str(log)
     assert started["stderr"] == main_module.subprocess.STDOUT
+    # Own process group: the dev reloader's console Ctrl+C must not kill Ollama mid-answer (12.3)
+    assert started["creationflags"] & main_module.subprocess.CREATE_NEW_PROCESS_GROUP
     assert log.exists()
 
 

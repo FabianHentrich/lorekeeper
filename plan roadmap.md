@@ -27,13 +27,12 @@ End-to-End-Lauf ~35 min (🟡).
 | — | 3.5 Wikilink-Expansion ⏸ | Gering | Mittel | 🔴 | Gemessen 14.10.: kein Gewinn, −1/−2 Dateien; nur bei konkreten Link-Fragen neu prüfen |
 | — | 2 Bilder — Rest (Dateiname-Rückfall, PDF-Bilder) | Gering | Mittel | 🔴 | Einbettungen laufen (14.10.); Rest nur bei Bedarf |
 | — | 4.2 Internet-Zugriff (Tailscale) ⏸ | Mittel | Gering | 🟢 | Nur zusammen mit einem Login für die API |
-| — | 3.2 Session-History ⏸ | Gering | Mittel | 🟢 | Empfehlung: streichen — Nutzerentscheidung offen |
 | — | 3.10 / 3.15 Einzelfälle | Gering | — | 🟡 | Nur bei Anlass im Spiel |
 | — | 3.14 Rechenfragen ⏸ | Mittel | Mittel-Hoch | 🟡 | Nur mit Denken zuverlässig (14–41 s); später mit größerem Modell neu prüfen |
-| — | 12.3 Auto-Reload im Entwicklungsmodus hängt | Gering | Gering | 🟢 | Nach Code-Änderungen lud das Backend dreimal nicht neu (14.10., auch ohne Job) |
 | — | 11.0 P8 Dienste-/Reranker-Modul | Gering | Mittel | 🟢 | Nur zusammen mit Feature-Arbeit an diesen Stellen |
 
-**Entschieden 14.10.**: Der Fähigkeitsbericht bleibt für Spieler freigegeben (Entscheidungshilfe).
+**Entschieden 14.10.**: 3.2 Session-History gestrichen (Nutzer) — Sessions bleiben im RAM; bei einem
+Wissenstool steht die Antwort im Regelbuch/Vault, nicht im Verlauf. Der Fähigkeitsbericht bleibt für Spieler freigegeben (Entscheidungshilfe).
 `Spielleiter-Tools/potenzielle_anpassungen.md` wird nicht indiziert — Vorschläge sind keine geltenden
 Regeln. `HF_HUB_OFFLINE=1` (in `src/__init__.py`): Modelle nur aus dem lokalen Cache, Downloads mit
 `HF_HUB_OFFLINE=0` ([operations.md](docs/operations.md#modelle-fehlen-beim-ersten-start)).
@@ -72,16 +71,6 @@ Einbettungen in Notizen laufen seit 14.10. (siehe „Erledigt“ 2). Offen, nur 
 Verworfen: Vision-Beschreibungen beim Ingest, CLIP-Embeddings, manuelle Captions; ein Endpunkt
 `/files/{path}` ist unnötig, weil `st.image` die Datei auf dem Streamlit-Server liest (auch im Heimnetz).
 
-### 12.3 Auto-Reload im Entwicklungsmodus hängt
-
-`.\start.ps1` startet uvicorn mit `--reload`. Am 14.10. blieb das Backend nach einer Code-Änderung
-zweimal hängen statt neu zu laden: um 14:13 fuhr es herunter (samt Ollama) und kam nicht wieder hoch
-— ein laufender End-to-End-Job ging verloren —, um ~17:15 lud es die Änderung nicht und ließ sich nur
-mit `.\stop.ps1` nach 20 s hart beenden. Um ~20:20 dasselbe nach einer Parser-Änderung **ohne**
-laufenden Job (Backend im Leerlauf) — ein Hintergrund-Job ist also nicht nötig. Ursache offen
-(Verdacht: Reload während GPU-Session oder das Herunterfahren von Ollama im Lifespan). Bis dahin: nach Code-Änderungen
-`.\stop.ps1` + `.\start.ps1`, und nie Code ändern, während ein Job im Backend läuft.
-
 ### 3.5 Wikilink-Expansion ⏸
 
 Gemessen am 14.10. (Index-Kopie, Golden Set + Holdout, Messung und Begründung in
@@ -99,12 +88,6 @@ ohne Portfreigabe. Alternative: Cloudflare Tunnel + Access. Offen: Der Gaming-PC
 Rolle des Aufrufers und hat keinen eigenen Login ([ARCHITECTURE.md](ARCHITECTURE.md#8-architektur-entscheidungen)
 → „Bewusste Grenze“) — solange nur Streamlit sie erreicht, reicht das; Tailscale ändert daran
 nichts, eine direkt erreichbare API schon.
-
-### 3.2 Session-History ⏸
-
-Sessions leben nur im RAM und sind nach einem Neustart weg. Idee: in SQLite/JSON speichern, Liste
-„Letzte Gespräche“ in der Sidebar, Export als Markdown. Empfehlung (14.10.): streichen — bei einem
-Wissenstool steht die Antwort im Regelbuch/Vault, nicht im Verlauf. Nutzerentscheidung offen.
 
 ### 3.10 Restliche Abschnitt-Misses — Einzelfälle
 
@@ -181,6 +164,7 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 | 3.16 | Chunks unter der Quelle einsehbar (Idee des Nutzers): `sources` liefern zusätzlich `content` (ganzer Chunk-Text), der Chat zeigt je Chunk einen Ausklapper „↳ Überschrift · Score“ mit dem Text (Überschriftenzeile gekürzt, `<br>` → Umbruch, ältere Nachrichten: Vorschau). Spieler-Sicherheitstest prüft auch `content` auf Geheimnisse; UI-, API- und Langtext-Test. Keine zusätzliche Backend-Anfrage | 14.10. | `docs/ui-ux.md`, `ARCHITECTURE.md` |
 | 3.15 (Teil) | 👎 aus dem Chat ausgewertet (5 Bewertungen, 4 Fälle, alle live nachgestellt): **Folgefragen** wie „bitte mehr infos“ wurden nicht umgeschrieben — „Info/Infos/Informationen/erzähl/hast“ ergänzt, Tests in beide Richtungen, keine Golden-Frage neu als Folgefrage; **Kleinschreibung** kostete systematisch (Golden Set klein 143 → 135/149) — klein getippte Wörter vor der Suche in die Schreibweise der Quellen (`src/retrieval/truecase.py`, nur intern): klein 135 → 142, wie geschrieben unverändert 143, Holdout klein 6 → 7/8; **Klassenübersicht** vom Nutzer im Regelbuch ergänzt (5.4/5.5), neu indiziert: „welche klassen gibt es?“ nennt alle 12. Offen: Tippfehler | 14.10. | `docs/embedding-strategy.md`, `docs/prompts.md`, `ARCHITECTURE.md` |
 | 12.4 | `stop.ps1` beendete den Browser: Windows vergibt PIDs neu, der Browser, den `start.ps1` geöffnet hatte, galt als Kind des UI-Prozesses und wurde nach 20 s hart beendet. Kinder zählen nur noch, wenn sie nach dem Elternprozess gestartet wurden; neu `.\stop.ps1 -List` zeigt die Prozesse, ohne zu stoppen | 14.10. | `docs/operations.md` |
+| 12.3 | Auto-Reload hing (dreimal am 14.10.), nachgestellt mit drei Ursachen: **(1)** Uvicorn startet den Worker unter Windows per Strg+C an die ganze Konsole neu — das traf auch das vom Backend gestartete Ollama (laufende Antwort → 503). Jetzt eigene Prozessgruppe, Beenden per Strg+Pause samt `llama-server` (1 s, Modell nicht mehr im VRAM). **(2)** Ein laufender End-to-End-Lauf (`asyncio.to_thread`) hielt den alten Worker am Leben — Python wartet beim Beenden auf Pool-Threads, der Lauf fragt den eigenen, nicht mehr antwortenden Server mit 120 s je Frage, und der Reloader wartet ohne Grenze: kein neuer Worker. Jetzt Daemon-Thread (`run_in_daemon_thread`, mutationsgeprüft); Indizierung bleibt bewusst ein Pool-Thread (wird fertig geschrieben). **(3)** `stop.ps1` während eines Neustarts: der Reloader startete noch einen Worker, der kein Strg+C bekam und als Waise Port 8000 hielt — `stop.ps1` sucht vor dem harten Beenden erneut nach Kindprozessen. Live geprüft: Neustart während E2E-Lauf mit geladenem Modell → Antwort fertig, Ollama + Runner beendet, neuer Worker nach 13 s; Stopp während Neustart-Serie → Port frei, keine Waisen. Der 17:15-Fall war keiner: Änderung in `evaluation/`, das nicht überwacht wird | 14.10. | `docs/operations.md` |
 | 2 | Bilder im Chat ohne Bildbeschreibung (Ansatz des Nutzers): Der Markdown-Parser behält `![[bild.png]]` / `![[bild.png\|300]]` je Abschnitt; **Titelbilder** (vor der ersten Unterüberschrift) hängen an jedem Abschnitt der Notiz — nur je Abschnitt bekam live keine Frage zu Malek/Arkenfeld ein Bild. Der Orchestrator löst die Namen **innerhalb derselben Quelle** zu Pfaden auf (`images`), `sources` liefern sie, der Chat zeigt „🖼️ Bilder (n)“ (zugeklappt, max. 6, nur existierende Dateien). Spieler-Sicherheitstest mit Köder-Bild in einer Spielleiter-Quelle, mutationsgeprüft (quellübergreifende Auflösung → 7 Fehlschläge). Zwei volle Re-Indizes des Vaults (je ~8 min); Golden Set unverändert Datei 272/274, Abschnitt 143/149. Live: Malek → Porträt, Arkenfeld-Karte → `arkenfeld.png`, Isolde Vaer → 2 Bilder. Suche danach 273/274 exakt (m039 weicht ab, Treffer unverändert) — nach weiteren In-place-Re-Indizes neu prüfen. Rest offen (Dateiname-Rückfall, PDF-Bilder) | 14.10. | `docs/parsing.md`, `docs/ui-ux.md`, `ARCHITECTURE.md`, `docs/embedding-strategy.md` |
 | 3.4 | Kommentar zur Bewertung: nach 👍/👎 ein optionales Feld (Enter speichert, ≤ 1.000 Zeichen, API antwortet sonst 422); jede Zeile in `logs/feedback.jsonl` trägt Bewertung und Kommentar zusammen, Zurücknehmen löscht ihn. Tab „Feedback“ mit Spalte „Kommentar“, beim Übernehmen ins Golden Set landet er in der Notiz. UI-, API- und Grenztests; kein zusätzlicher Backend-Aufruf beim Anzeigen | 14.10. | `docs/ui-ux.md`, `docs/operations.md`, `ARCHITECTURE.md` |
 | 3.11 | Spieler-/Spielleiter-Modus inkl. Sicherheitstests (deterministisch, live, Spy-Test) | 11./12.10. | `ARCHITECTURE.md` 4.8, `docs/testing.md` |

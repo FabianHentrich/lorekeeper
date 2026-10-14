@@ -19,7 +19,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from evaluation.evaluate_retrieval import load_qa_pairs, save_report
 from src.api.access import InvalidFilter, NoPlayerSources, effective_filters
-from src.api.background import spawn_background
+from src.api.background import run_in_daemon_thread, spawn_background
 from src.api.eval_schemas import (
     ChunkListResponse,
     EvalJobRequest,
@@ -285,8 +285,10 @@ async def _run_e2e_eval(job: EvalJobStatus, qa_pairs: list[dict], api_url: str):
     job.status = "running"
 
     try:
-        # Blocking HTTP calls per question; to_thread because the job outlives the starting request
-        report = await asyncio.to_thread(evaluate, api_url, qa_pairs)
+        # Blocking HTTP calls per question, against this very server. A daemon thread, not to_thread:
+        # after a reload or stop nobody answers them any more (120 s per question), and a pool thread
+        # would keep the old process alive — the dev reloader then never starts the new one (12.3)
+        report = await run_in_daemon_thread(evaluate, api_url, qa_pairs)
 
         filename = save_report(report, _RESULTS_DIR, "e2e").name
         _cleanup_results("e2e")

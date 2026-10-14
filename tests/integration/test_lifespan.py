@@ -105,5 +105,6 @@ def test_failed_startup_stops_the_ollama_it_started(patched_lifespan):
             with TestClient(main_module.app):
                 pass
 
-    ollama.terminate.assert_called_once()
+    # Ctrl+Break to its process group, so the llama-server runner stops too (12.3)
+    ollama.send_signal.assert_called_once_with(main_module.signal.CTRL_BREAK_EVENT)
     assert main_module._ollama_process is None
