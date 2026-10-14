@@ -171,16 +171,28 @@ Golden Sets und das Speichern der Berichte (`evaluation/evaluate_retrieval.py`).
 `retrieval_<zeit>.json` bzw. `e2e_<zeit>.json`; die Evaluation-Seite behält je Typ die letzten 3.
 Der End-to-End-Lauf kann `expected_source_ids` nicht prüfen — `/query` liefert keine Quellen-IDs.
 
+**Erster End-to-End-Lauf (14.10.)**, nach jina-Reranker, Regelkern und Eintrags-Slot: Answer Contains
+0,905 (248 von 274), Datei 0,993, Antwort Ø 6,8 s. Je Fragentyp: Lore (m) 96 %, kombiniert (k) 95 %,
+Regelbuch (p) 90 %, Entität + Regel (x) 88 %, Abenteuer (a) 87 %, Simulation (z) 82 %, Bilder (i) 70 %.
+Die 26 Fehlschläge sind von Hand gesichtet, aber nur grob — der Bericht speichert je Antwort nur die
+ersten 200 Zeichen, Listenfragen lassen sich damit nicht beurteilen. Drei Gruppen:
+**Golden-Set-Stichwort veraltet oder zu eng** — die Antwort stimmt (p009 sagt „Zauberpunkte …
+Charakterentwicklung“ statt „Fähigkeitspunkte“, p010, a007, a012, a015); **echte Antwortfehler** —
+Aufzählungen unvollständig (p008 Klassen, p036/p037 Basis-Skills/-Zauber, p049, m056), Fakten falsch
+(k001 Langschwert „20 Gold“ statt 10 G, m048 Titel statt Deckname „Solmar“, p091); **Bilder** (i005–i007)
+— Bild-Chunks sind aus der Suche ausgeschlossen (Roadmap 2). Nebenbei gefunden: Das Regelbuch nennt für
+ein meisterliches Langschwert 40 Gold, nach seiner eigenen Tabelle (10 G × 5) wären es 50.
+
 ---
 
 ## Kennzahlen und Ziele
 
-| Kennzahl | Skript | Was sie misst | Ziel | Stand 13.10. |
+| Kennzahl | Skript | Was sie misst | Ziel | Stand 14.10. |
 |---|---|---|---|---|
 | **Trefferquote (Datei)** | `evaluate_retrieval.py` | Erwartete Datei unter den gefundenen Chunks | > 0,85 | 0,993 (272/274) |
-| **Abschnitt-Trefferquote** | `evaluate_retrieval.py` | Erwarteter Abschnitt unter den Überschriften | darf nicht sinken | 139/149 |
-| **Answer Contains** | `evaluate.py` | Stichwörter in der LLM-Antwort | > 0,75 | — |
-| **Latenz** | `evaluate.py` | Antwortzeit gesamt, gemittelt über die beantworteten Fragen (fehlgeschlagene zählen bei den Quoten als Fehltreffer) | < 10 s | ~3–4 s |
+| **Abschnitt-Trefferquote** | `evaluate_retrieval.py` | Erwarteter Abschnitt unter den Überschriften | darf nicht sinken | 143/149 |
+| **Answer Contains** | `evaluate.py` | Stichwörter in der LLM-Antwort | > 0,75 | 0,905 (248/274, erster Lauf) |
+| **Latenz** | `evaluate.py` | Antwortzeit gesamt, gemittelt über die beantworteten Fragen (fehlgeschlagene zählen bei den Quoten als Fehltreffer) | < 10 s | Ø 6,8 s (p50 5,9 s, p95 13,8 s) |
 
 Die Ziel-Trefferquote liegt bewusst unter 1,0 — die Strukturtests prüfen Randfälle, sie alle zu
 treffen ist ein Ziel, keine Grundlinie. Unter 0,85 → etwas ist kaputt. Dass die
