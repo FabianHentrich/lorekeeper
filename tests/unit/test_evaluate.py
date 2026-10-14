@@ -7,11 +7,11 @@ import requests
 from evaluation import evaluate as ev
 
 PAIRS = [
-    {"question": "Wer regiert Arkenfeld?", "expected_sources": ["Orte/Arkenfeld.md"],
+    {"id": "m001", "question": "Wer regiert Arkenfeld?", "expected_sources": ["Orte/Arkenfeld.md"],
      "expected_answer_contains": ["Rat", "Magier"]},
     {"question": "Was kostet ein Schwert?", "expected_sources": ["Regeln/Waffen.md"],
      "expected_answer_contains": ["Gold"]},
-    {"question": "Kaputt?", "expected_sources": ["x.md"]},
+    {"id": "x009", "question": "Kaputt?", "expected_sources": ["x.md"]},
 ]
 
 
@@ -50,7 +50,17 @@ def test_rates_count_hits_keywords_and_failures(fake_query):
     first, second, failed = report["details"]
     assert (first["hit"], first["answer_contains_match"]) == (True, True)
     assert (second["hit"], second["answer_contains_match"]) == (False, False)
-    assert failed == {"question": "Kaputt?", "error": "backend down"}
+    assert failed == {"id": "x009", "question": "Kaputt?", "error": "backend down"}
+
+
+def test_details_keep_the_whole_answer_id_and_keywords(monkeypatch):
+    """A 200-character excerpt couldn't show why a list answer failed (roadmap 3.15)."""
+    long_answer = "Klassen: " + ", ".join(f"Klasse{i}" for i in range(100))  # ~1,000 characters
+    monkeypatch.setattr(ev.requests, "post", lambda url, json, timeout: _response(long_answer, ["Orte/Arkenfeld.md"]))
+    first, second, _ = ev.evaluate("http://127.0.0.1:8000", PAIRS)["details"]
+    assert first["answer"] == long_answer
+    assert (first["id"], first["expected_answer_contains"]) == ("m001", ["Rat", "Magier"])
+    assert second["id"] == ""  # a pair without id
 
 
 def test_average_latency_ignores_failed_requests(fake_query, monkeypatch):

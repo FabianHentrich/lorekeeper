@@ -671,6 +671,8 @@ with tab_e2e:
                             f"Retrieval: {icon} Answer: {ac_icon}"
                         ):
                             st.markdown(f"**Antwort:** {d.get('answer', '')}")
+                            if expected := d.get("expected_answer_contains"):
+                                st.caption("Erwartete Stichwörter: " + " · ".join(expected))
                             col_exp, col_ret = st.columns(2)
                             with col_exp:
                                 st.markdown("**Erwartet:**")

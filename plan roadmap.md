@@ -21,7 +21,7 @@ mehrere Minuten, nicht parallel zur Simulation). Ein Golden-Set-Lauf dauert ~1 m
 |---|---|---|---|---|---|
 | 1 | 13.0 Korrekturen aus dem Code-Review (Befund 1 kritisch) | Hoch — lange Frage legt das Backend lahm | Gering | 🟢 | Kappung + API-Grenze, Tests; danach Golden Set (🟡) |
 | 2 | 3.10 Restliche Abschnitt-Misses | Gering-Mittel — Regelfragen präziser | Mittel | 🟡 | Einzelfälle, je Golden-Set-Lauf prüfbar |
-| 2 | 3.15 Antwortfehler aus dem End-to-End-Lauf | Mittel — 9,5 % der Antworten verfehlen das Erwartete | Gering-Mittel | 🟡 | Erst ganze Antworten speichern, dann sichten |
+| 2 | 3.15 Antwortfehler aus dem End-to-End-Lauf | Mittel — 9,5 % der Antworten verfehlen das Erwartete | Gering-Mittel | 🟡 | Ganze Antworten werden jetzt gespeichert; neuer Lauf, dann sichten |
 | — | 3.14 Rechenfragen zum Regelwerk ⏸ | Mittel — falsche Zahlen bei Regel-Rechnungen | Mittel-Hoch | 🟡 | Vorerst so gelassen (14.10.); nur mit Denken zuverlässiger, das kostet 15–40 s |
 | — | 3.2 Session-History ⏸ | Unklar | Mittel | 🟢 | Erst entscheiden, ob gespeicherte Sessions Nutzen haben |
 | 3 | 3.4 Kommentar zur Bewertung ⏸ | Gering | Gering | 🟢 | Feature |
@@ -91,13 +91,16 @@ gegen gewählt; Skript-Muster: Rang in den Top 200 + `_predict` je Paar):
 
 Answer Contains 0,905 (248/274), Details in [evaluation.md](docs/evaluation.md#evaluatepy--end-to-end).
 Offen:
-- **Bericht speichert nur 200 Zeichen je Antwort** — Listenfragen und lange Antworten lassen sich nicht
-  beurteilen. Ganze Antwort speichern (klein, `evaluation/evaluate.py`), dann neu sichten.
+- ~~Bericht speichert nur 200 Zeichen je Antwort~~ — erledigt 14.10.: ganze Antwort, `id` und erwartete
+  Stichwörter im Bericht und auf der Evaluation-Seite. Nächster End-to-End-Lauf zeigt die vollen
+  Listenantworten.
 - **Golden-Set-Stichwörter veraltet/zu eng** (p009, p010, a007, a012, a015; p094 erwartet „doppel“, das
   Regelbuch sagt „das Fünffache“) — Nutzer entscheidet, welche Stichwörter angepasst werden.
 - **Echte Fehler**: Aufzählungen unvollständig (p008 Klassen, p036/p037, p049, m056), Fakten falsch (k001
   Langschwert-Preis, m048 Deckname, p091 Fehlwurf beim Tränkebrauen).
-- **Regelbuch**: meisterliches Langschwert 40 Gold im Text, 50 nach der eigenen Tabelle (10 G × 5).
+- **Regelbuch (Nutzer)**: `07_gegenstaende.tex` Zeile 1222 „meisterliches Langschwert 40 Gold“ — nach Zeile 1190
+  (schwere Waffe 10 G) und 1217 (meisterlich = das Fünffache) wären es 50; die Rüstung im selben Satz (200) stimmt.
+  Nach der Korrektur das PDF neu indizieren.
 
 ### 3.14 Rechenfragen zum Regelwerk unzuverlässig ⏸
 

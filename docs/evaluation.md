@@ -164,7 +164,9 @@ python -m evaluation.evaluate --qa-pairs evaluation/qa_pairs.yaml --output evalu
 ```
 
 Zusätzlich gemessen wird `answer_contains`: wie oft die Antwort die Teilstrings aus
-`expected_answer_contains` enthält. Als Abnahme, nachdem die Suche stabil ist.
+`expected_answer_contains` enthält. Als Abnahme, nachdem die Suche stabil ist. Jede Frage im Bericht
+trägt ihre `id`, die **ganze** Antwort und die erwarteten Stichwörter (seit 14.10. — vorher nur die
+ersten 200 Zeichen, damit ließen sich Listenantworten nicht beurteilen).
 
 Beide Skripte und die Evaluation-Seite teilen sich die Treffer-Regel (`source_hit`), das Laden des
 Golden Sets und das Speichern der Berichte (`evaluation/evaluate_retrieval.py`). Berichte heißen
@@ -174,14 +176,15 @@ Der End-to-End-Lauf kann `expected_source_ids` nicht prüfen — `/query` liefer
 **Erster End-to-End-Lauf (14.10.)**, nach jina-Reranker, Regelkern und Eintrags-Slot: Answer Contains
 0,905 (248 von 274), Datei 0,993, Antwort Ø 6,8 s. Je Fragentyp: Lore (m) 96 %, kombiniert (k) 95 %,
 Regelbuch (p) 90 %, Entität + Regel (x) 88 %, Abenteuer (a) 87 %, Simulation (z) 82 %, Bilder (i) 70 %.
-Die 26 Fehlschläge sind von Hand gesichtet, aber nur grob — der Bericht speichert je Antwort nur die
-ersten 200 Zeichen, Listenfragen lassen sich damit nicht beurteilen. Drei Gruppen:
+Die 26 Fehlschläge sind von Hand gesichtet, aber nur grob — dieser Lauf speicherte je Antwort nur die
+ersten 200 Zeichen, Listenfragen ließen sich damit nicht beurteilen (seither behoben). Drei Gruppen:
 **Golden-Set-Stichwort veraltet oder zu eng** — die Antwort stimmt (p009 sagt „Zauberpunkte …
 Charakterentwicklung“ statt „Fähigkeitspunkte“, p010, a007, a012, a015); **echte Antwortfehler** —
 Aufzählungen unvollständig (p008 Klassen, p036/p037 Basis-Skills/-Zauber, p049, m056), Fakten falsch
 (k001 Langschwert „20 Gold“ statt 10 G, m048 Titel statt Deckname „Solmar“, p091); **Bilder** (i005–i007)
 — Bild-Chunks sind aus der Suche ausgeschlossen (Roadmap 2). Nebenbei gefunden: Das Regelbuch nennt für
-ein meisterliches Langschwert 40 Gold, nach seiner eigenen Tabelle (10 G × 5) wären es 50.
+ein meisterliches Langschwert 40 Gold, nach seiner eigenen Tabelle (10 G × 5) wären es 50
+(`07_gegenstaende.tex`, Zeile 1222 gegen 1190/1217).
 
 ---
 

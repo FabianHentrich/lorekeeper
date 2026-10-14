@@ -26,7 +26,9 @@ def evaluate(api_url: str, qa_pairs: list[dict]) -> dict:
     Sends each question as a POST request to `/query`, measuring latency and
     testing if the retrieved sources and generated answer match the expected
     values defined in the evaluation dataset. A failed request counts as a miss (it stays in the
-    denominator of both rates) and is listed with its error.
+    denominator of both rates) and is listed with its error. Each detail keeps the whole answer, the
+    question id and the expected keywords — a 200-character excerpt couldn't show why a list answer
+    failed (roadmap 3.15).
     """
     results = []
     hits = 0
@@ -49,7 +51,7 @@ def evaluate(api_url: str, qa_pairs: list[dict]) -> dict:
             resp.raise_for_status()
             data = resp.json()
         except Exception as e:
-            results.append({"question": question, "error": str(e)})
+            results.append({"id": pair.get("id", ""), "question": question, "error": str(e)})
             continue
 
         latency = (time.time() - start) * 1000
@@ -69,8 +71,10 @@ def evaluate(api_url: str, qa_pairs: list[dict]) -> dict:
             answer_matches += 1
 
         results.append({
+            "id": pair.get("id", ""),
             "question": question,
-            "answer": answer[:200],
+            "answer": answer,
+            "expected_answer_contains": expected_contains,
             "sources_retrieved": sources,
             "expected_sources": expected_sources,
             "hit": hit,
