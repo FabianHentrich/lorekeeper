@@ -83,12 +83,12 @@ pairs:
     notes: "Kampfregeln 'Varianten für die Initiativereihenfolge', zwei Varianten."
 
   - id: h009
-    question: "Welche fünf Pfade hat der Schattenorden?"
+    question: "Welche Pfade hat der Schattenorden?"
     source_type: markdown
     category: list
-    expected_sources: ["Organisationen/Schattenorden/Schattenorden.md"]
+    expected_sources: ["Organisationen/Schattenorden/Meister der Pfade.md"]
     expected_answer_contains: ["Nekromantie", "Chaosmagie", "Verbotene Runen", "Astrale Manipulation"]
-    notes: "Tabelle 'Die fünf Pfade' (Chaosmagie I und II zählen als ein Stichwort)."
+    notes: "Meister der Pfade.md, 'Pfad 1' bis 'Pfad 4'. Seit 14.10. ohne Pfad-Tabelle in Schattenorden.md (Nutzer; dort stand Chaosmagie als I und II, daher früher 'fünf Pfade')."
 
   - id: h010
     question: "Welche Abenteuer gehören zu Akt 2 der Söldner-Kampagne?"

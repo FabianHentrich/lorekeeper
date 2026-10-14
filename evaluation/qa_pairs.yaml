@@ -2047,7 +2047,7 @@ pairs:
     category: npc
     expected_sources: ["Organisationen/Schattenorden/Meister der Pfade.md"]
     expected_answer_contains: ["Kaelvorr", "Serynthia"]
-    notes: "INHALTLICHER WIDERSPRUCH: Meister der Pfade.md nennt Kaelvorr + Serynthia; Schattenorden.md nennt Elyndar Vaelis als Runen-Meister und Kaelvorr/Serynthia 'Pfad unklar'."
+    notes: "Meister der Pfade.md, 'Pfad 2: Verbotene Runen'. Bis 14.10. ein Widerspruch zur Pfad-Tabelle in Schattenorden.md (Elyndar Vaelis) — Nutzer: Kaelvorr + Serynthia gelten, Tabelle gelöscht."
 
   - id: m057
     question: "Was sind die Grundsätze des Schattenordens?"

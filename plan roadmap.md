@@ -116,9 +116,9 @@ Temperatur 0,3). Die 19 Fragen, die in **beiden** scheitern, mit ganzen Antworte
   „Kultpriester“ (Beutetabelle I-2); Nutzer 14.10.: „Kultpriester“ gilt — echter Antwortfehler. z009 ist ein bekannter
   Retrieval-Miss (3.10).
 
-- **m056 — Widerspruch im Vault (Nutzer entscheidet)**: `Schattenorden/Meister der Pfade.md` nennt Kaelvorr
-  Eryndrak und Serynthia Kaevellis als Meister der Verbotenen Runen, `Schattenorden.md` (Pfad-Tabelle)
-  Elyndar Vaelis und Kaelvorr/Serynthia „Pfad unklar“. Golden Set erwartet bisher Kaelvorr + Serynthia.
+- ~~m056 — Widerspruch im Vault~~ — Nutzer 14.10.: Kaelvorr + Serynthia gelten, Pfad-Tabelle aus
+  `Schattenorden.md` gelöscht; Vault inkrementell neu indiziert (1 Datei, 27 Chunks, Suche exakt), m056
+  live richtig. Holdout h009 zeigt jetzt auf `Meister der Pfade.md`.
 
 ### 3.14 Rechenfragen zum Regelwerk unzuverlässig ⏸
 
