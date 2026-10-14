@@ -190,7 +190,13 @@ Preisänderung vom 14.10. (schwere Waffe 15 G, Langschwert meisterlich 75 G) sti
 **Golden Set nach der Regelbuch-Änderung vom 14.10.** (Preise, magische Gegenstände): alle 139
 Regelbuch-Fragen gegen das alte und neue PDF geprüft (Stichwörter und Abschnitte vorhanden) und die
 Fragen zu geänderten Regeln von Hand. Angepasst: k001 (Langschwert 15 G statt 10 G), p095 (magische
-Gegenstände sind jetzt käuflich, „teurer“ statt „nicht“).
+Gegenstände sind jetzt käuflich, Stichwort „teu“ — trifft „teuer“ und „teurer“).
+
+**Zweiter Lauf (14.10., nach der Neu-Indizierung): Answer Contains 0,901** — gleich wie der erste
+(0,905), aber **15 Fragen kippen** (7 von Fehler zu richtig, 8 umgekehrt): Das LLM antwortet bei
+Temperatur 0,3 nicht gleich. Ein einzelner Lauf trennt ±3 % nicht vom Rauschen; Verbesserungen an
+den Fragen messen, die in **beiden** Läufen scheitern (19), oder mehrere Läufe vergleichen. Die 19 sind
+mit ganzen Antworten nachgefragt und sortiert (Roadmap 3.15).
 
 ---
 

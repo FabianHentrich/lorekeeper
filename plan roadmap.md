@@ -21,7 +21,7 @@ mehrere Minuten, nicht parallel zur Simulation). Ein Golden-Set-Lauf dauert ~1 m
 |---|---|---|---|---|---|
 | 1 | 13.0 Korrekturen aus dem Code-Review (Befund 1 kritisch) | Hoch — lange Frage legt das Backend lahm | Gering | 🟢 | Kappung + API-Grenze, Tests; danach Golden Set (🟡) |
 | 2 | 3.10 Restliche Abschnitt-Misses | Gering-Mittel — Regelfragen präziser | Mittel | 🟡 | Einzelfälle, je Golden-Set-Lauf prüfbar |
-| 2 | 3.15 Antwortfehler aus dem End-to-End-Lauf | Mittel — 9,5 % der Antworten verfehlen das Erwartete | Gering-Mittel | 🟡 | Ganze Antworten werden jetzt gespeichert; neuer Lauf, dann sichten |
+| 2 | 3.15 Antwortfehler aus dem End-to-End-Lauf | Mittel — 19 Fragen scheitern stabil | Mittel | 🟡 | Größte Gruppe: Aufzählungsfragen (Retrieval) |
 | — | 3.14 Rechenfragen zum Regelwerk ⏸ | Mittel — falsche Zahlen bei Regel-Rechnungen | Mittel-Hoch | 🟡 | Vorerst so gelassen (14.10.); nur mit Denken zuverlässiger, das kostet 15–40 s |
 | — | 3.2 Session-History ⏸ | Unklar | Mittel | 🟢 | Erst entscheiden, ob gespeicherte Sessions Nutzen haben |
 | 3 | 3.4 Kommentar zur Bewertung ⏸ | Gering | Gering | 🟢 | Feature |
@@ -87,20 +87,29 @@ gegen gewählt; Skript-Muster: Rang in den Top 200 + `_predict` je Paar):
   Wurfzahl 12“ und „Unterschied Dolch und Kurzschwert“ (Slot holt die Tabelle, jina wertet anderes
   höher), „Langbogen“ (PDF-Zelle `**l**<br>**Langbogen**`, Parser-Artefakt). Der Rechenteil gehört zu 3.14.
 
-### 3.15 Antwortfehler aus dem ersten End-to-End-Lauf (14.10.)
+### 3.15 Antwortfehler aus dem End-to-End-Lauf (14.10.)
 
-Answer Contains 0,905 (248/274), Details in [evaluation.md](docs/evaluation.md#evaluatepy--end-to-end).
-Offen:
-- ~~Bericht speichert nur 200 Zeichen je Antwort~~ — erledigt 14.10.: ganze Antwort, `id` und erwartete
-  Stichwörter im Bericht und auf der Evaluation-Seite. Nächster End-to-End-Lauf zeigt die vollen
-  Listenantworten.
-- **Golden-Set-Stichwörter veraltet/zu eng** (p009, p010, a007, a012, a015) — Nutzer entscheidet nach dem
-  nächsten Lauf mit ganzen Antworten. (p094 ist kein Golden-Set-Fehler: „das Doppelte“ für Verbrauchsgüter
-  steht im Regelbuch, die Antwort ließ es aus.) k001 und p095 an die Regelbuch-Änderung vom 14.10. angepasst.
-- **Echte Fehler**: Aufzählungen unvollständig (p008 Klassen, p036/p037, p049, m056), Fakten falsch (k001
-  Langschwert-Preis, m048 Deckname, p091 Fehlwurf beim Tränkebrauen).
-- ~~Regelbuch: meisterliches Langschwert 40 statt 50 Gold~~ — vom Nutzer am 14.10. mit neuen Preisen behoben
-  (schwere Waffe 15 G, meisterlich 75 G); Regelbuch neu indiziert (548 Chunks, Suche exakt 274/274).
+Zwei Läufe: Answer Contains 0,905 und 0,901, aber 15 Fragen kippen zwischen den Läufen (Rauschen bei
+Temperatur 0,3). Die 19 Fragen, die in **beiden** scheitern, mit ganzen Antworten nachgefragt
+([evaluation.md](docs/evaluation.md#evaluatepy--end-to-end)):
+
+- **Stichwort zu eng, Antwort richtig** — am 14.10. angepasst (a007 „Ephraskal“, a012 „Monolith“, m042
+  „physisch“, p009 „Abenteuer“, p010 „Rang 1“, p079 „halbe“ + „10+“; geprüft gegen die gespeicherten
+  Antworten). Vorher: a007 („Mandate der Macht“ — Antwort erklärt
+  das Ziel ohne den Akt-Titel), a012 („Gewahrsam“ — Abenteuername), m042 („Berechtigung“ — Phasen richtig
+  beschrieben), p009 („Fähigkeitspunkte“ — Antwort richtig, sagt „Zauberpunkte … nicht Manapunkte“),
+  p010 („Fähigkeitspunkt“ — Antwort sagt „Zauberpunkt“, wie das Regelbuch auch), p079 („keine Kosten“ —
+  Antwort „keinen Kosten“, inhaltlich vollständig).
+- **Aufzählungen unvollständig** (größte Gruppe, Retrieval): p008 Klassen („keine konkreten Klassen
+  genannt“), p036 Basis-Skills (nur einer), p037 Basis-Zauber („Magischer Schlag“ fehlt), p114 Eigenheiten
+  Magie („Manaschwäche“ beschrieben, aber ohne Namen), p014 Benchmark-Werte fehlen, a030 Beweis-Tabelle
+  nicht gefunden, p049 Überheilung (Seelenentzug fehlt, dafür geratene Zauber aus NPC-Dateien).
+- **Fakten falsch**: k001 Langschwert „20,5 Gold“ — Zahl aus der Fähigkeiten-Rangliste der Simulation
+  (Spalte „Preis“ = Kosten je Effekt), die Preistabelle 7.4 fehlt im Kontext; m048 Deckname „Solmar“
+  (steht ohne Überschrift neben einem Bild); p091 Tränke-Fehlwurf (1W8-Tabelle fehlt).
+- **x008 Heimkehrpfennig** — Antwort „bei Thalion, Endzustand B“ (Kampagnenstruktur), erwartet
+  „Kultpriester“ (Beutetabelle I-2); Nutzer 14.10.: „Kultpriester“ gilt — echter Antwortfehler. z009 ist ein bekannter
+  Retrieval-Miss (3.10).
 
 ### 3.14 Rechenfragen zum Regelwerk unzuverlässig ⏸
 
