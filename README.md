@@ -175,12 +175,13 @@ Voraussetzungen: Windows, Python 3.11+ (`winget install Python.Python.3.12`),
    schreiben (Vorlage `config/sources_example.yaml`). Alle Einstellungen:
    [docs/configuration.md](docs/configuration.md).
 
-4. **Modelle vorab laden** *(empfohlen — sonst lädt der erste Start ~1,7 GB herunter)*
+4. **Modelle vorab laden** *(nötig — LoreKeeper lädt offline aus dem Cache, ~2,8 GB)*
    ```powershell
    python -c "from sentence_transformers import SentenceTransformer; from huggingface_hub import hf_hub_download as d; SentenceTransformer('intfloat/multilingual-e5-base'); [d('jinaai/jina-reranker-v2-base-multilingual', f) for f in ('tokenizer.json', 'onnx/model_fp16.onnx', 'onnx/model.onnx')]; print('Fertig.')"
    ```
    Lädt Embedding-Modell und Reranker (GPU-Datei fp16, CPU-Rückfall fp32). Alles liegt danach in
-   `~/.cache/huggingface/hub/`.
+   `~/.cache/huggingface/hub/`. **Pflicht**: LoreKeeper selbst lädt seit 14.10. nur aus diesem Cache
+   (`HF_HUB_OFFLINE=1`, siehe [docs/configuration.md](docs/configuration.md#umgebungsvariablen)).
 
 5. **Backend und UI starten**
    ```powershell

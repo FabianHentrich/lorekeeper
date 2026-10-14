@@ -132,10 +132,11 @@ qa: |
 
 #### Regelkern
 
-Ein fester Block mit 14 Stichpunkten zum Regelwerk, verdichtet aus dem Regelbuch (Kapitel
+Ein fester Block mit 15 Stichpunkten zum Regelwerk, verdichtet aus dem Regelbuch (Kapitel
 Grundregeln, Kampfregeln, Gegenstände, Ressourcen): Probe und Würfel je Rang, Ass-Regel, Angriff,
 kritischer Treffer, Waffenkategorien, Qualität, Schadensreihenfolge SP → RP → LP, Rüstungswerte,
-Schadenstypen, magische Waffen, Zug, Statuseffekte, Lesart der Simulationsberichte. Die
+Ressourcen gegen Punkte, Schadenstypen, magische Waffen, Zug, Statuseffekte, Lesart der
+Simulationsberichte. Die
 Einleitung des Blocks sagt dem Modell, nur die zur Frage passenden Punkte zu nutzen und ihn bei
 reinen Lore-Fragen nicht zu erwähnen; konkrete Werte aus den Quellen haben Vorrang.
 
@@ -176,6 +177,17 @@ Zwei Formulierungen kamen aus der Messung: „bei jedem Würfel einschließlich 
 erneut werfen)“ — ohne das Beispiel meinte das Modell, beim W4 gelte die Ass-Regel nicht; „den
 Regelkern nie als Ganzes wiedergeben“ — sonst schrieb es bei der Würfelsystem-Frage alle 14 Punkte
 ab (17 s). Verworfen: „waffenlos“ als eigener Stichpunkt (Dolch weiter 0/3).
+
+**Ressourcen vs. Punkte** (ergänzt 14.10.): Mit jina landet „5.1 Fähigkeitspunkte“ bei „Was sind
+Zauberpunkte und wie erhält man sie zurück?“ (Golden Set p009) nicht mehr im Kontext, dafür die
+Ressourcen-Chunks (AP/MP, LP, RP) — die Antwort hielt Zauberpunkte für eine verbrauchte, in der Ruhe
+regenerierte Ressource. Der Stichpunkt trennt Verbrauchsressourcen (AP, MP, LP, RP, SP) von
+Entwicklungspunkten und sagt ausdrücklich „Zauberpunkte sind keine Manapunkte: Zauber kosten MP, nie
+Zauberpunkte“. Live-jina-Chunks, je 3 Läufe, richtig vorher → nachher: Zauberpunkte 0/3 → 3/3;
+Manapunkte zurückholen 3/3 → 3/3, Talentpunkte 3/3 → 3/3 (keine Verschlechterung). Ohne den letzten
+Satz nur halb: „nicht regeneriert, pro Abenteuer“ richtig, aber weiter „werden verbraucht“ (3/3).
+Unverändert falsch (vorher wie nachher 0/3): „Wie viele Aktionspunkte habe ich?“ → „50 AP“ — die 50
+sind ein gemeinsamer Pool für AP und MP.
 
 **Grenzen**: Regeln *anwenden und rechnen* bleibt ohne Denken unzuverlässig (Roadmap 3.14, am 14.10.
 so gelassen). Beim Dolch fehlt zusätzlich die Waffentabelle im Kontext — die Frage holt den Abschnitt

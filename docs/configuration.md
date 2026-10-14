@@ -353,5 +353,16 @@ unavailable` im Log.
 
 Jeder andere Schlüssel geht nach demselben Muster (`ABSCHNITT__UNTERSCHLÜSSEL`).
 
+**Hugging Face** (nur als echte Umgebungsvariable — der Wert in `.env` erreicht die Modell-Bibliotheken
+nicht, weil das Backend `.env` nur in die Einstellungen liest):
+
+| Variable | Default | Wirkung |
+|----------|---------|---------|
+| `HF_HUB_OFFLINE` | `1` (gesetzt in `src/__init__.py`, seit 14.10.) | Modelle (Embedding, Reranker) nur aus dem lokalen Cache `~/.cache/huggingface/hub/`, keine Anfrage an Hugging Face beim Start. `0` erlaubt Downloads — nötig für ein neues oder geändertes `embeddings.model`/`reranking.model`, siehe [operations.md](operations.md#modelle-fehlen-beim-ersten-start) |
+
+Warum offline: Ohne die Variable fragt jeder Start bei Hugging Face nach neuen Modellversionen; ist
+der Hub langsam oder antwortet mit 429/500, kosten die Wiederholungen Startzeit, obwohl alle Modelle
+im Cache liegen. Gilt für Backend, Ingestion- und Eval-CLI und die Tests (alle importieren `src`).
+
 **Ollama** (Benutzer-Umgebungsvariablen von Windows): `OLLAMA_CONTEXT_LENGTH=16384`,
 `OLLAMA_KEEP_ALIVE=1h`, ggf. `OLLAMA_MODELS` — siehe `llm.ollama`.

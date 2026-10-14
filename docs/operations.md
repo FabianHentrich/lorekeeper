@@ -198,10 +198,23 @@ Fehler, statt still alle Dateien für neu zu halten und alte Chunks liegen zu la
 
 ### Modelle fehlen beim ersten Start
 
-Beim ersten Start lädt LoreKeeper `intfloat/multilingual-e5-base` (~1,1 GB) und den Reranker
-`jina-reranker-v2-base-multilingual` von Hugging Face — auf der GPU `onnx/model_fp16.onnx`
-(~560 MB); den CPU-Export `onnx/model.onnx` (~1,1 GB) erst beim ersten CPU-Rückfall. Danach liegt alles in
-`~/.cache/huggingface/`. Vorab laden: README → Schnellstart, Schritt 4.
+LoreKeeper lädt Modelle seit 14.10. nur aus dem lokalen Cache (`HF_HUB_OFFLINE=1`, gesetzt in
+`src/__init__.py`; [configuration.md](configuration.md#umgebungsvariablen)). Gebraucht werden
+`intfloat/multilingual-e5-base` (~1,1 GB) und vom Reranker `jina-reranker-v2-base-multilingual`
+`tokenizer.json`, `onnx/model_fp16.onnx` (~560 MB, GPU) und `onnx/model.onnx` (~1,1 GB, CPU-Rückfall).
+Fehlt das Embedding-Modell oder `onnx/model.onnx` beim CPU-Rückfall, endet das mit
+`LocalEntryNotFoundError` („… cannot find the requested files in the local cache …“); fehlt nur die
+GPU-Datei, läuft der Reranker mit Warnung auf der CPU.
+
+**Beheben**: einmal den Vorab-Download aus README → Schnellstart, Schritt 4 ausführen (der Befehl
+importiert `src` nicht und darf deshalb herunterladen), oder das Backend einmal mit erlaubtem Download
+starten:
+
+```powershell
+$env:HF_HUB_OFFLINE = "0"; .\start.ps1     # lädt fehlende Modelle; danach wieder normal starten
+```
+
+Das gilt auch nach einem Wechsel von `embeddings.model` oder `reranking.model`.
 
 ### Reranker läuft auf der CPU (DirectML-Warnung)
 

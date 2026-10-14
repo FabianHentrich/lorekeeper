@@ -32,13 +32,11 @@ mehrere Minuten, nicht parallel zur Simulation). Ein Golden-Set-Lauf dauert ~1 m
 Entscheidungshilfe (Spieler bekommen bei 47 von 124 reinen Regelfragen Ø 2,3 von 8 Chunks daraus).
 `Spielleiter-Tools/potenzielle_anpassungen.md` (Änderungsvorschläge/Errata) wird nicht mehr
 indiziert (`exclude_patterns` in `sources.yaml`, 14 Chunks entfernt) — Vorschläge sind keine
-geltenden Regeln.
+geltenden Regeln. `HF_HUB_OFFLINE=1` ist gesetzt (in `src/__init__.py`, weil `.env` die
+Modell-Bibliotheken nicht erreicht): Modelle nur aus dem lokalen Cache, kein Hub-Zugriff beim Start;
+Downloads mit `HF_HUB_OFFLINE=0` ([operations.md](docs/operations.md#modelle-fehlen-beim-ersten-start)).
 
-**Zu entscheiden (Nutzer)**:
-- `HF_HUB_OFFLINE=1` (`.env`/`start.ps1`)? Jeder Modell-Start fragt Hugging Face; bei 429/500 von
-  dort kosten die Wiederholungen Startzeit, alle Modelle liegen ohnehin im lokalen Cache.
-
-**Offen am Gaming-PC (Nutzer)**: DHCP-Reservierung für `192.168.178.34` im Router. Die alte
+**Offen am Gaming-PC (Nutzer)**: (DHCP-Reservierung für `192.168.178.34` eingestellt, 14.10.) Die alte
 Autostart-Aufgabe „LoreKeeper Server“ war am 13.10. ohne Admin-Rechte nicht mehr zu sehen — einmal
 in einer Admin-PowerShell bestätigen (`Get-ScheduledTask -TaskName "LoreKeeper*"`). Nebenbei
 gesehen: Inbound-Allow-Regeln für `python.exe` im Profil „Öffentlich“ gehören zu anderen
@@ -63,9 +61,19 @@ Tabellen-Chunks, Reranker jina-reranker-v2; verworfen: Hybrid-Suche, Tabellen al
 
 **Offen, je mit Diagnose** (Rang des richtigen Chunks in der Vektorsuche, Reranker-Score richtig
 gegen gewählt; Skript-Muster: Rang in den Top 200 + `_predict` je Paar):
-- **Seit jina verloren** — Zauberpunkte (p009, 5.1: „2.6 Skill- und Zauberpunkte“ und „5.3
-  Basis-Zauber“ vorn), Schwierigkeit einer Begegnung (z001, Begegnungsbaukasten statt
-  `llm_report.md`). Noch nicht diagnostiziert.
+- **Seit jina verloren** (diagnostiziert 14.10., Kandidaten mit jina und mMiniLMv2 nachgerechnet):
+  - **p009 Zauberpunkte — Antwort war falsch, über den Regelkern behoben (14.10.).** jina setzt „5.1
+    Fähigkeitspunkte“ auf Rang 15 von 20 (mMiniLMv2: 7) und füllt den Kontext mit Ressourcen-Chunks
+    (2.5 AP/MP, LP, RP); die Antwort hielt Zauberpunkte für verbrauchte, regenerierte Ressourcen.
+    Neuer Regelkern-Stichpunkt „Ressourcen vs. Punkte“: Antwort 0/3 → 3/3, MP-/Talentfragen
+    unverändert richtig ([prompts.md](docs/prompts.md#regelkern)). Im Golden Set (nur Retrieval) bleibt
+    p009 ein Abschnitt-Miss — der Chunk nennt „Zauberpunkte“ nur in Klammern.
+  - **z001 Begegnungsschwierigkeit — Antwort trotzdem richtig** (leicht < 15 % … tödlich ≥ 50 %, aus
+    Begegnungsbaukasten/Bericht). jina setzt Abenteuer-Szenen („Gefährlicher Wald“) nach vorn; die
+    Berichts-Chunks sagen weder „Schwierigkeit“ noch „Simulation“, und „4. Die Einstufung“ steht in
+    einem anderen Chunk als die Tabelle mit den Schwellen.
+- **AP-Pool** (14.10., nebenbei gefunden): „Wie viele Aktionspunkte habe ich?“ → „50 AP“ (0/3, mit
+  und ohne Regelkern) — die 50 sind ein gemeinsamer Pool für AP und MP (2.5).
 - **Entität + Regel** — x004 (Phönixfeder bei Thalion: nur Thalions Kampfwerte).
 - **Simulation** — z003, z006, z009, z012 (Fragen zu Berichtsabschnitten).
 - **Name in fremder Identität** — „Wer ist Arkenfeld?“ (live 13.10.): 12 Chunks von „Bargrun
@@ -175,7 +183,7 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 | 3.10 (Teil) | Reranker `jina-reranker-v2-base-multilingual` (fp16 auf der GPU, fp32-ONNX als CPU-Rückfall statt torch): Abschnitt 139 → 142/149, Platz-1-Treffer 110 → 121, Datei unverändert 272/274; bge-m3, MiniLM en-de, gte verworfen; VRAM neben qwen3:14b 14,4 statt 14,6 GB, LLM-Tempo gleich | 14.10. | `docs/embedding-strategy.md`, `docs/configuration.md` |
 | 3.11 | Spieler-/Spielleiter-Modus inkl. Sicherheitstests (deterministisch, live, Spy-Test) | 11./12.10. | `ARCHITECTURE.md` 4.8, `docs/testing.md` |
 | 3.12 | Folgefragen ohne Inhaltswort („Fass das kürzer zusammen“, „Gib mir ein Beispiel“) gehen durch Condense — Suche und Quellenliste passen zum Thema; Wortliste nur ergänzend (unbekanntes Wort = Inhaltswort), Unit-Tests in beide Richtungen, mutationsgeprüft. Live 13.10.: „Fass das kürzer zusammen“ → „Fasse die Beschreibung von Arkenfeld kurz zusammen.“ (1,2 s), Quellen `Orte/Arkenfeld.md` statt Venthir/Regelbuch | 13.10. | `docs/prompts.md` |
-| 3.13 | Regelkern im `qa`-Prompt (14 Stichpunkte zum Regelwerk, direkt vor der Frage): mit mMiniLMv2 Rang-1-Wurfzahl und Rüstung je 0/3 → 3/3, Lore-Fragen unverändert; im Systemprompt wirkungslos. Live mit jina: Rüstung 3/3, Rang-1-Wurfzahl wieder 0/3 (Lead „höchstens 13“). Offen: Rang 1 mit jina, Dolch, Schattenklinge (3.10) | 14.10. | `docs/prompts.md` |
+| 3.13 | Regelkern im `qa`-Prompt (15 Stichpunkte zum Regelwerk, direkt vor der Frage; „Ressourcen vs. Punkte“ ergänzt: p009 Zauberpunkte 0/3 → 3/3): mit mMiniLMv2 Rang-1-Wurfzahl und Rüstung je 0/3 → 3/3, Lore-Fragen unverändert; im Systemprompt wirkungslos. Live mit jina: Rüstung 3/3, Rang-1-Wurfzahl wieder 0/3 (Lead „höchstens 13“). Offen: Rang 1 mit jina, Dolch, Schattenklinge (3.10) | 14.10. | `docs/prompts.md` |
 | 4.1 | Heimnetz-Betrieb (`start.ps1 -Server`, Firewall-Skript, kein Autostart) | 11.10. | `docs/operations.md` |
 | 4.2 (Teil) | Spieler-Filter im Backend erzwungen (`role`) | 12.10. | `ARCHITECTURE.md` 4.8 |
 | 4.3 | Sauberes Beenden: `stop.ps1` (Strg+C an beide Fenster, nach 20 s hart, samt Ollama; Sperre während Ingest) und **⏻ LoreKeeper beenden** in der Sidebar (Admin). Gemessen: Strg+C ist in allen Lagen sauber (Backend 1,3–1,6 s, UI 0,2 s, auch bei Stream/Eval) — 7 von 10 Starts endeten durch Fenster-Schließen ohne Shutdown; die verzögerte Strg+C-Reaktion war nicht reproduzierbar (Verdacht: markierter Text im Konsolenfenster hält den Prozess an) | 13.10. | `docs/operations.md`, `docs/ui-ux.md` |
