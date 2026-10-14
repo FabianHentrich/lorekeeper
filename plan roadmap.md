@@ -19,9 +19,8 @@ mehrere Minuten, nicht parallel zur Simulation). Ein Golden-Set-Lauf dauert ~1 m
 
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 1 | 13.0 Korrekturen aus dem Code-Review (Befund 1 kritisch) | Hoch — lange Frage legt das Backend lahm | Gering | 🟢 | Kappung + API-Grenze, Tests; danach Golden Set (🟡) |
-| 2 | 3.10 Restliche Abschnitt-Misses | Gering-Mittel — Regelfragen präziser | Mittel | 🟡 | Einzelfälle, je Golden-Set-Lauf prüfbar |
-| 2 | 3.15 Antwortfehler aus dem End-to-End-Lauf | Gering-Mittel — Einzelfälle | Mittel | 🟡 | Listen-Tuning pausiert (Holdout 9/10); Fakten-Fehler einzeln |
+| 1 | 3.10 Restliche Abschnitt-Misses | Gering-Mittel — Regelfragen präziser | Mittel | 🟡 | Einzelfälle, je Golden-Set-Lauf prüfbar |
+| — | 3.15 Antwortfehler aus dem End-to-End-Lauf | Gering — Einzelfälle | — | 🟡 | Feintuning beendet (14.10.); nur bei Anlass im Spiel |
 | — | 3.14 Rechenfragen zum Regelwerk ⏸ | Mittel — falsche Zahlen bei Regel-Rechnungen | Mittel-Hoch | 🟡 | Vorerst so gelassen (14.10.); nur mit Denken zuverlässiger, das kostet 15–40 s |
 | — | 3.2 Session-History ⏸ | Unklar | Mittel | 🟢 | Erst entscheiden, ob gespeicherte Sessions Nutzen haben |
 | 3 | 3.4 Kommentar zur Bewertung ⏸ | Gering | Gering | 🟢 | Feature |
@@ -44,6 +43,11 @@ in einer Admin-PowerShell bestätigen (`Get-ScheduledTask -TaskName "LoreKeeper*
 gesehen: Inbound-Allow-Regeln für `python.exe` im Profil „Öffentlich“ gehören zu anderen
 Python-Installationen (alte LoreKeeper-Kopie unter OneDrive, PortraitForge, globales Python) — ggf.
 selbst aufräumen.
+
+**Offen im Vault (Nutzer)**: `Organisationen/Schattenorden/Schattenorden.md` nennt noch „fünf
+Magiepfade“ (Einleitung, Grundsatz 6, Hierarchie-Tabelle), `Meister der Pfade.md` hat vier Pfade — das
+LLM antwortet „fünf Pfade“ und zählt vier auf. Optional: Simulationsberichte mit fragenahen
+Überschriften und „Kosten je Effekt“ statt „Preis“ (3.15).
 
 **Offen im Browser** (Handprüfung): **⏻ LoreKeeper beenden** einmal klicken — `logs/stop.log` muss
 nach Sekunden mit „stopped … (clean)“ enden (der korrigierte Startweg wurde nur mit einem
@@ -88,6 +92,18 @@ gegen gewählt; Skript-Muster: Rang in den Top 200 + `_predict` je Paar):
   höher), „Langbogen“ (PDF-Zelle `**l**<br>**Langbogen**`, Parser-Artefakt). Der Rechenteil gehört zu 3.14.
 
 ### 3.15 Antwortfehler aus dem End-to-End-Lauf (14.10.)
+
+**Bewertung 14.10. — Feintuning beendet, nur noch Einzelfälle.** Stand: Retrieval Datei 272/274,
+Abschnitt 143/149 (übrige Misses: p009 und z001 mit richtiger Antwort, z003/z006/z009/z012
+Simulationsberichte); Antworten ~90 % in zwei Läufen; Holdout-Listen 9/10. Gründe: (1) Zwischen zwei
+gleichen Läufen kippen ~15 Fragen — größer als jeder Effekt, den ein Einzelfix noch bringen kann, und
+nur über mehrere 30-Minuten-Läufe messbar; (2) die übrigen Fehler haben je eine eigene Ursache, sie
+einzeln zu beheben hieße auf das Golden Set zu tunen; (3) der Holdout zeigt, dass der allgemeine Fall
+funktioniert. Einzige kleine Gruppe: **Simulationsberichte** (4 Retrieval-Misses, dazu k001 — „Preis“ =
+Kosten je Effekt wird als Kaufpreis gelesen); der bessere Hebel liegt in den Berichten selbst
+(Überschriften wie gefragt wird, „Kosten je Effekt“ statt „Preis“), nicht im Retriever.
+**Vorgehen künftig**: nach größeren Inhaltsänderungen (Regelbuch, Vault) ein End-to-End-Lauf + Holdout
+als Regressionsprüfung, kein Tuning; Einzelfälle unten nur bei Anlass im Spiel.
 
 Zwei Läufe: Answer Contains 0,905 und 0,901, aber 15 Fragen kippen zwischen den Läufen (Rauschen bei
 Temperatur 0,3). Die 19 Fragen, die in **beiden** scheitern, mit ganzen Antworten nachgefragt
@@ -143,26 +159,6 @@ Antworten (Token-Budget aufgebraucht), Schattenklinge 3/3 „X nicht angegeben�
 (braucht eine Erkennung solcher Fragen und mehr `max_tokens`, Antworten 15–40 s); größeres Modell;
 Waffentabelle für Waffenfragen zuverlässig in den Kontext (3.10). Vorher eine feste Liste von
 Rechenfragen mit Sollwerten anlegen, damit Varianten über mehrere Läufe vergleichbar sind.
-
-### 13.0 Code-Review seit 194be1b — Korrekturplan (14.10.)
-
-Review der vier Commits (jina, Regelkern, Batches, Eintrags-Slot) durch den Review-Agenten; Befund 1
-selbst nachgestellt (eigener Prozess, In-Memory-Chroma).
-
-| # | Befund | Schwere | Status | Korrektur |
-|---|---|---|---|---|
-| 1 | Lange Frage legt das Backend lahm: der Eintrags-Slot macht aus jedem Wort und jeder 2–3-Wort-Folge eine `$contains`-Klausel, ohne Obergrenze. 4.000 Zeichen (1.081 Namen) → `InternalError: Expression tree is too large` (500), 12.000 Zeichen → Prozess stirbt ohne Log (Stack Overflow) — im Heimnetz-Modus für jeden Spieler auslösbar | **Kritisch** | nachgestellt | Namen kappen (z. B. 60) + `max_length` für `question` in `QueryRequest`/`RetrievalPreviewRequest` (Grenze an der API, 422), Test mit sehr langer Frage; Golden Set einmal nachmessen |
-| 2 | Kosten der Namenssuche ∝ Namen × Chunks (je Klausel ein Durchlauf über die Collection): bei 20k Chunks ~1 s für eine normale Frage (synthetisch gemessen) | Mittel | gemessen (synthetisch) | Kappung aus 1 begrenzt es; in `embedding-strategy.md` festhalten, bei wachsendem Index neu messen |
-| 3 | Eintrags-Treffer umgehen `score_threshold` — gewollt (sie werden gefunden, weil ihr Vektor schwach ist), aber undokumentiert | Gering | Code gelesen | Satz in der Doku + Kommentar, Test mit Score unter der Schwelle |
-| 4 | Veraltete Docstrings: `retriever.py` (Modul, `retrieve()` — Eintrags-Slot und Stufe `entry` fehlen), Lock-Kommentar in `onnx_reranker.py` („GPU-Queue“, gilt jetzt auch für die CPU) | Gering | Code gelesen | nachziehen |
-| 5 | Doku-Kleinigkeiten: `onnx_file` fehlt in der UI-Tabelle, drei verschiedene Rerank-Zeiten ohne Kontext (26/90/110 ms), „7 Tests rot“ (Agent maß 5 + 1) | Gering | Code gelesen | angleichen |
-| 6 | Regelkern geht an jede Rolle — heute unkritisch (Regelbuch spielerfreigegeben), ein künftiger Spielleiter-Inhalt dort würde aber ungeprüft an Spieler gehen | Info | — | Satz in `prompts.md`: nur spielerfreigegebene Inhalte |
-
-Als Fehlalarm ausgeschlossen: Sonderzeichen in `$contains` (keine Injektion, `%`/`_` keine Platzhalter),
-Lock pro Batch, GPU→CPU-Rückfall-Race, Reihenfolge von `HF_HUB_OFFLINE`, alter Wert `backend: torch`.
-
-Dazu aus dem Performance-Review: `start.ps1` hielt `TimeWait`-Reste geschlossener Verbindungen für einen
-laufenden Server und startete das Backend nicht — behoben (nur `-State Listen`, wie `stop.ps1`).
 
 ### 2 Bilder im Chat ⏸
 
@@ -239,6 +235,7 @@ Idee wenn man es nochmal aus der Quelle nachlesen will kann man das einfach in d
 | 3.10 (Teil) | Tabellen-Chunks: Zeilennamen im Embed-Text („Einträge: Dolch, …“) — Langschwert/Armbrust gelöst, Abschnitt 137 → 139/149, nichts verloren (Vektor-Rang 22 → 14, 47 → 2); Fließtext-Variante verworfen; Full-Reindex, Suche exakt | 13.10. | `docs/embedding-strategy.md` |
 | 3.10 (Teil) | Reranker `jina-reranker-v2-base-multilingual` (fp16 auf der GPU, fp32-ONNX als CPU-Rückfall statt torch): Abschnitt 139 → 142/149, Platz-1-Treffer 110 → 121, Datei unverändert 272/274; bge-m3, MiniLM en-de, gte verworfen; VRAM neben qwen3:14b 14,4 statt 14,6 GB, LLM-Tempo gleich | 14.10. | `docs/embedding-strategy.md`, `docs/configuration.md` |
 | 3.10 (Teil) | Eintrags-Slot: nennt die Frage eine Tabellenzeile („Dolch-Angriff“, „Hammer“, „Glücksstein“), kommt die Tabelle per Namenssuche in den Rerank-Pool (Filter der Anfrage, max. 3, kein reservierter Platz). Golden Set Abschnitt 142 → 143/149 (+x004), nichts verloren; Tabellenfragen 5 → 8/11; ~75 ms. Verworfen vorher: `top_k` 25–40 (verliert m062/k006/z001), Zeilen-Chunks (142 → 141, Listenfragen 9/9 → 2/9). Spy-Test + Köder-Tabelle, mutationsgeprüft | 14.10. | `docs/embedding-strategy.md`, `docs/configuration.md` |
+| 13.0 | Code-Review seit 194be1b (jina, Regelkern, Batches, Eintrags-Slot) + Korrekturen: **kritisch** — eine lange Frage machte den Eintrags-Slot zu einer `$contains`-Abfrage ohne Grenze (4.000 Zeichen → 500, 12.000 → Backend-Prozess stirbt ohne Log, im Heimnetz für jeden Spieler auslösbar); jetzt höchstens 60 Namen (Golden Set braucht ≤ 48, nichts ändert sich) und `question` ≤ 4.000 Zeichen an `/query`, `/query/stream`, `/eval/preview` (422) sowie im Chat-Feld — beides mutationsgeprüft, 50.000 Zeichen laufen durch. Dazu: Kostenmodell Namen × Chunks dokumentiert, Schwellen-Umgehung des Slots dokumentiert und per Test festgehalten, Docstrings/Kommentare nachgezogen, Rerank-Zeiten mit Kontext, Regelkern nur mit spielerfreigegebenem Inhalt. Aus dem Performance-Review: `start.ps1` hielt `TimeWait`-Reste für einen laufenden Server und startete das Backend nicht (jetzt `-State Listen`). Performance 14.10.: Retrieval p50 278 ms / p95 364 ms (Baseline 784/1.156), erster Token ~2 s (Regelkern +0,56 s), Antwort p50 7,6 s je nach Länge | 14.10. | `docs/embedding-strategy.md`, `docs/prompts.md`, `docs/provider-strategy.md`, `ARCHITECTURE.md` |
 | 3.11 | Spieler-/Spielleiter-Modus inkl. Sicherheitstests (deterministisch, live, Spy-Test) | 11./12.10. | `ARCHITECTURE.md` 4.8, `docs/testing.md` |
 | 3.12 | Folgefragen ohne Inhaltswort („Fass das kürzer zusammen“, „Gib mir ein Beispiel“) gehen durch Condense — Suche und Quellenliste passen zum Thema; Wortliste nur ergänzend (unbekanntes Wort = Inhaltswort), Unit-Tests in beide Richtungen, mutationsgeprüft. Live 13.10.: „Fass das kürzer zusammen“ → „Fasse die Beschreibung von Arkenfeld kurz zusammen.“ (1,2 s), Quellen `Orte/Arkenfeld.md` statt Venthir/Regelbuch | 13.10. | `docs/prompts.md` |
 | 3.13 | Regelkern im `qa`-Prompt (15 Stichpunkte zum Regelwerk, direkt vor der Frage; „Ressourcen vs. Punkte“ ergänzt: p009 Zauberpunkte 0/3 → 3/3): mit mMiniLMv2 Rang-1-Wurfzahl und Rüstung je 0/3 → 3/3, Lore-Fragen unverändert; im Systemprompt wirkungslos. Live mit jina: Rüstung 3/3, Rang-1-Wurfzahl wieder 0/3 (Lead „höchstens 13“). Offen: Rang 1 mit jina, Dolch, Schattenklinge (3.10) | 14.10. | `docs/prompts.md` |
