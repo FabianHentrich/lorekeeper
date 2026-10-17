@@ -6,8 +6,9 @@ done event ties follow-ups to the backend session. Sidebar data comes from one c
 request. Admin pages sit behind ui/admin_gate.py. Details: docs/ui-ux.md.
 """
 import json
+import re
 import uuid
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from urllib.parse import quote
 
 import requests
@@ -32,12 +33,17 @@ def _chunk_text(c: dict) -> str:
 _MAX_ANSWER_IMAGES = 6
 
 
-def _answer_images(sources: list[dict]) -> list[str]:
+def _answer_images(sources: list[dict], text: str) -> list[str]:
     """Images the notes behind this answer embed (roadmap 2), in source order, each once, at most
-    ``_MAX_ANSWER_IMAGES``. The paths are on this machine — the UI runs where the vault is, and Streamlit
+    ``_MAX_ANSWER_IMAGES``. Only notes whose name occurs in ``text`` (question + answer) count: a
+    weakly matched source showed a stranger's portrait under the answer (15.10., "Lady Lilith" got
+    Liora Veylan's). The paths are on this machine — the UI runs where the vault is, and Streamlit
     sends the image itself to the browser, also for players in the LAN. Missing files are skipped."""
     seen: list[str] = []
     for src in sources:
+        name = PureWindowsPath(src.get("file", "")).stem   # "file" is vault-relative, backslashes
+        if not name or not re.search(rf"(?<!\w){re.escape(name)}(?!\w)", text, re.IGNORECASE):
+            continue
         for path in src.get("images", []):
             if path not in seen and Path(path).is_file():
                 seen.append(path)
@@ -453,13 +459,17 @@ def _send_feedback(msg: dict, comment_only: bool = False):
 
 def _render_feedback(msg: dict):
     """Thumbs under an answer — only answers with an id (not errors, not older messages). Once rated,
-    an optional comment field appears; Enter saves it (roadmap 3.4)."""
+    an optional comment field appears; Enter or the button saves it (roadmap 3.4). The field sits in
+    a form: a bare text_input commits on every focus loss, which saved half-written comments."""
     if msg.get("id"):
         st.feedback("thumbs", key=f"fb_{msg['id']}", on_change=_send_feedback, args=(msg,))
         if st.session_state.get(f"fb_{msg['id']}") is not None:
-            st.text_input("Kommentar zur Bewertung", key=f"fbc_{msg['id']}", max_chars=_MAX_COMMENT_CHARS,
-                          placeholder="Optional: Was war falsch oder gut? (Enter speichert)",
-                          label_visibility="collapsed", on_change=_send_feedback, args=(msg, True))
+            with st.form(key=f"fbf_{msg['id']}", border=False, enter_to_submit=True):
+                st.text_input("Kommentar zur Bewertung", key=f"fbc_{msg['id']}", max_chars=_MAX_COMMENT_CHARS,
+                              placeholder="Optional: Was war falsch oder gut? (Enter speichert)",
+                              label_visibility="collapsed")
+                st.form_submit_button("Kommentar speichern", key=f"fbs_{msg['id']}",
+                                      on_click=_send_feedback, args=(msg, True))
 
 
 def _render_extras(msg: dict):
@@ -470,7 +480,7 @@ def _render_extras(msg: dict):
         st.caption(_fmt_usage(msg["usage"]))
     if msg.get("timings"):
         st.caption(_fmt_timings(msg["timings"]))
-    images = _answer_images(msg.get("sources", []))
+    images = _answer_images(msg.get("sources", []), f"{msg.get('question', '')}\n{msg.get('content', '')}")
     if images:
         with st.expander(f"🖼️ Bilder ({len(images)})"):
             st.image(images, caption=[Path(p).stem for p in images], width=300)

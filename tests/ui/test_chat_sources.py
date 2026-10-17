@@ -50,14 +50,20 @@ def test_each_chunk_can_be_read_under_its_source(fake_backend, monkeypatch):
 
 
 def test_images_of_the_sources_show_under_the_answer(fake_backend, monkeypatch, tmp_path):
-    """Roadmap 2: each existing image once, in source order; a missing file is skipped."""
+    """Roadmap 2: each existing image once, in source order; a missing file is skipped, and only notes
+    named in the question or answer count."""
     import base64
     png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
     karte, malek = tmp_path / "Karte.png", tmp_path / "Malek.png"
     karte.write_bytes(png)
     malek.write_bytes(png)
+    liora = tmp_path / "Liora Veylan_1.png"
+    liora.write_bytes(png)
+    # 15.10.: a note named neither in the question nor the answer brings no images
     with_images = [{**SOURCES[0], "images": [str(karte), str(tmp_path / "fehlt.png")]},
-                   {**SOURCES[1], "images": [str(karte), str(malek)]}, *SOURCES[2:]]
+                   {**SOURCES[1], "images": [str(karte), str(malek)]},
+                   {**SOURCES[1], "file": r"Organisationen\Chronos\Liora Veylan.md", "images": [str(liora)]},
+                   *SOURCES[2:]]
     monkeypatch.setattr(conftest, "_STREAM_EVENTS",
                         [*conftest._STREAM_EVENTS[:-1], {**conftest._STREAM_EVENTS[-1], "sources": with_images}])
     at = open_page("chat").run()

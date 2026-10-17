@@ -50,12 +50,24 @@ def test_comment_field_appears_after_rating_and_is_sent_with_it(chat):
     assert f"fbc_{msg_id}" not in [t.key for t in at.text_input]   # no field before a rating
 
     at.feedback(key=f"fb_{msg_id}").set_value(0).run()
-    at.text_input(key=f"fbc_{msg_id}").input("  Quelle fehlte  ").run()
+    at.text_input(key=f"fbc_{msg_id}").input("  Quelle fehlte  ")
+    at.button(key=f"fbs_{msg_id}").click().run()
     at.feedback(key=f"fb_{msg_id}").set_value(1).run()
 
     bodies = chat.bodies["POST /feedback"]
     assert [(b["rating"], b["comment"]) for b in bodies] == \
         [("down", ""), ("down", "Quelle fehlte"), ("up", "Quelle fehlte")]
+
+
+def test_typing_a_comment_saves_nothing_until_it_is_submitted(chat):
+    """15.10. bug: a bare text_input commits on focus loss, so a half-written comment was saved
+    every time the rater clicked elsewhere. Another rerun while typing must not post it."""
+    at = _ask(roles.GAME_MASTER)
+    msg_id = at.session_state["messages"][-1]["id"]
+    at.feedback(key=f"fb_{msg_id}").set_value(0).run()
+    at.text_input(key=f"fbc_{msg_id}").input("text ist gut aber").run()
+
+    assert [b["comment"] for b in chat.bodies["POST /feedback"]] == [""]
 
 
 def test_comment_field_is_bounded_like_the_api(chat):
@@ -70,7 +82,8 @@ def test_withdrawn_rating_drops_the_comment(chat):
     at = _ask(roles.GAME_MASTER)
     msg_id = at.session_state["messages"][-1]["id"]
     at.feedback(key=f"fb_{msg_id}").set_value(0).run()
-    at.text_input(key=f"fbc_{msg_id}").input("falsch").run()
+    at.text_input(key=f"fbc_{msg_id}").input("falsch")
+    at.button(key=f"fbs_{msg_id}").click().run()
     at.feedback(key=f"fb_{msg_id}").set_value(None).run()
 
     last = chat.bodies["POST /feedback"][-1]

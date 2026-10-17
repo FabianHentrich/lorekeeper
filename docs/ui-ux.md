@@ -205,13 +205,19 @@ keine Backend-Anfrage — die Ingest-Prüfung läuft erst beim Bestätigen.
   - 👍/👎 (`st.feedback("thumbs")`) für Spieler und Spielleiter. Ein Klick schickt
     `POST /feedback` mit Frage, Antwort, Quelldateien, Modell, Rolle, Session und Zeiten;
     Zurücknehmen als `rating: null`. Nach einer Bewertung erscheint ein Feld für einen
-    **Kommentar** (optional, höchstens 1.000 Zeichen, Enter speichert — Roadmap 3.4, 14.10.); jede
+    **Kommentar** (optional, höchstens 1.000 Zeichen, Enter oder „Kommentar speichern“ speichert — Roadmap 3.4, 14.10.). Das Feld steht in
+    einem `st.form`, weil ein freies `st.text_input` schon beim Verlassen des Felds speichert — so
+    kamen am 15.10. halbe Kommentare an, sobald man zwischendurch woanders hinklickte; jede
     Zeile trägt Bewertung und Kommentar zusammen, sodass eine spätere Änderung des einen das andere
     nicht verliert, Zurücknehmen löscht den Kommentar mit. Fehlermeldungen und ausgeblendete ältere
     Nachrichten haben keine Daumen. Anzeigen kostet keinen Backend-Aufruf — nur Klick und Enter.
 - **🖼️ Bilder (n)** (zugeklappt, vor den Quellen): die Bilder, die die gefundenen Abschnitte in
   ihrer Notiz einbetten (`images` je Quelle, Roadmap 2) — jedes Bild einmal, in Quellen-Reihenfolge,
-  höchstens 6, nur existierende Dateien, 300 px breit mit Dateiname. `st.image` liest die Datei auf
+  höchstens 6, nur existierende Dateien, 300 px breit mit Dateiname. Nur Notizen, deren Name
+  (Dateiname ohne `.md`, ganzes Wort, Groß-/Kleinschreibung egal) in Frage oder Antwort vorkommt —
+  sonst zeigte eine schwach passende Quelle ein fremdes Porträt (15.10.: „wer ist lady lilith?“ bekam
+  Liora Veylans Bild, Quelle Nr. 6, in der Antwort nicht erwähnt). Spricht die Antwort jemanden nur
+  mit Vornamen oder Spitznamen an, fehlt dessen Bild. `st.image` liest die Datei auf
   dem Streamlit-Server, daher klappt es auch von einem anderen Gerät im Heimnetz. Im Spieler-Modus
   kommen nur Bilder freigegebener Quellen an (Auflösung je Quelle, siehe [parsing.md](parsing.md)).
 - Quellen im Ausklapper **📎 Quellen**, nach Datei gruppiert (siehe unten).
