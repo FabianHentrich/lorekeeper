@@ -126,6 +126,18 @@ Offen:
 - **Aufzählungen über große Kapitel** (Priorität 4) — der richtige Abschnitt wird gefunden, aber nur 8 Chunks
   erreichen das LLM: p008 Klassen, p036 Basis-Skills, p037 Basis-Zauber, p114 Eigenheiten Magie, p014
   Benchmark, a030 Beweis-Tabelle, p049 Überheilung.
+  **Analyse 17.10.**: p008 ist seit der Klassenübersicht im Regelbuch (14.10.) richtig. Zwei Ursachen
+  gefunden: **(1)** `pymupdf4llm` machte Beschriftungen („Nachteil:“, 62× „Legendär (Rang 6):“) zu
+  Überschriften — 109 von 543 Regelbuch-Chunks; „Manaschwäche“ war dadurch unauffindbar, 5.3 hatte
+  26 Chunks (> 25, keine Expansion). **(2)** Die Section Expansion zählt den Einleitungs-Chunk eines
+  Abschnitts („5.2 Basis-Skills“ ohne Unterüberschrift) nicht als Treffer dieses Abschnitts (p036:
+  Rang 1, aber bester gezählter Treffer Rang 5; p014: nur eine Unterüberschrift). a030 (Tabelle im
+  Vault) und p049 (Regel in 4.11, Zauber in 5.5.6) haben andere Ursachen.
+  **Schritt 1 umgesetzt (17.10.)**: Überschriften auf „:“ im PDF-Parser wieder fetter Text
+  ([parsing.md](docs/parsing.md)), Regelbuch neu indiziert (81 s): 543 → 458 Chunks, 0 Beschriftungs-
+  Überschriften. Golden Set unverändert 272/274 · 143/149 (keine Frage kippt), Holdout 9/10 · 51/53;
+  je 3 Läufe: p037 0 → 3/3, p114 0 → 3/3, p036 findet jetzt „Erholen“ (fehlt noch „Verbände“), p014,
+  a030, p049 unverändert. **Offen**: Schritt 2 (Einleitungs-Chunk in der Expansion), danach E2E.
 - **👎 aus dem Chat (14.10.)** — 5 Bewertungen, 4 Fälle: drei behoben (siehe „Erledigt“ 3.15 Teil, Feedback);
   offen **Tippfehler** (Priorität 5) „was ist üebrschaden?“ — findet nichts Passendes, das Modell erfindet
   „Überschusschaden“ aus dem Simulationsbericht. Möglicher Weg: unbekannte Wörter auf das nächste Wort

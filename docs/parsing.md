@@ -145,7 +145,11 @@ pymupdf4llm.to_markdown(page_chunks=True)
    (z.B. "## **5.4 Mönch**" → "# **5.4 Mönch**")
   │
   ▼
-3. Bildverweise auflösen
+3. Beschriftungen zurück in Text: Überschrift endet auf „:“ → fetter Text
+   (z.B. "## **Nachteil:**" → "**Nachteil:**")
+  │
+  ▼
+4. Bildverweise auflösen
    (![alt](pfad) → [Bild: alt] + eigenes ParsedDocument)
   │
   ▼
@@ -162,12 +166,20 @@ Seite), wiederholt der Parser das ganze Dokument ohne OCR und schreibt eine Warn
 ### Überschriften-Hierarchie
 
 `pymupdf4llm` setzt oft alle Überschriften auf dieselbe Ebene (`##`) und verliert die Struktur.
-Korrektur in zwei Schritten:
+Korrektur in drei Schritten:
 
 1. **Inhaltsverzeichnis** (am zuverlässigsten) — hat das PDF eins, liefert `toc_items`
    `[Ebene, Titel, Seite]`; Überschriften werden per Titel zugeordnet und neu eingestuft.
 2. **Regex für nummerierte Überschriften** (Fallback) — `## **5.4.5 Mönch**` wird hochgestuft, weil
    nummerierte Titel auf Struktur hindeuten, die `pymupdf4llm` übersehen hat.
+
+3. **Beschriftungen sind keine Überschriften** — steht eine Beschriftung allein auf ihrer Zeile
+   („Nachteil:“, „Legendär (Rang 6):“, „Effekt:“), macht `pymupdf4llm` daraus eine Überschrift. Damit
+   zerschnitt sie den Eintrag, zu dem sie gehört: „Manaschwäche“ wurde ein leerer Abschnitt, ihr Text
+   landete unter „Nachteil:“ und war über den Namen nicht zu finden; 62 Chunks „Legendär (Rang 6):“
+   nannten ihren Zauber nicht. Im Regelbuch betraf das 109 von 543 Chunks (17.10., Roadmap 3.15).
+   Überschriften, die auf „:“ enden, werden deshalb wieder fetter Text. Nummerierte Überschriften
+   bleiben, ebenso ein Doppelpunkt mitten im Titel („Akt 1: Erste Fäden“).
 
 Die Nummern in den Überschriften nutzt die Evaluation für die Abschnittsprüfung
 (`expected_section`).

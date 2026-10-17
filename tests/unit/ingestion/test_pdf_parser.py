@@ -7,6 +7,7 @@ from src.config.manager import PdfConfig
 from src.ingestion.parsers.pdf import (
     PDFParser,
     _apply_toc_headings,
+    _demote_label_headings,
     _extract_image_docs,
     _is_toc_section,
     _join_cell_hyphenation,
@@ -24,6 +25,24 @@ def pdf_parser():
 def pdf_parser_no_ocr():
     """Provides a PDFParser instance explicitly disabling OCR and image extraction."""
     return PDFParser(pdf_config=PdfConfig(ocr_enabled=False, extract_images=False))
+
+
+class TestDemoteLabelHeadings:
+    """Label lines that pymupdf4llm took for headings become bold text again (roadmap 3.15, 17.10.)."""
+
+    def test_label_heading_becomes_bold_text(self):
+        md = "## **Manaschwäche**\n\n## **Nachteil:**\n\n- –2 Zauberpunkte"
+        assert _demote_label_headings(md) == "## **Manaschwäche**\n\n**Nachteil:**\n\n- –2 Zauberpunkte"
+
+    def test_plain_label_gets_bold(self):
+        assert _demote_label_headings("### Legendär (Rang 6):") == "**Legendär (Rang 6):**"
+
+    def test_real_headings_stay(self):
+        md = "# **5.3 Basis-Zauber**\n## **Magischer Schlag**\n# 4.2 Ablauf:"   # numbered: never a label
+        assert _demote_label_headings(md) == md
+
+    def test_colon_inside_a_heading_is_not_a_label(self):
+        assert _demote_label_headings("## Akt 1: Erste Fäden") == "## Akt 1: Erste Fäden"
 
 
 class TestNormalizePdfHeadings:
@@ -219,6 +238,21 @@ class TestPDFParser:
         assert len(text_docs) >= 2
         headings = [d.heading_hierarchy for d in text_docs]
         assert ["Kapitel 1", "Abschnitt A"] in headings
+
+    @patch("src.ingestion.parsers.pdf.pymupdf4llm.to_markdown")
+    def test_label_heading_stays_with_its_entry(self, mock_to_md, pdf_parser_no_ocr):
+        """17.10.: "Nachteil:" as a heading left "Manaschwäche" as an empty section; its text went to a
+        chunk titled "Nachteil:" that never names it."""
+        mock_to_md.return_value = [
+            {"text": "# 6.2 Eigenheiten\n## **Manaschwäche**\n## **Nachteil:**\n- –2 Zauberpunkte",
+             "toc_items": []},
+        ]
+
+        docs = pdf_parser_no_ocr.parse(Path("test.pdf"))
+
+        [entry] = [d for d in docs if d.heading_hierarchy[-1] == "**Manaschwäche**"]
+        assert "**Nachteil:**" in entry.content and "–2 Zauberpunkte" in entry.content
+        assert not any(d.heading_hierarchy[-1] == "**Nachteil:**" for d in docs)
 
     @patch("src.ingestion.parsers.pdf.pymupdf4llm.to_markdown")
     def test_table_of_contents_not_indexed(self, mock_to_md, pdf_parser_no_ocr):

@@ -1,7 +1,8 @@
 """PDF parser: pymupdf4llm turns the PDF into Markdown, the Markdown parser splits it by heading.
 
-Repairs on the way: numbered headings normalised and matched against the PDF outline, words hyphenated
-across table-cell line breaks rejoined, table-of-contents sections dropped (they match almost any question).
+Repairs on the way: numbered headings normalised and matched against the PDF outline, label lines that
+pymupdf4llm took for headings ("Nachteil:") turned back into text, words hyphenated across table-cell line
+breaks rejoined, table-of-contents sections dropped (they match almost any question).
 OCR and image extraction follow ``PdfConfig``; if OCR fails the page text is extracted without it.
 Details: docs/parsing.md.
 """
@@ -20,6 +21,8 @@ from .markdown import MarkdownParser
 logger = logging.getLogger(__name__)
 
 _NUMBERED_HEADING = re.compile(r'^(#{1,6})(\s+)(\*{0,2}\d+[\d.]*\s*.+)', re.MULTILINE)
+_ANY_HEADING = re.compile(r'^#{1,6}[ \t]+(.+?)[ \t]*$', re.MULTILINE)  # \s would eat the line break
+_SECTION_NUMBER = re.compile(r'^\d+(\.\d+)*\s')
 _IMAGE_REF = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
 # A word hyphenated across a line break inside a table cell ("Le-<br>benspunkten")
 _CELL_HYPHENATION = re.compile(r'(\w)-<br>(\w+)')
@@ -72,6 +75,26 @@ def _normalize_pdf_headings(md_text: str) -> str:
         return f"#{m.group(2)}{m.group(3)}"
 
     return _NUMBERED_HEADING.sub(promote, md_text)
+
+
+def _demote_label_headings(md_text: str) -> str:
+    """Turn headings that end in a colon back into bold text.
+
+    A label alone on its line ("Nachteil:", "Legendär (Rang 6):", "Effekt:") looks like a heading to
+    pymupdf4llm. As a heading it cut the entry it belongs to: "Manaschwäche" became an empty section and
+    its text sat under "Nachteil:" — unfindable by name — and 62 "Legendär (Rang 6):" chunks did not
+    name their spell (rulebook 17.10.: 109 of 543 chunks, roadmap 3.15). Numbered headings stay; a
+    chapter title never ends in a colon, a label never starts with a section number.
+    """
+    def demote(m: re.Match) -> str:
+        """Keep the label's text (bold) and drop the heading marker."""
+        text = m.group(1)
+        clean = re.sub(r'\*{1,2}', '', text).strip()
+        if not clean.endswith(":") or _SECTION_NUMBER.match(clean):
+            return m.group(0)
+        return text if text.startswith("**") else f"**{clean}**"
+
+    return _ANY_HEADING.sub(demote, md_text)
 
 
 def _apply_toc_headings(md_text: str, toc_items: list[list]) -> str:
@@ -215,6 +238,7 @@ class PDFParser(BaseParser):
                 text = _apply_toc_headings(text, toc_items)
                 # 2. Fallback regex for numbered headings not in TOC
                 text = _normalize_pdf_headings(text)
+                text = _demote_label_headings(text)
                 text = _join_cell_hyphenation(text)
 
                 # Extract image references
