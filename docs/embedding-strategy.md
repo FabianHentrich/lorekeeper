@@ -313,7 +313,34 @@ Gemessen 14.10. (frisch gebauter Index, jina): Golden Set wie geschrieben 143 �
 kleingeschrieben 135 → **142**/149 (übrig: „würfeln“ — in den Quellen 3× klein, 2× groß — und
 „Decknamen“, das dort nicht vorkommt); Holdout kleingeschrieben 6/8 → 7/8 Abschnitte (= wie
 geschrieben). Erste Fassung ohne die Großschreibung am Fragenanfang und mit nur der häufigsten
-Großform: 140/149. Tippfehler („üebrschaden“) behebt das nicht.
+Großform: 140/149. Tippfehler („üebrschaden“) behebt das nicht — dafür der nächste Schritt.
+
+**Tippfehler (17.10., Roadmap 3.15):** Vor dem Truecasing ersetzt `TypoIndex` ein Wort, das in den
+Quellen **nirgends** vorkommt, durch das großgeschriebene Quellwort (Substantiv aus demselben Wörterbuch,
+≥ 3× belegt) im Abstand 1 — ab 10 Buchstaben 2; eine Vertauschung benachbarter Buchstaben zählt als
+eins. „was ist üebrschaden?“ fand ohne das die Krieger-Abschnitte, mit „Überschaden“ dieselben Treffer
+wie richtig geschrieben. Gesucht wird über einen Lösch-Index (kein Durchlauf über alle Wörter).
+
+Gemessen auf dem Golden Set (ein Prozess, ein Index): Je Frage bekam das längste Wort (≥ 6 Buchstaben)
+einen Handy-Tippfehler — Vertauschen, Auslassen, Verdoppeln, Nachbartaste (QWERTZ), fester Seed, 270
+Fragen. Drei Fassungen:
+
+| Fassung | sauber: Treffer / geänderte Fragen | mit Tippfehler: abweichend von sauber |
+|---|---|---|
+| ohne Korrektur | 272 · 144 / — | 7 Fragen (−3 Dateien, −5 Abschnitte) |
+| jedes Quellwort als Ziel, Abstand 2 ab 8 Buchstaben | 271 · 143 / 27 | 2 |
+| nur Substantive, jedes Quellwort gilt als bekannt | 272 · 144 / 11 | 1 |
+| **+ gleicher Anfangsbuchstabe, keine Beugungen, Abstand 2 erst ab 10** | **272 · 144 / 4** | **0** |
+
+Die verworfenen Fassungen machten aus seltenen, aber richtigen Beugungen „Tippfehler“: „zeichnet“ →
+„Zeichen“, „kaufen“ → „laufen“, „Worum“ → „Warum“, „bewirken“ → „Bezirke“, „paarieren“ → „Barrieren“
+(kostete p065). Jede Schutzregel stammt aus einem solchen Fall; die vier verbleibenden Änderungen an
+sauberen Fragen sind gleichbedeutend („Grundsätze“ → „Grundsaetze“ wie im Vault, „Bosskampf“ →
+„Boss-Kampf“). 190 der 270 Tippfehler werden exakt rückgängig gemacht, die übrigen meist auf eine Beugung
+desselben Worts. **Grenzen:** Ein Tippfehler im ersten Buchstaben bleibt stehen (der Generator erzeugt
+keine, die Messung sagt dazu nichts); Wörter unter 5 Buchstaben werden nie korrigiert. Kosten: Aufbau
+von Wörterbuch + Lösch-Index 1,4 s (einmal nach Start oder Ingest), Korrektur 0,13 ms pro Frage. Die
+Umsetzung in `src/` ergibt dieselben Zahlen wie das Experiment.
 
 ### Warum ein Eintrags-Slot?
 

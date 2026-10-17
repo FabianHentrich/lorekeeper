@@ -6,6 +6,14 @@ typed in lower case ("was ist überschaden?" found "Überheilung"). The vocabula
 chunks: a word the user typed in lower case is replaced by its capitalised form only if the sources write
 it that way almost always. Words the user capitalised or wrote in mixed case stay as typed.
 
+Before that, typos are repaired (roadmap 3.15, 17.10.): a question word that occurs nowhere in the sources
+is replaced by the one capitalised source word (a noun from the vocabulary above) within edit distance 1, or
+2 from 10 letters on ("üebrschaden" → "Überschaden"; adjacent swaps count as one edit). Guard rails, each
+from a false correction in the golden-set measurement: same first letter ("bewirken" → "Bezirke"), no
+correction to a word that starts the other (inflections: "Decknamen"/"Deckname"), no correction when two
+candidates are about equally frequent. Measured: clean golden set unchanged, one-typo golden set loses
+nothing anymore (7 → 0 changed hits); a typo in the first letter stays as typed.
+
 Built lazily on the first query and dropped after every ingest (like the BM25 index). Only used internally
 for the search — the corrected text is never sent to the client, because the vocabulary also covers
 game-master-only chunks and a changed spelling would tell a player that a word exists there.
@@ -21,6 +29,10 @@ _WORD = re.compile(r"[^\W\d_]+(?:-[^\W\d_]+)*")
 _MIN_LEN = 3            # short words ("an", "im") are function words — never touched
 _MIN_COUNT = 2          # a word seen once is no evidence of its spelling
 _MIN_CAPITAL_SHARE = 0.8  # "Was" at a sentence start must not turn every "was" into "Was"
+_TYPO_MIN_LEN = 5       # shorter words have too many neighbours at distance 1
+_TYPO_TARGET_MIN_COUNT = 3  # a correction target must be an established source word
+_TYPO_LONG = 10         # from this length two edits are allowed (from 8 letters: "zeichnet" → "Zeichen")
+_TYPO_CLEAR_LEAD = 3    # among equally close candidates the most frequent wins only with 3× the count
 
 
 def build_vocabulary(texts) -> dict[str, str]:
@@ -54,6 +66,70 @@ def apply(query: str, vocab: dict[str, str]) -> str:
     return restored
 
 
+def _edit_distance(a: str, b: str, limit: int) -> int:
+    """Optimal string alignment distance (insert, delete, replace, adjacent swap = 1); ``limit + 1`` as soon
+    as it is certain to exceed ``limit``."""
+    if abs(len(a) - len(b)) > limit:
+        return limit + 1
+    before: list[int] = []
+    prev = list(range(len(b) + 1))
+    for i in range(1, len(a) + 1):
+        cur = [i] + [0] * len(b)
+        for j in range(1, len(b) + 1):
+            cur[j] = min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] != b[j - 1]))
+            if i > 1 and j > 1 and a[i - 1] == b[j - 2] and a[i - 2] == b[j - 1]:
+                cur[j] = min(cur[j], before[j - 2] + 1)
+        if min(cur) > limit:
+            return limit + 1
+        before, prev = prev, cur
+    return prev[-1]
+
+
+def _deletes(word: str, depth: int) -> set[str]:
+    """The word and every form with up to ``depth`` letters removed — two words within distance ``depth``
+    share at least one of them (symmetric-delete lookup, no scan over the whole vocabulary)."""
+    out = frontier = {word}
+    for _ in range(depth):
+        frontier = {w[:i] + w[i + 1:] for w in frontier for i in range(len(w))}
+        out = out | frontier
+    return out
+
+
+class TypoIndex:
+    """Every source word (to know what is no typo) and a delete index over the correction targets."""
+
+    def __init__(self, texts, vocab: dict[str, str]):
+        """``vocab`` is ``build_vocabulary``'s result: only its capitalised source words are targets."""
+        self.counts = Counter(w.lower() for text in texts for w in _WORD.findall(text or ""))
+        self.vocab = vocab
+        self.index: dict[str, set[str]] = {}
+        for word, count in self.counts.items():
+            if count >= _TYPO_TARGET_MIN_COUNT and word in vocab:
+                for key in _deletes(word, 2 if len(word) >= _TYPO_LONG else 1):
+                    self.index.setdefault(key, set()).add(word)
+
+    def fix(self, word: str) -> str | None:
+        """The source spelling ``word`` was probably meant as, or None (known word, no clear candidate)."""
+        low = word.lower()
+        if len(low) < _TYPO_MIN_LEN or low in self.counts:
+            return None
+        limit = 2 if len(low) >= _TYPO_LONG else 1
+        candidates = {c for key in _deletes(low, limit) for c in self.index.get(key, ())
+                      if c[0] == low[0] and not c.startswith(low) and not low.startswith(c)}
+        ranked = sorted((d, -self.counts[c], c) for c in candidates if (d := _edit_distance(low, c, limit)) <= limit)
+        if not ranked:
+            return None
+        best = ranked[0]
+        tied = [r for r in ranked[1:] if r[0] == best[0]]
+        if tied and -best[1] < _TYPO_CLEAR_LEAD * -tied[0][1]:
+            return None
+        return self.vocab[best[2]]
+
+    def apply(self, query: str) -> str:
+        """``query`` with every typo replaced by the source spelling of the word it was meant as."""
+        return _WORD.sub(lambda m: self.fix(m.group(0)) or m.group(0), query)
+
+
 class TrueCaser:
     """The vocabulary over the indexed chunks, built once and replaced as a whole.
 
@@ -63,30 +139,36 @@ class TrueCaser:
 
     def __init__(self):
         """Empty until the first ``ensure_built``."""
-        self._vocab: dict[str, str] | None = None
+        # Vocabulary and typo index are published together — a query never sees one without the other
+        self._built: tuple[dict[str, str], TypoIndex] | None = None
         self._generation = 0
         self._lock = threading.Lock()
 
     def ensure_built(self, vectorstore) -> None:
-        """Build the vocabulary from all stored chunks unless a current one exists."""
-        if self._vocab is not None:
+        """Build the vocabulary and the typo index from all stored chunks unless current ones exist."""
+        if self._built is not None:
             return
         with self._lock:
-            if self._vocab is not None:
+            if self._built is not None:
                 return
             generation = self._generation
             data = vectorstore.get_all(include=["documents"])
-            vocab = build_vocabulary((data or {}).get("documents") or [])
+            texts = (data or {}).get("documents") or []
+            vocab = build_vocabulary(texts)
+            typos = TypoIndex(texts, vocab)
             if generation == self._generation:
-                self._vocab = vocab
-                logger.info("Truecasing vocabulary built: %d words", len(vocab))
+                self._built = (vocab, typos)
+                logger.info("Truecasing vocabulary built: %d words, %d typo keys", len(vocab), len(typos.index))
 
     def invalidate(self) -> None:
         """Drop the vocabulary (the collection changed); the next query rebuilds it."""
         self._generation += 1
-        self._vocab = None
+        self._built = None
 
     def apply(self, query: str) -> str:
-        """``query`` with lower-case words in their source spelling (unchanged until built)."""
-        vocab = self._vocab
-        return apply(query, vocab) if vocab else query
+        """``query`` with typos repaired and lower-case words in their source spelling (unchanged until built)."""
+        built = self._built
+        if not built:
+            return query
+        vocab, typos = built
+        return apply(typos.apply(query), vocab)

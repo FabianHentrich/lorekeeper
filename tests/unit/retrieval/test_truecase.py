@@ -5,7 +5,7 @@ import pytest
 
 from src.config.manager import RerankingConfig, RetrievalConfig
 from src.retrieval.retriever import Retriever
-from src.retrieval.truecase import TrueCaser, apply, build_vocabulary
+from src.retrieval.truecase import TrueCaser, TypoIndex, apply, build_vocabulary
 
 TEXTS = [
     "Überschaden führt zu einem Todeszähler. Überschaden entsteht, wenn …",
@@ -42,6 +42,51 @@ class TestApply:
 
     def test_unknown_words_and_leading_space_are_kept(self):
         assert apply("  regeln im kampf", self.VOCAB) == "  Regeln im Kampf"
+
+
+class TestTypos:
+    """Typo repair toward capitalised source words (roadmap 3.15, 17.10.) — one test per guard rail."""
+
+    SOURCE = ["Überschaden Überschaden Überschaden Überheilung",
+              "Deckname Deckname Deckname Bezirke Bezirke Bezirke",
+              "Lebenspunkte Lebenspunkte Lebenspunkte Lebenspunkte",
+              "Wunde Wunde Wunde Runde Runde Runde",
+              "bewirken zeigt"]
+
+    def _index(self):
+        return TypoIndex(self.SOURCE, build_vocabulary(self.SOURCE))
+
+    def test_the_chat_typo_is_repaired(self):
+        """Adjacent swap = one edit: the 👎 case from 14.10."""
+        assert self._index().apply("was ist üebrschaden?") == "was ist Überschaden?"
+
+    def test_two_edits_only_for_long_words(self):
+        idx = self._index()
+        assert idx.apply("Lbeenspunktte") == "Lebenspunkte"     # 13 letters, two edits
+        assert idx.apply("Dkcename") == "Dkcename"             # 8 letters, two edits — too far
+
+    def test_a_word_from_the_sources_is_no_typo(self):
+        """'Rinde' occurs once — rare, but real; one edit from the frequent 'Runde' it must stay."""
+        source = self.SOURCE + ["Rinde"]
+        assert TypoIndex(source, build_vocabulary(source)).fix("Rinde") is None
+
+    def test_the_first_letter_must_match(self):
+        assert self._index().fix("Gezirke") is None
+
+    def test_inflections_are_not_corrected(self):
+        """'Decknamen' is a form of 'Deckname', not a typo of it."""
+        assert self._index().fix("Decknamen") is None
+
+    def test_equally_likely_candidates_leave_the_word_alone(self):
+        """'Wunde' and 'Wurde' are both one edit from 'Wuxde' and equally frequent — no guess."""
+        source = self.SOURCE + ["Wurde Wurde Wurde"]
+        idx = TypoIndex(source, build_vocabulary(source))
+        assert idx.fix("Wuxde") is None
+        clear = self.SOURCE + ["Wurde Wurde Wurde"] + ["Wunde"] * 9      # 12× against 3× — clear lead
+        assert TypoIndex(clear, build_vocabulary(clear)).fix("Wuxde") == "Wunde"
+
+    def test_short_words_are_never_touched(self):
+        assert self._index().fix("Rnde") is None               # one edit from "Runde", but only 4 letters
 
 
 class TestTrueCaser:

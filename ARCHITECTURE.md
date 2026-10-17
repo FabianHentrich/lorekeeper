@@ -324,9 +324,9 @@ Backend-Prozess steckt, darf **kein zweiter Prozess** (z.B. die Ingestion-CLI) g
 Ablauf in `Retriever.retrieve()` — alle Parameter in [docs/configuration.md](docs/configuration.md)
 → `retrieval`, die Begründungen in [docs/embedding-strategy.md](docs/embedding-strategy.md):
 
-0. **Schreibweise** (immer): klein getippte Wörter der Frage in ihre Schreibweise aus den Quellen
-   („überschaden“ → „Überschaden“), Fragenanfang groß — nur für die Suche, nie an den Client
-   (`src/retrieval/truecase.py`).
+0. **Schreibweise** (immer): Tippfehler zum nächsten Quellwort („üebrschaden“ → „Überschaden“), klein
+   getippte Wörter in ihre Schreibweise aus den Quellen („überschaden“ → „Überschaden“), Fragenanfang
+   groß — nur für die Suche, nie an den Client (`src/retrieval/truecase.py`).
 1. **Vektorsuche** (immer): Frage embedden, `top_k` (20) Kandidaten aus ChromaDB. Bilder sind
    ausgeschlossen. `score_threshold` (0,5) greift auf die Cosine-Scores **vor** einer Fusion.
 2. **BM25** (nur Hybrid): In-Memory-Index (`rank_bm25`), lazy aus der Collection gebaut (einmal,
