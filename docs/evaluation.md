@@ -214,6 +214,12 @@ Temperatur 0,3 nicht gleich. Ein einzelner Lauf trennt ±3 % nicht vom Rauschen;
 den Fragen messen, die in **beiden** Läufen scheitern (19), oder mehrere Läufe vergleichen. Die 19 sind
 mit ganzen Antworten nachgefragt und sortiert (Roadmap 3.15).
 
+**Dritter Lauf (15.10., nach Ultrareview 13.1 und dem Entfernen leerer Chunks 13.2, 3933 Chunks):
+Answer Contains 0,894** (245/274), Datei 0,993, Ø 7,1 s. Von den 19 Fragen, die in beiden Läufen
+vom 14.10. scheiterten, sind 6 richtig; 7 neue Fehlschläge, davon 5 inhaltlich richtig ohne das
+Stichwort der Frage (k015, a014, a005, m015, p026), i002 eine Absage, die früher nur wegen des
+Namens darin zählte, p035 unvollständig. Holdout unverändert 9/10, 50/53. Details: Roadmap 13.3.
+
 **Holdout für Aufzählungsfragen** (`evaluation/holdout_lists.yaml`, 14.10.): zehn Listenfragen aus
 Kapiteln ohne Listenfrage im Golden Set, vor jedem Tuning geschrieben, erwartet werden **alle**
 Einträge (Quelle jeweils geprüft). Sie dienen als Gegenprobe, ob eine Änderung Listen allgemein
