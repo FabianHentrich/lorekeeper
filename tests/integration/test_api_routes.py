@@ -79,6 +79,7 @@ class FakeLLMResponse:
     def __init__(self, content: str, model: str = "fake-model") -> None:
         self.content = content
         self.model = model
+        self.usage: dict = {}   # like LLMResponse: empty when the provider reports no token counts
 
 
 class FakeGenerator:

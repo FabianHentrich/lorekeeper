@@ -26,7 +26,9 @@ End-to-End-Lauf ~35 min (🟡).
 
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 7 | Deckel pro Datei bei Regelfragen — **nächster Punkt** (1–5, Tabellen-Fokus, 14.1 erledigt 17.10.) | Mittel (ungewiss) | Mittel | 🟡 | Neu 17.10.: `max_per_source` 3 gilt pro **Datei** — das Regelbuch ist eine Datei, also kommen höchstens 3 Regelbuch-Chunks plus Nachfüllen in den Kontext. „Dolch, STÄ 4, Wurfzahl 12“: Waffentabelle auf Platz 7, verdrängt von Monster-Werteblöcken. Deckel je PDF-Kapitel statt je Datei wäre eine Variante — nur mit Golden Set + Holdout + E2E |
+| 7 | Deckel je PDF-Kapitel — **End-to-End-Lauf offen** | Mittel (ungewiss) | Gering | 🟡 | Umgesetzt 17./18.10., nicht committet (Ablauf unten unter „7 Deckel je PDF-Kapitel“). Golden Set unverändert 272 · 144, Regelfragen Ø 8,3 → 10,6 Regelbuch-Chunks, Holdout 9/10 · 51/53; fehlt nur der E2E-Lauf gegen 260/274 |
+| 7b | VRAM-Warnung im Health-Loop | Mittel | Gering | 🟢 | Neu 18.10.: Das Modell lag 2,65 GB im geteilten Speicher (dwm hielt 7,85 GB VRAM), Antworten 3× langsamer, `ollama ps` zeigte trotzdem „100% GPU“ — tagelang unbemerkt möglich. Prüfung über `\GPU Process Memory(*)\Shared Usage` von `llama-server`, Warnung im Log und in der Sidebar |
+| 7c | Auto-Reload/Stopp hängt bei laufendem E2E-Lauf (Regression von 12.3?) | Mittel | Gering-Mittel | 🟡 | Neu 18.10.: Änderung unter `src/` um 00:00 — kein Neustart; `stop.ps1` musste nach 20 s hart beenden (samt Ollama). 12.3 hatte genau das behoben (Daemon-Thread); nachstellen mit einem kurzen E2E-Lauf |
 | 8 | 3.10 Monolith-Sektion in fremden Regelfragen (p011, p101) | Gering | Mittel | 🟡 | 22 Chunks, landet in den Top 3; Antworten bisher trotzdem richtig |
 | 9 | 2 Bilder — Rest (Vor-/Spitzname, Dateiname-Rückfall, PDF-Bilder, neues Bild ohne Notiz-Änderung) | Gering | Gering–Mittel | 🟢–🔴 | Einbettungen laufen. Vor-/Spitzname (13.4) über `aliases` der Notiz wäre klein (🟢); Dateiname-Rückfall braucht Spy-Test, PDF-Bilder dauerhafte Ablage + Re-Index (🔴) |
 | 10 | 3.10/3.15 übrige Einzelfälle: AP-Pool „50 AP“, p009 (Abschnitt-Miss, Antwort richtig), „Wer ist Arkenfeld?“, k001 Preis-Spalte, p091 Tränke-Tabelle, x008 Heimkehrpfennig | Gering | je Gering | 🟡 | Nur bei Anlass im Spiel; Antworten teils schon richtig |
@@ -164,6 +166,28 @@ Dienste-Modul `src/services.py` (Globale, `install_llm`, Health-Loop; beseitigt 
 und vereinfacht die Test-Fixtures) und Reranker + GPU-Rückfall als `src/retrieval/reranker.py`. Nur
 zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 
+
+### 7 Deckel je PDF-Kapitel — End-to-End-Lauf offen
+
+**Umgesetzt (17./18.10., nicht committet):** `max_per_source` zählt bei PDFs je (Quelle, Datei,
+oberste Überschrift) statt je Datei (`_cap_key` in `retriever.py`, Unit-Test mutationsgeprüft). Messung
+und Begründung: [embedding-strategy.md](docs/embedding-strategy.md#warum-ein-deckel-pro-datei). Doku,
+`settings.yaml`-Kommentar und Token-Rate im Log (`tokens_in/tokens_out/tok/s` in `Query timings`) sind
+schon nachgezogen.
+
+**Ablauf des offenen End-to-End-Laufs:**
+1. VRAM frei machen: `Get-Counter '\GPU Process Memory(*)\Shared Usage'` — `llama-server` darf keinen
+   geteilten Speicher belegen; sonst Programm schließen bzw. ab-/anmelden, `ollama stop qwen3:14b`
+   ([operations.md](docs/operations.md#häufige-probleme)).
+2. `.\start.ps1`, eine Probefrage stellen: `Query timings` muss ~50 tok/s zeigen.
+3. Evaluation-Seite → End-to-End-Lauf (oder `POST /eval/run` mit `{"eval_type": "e2e"}`), ~30 min;
+   währenddessen nichts unter `src/` ändern.
+4. Vergleich mit `e2e_20261017_213213.json` (260/274, gleiche Stichwörter): gekippte Fragen sichten.
+   Zusätzlich die Dolch-Rechenfrage, „Wie viel Schaden macht ein Langbogen?“ und „Unterschied Dolch und
+   Kurzschwert“ im Chat stellen.
+5. Kein Rückschritt → committen, Zeile 7 nach „Erledigt“. Rückschritt → `_cap_key` auf je Datei
+   zurück und die Doku-Absätze wieder entfernen.
+6. Nebenbei liefert der Lauf die Antwortzeit mit den längeren Kontexten aus 3.15 (offen seit 17.10.).
 
 ### 14.0 UX
 

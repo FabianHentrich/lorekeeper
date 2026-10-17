@@ -195,6 +195,16 @@ gestartete Programme (Terminal neu öffnen); die App ändert sich dadurch nicht,
 verschoben. Oder die Ollama-App vor LoreKeeper starten. Die Ausgabe des selbst gestarteten Ollama
 steht in `logs/ollama.log`.
 
+**Antworten 3–4× langsamer als sonst** (`Query timings` zeigt ~15–20 statt ~54 tok/s bei gleicher
+Prompt-Größe, Retrieval normal): Das Modell liegt teilweise im **geteilten Speicher** (System-RAM über
+PCIe). `ollama ps` sagt trotzdem „100% GPU“ — das heißt nur, dass keine Schicht auf der CPU rechnet.
+Prüfen mit `Get-Counter '\GPU Process Memory(*)\Shared Usage'`: Ein `llama-server` mit mehreren GB
+„shared usage“ ist der Fall. Am 17./18.10. hielt `dwm.exe` (Windows-Desktop) 7,85 GB VRAM, qwen3:14b
+lag mit 2,65 GB im geteilten Speicher, 16,9 statt ~54 tok/s; ein Neuladen des Modells half nicht, weil
+der Speicher nicht frei war. Abhilfe: das Programm schließen, für das `dwm` den Speicher hält (meist ein
+Spiel im Vollbild/randlos), sonst ab- und wieder anmelden oder neu starten; danach das Modell neu laden
+(`ollama stop qwen3:14b`, nächste Frage lädt es).
+
 **Mehrere Fragen gleichzeitig**: Ollama beantwortet sie nacheinander (`OLLAMA_NUM_PARALLEL=1`,
 bewusst so gelassen). `OLLAMA_NUM_PARALLEL=2` wurde gemessen: Das erste Token kommt bei Gleichzeitigen
 schneller, aber jede Antwort läuft langsamer — auch allein (−27 %), bei ~2,6 GB mehr VRAM (Messung: [provider-strategy.md](provider-strategy.md)).
@@ -289,7 +299,9 @@ Spielabend über Mitternacht in einer Datei bleibt; behalten werden 30 Tage (`lo
 Pro Frage stehen auf INFO: `Question (session=… role=…): '…'` (bei Folgefragen mit `→ condensed
 '…'`, die Fassung, mit der gesucht wurde), die Rerank-Zusammenfassung, ggf. `Section expansion: …`
 und `Query timings: …` (Modell, Condense, Retrieval-Stufen, erster Token, gesamt, Chunks,
-Prompt-Größe). Die Frage steht nur in der ersten dieser Zeilen; die anderen ordnet man über
+Prompt-Größe, seit 18.10. auch `tokens_in=… tokens_out=… <n>tok/s`, sofern der Provider Tokens meldet —
+die Rate rechnet bei `/query` über den ganzen LLM-Aufruf inkl. Prefill, beim Stream ab dem ersten Token;
+Richtwert für qwen3:14b ganz im VRAM ~54 tok/s). Die Frage steht nur in der ersten dieser Zeilen; die anderen ordnet man über
 `session=` bzw. die Reihenfolge zu. Erfolgreiche GET-Anfragen (Seitenaufrufe, Job-Polling) stehen
 nur auf DEBUG; die Zeile von `/query/stream` misst nur den Start des Streams. Den Log-Level setzt
 `logging.level` (`DEBUG` zeigt u.a. alle Rerank-Scores, jede expandierte oder verworfene Sektion

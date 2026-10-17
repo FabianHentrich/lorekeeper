@@ -103,6 +103,19 @@ async def test_answer_lines_carry_session_role_and_model(fake_services, caplog):
     assert "session=test-ses role=game_master model=qwen3:8b" in timings
 
 
+def test_timings_line_carries_tokens_and_output_rate(caplog):
+    """17.10.: generation was 3–4× slower with the same prompts (model partly in shared memory) — the rate in
+    the log shows that at a glance. Without token counts (provider reports none) the line stays as before."""
+    with caplog.at_level(logging.INFO, logger="src.api.query_routes"):
+        query_routes._log_timings({"total_ms": 11000}, "session=s role=r", "qwen3:14b",
+                                  {"tokens_in": 3000, "tokens_out": 200}, 10000)
+        query_routes._log_timings({"total_ms": 900}, "session=s role=r", "none")
+
+    with_tokens, without = (r.getMessage() for r in caplog.records)
+    assert with_tokens.endswith("tokens_in=3000 tokens_out=200 20.0tok/s")
+    assert "tokens_" not in without
+
+
 async def test_gemini_key_change_is_logged_without_the_key(monkeypatch, caplog):
     """Set/clear shows up in the log; the key itself never does."""
     from src.generation.provider_factory import ProviderFactory

@@ -69,14 +69,24 @@ def _who(session_id: str, role: str) -> str:
     return f"session={session_id[:8]} role={role}"
 
 
-def _log_timings(timings: dict, who: str, model: str) -> None:
-    """One INFO line per answered query — the basis for spotting slow stages."""
+def _log_timings(timings: dict, who: str, model: str, usage: dict | None = None, generate_ms: int = 0) -> None:
+    """One INFO line per answered query — the basis for spotting slow stages.
+
+    With the provider's token counts it also logs the output rate: ``generate_ms`` is the whole LLM call for
+    /query (prefill included) and the time after the first token for the stream. A rate far below the usual
+    one with an unchanged prompt size points at the GPU, not at LoreKeeper — 17.10. the model sat partly in
+    shared system memory after loading next to another program (106 → 28 characters/s).
+    """
     stages = " ".join(f"{k}={v}" for k, v in timings.get("retrieval_stages_ms", {}).items())
+    tokens = ""
+    if usage and usage.get("tokens_out"):
+        rate = f" {usage['tokens_out'] / (generate_ms / 1000):.1f}tok/s" if generate_ms > 0 else ""
+        tokens = f" tokens_in={usage.get('tokens_in', 0)} tokens_out={usage['tokens_out']}{rate}"
     logger.info(
         f"Query timings: {who} model={model} condense={timings.get('condense_ms', 0)}ms "
         f"retrieval={timings.get('retrieval_ms', 0)}ms ({stages}) "
         f"first_token={timings.get('first_token_ms', 0)}ms total={timings.get('total_ms', 0)}ms "
-        f"chunks={timings.get('chunks', 0)} prompt_chars={timings.get('prompt_chars', 0)}"
+        f"chunks={timings.get('chunks', 0)} prompt_chars={timings.get('prompt_chars', 0)}{tokens}"
     )
 
 
@@ -181,12 +191,17 @@ async def query(request: QueryRequest):
     timings: dict = {}
     session, chunks, system_prompt, qa_prompt, search_query = await _prepare_query(request, timings)
 
+    usage: dict = {}
+    generate_ms = 0
     if qa_prompt is not None:
         try:
+            t_gen = time.perf_counter()
             with _generating():
                 response = await gen.generate(system_prompt=system_prompt, qa_prompt=qa_prompt)
+            generate_ms = _ms(t_gen)
             answer = response.content
             model_used = response.model
+            usage = response.usage
         except Exception as e:
             logger.exception("LLM generation failed (%s)", _who(session.session_id, request.role))
             raise HTTPException(status_code=503, detail=f"LLM nicht erreichbar: {e}") from e
@@ -200,7 +215,7 @@ async def query(request: QueryRequest):
     sources = [SourceReference(**_chunk_to_source_dict(c)) for c in chunks]
     latency_ms = (time.time() - start) * 1000
     timings["total_ms"] = _ms(t_start)
-    _log_timings(timings, _who(session.session_id, request.role), model_used)
+    _log_timings(timings, _who(session.session_id, request.role), model_used, usage, generate_ms)
 
     return QueryResponse(
         answer=answer,
@@ -273,7 +288,8 @@ async def query_stream(request: QueryRequest):
             session.add_usage(usage)
         timings["total_ms"] = _ms(t_start)
         model_used = stream_ctx.model or prov.model
-        _log_timings(timings, _who(session.session_id, request.role), model_used)
+        _log_timings(timings, _who(session.session_id, request.role), model_used, usage,
+                     timings["total_ms"] - timings.get("first_token_ms", timings["total_ms"]))
 
         done_event = json.dumps({
             "type": "done",
