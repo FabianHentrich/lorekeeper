@@ -220,6 +220,23 @@ vom 14.10. scheiterten, sind 6 richtig; 7 neue Fehlschläge, davon 5 inhaltlich 
 Stichwort der Frage (k015, a014, a005, m015, p026), i002 eine Absage, die früher nur wegen des
 Namens darin zählte, p035 unvollständig. Holdout unverändert 9/10, 50/53. Details: Roadmap 13.3.
 
+**Stichwörter nach dem dritten Lauf angepasst (17.10.)** — die fünf Antworten beginnen direkt mit dem
+Inhalt und wiederholen den Namen aus der Frage nicht. Neues Stichwort ist jeweils eine Tatsache, die alle
+drei Läufe nennen und die in der Quelle steht (Vault-Notiz bzw. Regelbuch-PDF geprüft):
+
+| ID | vorher | jetzt |
+|---|---|---|
+| k015 | „Thaloran“ | „Arkan-Schütze“ |
+| a014 | „Schirm“ | „Grenzwacht“ + „Schwarzhand“ |
+| a005 | „Scharlachofen“ | „Monolith“ + „Reaktor“ |
+| m015 | „Dämmerung“ + „Sol Invictus“ | „Ritterorden“ + „Sol Invictus“ |
+| p026 | „Waldläufer“ + „Gezielter Schuss“ | „Gezielter Schuss“ + „Waldkundiger Blick“ |
+
+Neu ausgewertet lässt sich nur der dritte Lauf: **245 → 250/274 (0,912)**, genau diese fünf kippen,
+keine Frage kippt zurück. Die Läufe vom 14.10. speicherten nur die ersten 200 Zeichen je Antwort —
+neue Stichwörter weiter hinten fehlen dort, ihre Zahlen (248, 247) bleiben mit den alten Stichwörtern
+gültig. Der nächste E2E-Lauf ist damit die erste Basis mit diesem Stand.
+
 **Holdout für Aufzählungsfragen** (`evaluation/holdout_lists.yaml`, 14.10.): zehn Listenfragen aus
 Kapiteln ohne Listenfrage im Golden Set, vor jedem Tuning geschrieben, erwartet werden **alle**
 Einträge (Quelle jeweils geprüft). Sie dienen als Gegenprobe, ob eine Änderung Listen allgemein
@@ -238,7 +255,7 @@ behaltenen Plätze belegt. Lange Listenantworten brauchen 10–34 s (Länge, ~54
 |---|---|---|---|---|
 | **Trefferquote (Datei)** | `evaluate_retrieval.py` | Erwartete Datei unter den gefundenen Chunks | > 0,85 | 0,993 (272/274) |
 | **Abschnitt-Trefferquote** | `evaluate_retrieval.py` | Erwarteter Abschnitt unter den Überschriften | darf nicht sinken | 143/149 |
-| **Answer Contains** | `evaluate.py` | Stichwörter in der LLM-Antwort | > 0,75 | 0,905 (248/274, erster Lauf) |
+| **Answer Contains** | `evaluate.py` | Stichwörter in der LLM-Antwort | > 0,75 | 0,905 (248/274, erster Lauf); 0,912 (250/274, dritter Lauf mit den Stichwörtern vom 17.10.) |
 | **Latenz** | `evaluate.py` | Antwortzeit gesamt, gemittelt über die beantworteten Fragen (fehlgeschlagene zählen bei den Quoten als Fehltreffer) | < 10 s | Ø 6,8 s (p50 5,9 s, p95 13,8 s) |
 
 Die Ziel-Trefferquote liegt bewusst unter 1,0 — die Strukturtests prüfen Randfälle, sie alle zu

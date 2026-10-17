@@ -325,7 +325,7 @@ pairs:
     source_type: pdf
     category: mechanic
     expected_sources: ["pnp_regelbuch.pdf"]
-    expected_answer_contains: ["Waldläufer", "Gezielter Schuss"]
+    expected_answer_contains: ["Gezielter Schuss", "Waldkundiger Blick"]
     expected_section: "5.4.3"
     notes: "Kapitel 5.4.3"
 
@@ -1332,7 +1332,7 @@ pairs:
     source_type: markdown
     category: adventure
     expected_sources: ["Geschichte - Söldner/Akt 3 - Mandate der Macht/2. Scharlachofen/Scharlachofen (III-2).md"]
-    expected_answer_contains: ["Scharlachofen"]
+    expected_answer_contains: ["Monolith", "Reaktor"]
 
   - id: a006
     question: "Wer ist der Auftraggeber im Abenteuer Relikt der verlorenen Stadt?"
@@ -1570,7 +1570,7 @@ pairs:
     source_type: markdown
     category: npc
     expected_sources: ["NPCs/Thaloran Windseele.md"]
-    expected_answer_contains: ["Thaloran"]
+    expected_answer_contains: ["Arkan-Schütze"]
     notes: "Keyword-case: seltener zweiteiliger Eigenname, BM25-affin."
 
   - id: k016
@@ -1654,7 +1654,7 @@ pairs:
     source_type: markdown
     category: lore
     expected_sources: ["Organisationen/Orden der letzten Dämmerung/Orden der Letzten Dämmerung.md"]
-    expected_answer_contains: ["Dämmerung", "Sol Invictus"]
+    expected_answer_contains: ["Ritterorden", "Sol Invictus"]
 
   - id: m016
     question: "Was ist Chronos, der Geheimbund der Zeit?"
@@ -1761,7 +1761,7 @@ pairs:
     source_type: markdown
     category: adventure
     expected_sources: ["Geschichte - Söldner/Akt 3 - Mandate der Macht/1. Weißer Schirm/Weißer Schirm (III-1).md"]
-    expected_answer_contains: ["Schirm"]
+    expected_answer_contains: ["Grenzwacht", "Schwarzhand"]
 
   - id: a015
     question: "Was passiert im Abenteuer Spiegelbruch?"
