@@ -6,17 +6,14 @@ Hier steht **offene Arbeit**. Erledigtes ist unten eine Zeile mit Verweis; Entsc
 und Begründungen stehen in der zuständigen Doku (Tabelle in `CLAUDE.md` → „Documentation“), die
 Umsetzung im `git log`. Die Nummern bleiben stabil — die Doku verweist auf sie.
 
-**Qualitätsphase 13.–14.10. abgeschlossen.** Retrieval Datei 272/274, Abschnitt 143/149; Antworten
-~90 % in zwei End-to-End-Läufen; Holdout-Listen 9/10; Code-Review 13.0 und Performance-Review
-erledigt. Was an Qualität offen ist, sind Einzelfälle (3.10, 3.15) oder bewusst zurückgestellt (3.14)
-— sie werden nur bei Anlass im Spiel angefasst. **Regressionsprüfung** nach größeren
-Inhaltsänderungen (Regelbuch, Vault): Golden Set + End-to-End-Lauf + Holdout
-([evaluation.md](docs/evaluation.md)), kein Tuning.
+**Qualitätsphase 13.–14.10. abgeschlossen**, Nacharbeit 13.1–13.4 (Ultrareview, leere Chunks,
+Regressionsprüfung, zwei Chat-Bugs) am 17.10. ebenfalls. Retrieval Datei 272/274, Abschnitt 143/149;
+Antworten 245/274 im dritten End-to-End-Lauf (im Rauschen der ersten beiden); Holdout-Listen 9/10.
+**Regressionsprüfung** nach größeren Inhaltsänderungen (Regelbuch, Vault): Golden Set +
+End-to-End-Lauf + Holdout ([evaluation.md](docs/evaluation.md)), kein Tuning.
 
-**Feature-Runde 14.10. abgeschlossen:** 3.16 Chunks unter der Quelle, 2 Bilder im Chat, 3.4 Kommentar zur
-Bewertung, 3.15-Fixes aus dem 👎 (Folgefragen, Schreibweise), 12.3 Auto-Reload, 12.4 `stop.ps1`;
-3.5 Wikilink-Expansion gemessen und verworfen, 3.2 gestrichen. Neu bewertet am 14.10. abends — die
-Liste unten.
+Neu priorisiert am 17.10.: **jeder offene Punkt unten steht in der Tabelle** — auch die Einzelfälle
+aus 3.10/3.15, als eigene Zeile oder in einer Sammelzeile.
 
 ---
 
@@ -29,15 +26,22 @@ End-to-End-Lauf ~35 min (🟡).
 
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 2 | 3.10 Rerank-Paar mit Dateiname/Überschrift | Mittel (ungewiss) | Gering | 🟡 | Der Reranker sieht nur den Chunk-Text; kurze Chunks ohne Namen sind chancenlos (m048 „Deckname: Solmar“ — Chunk existiert, Antwort falsch). Allgemeiner Hebel, nur mit Golden Set + Holdout + E2E |
-| 3 | 3.10 Schattenorden-Kontext (27 > 25 Chunks) | Gering-Mittel | Gering | 🟡 | Kernfrage zu einer Hauptfraktion (m003, m055) bekommt die Datei nicht mehr ganz; Treffer-Metriken sehen es nicht |
-| 4 | 3.15 Tippfehler-Toleranz | Gering-Mittel | Mittel | 🟡 | Am Spieltisch wird auf dem Handy getippt; einziger offener 👎-Fall. Riskant (falsche Korrekturen) — nur gemessen, mit Wörterbuch der Schreibweisen |
-| — | 2 Bilder — Rest (Dateiname-Rückfall, PDF-Bilder) | Gering | Mittel | 🔴 | Einbettungen laufen; Rest nur bei Bedarf |
-| — | 3.10 / 3.15 übrige Einzelfälle | Gering | — | 🟡 | Nur bei Anlass im Spiel |
+| 1 | 3.15 Golden-Set-Stichwörter k015, a014, a005, m015, p026 | Gering — Messgenauigkeit | Gering | 🟢 | Antworten inhaltlich richtig, wiederholen nur das Stichwort der Frage nicht (13.3). Vor Punkt 2, weil dessen E2E-Vergleich sonst 5 Schein-Fehler mitschleppt; die gespeicherten Antworten der drei Läufe lassen sich neu auswerten, die Vergleichbarkeit bleibt |
+| 2 | 3.10 Rerank-Paar mit Dateiname/Überschrift | Mittel (ungewiss) | Gering | 🟡 | Der Reranker sieht nur den Chunk-Text; kurze Chunks ohne Namen sind chancenlos (m048 „Deckname: Solmar“ — Chunk existiert, Antwort falsch). Allgemeiner Hebel, nur mit Golden Set + Holdout + E2E; `min_score` −4 des Regelwerk-Slots neu prüfen |
+| 3 | 3.10 Schattenorden-Kontext (27 > 25 Chunks) | Gering-Mittel | Gering | 🟡 | Kernfrage zu einer Hauptfraktion (m003, m055) bekommt die Datei nicht mehr ganz; Treffer-Metriken sehen es nicht. Danach nach Punkt 2, weil 2 die Pool-Reihenfolge ändert |
+| 4 | 3.15 Aufzählungen über große Kapitel | Mittel | Mittel-Hoch | 🟡 | Größte Gruppe echter Antwortfehler (7 Fragen: p008, p036, p037, p114, p014, a030, p049): Abschnitt gefunden, aber nur 8 Chunks erreichen das LLM. Holdout zeigt, dass kleine Listen gehen — Lösung muss gezielt sein (z. B. ganze Sektion für Listenfragen), Kontextlänge und Antwortzeit messen |
+| 5 | 3.15 Tippfehler-Toleranz | Gering-Mittel | Mittel | 🟡 | Am Spieltisch wird auf dem Handy getippt; einziger offener 👎-Fall („üebrschaden“). Riskant (falsche Korrekturen) — nur gemessen, mit Wörterbuch der Schreibweisen |
+| 6 | 14.1 Frage erneut senden | Gering | Gering | 🟢 | Idee des Nutzers. Echter Anwendungsfall: nach Fehler/Timeout (Ollama lädt, Backend-Neustart) dieselbe Frage ohne Abtippen; als neue Antwort wegen Temperatur 0,3 eher nicht. Vorschlag: Knopf nur unter Fehlermeldungen |
+| 7 | 3.10 Tabellen-Einzelfälle (Dolch/Wurfzahl 12, Dolch vs. Kurzschwert, Langbogen-PDF-Zelle) | Gering | Mittel | 🟡 | Eintrags-Slot holt die Tabelle, jina wertet anderes höher; evtl. durch Punkt 2 mit erledigt — danach neu ansehen |
+| 8 | 3.10 Monolith-Sektion in fremden Regelfragen (p011, p101) | Gering | Mittel | 🟡 | 22 Chunks, landet in den Top 3; Antworten bisher trotzdem richtig. Evtl. durch Punkt 2 mit erledigt |
+| 9 | 2 Bilder — Rest (Vor-/Spitzname, Dateiname-Rückfall, PDF-Bilder, neues Bild ohne Notiz-Änderung) | Gering | Gering–Mittel | 🟢–🔴 | Einbettungen laufen. Vor-/Spitzname (13.4) über `aliases` der Notiz wäre klein (🟢); Dateiname-Rückfall braucht Spy-Test, PDF-Bilder dauerhafte Ablage + Re-Index (🔴) |
+| 10 | 3.10/3.15 übrige Einzelfälle: AP-Pool „50 AP“, p009 (Abschnitt-Miss, Antwort richtig), „Wer ist Arkenfeld?“, k001 Preis-Spalte, p091 Tränke-Tabelle, x008 Heimkehrpfennig | Gering | je Gering | 🟡 | Nur bei Anlass im Spiel; Antworten teils schon richtig |
+| 11 | Beim nächsten Re-Index: Suchgenauigkeit prüfen (m039) | Gering | Gering | 🔴 | Nach zwei In-place-Re-Indizes 273/274 exakt; bei weiteren Abweichungen Vault einmal komplett neu aufbauen (3.10) |
+| — | 3.10 Simulationsberichte z001, z003, z006, z009, z012 | Gering | — | 🟢 | Liegt beim Nutzer: Überschriften in den Berichten (siehe „Offen beim Nutzer“), danach Golden Set |
 | — | 3.5 Wikilink-Expansion ⏸ | Gering | Mittel | 🔴 | Gemessen 14.10.: kein Gewinn, −1/−2 Dateien; nur bei konkreten Link-Fragen neu prüfen |
 | — | 4.2 Internet-Zugriff (Tailscale) ⏸ | Mittel | Gering | 🟢 | Nur zusammen mit einem Login für die API |
 | — | 3.14 Rechenfragen ⏸ | Mittel | Mittel-Hoch | 🟡 | Nur mit Denken zuverlässig (14–41 s); später mit größerem Modell neu prüfen |
-| — | 11.0 P8 Dienste-/Reranker-Modul | Gering | Mittel | 🟢 | Nur zusammen mit Feature-Arbeit an diesen Stellen (2 berührt das Reranker-Modul) |
+| — | 11.0 P8 Dienste-/Reranker-Modul | Gering | Mittel | 🟢 | Nur zusammen mit Feature-Arbeit an diesen Stellen (Punkt 2 berührt das Reranker-Modul — dann mitprüfen) |
 
 **Entschieden 14.10.**: 3.2 Session-History gestrichen (Nutzer) — Sessions bleiben im RAM; bei einem
 Wissenstool steht die Antwort im Regelbuch/Vault, nicht im Verlauf. Der Fähigkeitsbericht bleibt für Spieler freigegeben (Entscheidungshilfe).
@@ -57,93 +61,13 @@ Regeln. `HF_HUB_OFFLINE=1` (in `src/__init__.py`): Modelle nur aus dem lokalen C
 - **Browser (Handprüfung)**: **⏻ LoreKeeper beenden** einmal klicken — `logs/stop.log` muss nach
   Sekunden mit „stopped … (clean)“ enden (12.0); bei der nächsten Indizierung über die UI den
   Fortschritt durchklicken (Job starten, Seite wechseln und zurück — 3.8/3.9); 👍/👎 und die Tabs
-  „Feedback“/„Chunks“ einmal von Hand bedienen (👍/👎 vom Nutzer am 14.10. getestet, erste Bewertungen liegen
-  in `logs/feedback.jsonl`). Neu zu sehen: die Chunk-Ausklapper unter den Quellen (3.16), „🖼️ Bilder“ unter einer Antwort
-  zu Malek oder Arkenfeld (2), das Kommentarfeld nach 👍/👎 (3.4).
+  „Feedback“/„Chunks“ einmal von Hand bedienen (👍/👎 und Bilder vom Nutzer am 14./15.10. getestet).
+  Neu zu sehen (13.4): „wer ist lady lilith?“ zeigt nur noch Lyssaras Bilder, nicht Lioras; der
+  Kommentar wird erst mit Enter oder „Kommentar speichern“ gespeichert — Wegklicken speichert nichts.
 
 ---
 
 ## Offene Punkte
-
-### 13.1 Ultrareview 14.10. (Änderungen seit 1ba1f49) — Korrekturplan
-
-Zehn Befunde, jeder am Code nachvollzogen und am echten Vault geprüft (doppelte Bildnamen,
-Einbettungen mit Pfad, Notizen ohne H1, Einbettungen in Überschriften, Frontmatter-Schlüssel
-`images`, reine Bildnotizen, Datei-Quellen mit Einbettungen). **Heute wirkt keiner im Vault** — alle
-Mechanismen sind aber echt und treten mit der nächsten passenden Notiz ein.
-
-| # | Befund | Bewertung | Vault heute | Korrektur |
-|---|---|---|---|---|
-| 1 | Einbettung mit Ordner (`![[Spielleiter/Karte.png]]`) wird nur über den Dateinamen aufgelöst; bei gleichen Namen gewinnt der alphabetisch erste | bestätigt | 1 Einbettung mit Pfad, keine doppelten Namen | Pfad zuerst relativ zur Quelle auflösen, Name nur als Rückfall |
-| 2 | Notiz nur aus Bildern (`# Weltkarte` + `![[Weltkarte.png]]`): der Ersatz-Chunk bekommt kein `image_embeds` | bestätigt | keine solche Notiz | Bilder in den Ersatz-Chunk übernehmen |
-| 3 | Notiz ohne H1: die erste H2 gilt als „über der ersten Unterüberschrift“, ihre Bilder hängen an jedem Abschnitt | bestätigt | 3 Notizen ohne H1 (Escanor, Liora, Lyssara) — deren erste H2 hat kein Bild, Lyssaras Titelbild steht korrekt vor der ersten Überschrift | Titelbilder nur aus Text vor jeder Überschrift und aus dem Abschnitt einer echten H1 |
-| 4 | Frontmatter-Schlüssel `images`/`image_embeds` landet in denselben Metadaten; `images: 2` → `AttributeError` → 500 für jede Antwort mit dieser Notiz | bestätigt | kein solcher Schlüssel | beide Schlüssel aus dem Frontmatter verwerfen (reserviert) |
-| 5 | Einbettung in einer Überschriftszeile lässt die Platzhalterzeichen in `heading_hierarchy` und das Bild geht verloren | bestätigt | keine | Platzhalter auch aus Überschriften entfernen und sammeln |
-| 6 | Bild-Suche ignoriert `exclude_patterns`; bei Datei-Quellen durchsucht sie den ganzen Elternordner — ein Bild außerhalb der Quelle (z. B. aus einer Spielleiter-Quelle daneben) könnte an Spieler gehen | bestätigt, **Spieler-Invariante** | Datei-Quellen ohne Einbettungen; Ausschluss betrifft nur eine `.md` | gleicher Umfang wie die Indizierung: Ausschlüsse beachten, Datei-Quellen ohne Ordnersuche; Fall in den Sicherheitstest |
-| 7 | Truecasing-Aufbau ohne `try/except` — scheitert der Komplett-Lesezugriff, scheitert jede Frage | plausibel, **nicht ändern** | — | Scheitert ChromaDB beim Lesen, scheitert auch die Suche selbst; kein Fall, den ein Handler sinnvoll abfängt (Regel: nur an Systemgrenzen) |
-| 8 | `stop.ps1 -List`: `Substring` mit der Länge der ungekürzten Zeile (wirft bei mehrfachen Leerzeichen); `-List` wird während einer Indizierung verweigert | bestätigt | heute lange Befehlszeilen, wirft nicht | Länge der gekürzten Zeile; `-List` vor die Indizierungs-Sperre |
-| 9 | Strg+Pause an Ollama scheitert ohne Konsole (`OSError`), dann kein `kill` | plausibel, **nicht ändern** | — | `start.ps1` startet das Backend in beiden Modi mit Konsole; ohne Konsole gibt es keinen dokumentierten Start |
-| 10 | `TrueCaser` wiederholt den Lebenszyklus von `BM25Index`; zwei `invalidate()` an vier Stellen | bestätigt (Wartbarkeit) | — | ein Helfer in `sources_routes.py`, der beide verwirft; der doppelte Komplett-Scan nach einer Indizierung bleibt (einmalig, kein Messbedarf) |
-
-Danach: Unit-Tests je Korrektur (mutationsgeprüft bei 6), Sicherheitstest um eine Datei-Quelle mit
-Bild im Elternordner erweitern, voller Re-Index des Vaults, Golden Set + Live-Bilder prüfen.
-
-**Umgesetzt (14.10., spät)**: Korrekturen 1–6, 8 und 10 wie in der Tabelle (`markdown.py`: Frontmatter-Schlüssel
-reserviert, Titelbilder nur mit echter H1, Ersatz-Chunk mit Bildern, Einbettungen aus Überschriften;
-`orchestrator.py`: `_image_files` im Umfang der Indizierung, `_resolve_embed` Pfad vor Name;
-`sources_routes.py`: `_collection_changed()`; `stop.ps1`). Sechs neue Unit-Tests, der Sicherheitstest
-hat eine freigegebene Datei-Quelle `aushang` mit Köder-Bild im Elternordner — alle sieben schlagen gegen
-den alten Code fehl, #6 zusätzlich gezielt mutationsgeprüft (Datei-Quelle sucht wieder im Elternordner →
-Unit- und Sicherheitstest rot). Doku: `docs/parsing.md`, `docs/testing.md`, `docs/operations.md`.
-Voller Re-Index (14.10.): 215 Dokumente, 0 Fehler, Golden Set unverändert Datei 272/274, Abschnitt
-143/149. Live 15.10.: `stop.ps1 -List` listet Backend, Ollama und llama-server ohne Fehler; Bilder im
-Chat (Malek-Porträt, Arkenfeld-Karte) kommen mit der Antwort. ✅ Erledigt.
-
-### 13.4 Zwei Bugs aus dem Chat vom 15.10. — ✅ Erledigt (17.10.)
-
-**Kommentar halb gespeichert**: Beim 👎 zu „wer ist lady lilith?“ landeten sechs Zeilen in
-`logs/feedback.jsonl`, jede mit einem längeren Stück des Kommentars. Ursache: `st.text_input` löst
-`on_change` nicht nur bei Enter aus, sondern bei jedem Verlassen des Felds (zwischendurch die
-Bildnamen nachsehen). Umgesetzt: Feld in einem `st.form` mit Knopf „Kommentar speichern“, Enter
-speichert weiter. Neuer UI-Test (Tippen + Rerun schickt nichts), gegen den alten Code rot.
-
-**Fremdes Bild unter der Antwort**: `Liora Veylan_1.png` war richtig ihrer Notiz zugeordnet, aber die
-Notiz kam nur als schwache Quelle Nr. 6 mit, die Antwort erwähnt sie nicht. Umgesetzt (Entscheidung
-des Nutzers): Bilder nur von Notizen, deren Name in Frage oder Antwort steht (ganzes Wort). UI-Test
-erweitert, gegen den alten Code rot. Bekannte Lücke: nennt die Antwort jemanden nur beim Vornamen,
-fehlt das Bild. Doku: `docs/ui-ux.md`. **Offen**: live ansehen (Lady-Lilith-Frage → nur
-Lyssara-Bilder).
-
-### 13.3 Regressionsprüfung nach 13.1/13.2 (15.10.) — ✅ Erledigt
-
-End-to-End (274 Fragen, nach beiden Re-Indizes und den leeren Chunks): **Answer Contains 245/274
-(0,894)**, Datei 0,993, Antwort Ø 7,1 s — vorher 248 und 247, also im Rauschen (±3, siehe
-[evaluation.md](docs/evaluation.md)). Von den 19 Fragen, die in beiden alten Läufen scheiterten, sind
-6 jetzt richtig (a012, m042, p008, p009, p010, p079), 13 scheitern weiter. 7 neue Fehlschläge, alle
-gesichtet: 5 sind inhaltlich richtig, wiederholen aber das Stichwort aus der Frage nicht (k015, a014,
-a005, m015, p026 — Antwort beginnt direkt mit dem Inhalt); i002 („Wie sieht Lyssara aus?“) bekam
-dieselben Quellen wie am 14.10. und sagte damals wie heute „Die Quellen schweigen dazu“ — früher nur
-als Treffer gezählt, weil der Name in der Absage stand; p035 zählt die Basisausrüstungen nicht auf
-(schwankte schon vorher). **Keine Regression durch 13.1/13.2.** Holdout-Listen unverändert **9/10,
-50/53 Einträge** (fehlt wieder: Abenteuer von Akt 2). Live: Arkenfeld-Fragen ohne leere Chunks (kleinster
-170 Zeichen, vorher 5 `---`-Zwillinge), Karte unter der Antwort. Offen aus dem Lauf: Stichwörter von
-k015/a014/a005/m015/p026 lockern oder lassen (Golden-Set-Pflege, nur mit Blick auf die Antworten).
-
-### 13.2 Leere Chunks (14.10.) — ✅ Erledigt
-
-Anlass: leere Chunks im Chat bei einer Frage zu Arkenfeld. **Ursache**: 251 von 4414 Chunks waren nur
-`---` (Abschnitt endet auf Tabelle + Trennlinie; der Chunker trennt Tabelle und Text, und ein kleines
-Stück wurde nur mit einem kleinen Vorgänger zusammengelegt) — im Embedding fast nur der
-Überschriftenpfad, also passend zum Namen der Notiz, im Chat ohne Text. Dazu Block-IDs + `<!-- sim -->`-
-Kommentare am Ende von Werteblöcken, Tag-Zeilen, zwei leere Notizen (`(empty)`) und 33 abgeschnittene
-Beschriftungen (`- L2` aus eingeklappten Callouts) ohne ihre Tabelle. **Umgesetzt**: Parser entfernt
-Trennlinien, Block-IDs, HTML-Kommentare und Tag-Zeilen (nicht in Code-Blöcken), leere Notiz → kein
-Chunk; Chunker hängt ein Stück unter `min_chunk_size` an das nächste der Sektion und verwirft Stücke ohne
-Buchstaben/Ziffern. 5 neue Tests, alle gegen den alten Code rot. **Gemessen** (voller Re-Index): 4414 →
-3933 Chunks, 0 ohne Inhalt (vorher 251), ≤ 20 Zeichen nur noch 8 echte (Zitat, Namensliste); Golden Set
-unverändert 272/274 · 143/149, dieselben Misses; doppelt belegte Plätze (gleiche Datei + Überschrift)
-738 → 556. Doku: `docs/parsing.md`, `docs/embedding-strategy.md`, `ARCHITECTURE.md`,
-`docs/configuration.md`, `docs/data-flow.md`. Offen: Holdout/E2E stehen ohnehin als Punkt 1 an.
 
 ### 2 Bilder im Chat — Rest
 
@@ -153,6 +77,8 @@ Einbettungen in Notizen laufen seit 14.10. (siehe „Erledigt“ 2). Offen, nur 
   Filter der Anfrage, Spy-Test).
 - **Bilder aus PDFs** liegen nur in einem temporären Ordner, der nach dem Parsen gelöscht wird — zum
   Anzeigen müssten sie dauerhaft abgelegt werden.
+- **Vor-/Spitzname** (13.4): Bilder erscheinen nur, wenn Frage oder Antwort den vollen Notiznamen
+  nennt — „Lyssara“ allein reicht nicht. Weg: die `aliases` der Notiz mitprüfen.
 - Ein neu abgelegtes Bild erscheint erst nach einer Änderung der Notiz oder einem vollen Re-Index der
   Quelle (der Inhalts-Hash deckt nur die Notiz ab).
 
@@ -207,15 +133,17 @@ prüfen, bei weiteren Abweichungen den Vault einmal komplett neu aufbauen. Umges
 Feintuning beendet (14.10.): zwischen zwei gleichen Läufen kippen ~15 Fragen, die übrigen Fehler haben
 je eine eigene Ursache, und der Holdout zeigt, dass Listen allgemein funktionieren (9/10). Messungen,
 Gründe und die angepassten Golden-Set-Stichwörter: [evaluation.md](docs/evaluation.md#evaluatepy--end-to-end).
-Offen, nur bei Anlass:
-- **Aufzählungen über große Kapitel** — der richtige Abschnitt wird gefunden, aber nur 8 Chunks
+Offen:
+- **Golden-Set-Stichwörter** (Priorität 1, aus 13.3): k015, a014, a005, m015, p026 sind inhaltlich
+  richtig, wiederholen aber das Stichwort der Frage nicht — lockern, nur mit Blick auf die Antworten.
+- **Aufzählungen über große Kapitel** (Priorität 4) — der richtige Abschnitt wird gefunden, aber nur 8 Chunks
   erreichen das LLM: p008 Klassen, p036 Basis-Skills, p037 Basis-Zauber, p114 Eigenheiten Magie, p014
   Benchmark, a030 Beweis-Tabelle, p049 Überheilung.
 - **👎 aus dem Chat (14.10.)** — 5 Bewertungen, 4 Fälle: drei behoben (siehe „Erledigt“ 3.15 Teil, Feedback);
-  offen **Tippfehler** „was ist üebrschaden?“ — findet nichts Passendes, das Modell erfindet
+  offen **Tippfehler** (Priorität 5) „was ist üebrschaden?“ — findet nichts Passendes, das Modell erfindet
   „Überschusschaden“ aus dem Simulationsbericht. Möglicher Weg: unbekannte Wörter auf das nächste Wort
   aus dem Wörterbuch der Schreibweisen abbilden (Abstand 1–2, lange Wörter) — riskanter, nur gemessen.
-- **Fakten**: k001 Langschwert „20,5 Gold“ (Spalte „Preis“ der Simulations-Rangliste statt Preistabelle
+- **Fakten** (Priorität 10, nur bei Anlass): k001 Langschwert „20,5 Gold“ (Spalte „Preis“ der Simulations-Rangliste statt Preistabelle
   7.4); m048 Deckname „Solmar“ (Kopfabschnitt ohne Überschrift und Namen — 2 half nicht, siehe 3.10
   „Rerank-Paar ohne Namen“);
   p091 Tränke-Fehlwurf (1W8-Tabelle fehlt); x008 Heimkehrpfennig („Kultpriester“ gilt, Antwort nennt
@@ -238,12 +166,16 @@ und vereinfacht die Test-Fixtures) und Reranker + GPU-Rückfall als `src/retriev
 zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 
 
-## xx.0 UX verbessern
-- Bottun um input erneut zu schicken anstatt die selbe frage nochmla schreiben zu müssen (ist das sinnvoll; gibt dafür einen usecase?)
-- weiteres
+### 14.0 UX
 
-## xx.0 Bugs
-- (keine offenen — die zwei vom 15.10. sind 13.4)
+- **14.1 Frage erneut senden** (Priorität 6, Idee des Nutzers 15.10.): Knopf, der die letzte Frage
+  noch einmal schickt, statt sie neu zu tippen. Sinnvoll vor allem nach einem Fehler oder Timeout
+  (Ollama lädt noch, Backend-Neustart) — dort steht heute nur die Fehlermeldung. Für „noch eine
+  Antwort zur selben Frage“ eher nicht: die Antworten unterscheiden sich bei Temperatur 0,3 kaum,
+  und Folgefragen decken „ausführlicher“/„kürzer“ ab. Vorschlag: Knopf nur unter Fehlermeldungen.
+
+## Eingang (neue Bugs und Ideen, noch nicht bewertet)
+- —
 
 ---
 
@@ -271,6 +203,10 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 | 12.3 | Auto-Reload hing (dreimal am 14.10.), nachgestellt mit drei Ursachen: **(1)** Uvicorn startet den Worker unter Windows per Strg+C an die ganze Konsole neu — das traf auch das vom Backend gestartete Ollama (laufende Antwort → 503). Jetzt eigene Prozessgruppe, Beenden per Strg+Pause samt `llama-server` (1 s, Modell nicht mehr im VRAM). **(2)** Ein laufender End-to-End-Lauf (`asyncio.to_thread`) hielt den alten Worker am Leben — Python wartet beim Beenden auf Pool-Threads, der Lauf fragt den eigenen, nicht mehr antwortenden Server mit 120 s je Frage, und der Reloader wartet ohne Grenze: kein neuer Worker. Jetzt Daemon-Thread (`run_in_daemon_thread`, mutationsgeprüft); Indizierung bleibt bewusst ein Pool-Thread (wird fertig geschrieben). **(3)** `stop.ps1` während eines Neustarts: der Reloader startete noch einen Worker, der kein Strg+C bekam und als Waise Port 8000 hielt — `stop.ps1` sucht vor dem harten Beenden erneut nach Kindprozessen. Live geprüft: Neustart während E2E-Lauf mit geladenem Modell → Antwort fertig, Ollama + Runner beendet, neuer Worker nach 13 s; Stopp während Neustart-Serie → Port frei, keine Waisen. Der 17:15-Fall war keiner: Änderung in `evaluation/`, das nicht überwacht wird | 14.10. | `docs/operations.md` |
 | 2 | Bilder im Chat ohne Bildbeschreibung (Ansatz des Nutzers): Der Markdown-Parser behält `![[bild.png]]` / `![[bild.png\|300]]` je Abschnitt; **Titelbilder** (vor der ersten Unterüberschrift) hängen an jedem Abschnitt der Notiz — nur je Abschnitt bekam live keine Frage zu Malek/Arkenfeld ein Bild. Der Orchestrator löst die Namen **innerhalb derselben Quelle** zu Pfaden auf (`images`), `sources` liefern sie, der Chat zeigt „🖼️ Bilder (n)“ (zugeklappt, max. 6, nur existierende Dateien). Spieler-Sicherheitstest mit Köder-Bild in einer Spielleiter-Quelle, mutationsgeprüft (quellübergreifende Auflösung → 7 Fehlschläge). Zwei volle Re-Indizes des Vaults (je ~8 min); Golden Set unverändert Datei 272/274, Abschnitt 143/149. Live: Malek → Porträt, Arkenfeld-Karte → `arkenfeld.png`, Isolde Vaer → 2 Bilder. Suche danach 273/274 exakt (m039 weicht ab, Treffer unverändert) — nach weiteren In-place-Re-Indizes neu prüfen. Rest offen (Dateiname-Rückfall, PDF-Bilder) | 14.10. | `docs/parsing.md`, `docs/ui-ux.md`, `ARCHITECTURE.md`, `docs/embedding-strategy.md` |
 | 3.4 | Kommentar zur Bewertung: nach 👍/👎 ein optionales Feld (Enter speichert, ≤ 1.000 Zeichen, API antwortet sonst 422); jede Zeile in `logs/feedback.jsonl` trägt Bewertung und Kommentar zusammen, Zurücknehmen löscht ihn. Tab „Feedback“ mit Spalte „Kommentar“, beim Übernehmen ins Golden Set landet er in der Notiz. UI-, API- und Grenztests; kein zusätzlicher Backend-Aufruf beim Anzeigen | 14.10. | `docs/ui-ux.md`, `docs/operations.md`, `ARCHITECTURE.md` |
+| 13.1 | Ultrareview 14.10. (Änderungen seit 1ba1f49): 10 Befunde zu Bildern und `stop.ps1`, 8 korrigiert (Einbettung mit Pfad vor Name, Ersatz-Chunk mit Bildern, Titelbilder nur mit echter H1, Frontmatter-Schlüssel `images`/`image_embeds` reserviert, Einbettungen aus Überschriften, Bild-Suche im Umfang der Indizierung — **Spieler-Invariante**, Sicherheitstest mit Köder-Bild, mutationsgeprüft —, `stop.ps1 -List`, ein Helfer für BM25 + Truecaser); #7 und #9 mit Grund verworfen (kein Fall für einen Handler, kein Start ohne Konsole). Voller Re-Index, Golden Set unverändert 272/274 · 143/149; live 15.10.: `stop.ps1 -List` und Bilder im Chat | 14./15.10. | `docs/parsing.md`, `docs/testing.md`, `docs/operations.md` |
+| 13.2 | Leere Chunks: 251 von 4414 waren nur `---` (dazu Block-IDs, Sim-Kommentare, Tag-Zeilen, leere Notizen, abgeschnittene Beschriftungen) — Parser entfernt sie, Chunker hängt Stücke unter `min_chunk_size` an das nächste und verwirft Stücke ohne Buchstaben/Ziffern. Index 4414 → 3933 Chunks, 0 ohne Inhalt, Golden Set unverändert, doppelt belegte Plätze 738 → 556 | 14.10. | `docs/parsing.md`, `docs/embedding-strategy.md`, `ARCHITECTURE.md`, `docs/configuration.md`, `docs/data-flow.md` |
+| 13.3 | Regressionsprüfung nach 13.1/13.2: E2E 245/274 (0,894, vorher 248/247 — Rauschen), Datei 0,993, Ø 7,1 s; 6 der 19 Dauer-Fehler jetzt richtig, 7 neue gesichtet (5 nur Stichwort, i002 frühere Schein-Treffer-Absage, p035 schwankt) — keine Regression. Holdout 9/10, 50/53; live keine leeren Chunks mehr. Rest: Stichwörter (Priorität 1) | 15.10. | `docs/evaluation.md` |
+| 13.4 | Zwei Chat-Bugs vom 15.10.: 👎-Kommentar wurde bei jedem Verlassen des Felds halb gespeichert (`st.text_input` speichert beim Fokusverlust) → Feld in `st.form`, nur Enter/Knopf speichert; fremdes Porträt unter der Antwort (Liora Veylan als schwache Quelle Nr. 6) → Bilder nur von Notizen, deren Name in Frage oder Antwort steht (Entscheidung des Nutzers). Beide UI-Tests gegen den alten Code rot. Rest: live ansehen, Vor-/Spitzname (2 Rest) | 17.10. | `docs/ui-ux.md` |
 | 3.11 | Spieler-/Spielleiter-Modus inkl. Sicherheitstests (deterministisch, live, Spy-Test) | 11./12.10. | `ARCHITECTURE.md` 4.8, `docs/testing.md` |
 | 3.12 | Folgefragen ohne Inhaltswort („Fass das kürzer zusammen“, „Gib mir ein Beispiel“) gehen durch Condense — Suche und Quellenliste passen zum Thema; Wortliste nur ergänzend (unbekanntes Wort = Inhaltswort), Unit-Tests in beide Richtungen, mutationsgeprüft. Live 13.10.: „Fass das kürzer zusammen“ → „Fasse die Beschreibung von Arkenfeld kurz zusammen.“ (1,2 s), Quellen `Orte/Arkenfeld.md` statt Venthir/Regelbuch | 13.10. | `docs/prompts.md` |
 | 3.13 | Regelkern im `qa`-Prompt (15 Stichpunkte zum Regelwerk, direkt vor der Frage; „Ressourcen vs. Punkte“ ergänzt: p009 Zauberpunkte 0/3 → 3/3): mit mMiniLMv2 Rang-1-Wurfzahl und Rüstung je 0/3 → 3/3, Lore-Fragen unverändert; im Systemprompt wirkungslos. Live mit jina: Rüstung 3/3, Rang-1-Wurfzahl wieder 0/3 (Lead „höchstens 13“). Offen: Rang 1 mit jina, Dolch, Schattenklinge (3.10) | 14.10. | `docs/prompts.md` |
