@@ -20,7 +20,7 @@ from src.config.manager import RetrievalConfig
 from src.retrieval.bm25_index import BM25Index
 from src.retrieval.embeddings import EmbeddingService
 from src.retrieval.truecase import TrueCaser
-from src.retrieval.vectorstore import VectorStoreService, identity_line
+from src.retrieval.vectorstore import _TABLE_SEPARATOR, VectorStoreService, identity_line
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,31 @@ def _to_chunk(item: dict[str, Any]) -> "RetrievedChunk":
         score=item["score"],
         metadata=item["metadata"],
     )
+
+
+def _focus_table(text: str, names: set[str]) -> str | None:
+    """``text`` cut to what precedes its first table, the header row and the rows whose first cell is one of
+    ``names`` (cell parts split at ``<br>``: "**l**<br>**Langbogen**" is a PDF artefact for "Langbogen").
+    None when no row is named — the chunk is then scored as it is.
+
+    A table is one long text; a question about one row ("Unterschied Dolch und Kurzschwert") scored the
+    whole weapon table below unrelated sections. The caller keeps the better of both scores, so a table can
+    only rise: scoring the focused text alone moved the Glücksstein table from rank 1 to 4 and cost p086
+    (golden set 144 → 143); with the maximum the golden set is unchanged (roadmap 3.10, 17.10.).
+    """
+    lines = text.split("\n")
+    table = [i for i, line in enumerate(lines) if line.lstrip().startswith("|")]
+    rows = [i for i in table[1:] if not _TABLE_SEPARATOR.match(lines[i].strip())   # table[0] is the header
+            and {p.replace("*", "").strip() for p in re.split(r"<br\s*/?>", lines[i].strip().strip("|").split("|")[0])}
+            & names]
+    if not rows:
+        return None
+    first = table[0]
+    keep = [*range(first), first]
+    if first + 1 < len(lines) and _TABLE_SEPARATOR.match(lines[first + 1].strip()):
+        keep.append(first + 1)
+    keep += [i for i in rows if i not in keep]
+    return "\n".join(lines[i] for i in keep)
 
 
 def _rerank_text(chunk: "RetrievedChunk") -> str:
@@ -519,6 +544,13 @@ class Retriever:
         pairs = [[query, _rerank_text(c)] for c in chunks + extra]
 
         all_scores = await self._predict(pairs)
+        # Tables with a row the question names also get scored on just those rows; the better score counts
+        names = set(_entry_names(query))
+        focused = {n: f for n, (_, text) in enumerate(pairs) if (f := _focus_table(text, names))}
+        if focused:
+            row_scores = await self._predict([[query, f] for f in focused.values()])
+            for n, score in zip(focused, row_scores, strict=True):
+                all_scores[n] = max(all_scores[n], score)
         scores, extra_scores = all_scores[:len(chunks)], all_scores[len(chunks):]
 
         ranked = sorted(zip(scores, chunks, strict=True), key=lambda x: x[0], reverse=True)

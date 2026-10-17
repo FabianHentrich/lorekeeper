@@ -380,9 +380,33 @@ pro Klausel, eine normale Frage bei 20.000 Chunks ~1 s). Deshalb höchstens **60
 Anfang der Frage (Golden Set braucht höchstens 48, p95 32): Ohne Grenze ließen ~1.000 Klauseln (eine
 Frage mit ~4.000 Zeichen) die Abfrage scheitern und ~3.000 den Backend-Prozess abstürzen (Code-Review
 14.10., Roadmap 13.0); dazu nimmt die API höchstens 4.000 Zeichen pro Frage an. Wächst der Index stark,
-die Zeit neu messen. Offen: die Rechenfrage „Dolch, STÄ 4, Wurfzahl 12“ und „Unterschied Dolch und
-Kurzschwert“ — der Slot holt die Tabelle, jina bewertet Krit-Regeln bzw. die Schurken-Sektion höher;
-„Langbogen“ — die PDF-Zelle heißt `**l**<br>**Langbogen**` (Parser-Artefakt). Groß-/Kleinschreibung
+die Zeit neu messen.
+
+**Tabellen im Rerank auf die genannten Zeilen fokussiert (17.10., Roadmap 3.10):** Der Slot holte die
+Waffentabelle bei „Unterschied Dolch und Kurzschwert“ in den Pool, aber jina bewertete die **ganze**
+Tabelle (Dutzende Zeilen) gegen eine Frage zu **einer** Zeile und gab ihr −1,3 — die Schurken-Sektion
+gewann und füllte per Expansion den Kontext. Seitdem bekommt jeder Tabellen-Chunk im Pool, dessen
+erste Zelle einer Zeile ein Name aus der Frage ist (dieselben Namen wie der Slot, Zellen an `<br>`
+geteilt — die PDF-Zelle `**l**<br>**Langbogen**` zählt als „Langbogen“), einen zweiten Score für
+Text vor der Tabelle + Kopfzeile + genannte Zeilen; **es zählt der bessere** (`_focus_table`). Das LLM
+bekommt weiter die ganze Tabelle. Gemessen (ein Prozess, ein Index, aus/an/aus, beide Aus-Läufe
+identisch):
+
+| Fassung | Golden Set | Dolch/Kurzschwert | Hammer | Glücksstein |
+|---|---|---|---|---|
+| ohne | 272 · 144 | — | Platz 2 | Platz 1 |
+| nur der fokussierte Text | 272 · 143 (verliert p086) | Platz 2 | 1 | **4** |
+| **besserer der beiden Scores** | **272 · 144**, keine Frage kippt | **Platz 2** | **1** | 1 |
+
+Der fokussierte Text allein verliert, wo der Kontext der ganzen Tabelle hilft (Glücksstein, p086
+Langschwert); mit dem Maximum kann eine Tabelle nur steigen. 13 Golden-Fragen bekommen andere Chunks,
+10 davon nur in anderer Reihenfolge; inhaltlich: k001 („Was kostet ein Langschwert?“) bekommt die
+Waffentabelle statt der Gladiator-Startausrüstung, m017 und m028 tauschen je einen Lore-Chunk. Kosten:
+ein zusätzlicher Rerank-Aufruf nur bei Fragen mit genannter Tabellenzeile, im Golden Set Ø +15 ms.
+Weiter offen: „Wie viel Schaden macht ein Langbogen?“ (Tabelle bleibt bei −1,5 hinter Simulationsbericht
+und Krit-Regel) und die Rechenfrage „Dolch, STÄ 4, Wurfzahl 12“ — die Waffentabelle wäre Platz 7, scheitert
+aber am Deckel `max_per_source` 3: Das Regelbuch ist **eine** Datei, zwei Krit-Chunks und die magischen
+Waffen sind schon drin. Groß-/Kleinschreibung
 innerhalb des Namens zählt: „ap-trank“ findet „AP-Trank“ nicht.
 
 ### Warum Section Expansion?

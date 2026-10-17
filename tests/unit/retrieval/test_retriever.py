@@ -10,7 +10,7 @@ from src.config.manager import (
     RulesSlotConfig,
 )
 from src.retrieval.bm25_index import BM25Index
-from src.retrieval.retriever import Retriever, _entry_names, _rrf_merge
+from src.retrieval.retriever import Retriever, _entry_names, _focus_table, _rrf_merge
 
 
 @pytest.fixture
@@ -381,6 +381,49 @@ class TestEntryNames:
         names = _entry_names("Dolch der Schatten Dolch der Schatten Klinge")
         assert "Dolch der Schatten" in names and "Dolch der Schatten Dolch" not in names
         assert len(names) == len(set(names))
+
+
+_WEAPONS = ("**7.1.1 Waffen** > **Nahkampfwaffen**\n\n"
+            "|**Waffe**|**Kat.**|**normal**|\n|---|---|---|\n"
+            "|**Dolch**|leicht|STÄ + 2|\n|**Langschwert**|schwer|STÄ + 4|\n|**l**<br>**Langbogen**|normal|GEW + 2|")
+
+
+class TestFocusTable:
+    """Roadmap 3.10 (17.10.): a table is reranked on the rows the question names, too."""
+
+    def test_heading_header_and_named_rows_only(self):
+        assert _focus_table(_WEAPONS, {"Dolch", "Wie"}) == (
+            "**7.1.1 Waffen** > **Nahkampfwaffen**\n\n|**Waffe**|**Kat.**|**normal**|\n|---|---|---|\n"
+            "|**Dolch**|leicht|STÄ + 2|")
+
+    def test_pdf_cell_artefact_before_br_still_matches(self):
+        assert _focus_table(_WEAPONS, {"Langbogen"}).endswith("|**l**<br>**Langbogen**|normal|GEW + 2|")
+
+    def test_no_named_row_and_no_table_give_none(self):
+        assert _focus_table(_WEAPONS, {"Hammer", "Waffe"}) is None          # the header is no row
+        assert _focus_table("Dolch ist eine leichte Waffe.", {"Dolch"}) is None
+
+    @pytest.mark.asyncio
+    async def test_the_better_of_both_scores_counts(self, config, embed_service):
+        """The whole table scores low against one named row; its focused text high — the table must win."""
+        config.reranking = RerankingConfig(enabled=True, top_k_rerank=1)
+        vs = MagicMock()
+        vs.query.return_value = [
+            {"id": "1", "content": _WEAPONS, "score": 0.8,
+             "metadata": {"source_file": "regeln.pdf", "document_type": "pdf", "heading_hierarchy": "Waffen"}},
+            {"id": "2", "content": "Kritische Treffer verdoppeln …", "score": 0.9,
+             "metadata": {"source_file": "regeln.pdf", "document_type": "pdf", "heading_hierarchy": "Krit"}},
+        ]
+        retriever = Retriever(config=config, embedding_service=embed_service, vectorstore=vs)
+        retriever._reranker = MagicMock()
+        retriever._reranker.predict.side_effect = lambda pairs: [
+            0.9 if "Langschwert" not in text and "Dolch" in text else 0.1 if "Dolch" in text else 0.5
+            for _, text in pairs]
+
+        results = await retriever.retrieve("Unterschied zwischen Dolch und Kurzschwert?")
+
+        assert [r.heading for r in results] == ["Waffen"]
+        assert retriever._reranker.predict.call_count == 2                # one extra batch for the table rows
 
 
 class TestRerankerBackend:
