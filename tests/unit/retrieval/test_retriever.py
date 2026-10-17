@@ -792,6 +792,42 @@ class TestSectionExpansion:
         vs.get_chunks_for_file.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_intro_plus_one_sub_heading_expands(self, embed_service):
+        """Roadmap 3.15 (p014): the section's intro chunk and one sub-heading are two distinct hits."""
+        hits = [_hit("Waldläufer", 10, 0.9), _hit("Waldläufer > Kurzprofil", 11, 0.8)]
+        retriever, _ = self._retriever(embed_service, hits)
+
+        results = await retriever.retrieve("waldläufer")
+
+        assert [r.metadata["chunk_index"] for r in results] == [10, 11, 12, 13, 14]
+
+    @pytest.mark.asyncio
+    async def test_top_ranked_intro_counts_for_top_rank_and_placement(self, embed_service):
+        """Roadmap 3.15 (p036): intro at rank 1, sub-headings only below top_rank — the section is
+        expanded anyway and starts where the intro was."""
+        hits = [_hit("Waldläufer", 10, 0.9), _hit("A", 0, 0.85, source_file="other.pdf"),
+                _hit("B", 1, 0.8, source_file="other.pdf"), _hit("Waldläufer > Mehrfachschuss", 14, 0.7),
+                _hit("Waldläufer > Kurzprofil", 11, 0.6)]
+        retriever, _ = self._retriever(embed_service, hits)
+
+        results = await retriever.retrieve("fähigkeiten waldläufer")
+
+        assert [(r.source_file, r.metadata["chunk_index"]) for r in results] == [
+            ("regelbuch.pdf", 10), ("regelbuch.pdf", 11), ("regelbuch.pdf", 12), ("regelbuch.pdf", 13),
+            ("regelbuch.pdf", 14), ("other.pdf", 0), ("other.pdf", 1)]
+
+    @pytest.mark.asyncio
+    async def test_intro_without_a_sub_heading_hit_does_not_expand(self, embed_service):
+        """An intro alone is one heading — no sibling evidence, nothing is loaded."""
+        hits = [_hit("Waldläufer", 10, 0.9), _hit("Krieger > Kurzprofil", 20, 0.8)]
+        retriever, vs = self._retriever(embed_service, hits)
+
+        results = await retriever.retrieve("waldläufer")
+
+        assert len(results) == 2
+        vs.get_chunks_for_file.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_oversized_section_is_not_expanded(self, embed_service):
         """Verify a section above max_chunks is left as the original hits."""
         hits = [_hit("Waldläufer > Mehrfachschuss", 14), _hit("Waldläufer > Kurzprofil", 11)]

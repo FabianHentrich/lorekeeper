@@ -365,6 +365,23 @@ Unterabschnitte einer Sektion; die Antwort wird dann lückenhaft. Teilen sich �
 Datei eine Eltern-Überschrift mit **verschiedenen** Unter-Überschriften, lädt der Retriever die
 ganze Sektion in Dokumentreihenfolge und setzt sie an der Stelle des besten Treffers ein.
 
+**Einleitungs-Chunk zählt mit (17.10., Roadmap 3.15):** Der Chunk mit der Eltern-Überschrift selbst
+(„5.2 Basis-Skills“, der Text vor der ersten Unter-Überschrift) zählt als Treffer seiner Sektion —
+aber nur, wenn auch eine Unter-Überschrift getroffen wurde; ein Einleitungs-Chunk allein lädt nichts.
+Vorher zählte nur, was eine Ebene **unter** der Eltern-Überschrift lag: Bei p036 („Welche Basis-Skills
+…?“) stand die Einleitung auf Rang 1, der beste gezählte Treffer auf Rang 5 (> `top_rank`), es blieb
+bei 8 Chunks; bei p014 waren Einleitung + eine Unter-Überschrift nur *eine* verschiedene Überschrift.
+Die Sektion wird an der Stelle des bestplatzierten Treffers eingesetzt, also oft an der der
+Einleitung. Golden Set (gleicher Index, nach dem Parser-Fix für Beschriftungen): Datei 272/274
+unverändert, Abschnitt 143 → **144**/149 (+z006, nichts verloren); expandierte Fragen 115 → 144,
+Chunks Ø / p90 / max 11,7 / 21 / 27 → 12,6 / 22 / 28 (Budget 30 hält). Je drei Läufe: p036 und p014
+0 → 3/3; Holdout unverändert 9/10, 51/53. End-to-End mit Parser-Fix und dieser Regel zusammen
+(17.10.): **260/274** gegen 253 — 12 gewonnen (alle vier Zielfragen p036, p037, p114, p014, dazu p091,
+m056 u. a.), 5 verloren, alle inhaltlich richtig mit anderer Formulierung („nicht vorbereitet“ statt
+„unvorbereitet“, „Kleine Golems“). Die Antwortzeit dieses Laufs ist nicht vergleichbar — das LLM
+generierte während des Laufs 3–4× langsamer, auch bei Fragen mit unverändert 8 Chunks (Rechner unter
+Last); was die längeren Kontexte kosten, ist noch nicht gemessen.
+
 Zwei Grenzen schützen den Kontext: Sektionen über `max_chunks` (25) bleiben unverändert, und
 expandiert wird nur, wenn ein Treffer der Sektion unter den ersten `top_rank` (3) liegt — sonst
 ziehen zwei zufällige, schwache Treffer eine fremde Sektion herein. Golden Set mit `top_rank: 3`:

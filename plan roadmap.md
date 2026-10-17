@@ -26,8 +26,7 @@ End-to-End-Lauf ~35 min (🟡).
 
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 4 | 3.15 Aufzählungen über große Kapitel — **nächster Punkt** (1–3 erledigt 17.10.) | Mittel | Mittel-Hoch | 🟡 | Größte Gruppe echter Antwortfehler (7 Fragen: p008, p036, p037, p114, p014, a030, p049): Abschnitt gefunden, aber nur 8 Chunks erreichen das LLM. Holdout zeigt, dass kleine Listen gehen — Lösung muss gezielt sein (z. B. ganze Sektion für Listenfragen), Kontextlänge und Antwortzeit messen |
-| 5 | 3.15 Tippfehler-Toleranz | Gering-Mittel | Mittel | 🟡 | Am Spieltisch wird auf dem Handy getippt; einziger offener 👎-Fall („üebrschaden“). Riskant (falsche Korrekturen) — nur gemessen, mit Wörterbuch der Schreibweisen |
+| 5 | 3.15 Tippfehler-Toleranz — **nächster Punkt** (1–4, 14.1 erledigt 17.10.) | Gering-Mittel | Mittel | 🟡 | Am Spieltisch wird auf dem Handy getippt; einziger offener 👎-Fall („üebrschaden“). Riskant (falsche Korrekturen) — nur gemessen, mit Wörterbuch der Schreibweisen |
 | 7 | 3.10 Tabellen-Einzelfälle (Dolch/Wurfzahl 12, Dolch vs. Kurzschwert, Langbogen-PDF-Zelle) | Gering | Mittel | 🟡 | Eintrags-Slot holt die Tabelle, jina wertet anderes höher; ob Punkt 2 sie verändert hat, ist nicht einzeln geprüft — zuerst nachsehen |
 | 8 | 3.10 Monolith-Sektion in fremden Regelfragen (p011, p101) | Gering | Mittel | 🟡 | 22 Chunks, landet in den Top 3; Antworten bisher trotzdem richtig |
 | 9 | 2 Bilder — Rest (Vor-/Spitzname, Dateiname-Rückfall, PDF-Bilder, neues Bild ohne Notiz-Änderung) | Gering | Gering–Mittel | 🟢–🔴 | Einbettungen laufen. Vor-/Spitzname (13.4) über `aliases` der Notiz wäre klein (🟢); Dateiname-Rückfall braucht Spy-Test, PDF-Bilder dauerhafte Ablage + Re-Index (🔴) |
@@ -136,7 +135,12 @@ Offen:
   ([parsing.md](docs/parsing.md)), Regelbuch neu indiziert (81 s): 543 → 458 Chunks, 0 Beschriftungs-
   Überschriften. Golden Set unverändert 272/274 · 143/149 (keine Frage kippt), Holdout 9/10 · 51/53;
   je 3 Läufe: p037 0 → 3/3, p114 0 → 3/3, p036 findet jetzt „Erholen“ (fehlt noch „Verbände“), p014,
-  a030, p049 unverändert. **Offen**: Schritt 2 (Einleitungs-Chunk in der Expansion), danach E2E.
+  a030, p049 unverändert.
+  **Schritt 2 umgesetzt (17.10.)**: Einleitungs-Chunk zählt als Treffer seiner Sektion
+  ([embedding-strategy.md](docs/embedding-strategy.md#warum-section-expansion)). Golden Set Abschnitt
+  143 → 144/149, Chunks Ø 11,7 → 12,6; p036 und p014 0 → 3/3. E2E beider Schritte **253 → 260/274**.
+  ✅ Erledigt bis auf a030 (Beweis-Tabelle im Vault) und p049 (Regel 4.11 + Zauber 5.5.6) — eigene
+  Ursachen, Einzelfälle. **Offen**: Antwortzeit mit längerem Kontext auf freiem Rechner messen.
 - **👎 aus dem Chat (14.10.)** — 5 Bewertungen, 4 Fälle: drei behoben (siehe „Erledigt“ 3.15 Teil, Feedback);
   offen **Tippfehler** (Priorität 5) „was ist üebrschaden?“ — findet nichts Passendes, das Modell erfindet
   „Überschusschaden“ aus dem Simulationsbericht. Möglicher Weg: unbekannte Wörter auf das nächste Wort
@@ -204,6 +208,7 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 | 3.10 (Teil) | Rerank-Paar mit Notizname: Markdown-Chunks gehen mit Identitätszeile (Dateiname \| Aliase) in den Cross-Encoder, PDF-Paare unverändert (Regelbuch-Name ist Rauschen, verlor k006). Golden Set 272/274 · 143/149, Platz-1-Abschnitt 118 → 120; Holdout 9/10, 51/53; E2E 250 → **253/274** (8 gewonnen, darunter m048 „Deckname: Solmar“, 5 verloren — alle Formulierung/Rauschen, gesichtet); Regelbuch-Anteil an den Quellen steigt leicht, `min_score` −4 bleibt. Kein Re-Index nötig. a005-Stichwort „Reaktor“ → „Carath“ (zu eng gewählt am selben Tag) | 17.10. | `docs/embedding-strategy.md`, `docs/evaluation.md` |
 | 3.10 (Teil) | Schattenorden-Kontext: `Schattenorden.md` hatte 27 Chunks (> `section_expansion.max_chunks` 25), m003/m055 bekamen die Datei nicht ganz. Erledigt ohne Code durch 13.2 (leere Chunks entfernt): jetzt 18 Chunks, beide Fragen bekommen alle 18 (Vorschau 17.10.), beide im E2E-Lauf vom 17.10. richtig | 17.10. | — |
 | 14.1 | „🔁 Erneut senden“ unter Fehlern (Idee des Nutzers): Provider-, Backend- und Verbindungsfehler bleiben als „⚠️ …“ im Verlauf (der Verbindungsfehler verschwand vorher beim nächsten Rerun), die letzte trägt den Knopf; ein Klick ersetzt Frage + Fehler und schickt die Frage erneut. Kein Knopf unter Antworten oder älteren Fehlern. 4 UI-Tests, alle gegen den alten Code rot | 17.10. | `docs/ui-ux.md` |
+| 3.15 (Teil) | Aufzählungen über große Kapitel: (1) PDF-Beschriftungen („Nachteil:“, „Legendär (Rang 6):“) sind keine Überschriften mehr — 109 von 543 Regelbuch-Chunks betroffen, „Manaschwäche“ wieder auffindbar, Regelbuch 543 → 458 Chunks; (2) der Einleitungs-Chunk zählt in der Section Expansion als Treffer seiner Sektion. Golden Set 272/274 · 144/149 (+z006), Holdout 9/10 · 51/53, E2E 253 → **260/274**; p036, p037, p114, p014 je 0 → 3/3. Offen: a030, p049 (andere Ursachen), Antwortzeit-Messung | 17.10. | `docs/parsing.md`, `docs/embedding-strategy.md`, `docs/evaluation.md` |
 | 3.11 | Spieler-/Spielleiter-Modus inkl. Sicherheitstests (deterministisch, live, Spy-Test) | 11./12.10. | `ARCHITECTURE.md` 4.8, `docs/testing.md` |
 | 3.12 | Folgefragen ohne Inhaltswort („Fass das kürzer zusammen“, „Gib mir ein Beispiel“) gehen durch Condense — Suche und Quellenliste passen zum Thema; Wortliste nur ergänzend (unbekanntes Wort = Inhaltswort), Unit-Tests in beide Richtungen, mutationsgeprüft. Live 13.10.: „Fass das kürzer zusammen“ → „Fasse die Beschreibung von Arkenfeld kurz zusammen.“ (1,2 s), Quellen `Orte/Arkenfeld.md` statt Venthir/Regelbuch | 13.10. | `docs/prompts.md` |
 | 3.13 | Regelkern im `qa`-Prompt (15 Stichpunkte zum Regelwerk, direkt vor der Frage; „Ressourcen vs. Punkte“ ergänzt: p009 Zauberpunkte 0/3 → 3/3): mit mMiniLMv2 Rang-1-Wurfzahl und Rüstung je 0/3 → 3/3, Lore-Fragen unverändert; im Systemprompt wirkungslos. Live mit jina: Rüstung 3/3, Rang-1-Wurfzahl wieder 0/3 (Lead „höchstens 13“). Offen: Rang 1 mit jina, Dolch, Schattenklinge (3.10) | 14.10. | `docs/prompts.md` |

@@ -137,6 +137,13 @@ def _section_key(chunk) -> tuple[str, str, str] | None:
     return (chunk.metadata.get("source_id", ""), chunk.source_file, " > ".join(parts[:-1]))
 
 
+def _own_section_key(chunk) -> tuple[str, str, str] | None:
+    """(source_id, source_file, own heading) — the section this chunk introduces, if others nest under it."""
+    if not chunk.heading:
+        return None
+    return (chunk.metadata.get("source_id", ""), chunk.source_file, chunk.heading)
+
+
 def _chunk_ident(chunk) -> tuple | int:
     """Identity of a chunk across the rerank result and loaded sections: (source_id, file, chunk_index).
     source_id too — two sources may contain the same relative file name."""
@@ -401,6 +408,11 @@ class Retriever:
         headings, every chunk under that parent is loaded and inserted in document
         order at the position of the best hit. Sections above ``max_chunks`` stay as is.
 
+        A section's own intro chunk (heading == the parent, e.g. "5.2 Basis-Skills" above its skills)
+        counts as one of its hits once a sub-heading of it was hit too: it was often the best-ranked hit
+        but never counted, so the section stayed fragmentary (p036: intro at rank 1, best counted hit at
+        rank 5; p014: intro + one sub-heading = one "distinct" heading only; roadmap 3.15).
+
         Only sections with a hit among the first ``top_rank`` chunks are expanded —
         two stray mid-ranking hits in an unrelated section (e.g. the Krieger section
         for "was ist überschaden?") would otherwise flood the context with ~20 chunks.
@@ -419,6 +431,11 @@ class Retriever:
             if key is not None:
                 siblings.setdefault(key, set()).add(c.heading)
                 best_rank.setdefault(key, rank)
+        for rank, c in enumerate(chunks):
+            own = _own_section_key(c)
+            if own in siblings:   # only sections a sub-heading already hit — an intro alone never expands
+                siblings[own].add(c.heading)
+                best_rank[own] = min(best_rank[own], rank)
 
         expanded: dict[tuple[str, str, str], list[RetrievedChunk]] = {}
         for (source_id, source_file, parent), headings in siblings.items():
@@ -470,7 +487,8 @@ class Retriever:
         result: list[RetrievedChunk] = []
         seen: set = set()
         for c in chunks:
-            key = _section_key(c)
+            own = _own_section_key(c)
+            key = own if own in expanded else _section_key(c)   # an intro inserts its own section
             for item in (expanded.get(key, [c]) if key is not None else [c]):
                 ident = _chunk_ident(item)
                 if ident not in seen:
