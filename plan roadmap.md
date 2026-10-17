@@ -26,13 +26,12 @@ End-to-End-Lauf ~35 min (🟡).
 
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 2 | 3.10 Rerank-Paar mit Dateiname/Überschrift — **nächster Punkt** (1 erledigt 17.10.) | Mittel (ungewiss) | Gering | 🟡 | Der Reranker sieht nur den Chunk-Text; kurze Chunks ohne Namen sind chancenlos (m048 „Deckname: Solmar“ — Chunk existiert, Antwort falsch). Allgemeiner Hebel, nur mit Golden Set + Holdout + E2E; `min_score` −4 des Regelwerk-Slots neu prüfen |
-| 3 | 3.10 Schattenorden-Kontext (27 > 25 Chunks) | Gering-Mittel | Gering | 🟡 | Kernfrage zu einer Hauptfraktion (m003, m055) bekommt die Datei nicht mehr ganz; Treffer-Metriken sehen es nicht. Danach nach Punkt 2, weil 2 die Pool-Reihenfolge ändert |
+| 3 | 3.10 Schattenorden-Kontext (27 > 25 Chunks) — **nächster Punkt** (1, 2 erledigt 17.10.) | Gering-Mittel | Gering | 🟡 | Kernfrage zu einer Hauptfraktion (m003, m055) bekommt die Datei nicht mehr ganz; Treffer-Metriken sehen es nicht. Punkt 2 ist drin, die Pool-Reihenfolge steht also |
 | 4 | 3.15 Aufzählungen über große Kapitel | Mittel | Mittel-Hoch | 🟡 | Größte Gruppe echter Antwortfehler (7 Fragen: p008, p036, p037, p114, p014, a030, p049): Abschnitt gefunden, aber nur 8 Chunks erreichen das LLM. Holdout zeigt, dass kleine Listen gehen — Lösung muss gezielt sein (z. B. ganze Sektion für Listenfragen), Kontextlänge und Antwortzeit messen |
 | 5 | 3.15 Tippfehler-Toleranz | Gering-Mittel | Mittel | 🟡 | Am Spieltisch wird auf dem Handy getippt; einziger offener 👎-Fall („üebrschaden“). Riskant (falsche Korrekturen) — nur gemessen, mit Wörterbuch der Schreibweisen |
 | 6 | 14.1 Frage erneut senden | Gering | Gering | 🟢 | Idee des Nutzers. Echter Anwendungsfall: nach Fehler/Timeout (Ollama lädt, Backend-Neustart) dieselbe Frage ohne Abtippen; als neue Antwort wegen Temperatur 0,3 eher nicht. Vorschlag: Knopf nur unter Fehlermeldungen |
-| 7 | 3.10 Tabellen-Einzelfälle (Dolch/Wurfzahl 12, Dolch vs. Kurzschwert, Langbogen-PDF-Zelle) | Gering | Mittel | 🟡 | Eintrags-Slot holt die Tabelle, jina wertet anderes höher; evtl. durch Punkt 2 mit erledigt — danach neu ansehen |
-| 8 | 3.10 Monolith-Sektion in fremden Regelfragen (p011, p101) | Gering | Mittel | 🟡 | 22 Chunks, landet in den Top 3; Antworten bisher trotzdem richtig. Evtl. durch Punkt 2 mit erledigt |
+| 7 | 3.10 Tabellen-Einzelfälle (Dolch/Wurfzahl 12, Dolch vs. Kurzschwert, Langbogen-PDF-Zelle) | Gering | Mittel | 🟡 | Eintrags-Slot holt die Tabelle, jina wertet anderes höher; ob Punkt 2 sie verändert hat, ist nicht einzeln geprüft — zuerst nachsehen |
+| 8 | 3.10 Monolith-Sektion in fremden Regelfragen (p011, p101) | Gering | Mittel | 🟡 | 22 Chunks, landet in den Top 3; Antworten bisher trotzdem richtig |
 | 9 | 2 Bilder — Rest (Vor-/Spitzname, Dateiname-Rückfall, PDF-Bilder, neues Bild ohne Notiz-Änderung) | Gering | Gering–Mittel | 🟢–🔴 | Einbettungen laufen. Vor-/Spitzname (13.4) über `aliases` der Notiz wäre klein (🟢); Dateiname-Rückfall braucht Spy-Test, PDF-Bilder dauerhafte Ablage + Re-Index (🔴) |
 | 10 | 3.10/3.15 übrige Einzelfälle: AP-Pool „50 AP“, p009 (Abschnitt-Miss, Antwort richtig), „Wer ist Arkenfeld?“, k001 Preis-Spalte, p091 Tränke-Tabelle, x008 Heimkehrpfennig | Gering | je Gering | 🟡 | Nur bei Anlass im Spiel; Antworten teils schon richtig |
 | 11 | Beim nächsten Re-Index: Suchgenauigkeit prüfen (m039) | Gering | Gering | 🔴 | Nach zwei In-place-Re-Indizes 273/274 exakt; bei weiteren Abweichungen Vault einmal komplett neu aufbauen (3.10) |
@@ -111,11 +110,6 @@ prüfen, bei weiteren Abweichungen den Vault einmal komplett neu aufbauen. Umges
 - **Simulationsberichte** z003, z006, z009, z012 (und z001 mit richtiger Antwort) — die Berichts-Chunks
   sagen weder „Schwierigkeit“ noch „Simulation“; besser in den Berichten selbst lösen (Überschriften).
 - **p009** Zauberpunkte — Abschnitt-Miss im Golden Set, die Antwort ist seit dem Regelkern richtig.
-- **Rerank-Paar ohne Namen** (Priorität 2): `_rerank` bewertet `[Frage, Chunk-Text]`; Dateiname und
-  Aliase stehen nur im Embed-Text. Ein kurzer Kopfabschnitt wie „Deckname: Solmar · Faktion: Bund der
-  Sonne“ (Escanor) nennt die Person nicht und verliert gegen jeden Text, der „Escanor“ enthält. Variante:
-  `Dateiname | Überschrift` vor den Text im Rerank-Paar. Risiko: verschiebt alle Rerank-Scores
-  (Regelwerk-Slot `min_score` −4 neu prüfen).
 - **Name in fremder Identität** — „Wer ist Arkenfeld?“ holt vor allem „Der Armdrücker von Arkenfeld“;
   Antwort trotzdem richtig.
 - **Monolith-Sektion** (22 Chunks) landet bei fremden Regelfragen in den Top 3 (p011, p101).
@@ -141,8 +135,7 @@ Offen:
   „Überschusschaden“ aus dem Simulationsbericht. Möglicher Weg: unbekannte Wörter auf das nächste Wort
   aus dem Wörterbuch der Schreibweisen abbilden (Abstand 1–2, lange Wörter) — riskanter, nur gemessen.
 - **Fakten** (Priorität 10, nur bei Anlass): k001 Langschwert „20,5 Gold“ (Spalte „Preis“ der Simulations-Rangliste statt Preistabelle
-  7.4); m048 Deckname „Solmar“ (Kopfabschnitt ohne Überschrift und Namen — 2 half nicht, siehe 3.10
-  „Rerank-Paar ohne Namen“);
+  7.4);
   p091 Tränke-Fehlwurf (1W8-Tabelle fehlt); x008 Heimkehrpfennig („Kultpriester“ gilt, Antwort nennt
   Thalion).
 
@@ -205,6 +198,7 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 | 13.3 | Regressionsprüfung nach 13.1/13.2: E2E 245/274 (0,894, vorher 248/247 — Rauschen), Datei 0,993, Ø 7,1 s; 6 der 19 Dauer-Fehler jetzt richtig, 7 neue gesichtet (5 nur Stichwort, i002 frühere Schein-Treffer-Absage, p035 schwankt) — keine Regression. Holdout 9/10, 50/53; live keine leeren Chunks mehr. Stichwörter erledigt 17.10. (3.15 Teil) | 15.10. | `docs/evaluation.md` |
 | 13.4 | Zwei Chat-Bugs vom 15.10.: 👎-Kommentar wurde bei jedem Verlassen des Felds halb gespeichert (`st.text_input` speichert beim Fokusverlust) → Feld in `st.form`, nur Enter/Knopf speichert; fremdes Porträt unter der Antwort (Liora Veylan als schwache Quelle Nr. 6) → Bilder nur von Notizen, deren Name in Frage oder Antwort steht (Entscheidung des Nutzers). Beide UI-Tests gegen den alten Code rot. Rest: live ansehen, Vor-/Spitzname (2 Rest) | 17.10. | `docs/ui-ux.md` |
 | 3.15 (Teil) | Golden-Set-Stichwörter aus 13.3 (k015, a014, a005, m015, p026): Antworten richtig, ohne den Namen aus der Frage — je eine Tatsache, die alle drei Läufe nennen und die in der Quelle steht. Dritter Lauf neu ausgewertet 245 → 250/274 (0,912), nur diese fünf kippen; die Läufe vom 14.10. speicherten nur 200 Zeichen je Antwort und lassen sich nicht neu auswerten | 17.10. | `docs/evaluation.md` |
+| 3.10 (Teil) | Rerank-Paar mit Notizname: Markdown-Chunks gehen mit Identitätszeile (Dateiname \| Aliase) in den Cross-Encoder, PDF-Paare unverändert (Regelbuch-Name ist Rauschen, verlor k006). Golden Set 272/274 · 143/149, Platz-1-Abschnitt 118 → 120; Holdout 9/10, 51/53; E2E 250 → **253/274** (8 gewonnen, darunter m048 „Deckname: Solmar“, 5 verloren — alle Formulierung/Rauschen, gesichtet); Regelbuch-Anteil an den Quellen steigt leicht, `min_score` −4 bleibt. Kein Re-Index nötig. a005-Stichwort „Reaktor“ → „Carath“ (zu eng gewählt am selben Tag) | 17.10. | `docs/embedding-strategy.md`, `docs/evaluation.md` |
 | 3.11 | Spieler-/Spielleiter-Modus inkl. Sicherheitstests (deterministisch, live, Spy-Test) | 11./12.10. | `ARCHITECTURE.md` 4.8, `docs/testing.md` |
 | 3.12 | Folgefragen ohne Inhaltswort („Fass das kürzer zusammen“, „Gib mir ein Beispiel“) gehen durch Condense — Suche und Quellenliste passen zum Thema; Wortliste nur ergänzend (unbekanntes Wort = Inhaltswort), Unit-Tests in beide Richtungen, mutationsgeprüft. Live 13.10.: „Fass das kürzer zusammen“ → „Fasse die Beschreibung von Arkenfeld kurz zusammen.“ (1,2 s), Quellen `Orte/Arkenfeld.md` statt Venthir/Regelbuch | 13.10. | `docs/prompts.md` |
 | 3.13 | Regelkern im `qa`-Prompt (15 Stichpunkte zum Regelwerk, direkt vor der Frage; „Ressourcen vs. Punkte“ ergänzt: p009 Zauberpunkte 0/3 → 3/3): mit mMiniLMv2 Rang-1-Wurfzahl und Rüstung je 0/3 → 3/3, Lore-Fragen unverändert; im Systemprompt wirkungslos. Live mit jina: Rüstung 3/3, Rang-1-Wurfzahl wieder 0/3 (Lead „höchstens 13“). Offen: Rang 1 mit jina, Dolch, Schattenklinge (3.10) | 14.10. | `docs/prompts.md` |

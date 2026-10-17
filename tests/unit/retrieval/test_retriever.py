@@ -704,9 +704,34 @@ class TestHybridRetrieve:
         # The reranker was called with both vector and BM25 candidates.
         pairs = mock_reranker.predict.call_args[0][0]
         contents = [p[1] for p in pairs]
-        assert "vector hit" in contents
-        assert "BM25-only exact keyword" in contents
+        assert "v\n\nvector hit" in contents                  # Markdown: identity line first
+        assert "kw\n\nBM25-only exact keyword" in contents
         assert len(results) == 2
+
+    @pytest.mark.asyncio
+    async def test_rerank_pair_names_the_markdown_note_but_not_the_pdf(self, config, embed_service):
+        """Roadmap 3.10 (17.10.): a header chunk that never names its person ("Deckname: Solmar") lost
+        the rerank — Markdown pairs carry file name + aliases like the embedding; PDF pairs stay bare."""
+        config.reranking = RerankingConfig(enabled=True, top_k_rerank=2)
+        vs = MagicMock()
+        vs.query.return_value = [
+            {"id": "1", "content": "Deckname: Solmar", "score": 0.9,
+             "metadata": {"source_file": r"NPCs\Escanor.md", "document_type": "markdown",
+                          "heading_hierarchy": "", "aliases": "Flamme des Zeniths, Escanor"}},
+            {"id": "2", "content": "Regel > Rüstung\n\nRüstung senkt Schaden.", "score": 0.8,
+             "metadata": {"source_file": "pnp_regelbuch.pdf", "document_type": "pdf", "heading_hierarchy": "Regel"}},
+        ]
+        retriever = Retriever(config=config, embedding_service=embed_service, vectorstore=vs)
+        retriever._reranker = MagicMock()
+        retriever._reranker.predict.return_value = [0.9, 0.8]
+
+        await retriever.retrieve("Welchen Decknamen hat Escanor?")
+
+        pairs = retriever._reranker.predict.call_args[0][0]
+        assert [p[1] for p in pairs] == [
+            "Escanor | Flamme des Zeniths\n\nDeckname: Solmar",   # alias equal to the stem dropped
+            "Regel > Rüstung\n\nRüstung senkt Schaden.",
+        ]
 
 
 def _hit(heading, idx, score=0.9, source_file="regelbuch.pdf"):

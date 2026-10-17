@@ -1332,7 +1332,7 @@ pairs:
     source_type: markdown
     category: adventure
     expected_sources: ["Geschichte - Söldner/Akt 3 - Mandate der Macht/2. Scharlachofen/Scharlachofen (III-2).md"]
-    expected_answer_contains: ["Monolith", "Reaktor"]
+    expected_answer_contains: ["Monolith", "Carath"]
 
   - id: a006
     question: "Wer ist der Auftraggeber im Abenteuer Relikt der verlorenen Stadt?"

@@ -11,6 +11,7 @@ Datei, Regelwerk- und Eintrags-Slot, Section Expansion und der Aufbau der Embed-
    - [Warum `multilingual-e5-base`?](#warum-multilingual-e5-base)
    - [Warum ein Cross-Encoder-Reranking?](#warum-ein-cross-encoder-reranking)
    - [Warum jina-reranker-v2?](#warum-jina-reranker-v2-entscheidung-1410)
+   - [Warum sieht der Reranker den Notiznamen?](#warum-sieht-der-reranker-den-notiznamen-entscheidung-1710)
    - [Warum BM25-Hybrid-Suche?](#warum-bm25-hybrid-suche)
    - [Warum `top_k` 20?](#warum-top_k-20)
    - [Warum ein Deckel pro Datei?](#warum-ein-deckel-pro-datei)
@@ -135,6 +136,35 @@ bleibt ganz im VRAM (11,0/11,0 GB), Generierung unverändert 53,6 Token/s. Reran
 ununterbrochen parallel (nur bei gleichzeitigen Fragen), sinkt sie bei beiden auf ~14 Token/s.
 Lizenz CC-BY-NC — für den privaten Einsatz in Ordnung. Nach dem Einbau im Golden Set wieder
 272/274 und 142/149.
+
+### Warum sieht der Reranker den Notiznamen? (Entscheidung 17.10.)
+
+Der Cross-Encoder bewertete `[Frage, Chunk-Inhalt]`. Der Inhalt trägt den Überschriftenpfad, aber
+nicht die Identitäts-Schicht (Dateiname | Aliase), die nur im Embed-Text steht. Ein Kopfabschnitt
+ohne Überschrift wie „Deckname: Solmar · Faktion: Bund der Sonne“ (Escanor) nennt seine Person nie
+und verlor im Rerank gegen jeden Text, der „Escanor“ enthält — m048 fand die Datei, aber nie diesen
+Chunk, die Antwort war falsch. Seitdem bekommen **Markdown-Chunks die Identitätszeile vor den
+Inhalt** (`_rerank_text` in `retriever.py`, dieselbe Funktion `identity_line` wie der Embed-Text).
+Das ändert nur das Rerank-Paar, nicht den Index — kein Re-Index nötig.
+
+Gemessen am 17.10. (Golden Set, alle Varianten in einem Prozess auf demselben Index, Grundlinie
+vorher und nachher identisch):
+
+| Rerank-Paar | Datei | Abschnitt | Platz-1-Abschnitt | Bemerkung |
+|---|---|---|---|---|
+| Inhalt (bis 17.10.) | 272/274 | 143/149 | 118 | |
+| Identität + Inhalt, alle Typen | 272 | 142 | 119 | verliert k006 |
+| ganzer Embed-Text (inkl. „Einträge: …“) | 272 | 142 | 118 | verliert k006 |
+| **Identität nur für Markdown, PDF wie bisher** | **272** | **143** | **120** | nichts verloren, m048-Chunk auf Platz 1 |
+
+„pnp_regelbuch“ vor jedem Regelbuch-Chunk ist Rauschen — daher bleiben PDF-Paare unverändert. Die
+Variante ändert die Top 8 bei 179 von 274 Fragen, deshalb zusätzlich gegen die Antworten geprüft:
+Holdout 9/10 Listen, 51/53 Einträge (vorher 50/53); End-to-End **253/274** gegen 250 im Lauf vom
+15.10. (beide mit den Stichwörtern vom 17.10. ausgewertet) — 8 gewonnen (u. a. m048 „Deckname:
+Solmar“), 5 verloren, alle gesichtet: p016/p094/z006 richtig mit anderer Formulierung, a002 mit
+denselben Quellen wie vorher (LLM-Rauschen), x002 dieselben Dateien in anderer Reihenfolge, das
+Modell erfindet eine Quelle. Der Regelwerk-Slot (`min_score` −4) bleibt: Regelbuch-Chunks in den
+Antworten 1373 → 1421, Fragen mit Regelbuch 210 → 215 — Markdown verdrängt das PDF nicht.
 
 ### Warum BM25-Hybrid-Suche?
 
@@ -395,7 +425,8 @@ Tabellenzeile. Ihr Embedding hat null Bezug zu „Was ist Arkenfeld?“; der Chu
 
 Lösung: **Dateiname und Aliase aus dem Frontmatter werden dem Embed-Text vorangestellt** (nicht
 dem in ChromaDB gespeicherten Inhalt). Der Vektor trägt jetzt „Arkenfeld | Stadt Arkenfeld“ und
-passt zu Fragen nach der Entität; das LLM sieht weiter nur den sauberen Inhalt.
+passt zu Fragen nach der Entität; das LLM sieht weiter nur den sauberen Inhalt. Seit 17.10. steht
+dieselbe Zeile bei Markdown auch im Rerank-Paar ([Begründung](#warum-sieht-der-reranker-den-notiznamen-entscheidung-1710)).
 
 Das funktioniert, weil Obsidian-Vaults die Identität einer Entität per Konvention im Dateinamen
 tragen. Bei beliebigen Markdown-Sammlungen ginge das nicht.

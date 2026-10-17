@@ -20,7 +20,7 @@ from src.config.manager import RetrievalConfig
 from src.retrieval.bm25_index import BM25Index
 from src.retrieval.embeddings import EmbeddingService
 from src.retrieval.truecase import TrueCaser
-from src.retrieval.vectorstore import VectorStoreService
+from src.retrieval.vectorstore import VectorStoreService, identity_line
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,18 @@ def _to_chunk(item: dict[str, Any]) -> "RetrievedChunk":
         score=item["score"],
         metadata=item["metadata"],
     )
+
+
+def _rerank_text(chunk: "RetrievedChunk") -> str:
+    """What the cross-encoder sees of a chunk. Markdown gets the identity line (file name + aliases)
+    the embedding already has: a header chunk like "Deckname: Solmar · Faktion: …" never names its
+    person and lost to every text that did (m048 jumps to rank 1). PDFs stay bare — "pnp_regelbuch" in
+    front of every rulebook chunk is noise (golden set: k006 section lost). Measured 17.10.,
+    roadmap 3.10: section 143 → 143/149, rank-1 section 118 → 120; identity for all 142, full embed
+    text 142."""
+    if chunk.document_type == "pdf":
+        return chunk.content
+    return identity_line(chunk.source_file, chunk.metadata.get("aliases", "")) + "\n\n" + chunk.content
 
 
 def _rrf_merge(
@@ -478,6 +490,7 @@ class Retriever:
 
         Unlike the bi-encoder used for initial retrieval, a cross-encoder evaluates the query and chunk text
         simultaneously, yielding a highly accurate relevance score at the cost of higher latency.
+        Markdown chunks are scored together with their identity line (``_rerank_text``).
 
         The method also applies a diversity-aware selection strategy: it prefers to select chunks from different
         source files up to a `max_per_source` limit. If the pool of candidates above the initial score threshold
@@ -485,7 +498,7 @@ class Retriever:
         requested.
         """
         extra = rules_candidates or []
-        pairs = [[query, c.content] for c in chunks + extra]
+        pairs = [[query, _rerank_text(c)] for c in chunks + extra]
 
         all_scores = await self._predict(pairs)
         scores, extra_scores = all_scores[:len(chunks)], all_scores[len(chunks):]

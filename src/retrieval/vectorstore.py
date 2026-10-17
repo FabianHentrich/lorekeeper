@@ -27,6 +27,21 @@ _TIE_EPS = 1e-6
 _TABLE_SEPARATOR = re.compile(r"^\|?(\s*:?-{2,}:?\s*\|)+\s*:?-*:?\s*\|?$")
 
 
+def identity_line(source_file: str, aliases_raw: Any) -> str:
+    """``"Stem | Alias 1 | Alias 2"`` — who/what a chunk is about. Heads the embedded text and, for
+    Markdown, the reranker's input. ``aliases_raw`` is a list at ingest time and a comma-joined string
+    once read back from ChromaDB (flattened metadata); aliases equal to the stem are dropped.
+    Changing the format changes every vector — a full re-index is then required."""
+    stem = source_file.replace("\\", "/").split("/")[-1].rsplit(".", 1)[0]
+    if isinstance(aliases_raw, list):
+        aliases = [a for a in aliases_raw if a and a != stem]
+    elif aliases_raw:
+        aliases = [a.strip() for a in aliases_raw.split(",") if a.strip() and a.strip() != stem]
+    else:
+        aliases = []
+    return " | ".join([stem, *aliases])
+
+
 def _table_row_names(content: str) -> list[str]:
     """First cell of every body row of the Markdown tables in ``content`` (header and separator rows skipped).
 
@@ -138,19 +153,7 @@ class VectorStoreService:
         parts = []
 
         # 1. Identity line: filename stem + aliases from metadata
-        stem = chunk.source_file.replace("\\", "/").split("/")[-1].rsplit(".", 1)[0]
-        aliases_raw = chunk.metadata.get("aliases", "")
-        if isinstance(aliases_raw, list):
-            aliases = [a for a in aliases_raw if a and a != stem]
-        elif aliases_raw:
-            aliases = [a.strip() for a in aliases_raw.split(",") if a.strip() and a.strip() != stem]
-        else:
-            aliases = []
-
-        identity = stem
-        if aliases:
-            identity += " | " + " | ".join(aliases)
-        parts.append(identity)
+        parts.append(identity_line(chunk.source_file, chunk.metadata.get("aliases", "")))
 
         # 1b. Row names of tables — makes single rows findable (see docstring)
         if names := _table_row_names(chunk.content):
