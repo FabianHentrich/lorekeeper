@@ -28,7 +28,6 @@ End-to-End-Lauf ~35 min (🟡).
 |---|---|---|---|---|---|
 | 4 | 3.15 Aufzählungen über große Kapitel — **nächster Punkt** (1–3 erledigt 17.10.) | Mittel | Mittel-Hoch | 🟡 | Größte Gruppe echter Antwortfehler (7 Fragen: p008, p036, p037, p114, p014, a030, p049): Abschnitt gefunden, aber nur 8 Chunks erreichen das LLM. Holdout zeigt, dass kleine Listen gehen — Lösung muss gezielt sein (z. B. ganze Sektion für Listenfragen), Kontextlänge und Antwortzeit messen |
 | 5 | 3.15 Tippfehler-Toleranz | Gering-Mittel | Mittel | 🟡 | Am Spieltisch wird auf dem Handy getippt; einziger offener 👎-Fall („üebrschaden“). Riskant (falsche Korrekturen) — nur gemessen, mit Wörterbuch der Schreibweisen |
-| 6 | 14.1 Frage erneut senden | Gering | Gering | 🟢 | Idee des Nutzers. Echter Anwendungsfall: nach Fehler/Timeout (Ollama lädt, Backend-Neustart) dieselbe Frage ohne Abtippen; als neue Antwort wegen Temperatur 0,3 eher nicht. Vorschlag: Knopf nur unter Fehlermeldungen |
 | 7 | 3.10 Tabellen-Einzelfälle (Dolch/Wurfzahl 12, Dolch vs. Kurzschwert, Langbogen-PDF-Zelle) | Gering | Mittel | 🟡 | Eintrags-Slot holt die Tabelle, jina wertet anderes höher; ob Punkt 2 sie verändert hat, ist nicht einzeln geprüft — zuerst nachsehen |
 | 8 | 3.10 Monolith-Sektion in fremden Regelfragen (p011, p101) | Gering | Mittel | 🟡 | 22 Chunks, landet in den Top 3; Antworten bisher trotzdem richtig |
 | 9 | 2 Bilder — Rest (Vor-/Spitzname, Dateiname-Rückfall, PDF-Bilder, neues Bild ohne Notiz-Änderung) | Gering | Gering–Mittel | 🟢–🔴 | Einbettungen laufen. Vor-/Spitzname (13.4) über `aliases` der Notiz wäre klein (🟢); Dateiname-Rückfall braucht Spy-Test, PDF-Bilder dauerhafte Ablage + Re-Index (🔴) |
@@ -166,11 +165,7 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 
 ### 14.0 UX
 
-- **14.1 Frage erneut senden** (Priorität 6, Idee des Nutzers 15.10.): Knopf, der die letzte Frage
-  noch einmal schickt, statt sie neu zu tippen. Sinnvoll vor allem nach einem Fehler oder Timeout
-  (Ollama lädt noch, Backend-Neustart) — dort steht heute nur die Fehlermeldung. Für „noch eine
-  Antwort zur selben Frage“ eher nicht: die Antworten unterscheiden sich bei Temperatur 0,3 kaum,
-  und Folgefragen decken „ausführlicher“/„kürzer“ ab. Vorschlag: Knopf nur unter Fehlermeldungen.
+- (keine offenen — 14.1 erledigt 17.10.)
 
 ## Eingang (neue Bugs und Ideen, noch nicht bewertet)
 - —
@@ -208,6 +203,7 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 | 3.15 (Teil) | Golden-Set-Stichwörter aus 13.3 (k015, a014, a005, m015, p026): Antworten richtig, ohne den Namen aus der Frage — je eine Tatsache, die alle drei Läufe nennen und die in der Quelle steht. Dritter Lauf neu ausgewertet 245 → 250/274 (0,912), nur diese fünf kippen; die Läufe vom 14.10. speicherten nur 200 Zeichen je Antwort und lassen sich nicht neu auswerten | 17.10. | `docs/evaluation.md` |
 | 3.10 (Teil) | Rerank-Paar mit Notizname: Markdown-Chunks gehen mit Identitätszeile (Dateiname \| Aliase) in den Cross-Encoder, PDF-Paare unverändert (Regelbuch-Name ist Rauschen, verlor k006). Golden Set 272/274 · 143/149, Platz-1-Abschnitt 118 → 120; Holdout 9/10, 51/53; E2E 250 → **253/274** (8 gewonnen, darunter m048 „Deckname: Solmar“, 5 verloren — alle Formulierung/Rauschen, gesichtet); Regelbuch-Anteil an den Quellen steigt leicht, `min_score` −4 bleibt. Kein Re-Index nötig. a005-Stichwort „Reaktor“ → „Carath“ (zu eng gewählt am selben Tag) | 17.10. | `docs/embedding-strategy.md`, `docs/evaluation.md` |
 | 3.10 (Teil) | Schattenorden-Kontext: `Schattenorden.md` hatte 27 Chunks (> `section_expansion.max_chunks` 25), m003/m055 bekamen die Datei nicht ganz. Erledigt ohne Code durch 13.2 (leere Chunks entfernt): jetzt 18 Chunks, beide Fragen bekommen alle 18 (Vorschau 17.10.), beide im E2E-Lauf vom 17.10. richtig | 17.10. | — |
+| 14.1 | „🔁 Erneut senden“ unter Fehlern (Idee des Nutzers): Provider-, Backend- und Verbindungsfehler bleiben als „⚠️ …“ im Verlauf (der Verbindungsfehler verschwand vorher beim nächsten Rerun), die letzte trägt den Knopf; ein Klick ersetzt Frage + Fehler und schickt die Frage erneut. Kein Knopf unter Antworten oder älteren Fehlern. 4 UI-Tests, alle gegen den alten Code rot | 17.10. | `docs/ui-ux.md` |
 | 3.11 | Spieler-/Spielleiter-Modus inkl. Sicherheitstests (deterministisch, live, Spy-Test) | 11./12.10. | `ARCHITECTURE.md` 4.8, `docs/testing.md` |
 | 3.12 | Folgefragen ohne Inhaltswort („Fass das kürzer zusammen“, „Gib mir ein Beispiel“) gehen durch Condense — Suche und Quellenliste passen zum Thema; Wortliste nur ergänzend (unbekanntes Wort = Inhaltswort), Unit-Tests in beide Richtungen, mutationsgeprüft. Live 13.10.: „Fass das kürzer zusammen“ → „Fasse die Beschreibung von Arkenfeld kurz zusammen.“ (1,2 s), Quellen `Orte/Arkenfeld.md` statt Venthir/Regelbuch | 13.10. | `docs/prompts.md` |
 | 3.13 | Regelkern im `qa`-Prompt (15 Stichpunkte zum Regelwerk, direkt vor der Frage; „Ressourcen vs. Punkte“ ergänzt: p009 Zauberpunkte 0/3 → 3/3): mit mMiniLMv2 Rang-1-Wurfzahl und Rüstung je 0/3 → 3/3, Lore-Fragen unverändert; im Systemprompt wirkungslos. Live mit jina: Rüstung 3/3, Rang-1-Wurfzahl wieder 0/3 (Lead „höchstens 13“). Offen: Rang 1 mit jina, Dolch, Schattenklinge (3.10) | 14.10. | `docs/prompts.md` |

@@ -502,12 +502,42 @@ if len(_all_messages) > _MAX_VISIBLE_MESSAGES:
 else:
     _visible = _all_messages
 
-for msg in _visible:
+def _retry(prompt: str):
+    """Drop the failed exchange (question + error) and queue the question again — read by the chat input
+    below on this rerun, so the history shows it once, not twice."""
+    msgs = st.session_state.messages
+    if msgs and msgs[-1].get("retry") == prompt:
+        msgs.pop()
+    if msgs and msgs[-1]["role"] == "user" and msgs[-1]["content"] == prompt:
+        msgs.pop()
+    st.session_state["_retry_prompt"] = prompt
+
+
+def _render_retry(msg: dict):
+    """"Erneut senden" under an error (roadmap 14.1): after a timeout or a backend restart the question
+    goes out again without retyping it. Only for the last message — retrying an older one would reorder
+    the chat. One key suffices: per run the button is drawn either live or from the history, never both."""
+    if msg.get("retry"):
+        st.button("🔁 Erneut senden", key="retry_last", on_click=_retry, args=(msg["retry"],))
+
+
+def _fail(prompt: str, text: str):
+    """Show an error under the question and keep it in the history with a retry button."""
+    st.error(text)
+    msg = {"role": "assistant", "content": f"⚠️ {text}", "sources": [], "usage": {}, "retry": prompt}
+    st.session_state.messages.append(msg)
+    _render_retry(msg)
+
+
+for i, msg in enumerate(_visible):
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
         _render_extras(msg)
         if msg["role"] == "assistant":
             _render_feedback(msg)
+            # Not while a new question is already on its way (its value is known before the input renders)
+            if i == len(_visible) - 1 and not st.session_state.get("_chat_question"):
+                _render_retry(msg)
 
 # ─── Chat Input ───────────────────────────────────────────
 _placeholder = "Frag nach den Regeln..." if _ROLE == roles.PLAYER else "Stelle eine Frage über deine Welt..."
@@ -515,7 +545,9 @@ _chat_blocked = _ROLE == roles.PLAYER and not _player_source_ids
 # Same bound as the API (MAX_QUESTION_CHARS in src/api/schemas.py) — the field stops typing instead of the
 # backend answering 422
 _MAX_QUESTION_CHARS = 4000
-if prompt := st.chat_input(_placeholder, disabled=_chat_blocked, max_chars=_MAX_QUESTION_CHARS):
+prompt = st.chat_input(_placeholder, disabled=_chat_blocked, max_chars=_MAX_QUESTION_CHARS, key="_chat_question")
+prompt = prompt or st.session_state.pop("_retry_prompt", None)   # "Erneut senden" (14.1)
+if prompt:
     if _category_filter == "__BLOCKED__":
         st.error("Bitte mindestens eine Quellenart in der Seitenleiste auswählen.")
         st.stop()
@@ -592,13 +624,8 @@ if prompt := st.chat_input(_placeholder, disabled=_chat_blocked, max_chars=_MAX_
                         st.session_state.session_usage = sess_usage
 
             if error_message:
-                placeholder.error(f"Fehler vom LLM-Provider: {error_message}")
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": f"⚠️ Fehler vom LLM-Provider: {error_message}",
-                    "sources": [],
-                    "usage": {},
-                })
+                placeholder.empty()
+                _fail(prompt, f"Fehler vom LLM-Provider: {error_message}")
             else:
                 placeholder.markdown(full_response)
                 answer = {
@@ -617,6 +644,6 @@ if prompt := st.chat_input(_placeholder, disabled=_chat_blocked, max_chars=_MAX_
                 _render_feedback(answer)
 
         except requests.exceptions.ConnectionError:
-            st.error("Verbindung zum Backend fehlgeschlagen. Läuft der Server?")
+            _fail(prompt, "Verbindung zum Backend fehlgeschlagen. Läuft der Server?")
         except Exception as e:
-            st.error(f"Fehler: {e}")
+            _fail(prompt, f"Fehler: {e}")

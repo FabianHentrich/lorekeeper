@@ -232,6 +232,14 @@ ersten Token ein Hinweis da: „⏳ Das LLM beantwortet gerade eine andere Frage
 danach.“ (`status`-Event). Ollama arbeitet eine Frage nach der anderen ab; bei vier gleichzeitigen
 Fragen wartet die letzte bis zu ~17 s auf ihr erstes Token ([provider-strategy.md](provider-strategy.md)).
 
+**Fehler und „🔁 Erneut senden“** (Roadmap 14.1, 17.10.): Ein `error`-Event, ein Fehler-Status des
+Backends oder ein Verbindungsfehler („Läuft der Server?“) bleibt als Nachricht „⚠️ …“ im Verlauf —
+vorher verschwand der Verbindungsfehler beim nächsten Rerun. Unter der **letzten** Nachricht steht
+dann „🔁 Erneut senden“: Frage und Fehlermeldung verschwinden aus dem Verlauf und die Frage geht noch
+einmal raus, ohne sie neu zu tippen (gedacht für Timeout, ladendes Ollama, Backend-Neustart). Ältere
+Fehler im Verlauf haben keinen Knopf, ebenso während schon eine neue Frage unterwegs ist. Kostet
+keine zusätzliche Backend-Anfrage — erst der Klick schickt die Frage.
+
 ```mermaid
 sequenceDiagram
     participant UI as 🖥️ Streamlit
