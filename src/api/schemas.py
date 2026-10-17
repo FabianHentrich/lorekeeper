@@ -99,6 +99,7 @@ class HealthResponse(BaseModel):
     llm: bool
     sources_configured: bool = True
     reranker: str = ""  # gpu | cpu | cpu_fallback | not_loaded | off (Retriever.reranker_device)
+    llm_shared_gb: float | None = None  # local LLM in shared GPU memory (GB); None = unknown/not local (7b)
 
 
 class StatsResponse(BaseModel):

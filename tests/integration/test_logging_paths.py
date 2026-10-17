@@ -92,6 +92,29 @@ def test_health_logs_only_changes(monkeypatch, caplog):
     assert "llm=False (was chroma=True llm=True)" in changes[1].getMessage()
 
 
+def test_shared_gpu_memory_is_logged_when_it_crosses_the_bound(monkeypatch, caplog):
+    """Roadmap 7b: one WARNING when the model slips into shared memory, one INFO when it is back — not one per
+    check. An unknown reading (Gemini, failed check) logs nothing and ends the episode: what follows is
+    judged afresh, so a low value after it is no "back in VRAM"."""
+    monkeypatch.setattr(system_routes, "_health_cache", {"chroma": True, "llm": True, "llm_shared_bytes": None})
+    gb = 1024 ** 3
+    with caplog.at_level(logging.INFO, logger="src.api.system_routes"):
+        for value in (0, int(2.65 * gb), int(2.6 * gb), None, int(0.1 * gb)):
+            system_routes.update_gpu_memory(value)
+
+    lines = [(r.levelno, r.getMessage()) for r in caplog.records]
+    assert [lvl for lvl, _ in lines] == [logging.WARNING]
+    assert lines[0][1].startswith("LLM partly in shared GPU memory: 2.65 GB")
+    assert system_routes._health_cache["llm_shared_bytes"] == int(0.1 * gb)
+
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger="src.api.system_routes"):
+        system_routes.update_gpu_memory(int(3 * gb))
+        system_routes.update_gpu_memory(int(0.2 * gb))
+    assert [(r.levelno, r.getMessage()) for r in caplog.records][1] == (
+        logging.INFO, "LLM back in VRAM (shared GPU memory 0.20 GB)")
+
+
 async def test_answer_lines_carry_session_role_and_model(fake_services, caplog):
     """With several people asking at once, session/role/model tie the lines of one question together."""
     response = await query_routes.query_stream(QueryRequest(question="Was ist Arkenfeld?", role="game_master"))

@@ -320,6 +320,12 @@ def _render_sidebar():
         elif reranker:
             labels = {"gpu": "GPU ✅", "cpu": "CPU", "not_loaded": "noch nicht geladen", "off": "aus"}
             st.markdown(f"Reranker: {labels.get(reranker, reranker)}")
+        shared_gb = health.get("llm_shared_gb")
+        if shared_gb is not None and shared_gb > 1:
+            # The model runs, but partly from system RAM — "100% GPU" in ollama ps hides it (roadmap 7b)
+            st.warning(f"LLM liegt zu {shared_gb:.1f} GB im geteilten Speicher — Antworten mehrfach langsamer. "
+                       "VRAM freimachen (Programm schließen, ab-/anmelden), dann `ollama stop` "
+                       "(siehe docs/operations.md).")
         if not health.get("sources_configured", True):
             st.warning(
                 "Keine Quellen konfiguriert. Lege unter **Sources** "

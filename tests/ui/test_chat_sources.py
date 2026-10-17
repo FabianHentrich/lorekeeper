@@ -1,4 +1,6 @@
 """Chat: how an answer's sources, tokens and timings are shown (roadmap 9.0 — chat page had 78 %)."""
+import pytest
+
 from tests.ui import conftest
 from tests.ui.conftest import open_page
 
@@ -98,6 +100,16 @@ def test_sidebar_warns_when_the_reranker_fell_back_to_the_cpu(fake_backend, monk
     monkeypatch.setitem(conftest.PAYLOADS, "/sidebar-state", state)
     at = open_page("chat").run()
     assert any("Reranker läuft auf der CPU" in w.value for w in at.sidebar.warning)
+
+
+@pytest.mark.parametrize("shared_gb, warned", [(2.65, True), (0.2, False), (None, False)])
+def test_sidebar_warns_when_the_llm_sits_in_shared_gpu_memory(fake_backend, monkeypatch, shared_gb, warned):
+    """Roadmap 7b: 3× slower answers while `ollama ps` says "100% GPU" — the sidebar must say why."""
+    state = {**conftest.PAYLOADS["/sidebar-state"]}
+    state["health"] = {**state["health"], "llm_shared_gb": shared_gb}
+    monkeypatch.setitem(conftest.PAYLOADS, "/sidebar-state", state)
+    at = open_page("chat").run()
+    assert any("geteilten Speicher" in w.value for w in at.sidebar.warning) is warned
 
 
 def test_chat_input_is_bounded_like_the_api(fake_backend):

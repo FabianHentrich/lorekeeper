@@ -133,7 +133,9 @@ Aus `/sidebar-state` (in der UI 30 s gecacht; das Backend prüft im Hintergrund 
 🟢 healthy (ChromaDB + LLM erreichbar) · 🟡 degraded (eine Komponente nicht erreichbar) ·
 🔴 API nicht erreichbar. Darunter **Reranker**: „GPU ✅“, „CPU“, „noch nicht geladen“ oder „aus“ — und
 eine Warnung, wenn DirectML eingestellt ist, der Reranker aber auf der CPU läuft (Antworten langsamer,
-Ursache im Log; [operations.md](operations.md#reranker-läuft-auf-der-cpu-directml-warnung)).
+Ursache im Log; [operations.md](operations.md#reranker-läuft-auf-der-cpu-directml-warnung)). Ebenso eine
+Warnung, wenn das lokale LLM über 1 GB im **geteilten GPU-Speicher** liegt (`llm_shared_gb` aus `/health`,
+Roadmap 7b) — dann laufen Antworten mehrfach langsamer, obwohl `ollama ps` „100% GPU“ zeigt.
 
 ### Hybrid Search
 

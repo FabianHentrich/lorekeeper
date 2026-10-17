@@ -216,7 +216,8 @@ def fake_services():
 
     from src.api import sources_routes as sources_routes_module
     from src.api import system_routes as system_routes_module
-    system_routes_module._health_cache.update({"ts": _time.monotonic(), "chroma": True, "llm": True})
+    system_routes_module._health_cache.update({"ts": _time.monotonic(), "chroma": True, "llm": True,
+                                              "llm_shared_bytes": None})
     sources_routes_module._ingest_jobs.clear()
 
     yield fakes
@@ -535,7 +536,7 @@ def test_health_healthy(client, fake_services):
     assert response.status_code == 200
     body = response.json()
     assert body == {"status": "healthy", "chromadb": True, "llm": True, "sources_configured": True,
-                    "reranker": "gpu"}
+                    "reranker": "gpu", "llm_shared_gb": None}
 
 
 def test_health_degraded_when_llm_down(client, fake_services):
@@ -543,7 +544,14 @@ def test_health_degraded_when_llm_down(client, fake_services):
     system_routes_module._health_cache["llm"] = False
     response = client.get("/health")
     assert response.json() == {"status": "degraded", "chromadb": True, "llm": False, "sources_configured": True,
-                               "reranker": "gpu"}
+                               "reranker": "gpu", "llm_shared_gb": None}
+
+
+def test_health_reports_the_llm_share_in_shared_gpu_memory(client, fake_services):
+    """Roadmap 7b: the sidebar warns from this value; GB with two decimals."""
+    from src.api import system_routes as system_routes_module
+    system_routes_module._health_cache["llm_shared_bytes"] = 2845415424
+    assert client.get("/health").json()["llm_shared_gb"] == 2.65
 
 
 # ─── /sessions ─────────────────────────────────────────────────────────────────

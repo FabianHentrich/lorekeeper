@@ -164,6 +164,7 @@ lorekeeper/
 ├── src/
 │   ├── main.py                    # FastAPI-App, Lifespan (Modelle laden, Session-GC, Health-Schleife), Request-Log
 │   ├── logging_setup.py           # Konsole + eine Logdatei pro Tag, uvicorn-Fehler in die Datei
+│   ├── gpu_memory.py              # Anteil des LLM im geteilten GPU-Speicher (Windows-Leistungsindikator)
 │   ├── config/manager.py          # YAML + Env + Sidecars → Pydantic-Settings; atomic_write_text für alle Config-Dateien
 │   ├── ingestion/
 │   │   ├── orchestrator.py        # Parse → Chunk → Embed → Speichern (je Quelle)
@@ -500,7 +501,7 @@ Das Backend lauscht nur auf `127.0.0.1:8000`; der Browser spricht ausschließlic
 | GET    | `/provider/gemini/status`   | Ob ein Gemini-Key da ist (ohne den Key) |
 | POST   | `/provider/gemini/key`      | Gemini-Key zur Laufzeit setzen (nur im Prozess) |
 | GET    | `/sidebar-state`            | Gebündelter Status für die Chat-Sidebar |
-| GET    | `/health`                   | API + ChromaDB + LLM, dazu `reranker`: `gpu` · `cpu` · `cpu_fallback` (DirectML konfiguriert, läuft aber auf der CPU) · `not_loaded` · `off` |
+| GET    | `/health`                   | API + ChromaDB + LLM, dazu `reranker`: `gpu` · `cpu` · `cpu_fallback` (DirectML konfiguriert, läuft aber auf der CPU) · `not_loaded` · `off` ; `llm_shared_gb`: Anteil des lokalen LLM im geteilten GPU-Speicher in GB (`null` = unbekannt/Gemini), alle 5 min gemessen ([operations.md](docs/operations.md#häufige-probleme)) |
 | GET/DELETE | `/sessions/{id}`        | Session-Verlauf lesen / löschen |
 | GET    | `/stats`                    | Chunk-Anzahl |
 | GET/PUT | `/config`                  | UI-editierbare Settings lesen / Teil-Update (→ `settings.local.yaml`, live angewendet) |

@@ -34,11 +34,13 @@ router = APIRouter()
 _FEEDBACK_PATH = Path("logs/feedback.jsonl")
 
 
-# Health state, refreshed by _health_loop; /health and /sidebar-state only read it
-_health_cache: dict = {"chroma": False, "llm": False}
+# Health state, refreshed by _health_loop; /health and /sidebar-state only read it.
+# llm_shared_bytes: Ollama's share in shared GPU memory, None = unknown (roadmap 7b)
+_health_cache: dict = {"chroma": False, "llm": False, "llm_shared_bytes": None}
 
 
 _HEALTH_INTERVAL_S = 60.0
+_GPU_CHECK_EVERY = 5  # health passes per GPU-memory check (~1–2 s of PowerShell each, so every 5 minutes)
 
 
 # llm settings that change how the provider objects are built; the rest (temperature, timeout, ...) is
@@ -102,16 +104,40 @@ def update_health(chroma_ok: bool, llm_ok: bool) -> None:
         logger.log(level, "Health changed: chroma=%s llm=%s (was chroma=%s llm=%s)", chroma_ok, llm_ok, *previous)
 
 
+def update_gpu_memory(shared_bytes: int | None) -> None:
+    """Store Ollama's shared-GPU-memory share; log only when it crosses ``WARN_BYTES`` (WARNING with the
+    fix, INFO when it is back in VRAM) — the slowdown it causes is otherwise invisible (roadmap 7b)."""
+    from src.gpu_memory import WARN_BYTES
+    previous = _health_cache.get("llm_shared_bytes")
+    _health_cache["llm_shared_bytes"] = shared_bytes
+    if shared_bytes is None:
+        return
+    was_over = previous is not None and previous > WARN_BYTES
+    if shared_bytes > WARN_BYTES and not was_over:
+        logger.warning("LLM partly in shared GPU memory: %.2f GB — answers several times slower. Free the VRAM "
+                       "(program holding it, sign out/in), then 'ollama stop <model>' (operations.md)",
+                       shared_bytes / 1024 ** 3)
+    elif shared_bytes <= WARN_BYTES and was_over:
+        logger.info("LLM back in VRAM (shared GPU memory %.2f GB)", shared_bytes / 1024 ** 3)
+
+
 async def _health_loop(interval: float = _HEALTH_INTERVAL_S):
-    """Background loop that refreshes the health cache periodically."""
+    """Background loop that refreshes the health cache periodically; every ``_GPU_CHECK_EVERY`` passes it
+    also checks how much of a local (Ollama) model sits in shared GPU memory."""
+    from src.gpu_memory import llm_shared_bytes
+    passes = 0
     while True:
         try:
             import src.main as main_module
             chroma_ok = await run_in_threadpool(main_module.vectorstore.health_check)
             llm_ok = await main_module.provider.health_check()
             update_health(chroma_ok, llm_ok)
+            if passes % _GPU_CHECK_EVERY == 0:
+                local = main_module.provider.provider == "ollama"
+                update_gpu_memory(await run_in_threadpool(llm_shared_bytes) if local else None)
         except Exception as e:
             logger.warning("Background health check failed (%s: %s)", type(e).__name__, e)
+        passes += 1
         await asyncio.sleep(interval)
 
 
@@ -124,8 +150,10 @@ async def health():
     import src.main as main_module
     has_sources = bool(main_module.config.settings.ingestion.sources)
     status = "healthy" if (chroma_ok and llm_ok) else "degraded"
+    shared = _health_cache.get("llm_shared_bytes")
     return HealthResponse(status=status, chromadb=chroma_ok, llm=llm_ok, sources_configured=has_sources,
-                          reranker=main_module.retriever.reranker_device)
+                          reranker=main_module.retriever.reranker_device,
+                          llm_shared_gb=round(shared / 1024 ** 3, 2) if shared is not None else None)
 
 
 @router.get("/sidebar-state", response_model=SidebarState)

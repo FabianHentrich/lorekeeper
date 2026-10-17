@@ -203,7 +203,9 @@ Prüfen mit `Get-Counter '\GPU Process Memory(*)\Shared Usage'`: Ein `llama-serv
 lag mit 2,65 GB im geteilten Speicher, 16,9 statt ~54 tok/s; ein Neuladen des Modells half nicht, weil
 der Speicher nicht frei war. Abhilfe: das Programm schließen, für das `dwm` den Speicher hält (meist ein
 Spiel im Vollbild/randlos), sonst ab- und wieder anmelden oder neu starten; danach das Modell neu laden
-(`ollama stop qwen3:14b`, nächste Frage lädt es).
+(`ollama stop qwen3:14b`, nächste Frage lädt es). Seit 18.10. prüft der Health-Loop das alle 5 Minuten (`src/gpu_memory.py`, ein
+PowerShell-Aufruf von ~1–2 s): über 1 GB steht `LLM partly in shared GPU memory: … GB` als WARNING im Log
+und eine Warnung in der Sidebar, beim Zurückfallen `LLM back in VRAM` (INFO).
 
 **Mehrere Fragen gleichzeitig**: Ollama beantwortet sie nacheinander (`OLLAMA_NUM_PARALLEL=1`,
 bewusst so gelassen). `OLLAMA_NUM_PARALLEL=2` wurde gemessen: Das erste Token kommt bei Gleichzeitigen
