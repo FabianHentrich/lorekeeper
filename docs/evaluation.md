@@ -247,8 +247,13 @@ Holdout 9/10, 51/53.
 Roadmap 3.15): Answer Contains 0,949** (260/274), Datei 0,996 (273). 12 gewonnen, 5 verloren — die 5
 inhaltlich richtig, nur anders formuliert; Einzelheiten in
 [embedding-strategy.md](embedding-strategy.md#warum-section-expansion). Antwortzeit nicht vergleichbar
-(Rechner unter Last, LLM 3–4× langsamer). Holdout 9/10, 51/53. Das ist die Basis für die nächsten
-Vergleiche.
+(Rechner unter Last, LLM 3–4× langsamer). Holdout 9/10, 51/53.
+
+**Sechster Lauf (18.10., Regressionsprüfung nach Vault-Änderungen, Roadmap 12): Answer Contains 0,953**
+(261/274), Datei 0,996 (273), Ø 7,2 s (p50 6,3 s, p95 13,8 s). Gegen den fünften Lauf 4 gewonnen
+(x008 nach der Loot-Zeile beim Kultpriester, p055, p096, p107), 3 verloren (p035, m056, z004 — gleiche
+Quellen, LLM-Streuung). Holdout 9/10, 51/53. Das ist die Basis für die nächsten Vergleiche
+(`e2e_20261018_152757.json`).
 
 **Holdout für Aufzählungsfragen** (`evaluation/holdout_lists.yaml`, 14.10.): zehn Listenfragen aus
 Kapiteln ohne Listenfrage im Golden Set, vor jedem Tuning geschrieben, erwartet werden **alle**
@@ -268,7 +273,7 @@ behaltenen Plätze belegt. Lange Listenantworten brauchen 10–34 s (Länge, ~54
 |---|---|---|---|---|
 | **Trefferquote (Datei)** | `evaluate_retrieval.py` | Erwartete Datei unter den gefundenen Chunks | > 0,85 | 0,993 (272/274) |
 | **Abschnitt-Trefferquote** | `evaluate_retrieval.py` | Erwarteter Abschnitt unter den Überschriften | darf nicht sinken | 143/149 |
-| **Answer Contains** | `evaluate.py` | Stichwörter in der LLM-Antwort | > 0,75 | 0,949 (260/274, fünfter Lauf, 17.10.); erster Lauf 0,905 (248/274) |
+| **Answer Contains** | `evaluate.py` | Stichwörter in der LLM-Antwort | > 0,75 | 0,953 (261/274, sechster Lauf, 18.10.); erster Lauf 0,905 (248/274) |
 | **Latenz** | `evaluate.py` | Antwortzeit gesamt, gemittelt über die beantworteten Fragen (fehlgeschlagene zählen bei den Quoten als Fehltreffer) | < 10 s | Ø 6,8 s (p50 5,9 s, p95 13,8 s) |
 
 Die Ziel-Trefferquote liegt bewusst unter 1,0 — die Strukturtests prüfen Randfälle, sie alle zu

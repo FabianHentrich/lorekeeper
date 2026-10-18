@@ -2362,9 +2362,10 @@ pairs:
     expected_sources:
       - "pnp_regelbuch.pdf"
       - "Geschichte - Söldner/Akt 1 - Erste Fäden/2. Im Namen der Reinheit/Im Namen der Reinheit.md"
+      - "Gegner/Kultpriester.md"
     expected_answer_contains: ["Kultpriester"]
     expected_section: "7.2.4"
-    notes: "Loot-Tabelle in I-2 + Artefakttabelle 7.2.4."
+    notes: "Loot-Tabelle in I-2 + Artefakttabelle 7.2.4. Seit 18.10. steht der Fundort auch als Loot-Zeile in Gegner/Kultpriester.md (die Tabellenspalte in I-2 erreicht die Suche nicht; vorher erfand das LLM einen Gegner)."
 
   # ─────────────────────────────────────────
   # SIMULATION — Begegnungs- und Fähigkeitswertung aus PnP_Simulation (z001–z016)
