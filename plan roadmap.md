@@ -26,7 +26,6 @@ End-to-End-Lauf ~35 min (🟡).
 
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 9 | 2 Bilder — Rest (Dateiname-Rückfall, PDF-Bilder, neues Bild ohne Notiz-Änderung) | Gering | Gering–Mittel | 🟡–🔴 | Vor-/Spitzname erledigt 18.10. (siehe „Erledigt“). Dateiname-Rückfall braucht Spy-Test, PDF-Bilder dauerhafte Ablage + Re-Index (🔴) |
 | 11 | Beim nächsten Re-Index: Suchgenauigkeit prüfen | Gering | Gering | 🔴 | 18.10. nach dem Regelbuch-Re-Index (3.17) 274/274 exakt, auch m039 wieder; bei Abweichungen nach weiteren In-place-Re-Indizes den Vault einmal komplett neu aufbauen (3.10) |
 | — | 3.10 Simulationsberichte z001, z003, z006, z009, z012 | Gering | — | 🟢 | Liegt beim Nutzer: Überschriften in den Berichten (siehe „Offen beim Nutzer“), danach Golden Set |
 | — | 7c Auto-Reload/Stopp hing bei laufendem E2E-Lauf ⏸ (nicht nachstellbar) | Gering | — | 🟡 | 18.10. 00:00: Änderung unter `src/` ohne Neustart, `stop.ps1` musste nach 20 s hart beenden. In beiden Fällen fehlt „Shutting down“ im Log, der Worker beantwortete noch 19 s lang Fragen — er hat das Strg+C nicht verarbeitet (Prozessbaum war intakt, `GenerateConsoleCtrlEvent` erfolgreich); offene Verbindungen erklären es nicht, die werden erst nach „Shutting down“ abgewartet. Rechner war in der Nacht überlastet (Modell im geteilten GPU-Speicher, wenig RAM). Nachgestellt 18.10. 11:33 auf freiem Rechner: Reload während E2E nach 39 s fertig (wartet die laufende Frage ab), `stop.ps1` während E2E sauber nach 8 s — 12.3 hält. **Falls es wieder passiert**: im Log nach „Shutting down“ suchen, im Backend-Fenster nach „WatchFiles detected changes“ (steht nur dort, nicht in der Datei), Fenster-Titel auf „Auswählen“ prüfen (Markiermodus hält Konsolen-Ausgaben an) |
@@ -65,25 +64,22 @@ Regeln. `HF_HUB_OFFLINE=1` (in `src/__init__.py`): Modelle nur aus dem lokalen C
   (`[[Kultpriester]] | [[Heimkehrpfennig]]`, Link in der 2. Spalte, für die Suche unerreichbar); das LLM
   erfindet dann einen Gegner („Eisscherben-Wächter“, 3/3). Eine Notiz `Heimkehrpfennig.md` mit
   „Erbeutet bei: Kultpriester (I-2)“ löst es (der Link existiert schon, die Notiz fehlt).
+- **Bilder einbetten (18.10., aus 9)**: 20 von 40 Bildern im Vault sind nirgends eingebettet und erscheinen
+  deshalb nie im Chat — 15 davon die Räume des Weihnachts-One-Shots (`Der Maskenball des Winterkönigs -
+  Festsaal.webp`, `- Küche.webp`, …), dazu `Lagerhaus.png`, `Anwesen Lilith von Lysander.png`,
+  `Artefaktraum.png`, `Schatten_unter_Morgenstern_map.png` und ein Bildschirmfoto. `![[…]]` unter der
+  passenden Überschrift reicht: Der Chat zeigt das Bild dann zu genau diesem Abschnitt, die Notiz-Änderung
+  bringt es beim nächsten Indizieren mit.
 
 ---
 
 ## Offene Punkte
 
-### 2 Bilder im Chat — Rest
+### 2 Bilder im Chat
 
-Einbettungen in Notizen laufen seit 14.10. (siehe „Erledigt“ 2). Offen, nur bei Bedarf:
-- **Dateiname als Rückfall** für Bilder, die nirgends eingebettet sind (40 Bilddateien, 20 Einbettungen):
-  „Karte Arkenfeld.png“ passt zu Fragen, die „Arkenfeld“ nennen — wie der Eintrags-Slot (Namenssuche,
-  Filter der Anfrage, Spy-Test).
-- **Bilder aus PDFs** liegen nur in einem temporären Ordner, der nach dem Parsen gelöscht wird — zum
-  Anzeigen müssten sie dauerhaft abgelegt werden.
-- ~~**Vor-/Spitzname**~~ — 18.10. erledigt über die `aliases` (siehe „Erledigt“ 9).
-- Ein neu abgelegtes Bild erscheint erst nach einer Änderung der Notiz oder einem vollen Re-Index der
-  Quelle (der Inhalts-Hash deckt nur die Notiz ab).
-
-Verworfen: Vision-Beschreibungen beim Ingest, CLIP-Embeddings, manuelle Captions; ein Endpunkt
-`/files/{path}` ist unnötig, weil `st.image` die Datei auf dem Streamlit-Server liest (auch im Heimnetz).
+Geschlossen 18.10. (siehe „Erledigt“ 2 und 9). Verworfen: Vision-Beschreibungen beim Ingest,
+CLIP-Embeddings, manuelle Captions, Dateiname als Rückfall (siehe 9); ein Endpunkt `/files/{path}` ist
+unnötig, weil `st.image` die Datei auf dem Streamlit-Server liest (auch im Heimnetz).
 
 ### 3.5 Wikilink-Expansion ⏸
 
@@ -184,6 +180,7 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 
 | Nr | Was | Wann | Wo dokumentiert |
 |---|---|---|---|
+| 9 | Bilder — Rest **geschlossen**: Bilder aus PDFs entfallen (das Regelbuch enthält keine, 0 auf 115 Seiten). Dateiname als Rückfall nicht gebaut: von 20 nicht eingebetteten Bildern hat keines eine gleichnamige Notiz, 15 sind Räume des Weihnachts-One-Shots — Einbetten unter der Raum-Überschrift wirkt genauer und ohne Code (→ „Offen beim Nutzer“); damit entfällt auch „neues Bild ohne Notiz-Änderung“ | 18.10. | — |
 | 10 | Übrige Einzelfälle 3.10/3.15 — **geschlossen**: AP-Pool 3/3 richtig (Antwort erklärt den gemeinsamen AP/MP-Pool), p009 und „Wer ist Arkenfeld?“ waren schon richtig. k001 (Langschwert-Preis, zwei Schritte Kategorie → Preistabelle) und x008 (Heimkehrpfennig nur in einer Loot-Tabellenspalte; LLM erfindet den Gegner) brauchen Inhalt statt Code → „Offen beim Nutzer“. Tabellenzeilen-Suche für Obsidian-Tabellen war 14.10. schon verworfen | 18.10. | — |
 | 9 (Teil) | Bilder auch bei Vor-/Spitznamen: `sources` liefern die Frontmatter-`aliases` der Notiz, der Chat zeigt ihre Bilder, wenn Frage oder Antwort den Namen **oder** einen Alias nennt („Wer ist Lilith?“ → Lyssara Vaydris). 7 der 11 Notizen mit Bildern haben Aliase (Vornamen, Spitznamen). Fremde Porträts bleiben draußen (UI-Test mit Liora, mutationsgeprüft); live: Aliase kommen mit den Quellen an. Kein Re-Index nötig | 18.10. | `docs/ui-ux.md`, `ARCHITECTURE.md` |
 | 3.19 | Simulationsbericht in Regelfragen — **ohne Änderung erledigt**: 42 von 129 Regelfragen bekommen Chunks aus `llm_report.md`, zusammen 93 von 1.576 (5,9 %), fast immer 1–3 aus der normalen Rangfolge; meist „Kontext > Metriken-Erklärung“ (21 Fragen), die die Regeln für die LLM-Analyse nacherzählt. Section Expansion nur bei p011 (12 Chunks) — Antwort trotzdem 3/3 richtig. Den Abschnitt auszuschließen kostete z002 (Simulationsfrage, braucht ihn); gezieltes Tuning für eine richtige Antwort lohnt nicht. Neu prüfen, wenn Regelantworten Werte aus dem Bericht statt aus dem Regelbuch nennen | 18.10. | — |
