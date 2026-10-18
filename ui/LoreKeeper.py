@@ -543,8 +543,11 @@ for i, msg in enumerate(_visible):
         _render_extras(msg)
         if msg["role"] == "assistant":
             _render_feedback(msg)
-            # Not while a new question is already on its way (its value is known before the input renders)
-            if i == len(_visible) - 1 and not st.session_state.get("_chat_question"):
+            # Not while a new question is already on its way — typed (its value is known before the input
+            # renders) or queued by "Erneut senden": after two errors in a row the older one is last here,
+            # and its button collided with the one the failing retry draws (duplicate key, review 13.5)
+            if (i == len(_visible) - 1 and not st.session_state.get("_chat_question")
+                    and "_retry_prompt" not in st.session_state):
                 _render_retry(msg)
 
 # ─── Chat Input ───────────────────────────────────────────

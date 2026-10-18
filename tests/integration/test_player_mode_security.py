@@ -357,6 +357,23 @@ def test_condensed_follow_up_cannot_widen_the_search(env):
     _no_secret(env.llm.prompts[-1])
 
 
+def test_typo_correction_never_shows_a_player_a_game_master_word(env):
+    """Review 13.5: truecasing and typo repair use one vocabulary over all sources, so "invictux" is
+    corrected to "Invictus", a word only game-master text contains. The corrected query must stay inside
+    the retriever — the player's search_query and the prompt carry the question as typed. (Known residual:
+    a player who guesses the exact word can compare scores of guess and typo — documented in truecase.py.)"""
+    question = "Was ist invictux?"
+    env.retriever.truecaser.ensure_built(env.retriever.vectorstore)
+    assert "Invictus" in env.retriever.truecaser.apply(question)   # the bait works, else this proves nothing
+
+    status, events = _stream_as_player(env.client, question)
+
+    assert status == 200
+    assert events[-1]["search_query"] == question
+    assert "Invictus" not in env.llm.prompts[-1]
+    _no_secret(env.llm.prompts[-1])
+
+
 # ─── Enforced in the backend (role, roadmap 4.2) — no UI filter needed ─────────
 
 def _stream_as_player(client, question: str, **extra) -> tuple[int, list[dict]]:

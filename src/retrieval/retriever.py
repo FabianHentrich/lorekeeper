@@ -443,7 +443,9 @@ class Retriever:
         for "was ist überschaden?") would otherwise flood the context with ~20 chunks.
 
         ``max_total_chunks`` caps the result over all sections: they are expanded in the order of their
-        best hit while the total fits; a section that would exceed it keeps its original hits.
+        best hit while the total fits; a section that would exceed it keeps its original hits. A section
+        inside another expanded one is dropped — the outermost one is inserted, as one block, at its first
+        hit (review 13.5: the inner key used to win and the outer section never arrived).
 
         ``where`` is the request's filter (player restriction included) — every loaded section chunk
         must pass it, like every other search path.
@@ -501,20 +503,31 @@ class Retriever:
                 total += len(new)
                 present.update(_chunk_ident(it) for it in new)
 
+        # A section inside another expanded one adds nothing: the outer one inserts all of it. Before review
+        # 13.5 the inner key won at insertion, so the outer section was logged and charged to the budget
+        # but its other chunks never reached the result.
+        for key in [k for k in expanded
+                    if any(o != k and o[:2] == k[:2] and k[2].startswith(o[2] + " > ") for o in expanded)]:
+            del expanded[key]
+
         if not expanded:
             return chunks
         logger.info("Section expansion: %s", ", ".join(
             f"'{parent}' ({source_file}, {len(section)} chunks)"
             for (_, source_file, parent), section in expanded.items()))
 
-        # The first (best-ranked) hit of a section inserts the whole section; dedupe by
-        # chunk identity so siblings and deeper hits already inside it aren't repeated.
+        # The first (best-ranked) hit inside a section — its intro or any sub-heading at any depth — inserts
+        # the whole section; dedupe by chunk identity so siblings and deeper hits aren't repeated.
+        def container(c: RetrievedChunk) -> tuple[str, str, str] | None:
+            src = (c.metadata.get("source_id", ""), c.source_file)
+            return next((k for k in expanded if k[:2] == src
+                         and (c.heading == k[2] or c.heading.startswith(k[2] + " > "))), None)
+
         result: list[RetrievedChunk] = []
         seen: set = set()
         for c in chunks:
-            own = _own_section_key(c)
-            key = own if own in expanded else _section_key(c)   # an intro inserts its own section
-            for item in (expanded.get(key, [c]) if key is not None else [c]):
+            key = container(c) if c.heading else None
+            for item in (expanded[key] if key is not None else [c]):
                 ident = _chunk_ident(item)
                 if ident not in seen:
                     seen.add(ident)

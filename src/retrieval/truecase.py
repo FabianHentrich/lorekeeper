@@ -16,7 +16,11 @@ nothing anymore (7 → 0 changed hits); a typo in the first letter stays as type
 
 Built lazily on the first query and dropped after every ingest (like the BM25 index). Only used internally
 for the search — the corrected text is never sent to the client, because the vocabulary also covers
-game-master-only chunks and a changed spelling would tell a player that a word exists there.
+game-master-only chunks and a changed spelling would tell a player that a word exists there
+(tests/integration/test_player_mode_security.py, mutation-checked). Accepted residual (review 13.5): a
+player who already guesses an exact game-master word can confirm it — a typo of it, or its lower-case form,
+gets the same player-visible sources and scores as the word itself. Nothing is shown that wasn't guessed;
+a second, player-only vocabulary would close it (~0.5 s more build time).
 """
 import logging
 import re

@@ -326,6 +326,12 @@ Frage ersetzt, und die Frage beginnt mit einem Großbuchstaben; was der Nutzer g
 schrieb, bleibt. Gebaut beim ersten Suchaufruf, verworfen nach jedem Ingest (wie der BM25-Index).
 **Nur intern**: Die korrigierte Frage geht nie an den Client — das Wörterbuch enthält auch
 Spielleiter-Chunks, eine geänderte Schreibweise verriete einem Spieler, dass ein Wort dort vorkommt.
+Seit 18.10. als Spieler-Sicherheitstest festgehalten („invictux“ wird intern zu „Invictus“, einem Wort nur
+aus Spielleiter-Text; `search_query` und Prompt behalten die Eingabe; mutationsgeprüft). **Bewusst
+hingenommener Rest** (Review 13.5): Wer ein Spielleiter-Wort schon **errät**, kann es bestätigen — ein
+Tippfehler davon oder die Kleinschreibung liefert dieselben Spieler-Quellen und Scores wie das Wort selbst.
+Es wird nichts gezeigt, was nicht schon geraten war; ein zweites, nur aus Spieler-Quellen gebautes
+Wörterbuch würde es schließen (~0,5 s mehr Aufbau) — am Spieltisch kein realistischer Angriff.
 
 Gemessen 14.10. (frisch gebauter Index, jina): Golden Set wie geschrieben 143 → 143 (unverändert),
 kleingeschrieben 135 → **142**/149 (übrig: „würfeln“ — in den Quellen 3× klein, 2× groß — und
@@ -458,7 +464,11 @@ ziehen zwei zufällige, schwache Treffer eine fremde Sektion herein. Golden Set 
 
 Drittens begrenzt `max_total_chunks` (30) das ganze Ergebnis über alle Sektionen (Roadmap 5.6):
 Expandiert wird in der Reihenfolge des besten Treffers, solange die Summe passt; eine Sektion, die
-nicht mehr passt, behält ihre ursprünglichen Treffer. Golden-Set-Sweep 13.10. (alle Varianten in
+nicht mehr passt, behält ihre ursprünglichen Treffer. Liegt eine expandierte Sektion in einer anderen
+expandierten (`X > Y` in `X`), zählt nur die äußere — sie kommt als ein Block an die Stelle ihres ersten
+Treffers. Bis 18.10. gewann die innere: die äußere stand im Log und kostete Budget, kam aber nie an
+(Review 13.5; Golden Set dadurch unverändert 272 · 144, nur bei 4 Fragen eine andere Reihenfolge derselben
+Chunks). Golden-Set-Sweep 13.10. (alle Varianten in
 einem Prozess, zwei Läufe ohne Budget identisch):
 
 | Budget | Datei / Abschnitt | Ø / p95 / max Chunks | Fragen > 20 Chunks | geänderte Fragen |

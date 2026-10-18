@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # chapter 1 and split 5.4.6 Alchemist (roadmap 3.17)
 _NUMBERED_HEADING = re.compile(r'^(#{1,6})(\s+)(\*{0,2}\d+(?:\.\d+)*\.?\s+.+)', re.MULTILINE)
 _ANY_HEADING = re.compile(r'^#{1,6}[ \t]+(.+?)[ \t]*$', re.MULTILINE)  # \s would eat the line break
-_SECTION_NUMBER = re.compile(r'^\d+(\.\d+)*\s')
+_SECTION_NUMBER = re.compile(r'^\d+(\.\d+)*\.?\s')   # "5.2. " like _NUMBERED_HEADING (review 13.5)
 _IMAGE_REF = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
 # A word hyphenated across a line break inside a table cell ("Le-<br>benspunkten")
 _CELL_HYPHENATION = re.compile(r'(\w)-<br>(\w+)')

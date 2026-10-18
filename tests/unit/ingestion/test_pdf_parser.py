@@ -41,6 +41,10 @@ class TestDemoteLabelHeadings:
         md = "# **5.3 Basis-Zauber**\n## **Magischer Schlag**\n# 4.2 Ablauf:"   # numbered: never a label
         assert _demote_label_headings(md) == md
 
+    def test_numbered_heading_with_trailing_dot_stays(self):
+        """Review 13.5: "5.2. Effekte:" is numbered like "1. Rassen" — the label rule must not demote it."""
+        assert _demote_label_headings("# 5.2. Effekte:") == "# 5.2. Effekte:"
+
     def test_colon_inside_a_heading_is_not_a_label(self):
         assert _demote_label_headings("## Akt 1: Erste Fäden") == "## Akt 1: Erste Fäden"
 

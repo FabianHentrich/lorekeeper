@@ -1,4 +1,6 @@
 """Chat: "Erneut senden" under an error (roadmap 14.1) — the failed question goes out again without retyping."""
+import pytest
+
 from tests.ui import conftest
 from tests.ui.conftest import open_page
 
@@ -54,3 +56,20 @@ def test_only_the_last_error_has_the_button(fake_backend, monkeypatch):
 
     assert at.session_state["messages"][1].get("retry") == QUESTION     # old error kept in the history
     assert not [b for b in at.button if b.key == "retry_last"]
+
+
+@pytest.mark.parametrize("backend_down", [True, False])
+def test_retry_after_two_errors_in_a_row_fails_cleanly(fake_backend, monkeypatch, backend_down):
+    """Review 13.5: two errors, then a retry that fails again — the older error was last in the history
+    during the retry rerun and drew a second "retry_last" button (StreamlitDuplicateElementKey). With a
+    provider error the crash was caught and stored as a third, bogus error message."""
+    at = _ask_and_fail(fake_backend, monkeypatch, backend_down=backend_down)
+    at.chat_input[0].set_value("Frage zwei").run()
+
+    at.button(key="retry_last").click().run()
+
+    assert not at.exception, [e.message for e in at.exception]
+    msgs = at.session_state["messages"]
+    assert [m["content"] for m in msgs if m["role"] == "user"] == [QUESTION, "Frage zwei"]
+    assert [m.get("retry") for m in msgs if m["role"] == "assistant"] == [QUESTION, "Frage zwei"]
+    assert len([b for b in at.button if b.key == "retry_last"]) == 1

@@ -823,6 +823,23 @@ class TestSectionExpansion:
         vs.get_chunks_for_file.assert_called_once_with("rules", "regelbuch.pdf", {"document_type": {"$ne": "image"}})
 
     @pytest.mark.asyncio
+    async def test_outer_section_inserts_all_of_it_when_inner_sections_expand_too(self, embed_service, caplog):
+        """Review 13.5: hits in X > Y and X > Z expand Y, Z and (via their intros) X. The inner keys won at
+        insertion, so X was logged and charged to the budget while its intro and X > W never arrived."""
+        f = "n.pdf"
+        nested = [_hit("X", 0, source_file=f), _hit("X > Y", 1, source_file=f), _hit("X > Y > a", 2, source_file=f),
+                  _hit("X > Z", 3, source_file=f), _hit("X > Z > b", 4, source_file=f), _hit("X > W", 5, source_file=f)]
+        retriever, vs = self._retriever(embed_service, [nested[1], nested[2], nested[3], nested[4]])
+        vs.get_chunks_for_file.return_value = nested
+
+        with caplog.at_level("INFO", logger="src.retrieval.retriever"):
+            results = await retriever.retrieve("x")
+
+        assert [r.metadata["chunk_index"] for r in results] == [0, 1, 2, 3, 4, 5]
+        infos = [r.getMessage() for r in caplog.records if r.levelname == "INFO"]
+        assert "Section expansion: 'X' (n.pdf, 6 chunks)" in infos      # inner sections are not logged apart
+
+    @pytest.mark.asyncio
     async def test_repeated_same_heading_does_not_expand(self, embed_service):
         """Verify several parts of one heading (no distinct siblings) don't trigger expansion."""
         hits = [_hit("NPC > Rolle > Waldläufer (Kern)", 1, source_file="npc.md"),
