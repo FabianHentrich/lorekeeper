@@ -32,7 +32,7 @@ flowchart LR
         S4["🎯 Quellen-Filter<br/>☑ 🗺️ Lore · ☑ 📖 Abenteuer<br/>☑ 📋 Regelwerk · ☑ 📊 Simulation"]
         S5["🔍 Hybrid Search"]
         S7["🗑️ Neue Session"]
-        S8["⏻ LoreKeeper beenden<br/><i>nur Admin</i>"]
+        S8["⏻ LoreKeeper beenden · 🔄 neu starten<br/><i>nur Admin</i>"]
         S0 --- S1 --- S2 --- S3 --- S4 --- S5 --- S7 --- S8
     end
 
@@ -135,7 +135,8 @@ Aus `/sidebar-state` (in der UI 30 s gecacht; das Backend prüft im Hintergrund 
 eine Warnung, wenn DirectML eingestellt ist, der Reranker aber auf der CPU läuft (Antworten langsamer,
 Ursache im Log; [operations.md](operations.md#reranker-läuft-auf-der-cpu-directml-warnung)). Ebenso eine
 Warnung, wenn das lokale LLM über 1 GB im **geteilten GPU-Speicher** liegt (`llm_shared_gb` aus `/health`,
-Roadmap 7b) — dann laufen Antworten mehrfach langsamer, obwohl `ollama ps` „100% GPU“ zeigt.
+Roadmap 7b) — dann laufen Antworten mehrfach langsamer, obwohl `ollama ps` „100% GPU“ zeigt; die Warnung
+verweist auf **🔄 LoreKeeper neu starten** (lädt das Modell neu, nachdem der VRAM frei ist).
 
 ### Hybrid Search
 
@@ -173,13 +174,15 @@ Der Retriever verknüpft das mit dem festen Filter `document_type != "image"` pe
 Hinweise auf **⚙ Sources** (Chunk-Zahl, Indizieren, Quellen) und **🛠 Settings**. **🗑️ Neue
 Session** leert `messages` und `session_id` — die nächste Frage startet ohne Verlauf.
 
-### LoreKeeper beenden (`ui/shutdown.py`)
+### LoreKeeper beenden und neu starten (`ui/shutdown.py`)
 
-**⏻ LoreKeeper beenden** steht unten in der Sidebar jeder Seite (Chat und alle Admin-Seiten), nur
-für Admins (mit Passwort erst nach dem Login, ohne Passwort für alle wie die Admin-Seiten). Der
-erste Klick fragt nach („alle Nutzer verlieren die Verbindung“), **Beenden** startet `stop.ps1`
-losgelöst ohne Fenster (Ablauf: [operations.md](operations.md#server-im-heimnetz-lan)), **Abbrechen**
-nimmt die Frage zurück. Läuft eine Indizierung (`GET /ingest/active`), wird nicht beendet und die
+**⏻ LoreKeeper beenden** und darunter **🔄 LoreKeeper neu starten** (18.10., Roadmap 16) stehen unten in
+der Sidebar jeder Seite (Chat und alle Admin-Seiten), nur für Admins (mit Passwort erst nach dem Login,
+ohne Passwort für alle wie die Admin-Seiten). Der erste Klick fragt nach („alle Nutzer verlieren die
+Verbindung“ bzw. „für ~30 s“), **Beenden** startet `stop.ps1`, **Neu starten** `stop.ps1 -Restart` —
+beide losgelöst ohne Fenster (Ablauf: [operations.md](operations.md#server-im-heimnetz-lan)); der
+Neustart behält den Modus (Server/Entwicklung) und räumt den VRAM, die Seite verbindet sich danach von
+selbst wieder. **Abbrechen** nimmt die Frage zurück. Läuft eine Indizierung (`GET /ingest/active`), wird nicht beendet und die
 Seite sagt warum; ist das Backend nicht erreichbar, wird trotzdem beendet. Die UI startet das Skript
 selbst statt einen Backend-Endpunkt aufzurufen: UI und Backend laufen immer auf demselben PC, so
 bleibt das Beenden hinter dem Admin-Login, ohne eine neue API-Route zu öffnen. Beim Seitenaufbau
@@ -486,7 +489,7 @@ beenden die Fortschrittsanzeigen sofort mit dieser Meldung statt ~45 s „nicht 
 | `_role` | `"player" \| "game_master"` | Gewählte Rolle; fehlt → Rollenauswahl. Entfernen (Rolle wechseln) setzt Chat und Session zurück |
 | `_is_admin` | `bool` | Nach erfolgreichem Admin-Login; schaltet Admin-Seiten und Provider-Steuerung frei |
 | `_selected_provider` | `str` | Gewählter Provider (Widget-State) |
-| `_confirm_stop` | `bool` | Rückfrage von **⏻ LoreKeeper beenden** ist offen |
+| `_confirm_power` | `str` | Offene Rückfrage von **⏻ LoreKeeper beenden** (`"stop"`) oder **🔄 neu starten** (`"restart"`) |
 | `_provider_switch_ok` / `_provider_switch_error` | `bool` / `str` | Kurzzeit-Flags nach einem Provider-Wechsel |
 | `_ingest_job` | `dict \| None` | Sources-Seite: verfolgter Indizier-Job `{id, label, failures}` |
 | `_flash` | `str` | Sources-Seite: Erfolgsmeldung, die ein Neuladen überlebt |

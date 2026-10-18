@@ -324,8 +324,8 @@ def _render_sidebar():
         if shared_gb is not None and shared_gb > 1:
             # The model runs, but partly from system RAM — "100% GPU" in ollama ps hides it (roadmap 7b)
             st.warning(f"LLM liegt zu {shared_gb:.1f} GB im geteilten Speicher — Antworten mehrfach langsamer. "
-                       "VRAM freimachen (Programm schließen, ab-/anmelden), dann `ollama stop` "
-                       "(siehe docs/operations.md).")
+                       "VRAM freimachen (Programm schließen, ab-/anmelden), dann „🔄 LoreKeeper neu "
+                       "starten“ unten in der Sidebar — lädt das Modell neu (siehe docs/operations.md).")
         if not health.get("sources_configured", True):
             st.warning(
                 "Keine Quellen konfiguriert. Lege unter **Sources** "

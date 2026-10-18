@@ -133,7 +133,13 @@ an, die die Port-Freigabe überstimmt.
   das Backend gestartet hat. Erkannt werden nur LoreKeepers eigene Prozesse (`src.main:app`,
   `ui/LoreKeeper.py`); ein anderer Server auf 8000/8501 bleibt unberührt. Während einer Indizierung verweigert beides (ein harter Abbruch kann
   einen halb geschriebenen Index hinterlassen); `.\stop.ps1 -Force` bricht sie trotzdem ab. Die
-  Ausgabe des Buttons steht in `logs/stop.log`. `.\stop.ps1 -List` zeigt nur, welche Prozesse
+  Ausgabe des Buttons steht in `logs/stop.log`. `.\stop.ps1 -Restart` bzw. **🔄 LoreKeeper neu starten**
+  (gleiche Stelle, 18.10., Roadmap 16) beendet genauso und startet danach `start.ps1` im Modus, der lief
+  (`--reload` → Entwicklung, sonst `-Server`); scheitert das Beenden (Indizierung, Port belegt), wird nicht
+  gestartet. Dauer ~25 s, Ollama samt Modell ist danach aus dem VRAM. Der Button startet das Skript in
+  einer eigenen Prozessgruppe, die Strg+C abschaltet — und Kindprozesse erben das. Das Skript schaltet es
+  vor dem Start wieder ein; ohne das ignorierte das neue Backend das nächste Strg+C und wurde nach 20 s
+  hart beendet, samt Ollama (live geprüft 18.10.). `.\stop.ps1 -List` zeigt nur, welche Prozesse
   gestoppt würden — auch während einer Indizierung. Kindprozesse zählen nur, wenn sie **nach** ihrem Elternprozess gestartet wurden:
   Windows vergibt PIDs neu, und am 14.10. hielt das Skript so den Browser, den `start.ps1` geöffnet
   hatte, für ein Kind des UI-Prozesses und beendete ihn hart.
@@ -211,7 +217,8 @@ Prüfen mit `Get-Counter '\GPU Process Memory(*)\Shared Usage'`: Ein `llama-serv
 lag mit 2,65 GB im geteilten Speicher, 16,9 statt ~54 tok/s; ein Neuladen des Modells half nicht, weil
 der Speicher nicht frei war. Abhilfe: das Programm schließen, für das `dwm` den Speicher hält (meist ein
 Spiel im Vollbild/randlos), sonst ab- und wieder anmelden oder neu starten; danach das Modell neu laden
-(`ollama stop qwen3:14b`, nächste Frage lädt es). Seit 18.10. prüft der Health-Loop das alle 5 Minuten (`src/gpu_memory.py`, ein
+(**🔄 LoreKeeper neu starten** in der Sidebar beendet Ollama mit, oder `ollama stop qwen3:14b`; die nächste
+Frage lädt es). Seit 18.10. prüft der Health-Loop das alle 5 Minuten (`src/gpu_memory.py`, ein
 PowerShell-Aufruf von ~1–2 s): über 1 GB steht `LLM partly in shared GPU memory: … GB` als WARNING im Log
 und eine Warnung in der Sidebar, beim Zurückfallen `LLM back in VRAM` (INFO).
 

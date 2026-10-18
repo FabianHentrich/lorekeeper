@@ -26,7 +26,6 @@ End-to-End-Lauf ~35 min (🟡).
 
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 16 | Neustart-Knopf neben „⏻ LoreKeeper beenden“ (Idee des Nutzers) | Mittel | Gering–Mittel | 🟢 (Live-Prüfung 🟡) | Behebt hängende Zustände ohne Konsole, gibt den VRAM frei (Modell im geteilten Speicher, 7b-Warnung) |
 | 3.17 | PDF-Parser: `1W8 Ergebnis` als oberste Überschrift (aus dem Eingang) | Gering–Mittel | Gering–Mittel | 🔴 | Alchemisten-Tabellen hängen unter falschem Kapitel, vermutlich Ursache von p091; Regelbuch-Re-Index + Golden Set |
 | 8 | 3.10 Monolith-Sektion in fremden Regelfragen (p011, p101) | Gering | Mittel | 🟡 | 22 Chunks, landet in den Top 3; Antworten bisher trotzdem richtig |
 | 9 | 2 Bilder — Rest (Vor-/Spitzname, Dateiname-Rückfall, PDF-Bilder, neues Bild ohne Notiz-Änderung) | Gering | Gering–Mittel | 🟢–🔴 | Einbettungen laufen. Vor-/Spitzname (13.4) über `aliases` der Notiz wäre klein (🟢); Dateiname-Rückfall braucht Spy-Test, PDF-Bilder dauerhafte Ablage + Re-Index (🔴) |
@@ -64,19 +63,6 @@ Regeln. `HF_HUB_OFFLINE=1` (in `src/__init__.py`): Modelle nur aus dem lokalen C
 ---
 
 ## Offene Punkte
-
-### 16 Neustart-Knopf
-
-Idee des Nutzers (18.10.): analog zum Beenden-Button sollte es einen Neustart-Button geben, welcher einmal
-alle Ressourcen aufräumt/leert und dann den LoreKeeper neu startet.
-
-**Ansatz**: `ui/shutdown.py` startet heute `stop.ps1` losgelöst (eigene Prozessgruppe, kein Fenster). Neustart
-= dasselbe, danach `start.ps1` im **gleichen Modus** (Server oder Entwicklung — aus der Kommandozeile des
-laufenden Backends, `--reload` ja/nein). „Aufräumen“ leistet `stop.ps1` schon: Ollama samt `llama-server`
-beendet (VRAM frei), Waisen auf den Ports werden beendet. Während einer Indizierung gesperrt wie das
-Beenden. Die Browser-Seite verliert kurz die Verbindung — Hinweis „startet neu, Seite in ~20 s neu laden“.
-Tests: UI-Test (Knopf, Sperre, Aufruf), Budget in `test_backend_calls.py` falls nötig; live einmal im
-Server-Modus. Doku: `docs/ui-ux.md`, `docs/operations.md`.
 
 ### 2 Bilder im Chat — Rest
 
@@ -204,6 +190,7 @@ Weitere solche Überschriften im Regelbuch mit suchen.
 
 | Nr | Was | Wann | Wo dokumentiert |
 |---|---|---|---|
+| 16 | Neustart-Knopf (Idee des Nutzers): **🔄 LoreKeeper neu starten** unter „⏻ beenden“ (gleiche Rückfrage, gesperrt während einer Indizierung) startet `stop.ps1 -Restart` — beendet sauber und startet `start.ps1` im Modus, der lief; räumt den VRAM (Ollama wird mit beendet), die 7b-Warnung verweist darauf. Stolperstein: die eigene Prozessgruppe des Buttons schaltet Strg+C ab, Kinder erben das — das Skript schaltet es vor dem Start wieder ein (mutationsgeprüft live: ohne wurde das neue Backend beim nächsten Stopp nach 20 s hart beendet). Live: Server- und Entwicklungsmodus je ~25 s, nächster Stopp sauber ~2 s; UI-Tests mutationsgeprüft | 18.10. | `docs/ui-ux.md`, `docs/operations.md` |
 | 15 | Desktop-Verknüpfungen (Idee des Nutzers): `scripts/create-shortcuts.ps1` legt **LoreKeeper starten** (`start.ps1 -Server -Browser`) und **LoreKeeper beenden** (`stop.ps1`) auf den Desktop; `start.ps1 -Browser` öffnet die UI auch im Server-Modus und bei schon laufendem LoreKeeper. Fenster bleibt 15/8 s für LAN-URLs und Warnungen offen. Per Doppelklick geprüft: Start nach 14 s, zweiter Klick startet nichts doppelt, Beenden sauber nach 2 s | 18.10. | `docs/operations.md`, `README.md` |
 | 7 | Deckel je PDF-Kapitel **verworfen**: Golden Set 272 · 144 unverändert, E2E 260/274 wie die Grundlinie, aber p092 (Tränke je Rang) reproduzierbar verloren — Rang-Tabelle ist der 4. Chunk ihres Kapitels; Deckel bleibt je Datei. Nebenbei: Antwortzeit Ø 7,3 s auf freier GPU | 18.10. | `docs/embedding-strategy.md` |
 | 1 | PDF-Parsing: OCR (RapidOCR), Bildextraktion, Überschriften aus dem Inhaltsverzeichnis | 14.04. | `docs/parsing.md` |

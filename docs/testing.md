@@ -171,5 +171,8 @@ von Hand geprüft: Dev- und Server-Modus, Ingest-Sperre, `-Force`, fremder Serve
 unberührt, ein Strg+C ignorierender Prozess wird nach 20 s beendet; Button-Startweg mit dem Skript
 als Kind des UI-Prozesses — `logs/stop.log` endet nach Sekunden mit „stopped … (clean)“, nicht mit
 „Still running … powershell“; Desktop-Verknüpfungen am 18.10. per Doppelklick: Start im Server-Modus
-nach 14 s, zweiter Klick startet nichts doppelt, Beenden sauber nach 2 s), das Übernehmen von Feedback per Häkchen im Data-Editor (AppTest kann keine Zellen anklicken; die Logik in `ui/feedback.py` ist getestet) und
+nach 14 s, zweiter Klick startet nichts doppelt, Beenden sauber nach 2 s; `stop.ps1 -Restart` am 18.10.
+über den Startweg des Buttons: Server- und Entwicklungsmodus bleiben erhalten, ~25 s, Modell aus dem VRAM,
+der nächste Stopp sauber nach ~2 s — mutationsgeprüft: ohne das Wiedereinschalten von Strg+C wurde das
+neue Backend nach 20 s hart beendet), das Übernehmen von Feedback per Häkchen im Data-Editor (AppTest kann keine Zellen anklicken; die Logik in `ui/feedback.py` ist getestet) und
 die CLI-Einstiegspunkte (`main()`).

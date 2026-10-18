@@ -3,14 +3,16 @@
 #   .\stop.ps1                Stop backend and UI cleanly; kill whatever still runs after -Timeout seconds
 #   .\stop.ps1 -Force         Also while an ingest is running (the run is aborted; the next ingest redoes it)
 #   .\stop.ps1 -List          Only print the processes that would be stopped, stop nothing
+#   .\stop.ps1 -Restart       Stop, then start.ps1 again in the mode that ran (server or development);
+#                             no start when the stop failed (ingest running, port still busy)
 #
 # Finds the processes by the ports start.ps1 uses and sends Ctrl+C to their console windows — the
 # same as pressing it there, so uvicorn runs its shutdown and the backend stops the Ollama it started.
 # Closing a window instead kills the process before that shutdown runs (an Ollama started by
-# LoreKeeper then keeps running). Also run by the "LoreKeeper beenden" button in the UI sidebar
-# (ui/shutdown.py); its output then goes to logs/stop.log.
+# LoreKeeper then keeps running). Also run by the "LoreKeeper beenden" / "neu starten" buttons in the
+# UI sidebar (ui/shutdown.py); their output then goes to logs/stop.log.
 
-param([switch]$Force, [switch]$List, [int]$Timeout = 20)
+param([switch]$Force, [switch]$List, [switch]$Restart, [int]$Timeout = 20)
 
 $ROOT         = $PSScriptRoot
 $PYTHON       = Join-Path $ROOT ".venv\Scripts\python.exe"
@@ -93,8 +95,12 @@ foreach ($port in $BACKEND_PORT, $UI_PORT) {
 }
 if (-not $roots) {
     Write-Host "LoreKeeper is not running (no LoreKeeper process on ports $BACKEND_PORT/$UI_PORT)." -ForegroundColor Green
+    if ($Restart) { Write-Host "Nothing to restart - start it with .\start.ps1 (or -Server)." }
     exit 0
 }
+# The mode to restart in, read before the processes are gone: development runs the backend with --reload
+# and the UI on 127.0.0.1, the server neither
+$devMode = @($roots | Where-Object { $_.CommandLine -match '--reload|--server\.address"?\s+"?127\.0\.0\.1' }).Count -gt 0
 $tree = @($roots) + @($roots | ForEach-Object { Get-Descendants $_.ProcessId })
 # Started by the UI button, this script is a descendant of the UI process: without this it would wait
 # the full timeout for itself and then kill itself before reaching a hung python process
@@ -146,3 +152,15 @@ if ($busy) {
     exit 1
 }
 Write-Host ("LoreKeeper stopped after {0:N1} s{1}." -f $sw.Elapsed.TotalSeconds, $(if ($left) { " (some processes killed)" } else { " (clean)" })) -ForegroundColor Green
+
+if ($Restart) {
+    # The UI button starts this script in its own process group, which switches Ctrl+C off — and children
+    # inherit that: the new backend would ignore the next stop's Ctrl+C, be killed after the timeout and
+    # leave its Ollama behind. Switch it back on before starting them.
+    Add-Type -Namespace LoreKeeper -Name ConsoleCtrl -MemberDefinition `
+        '[DllImport("kernel32.dll")] public static extern bool SetConsoleCtrlHandler(System.IntPtr handler, bool add);'
+    [LoreKeeper.ConsoleCtrl]::SetConsoleCtrlHandler([IntPtr]::Zero, $false) | Out-Null
+    Write-Host "Restarting in $(if ($devMode) { 'development' } else { 'server' }) mode ..."
+    # $PSScriptRoot, not $ROOT: PowerShell names ignore case, and the loop variable $root above overwrote it
+    & (Join-Path $PSScriptRoot "start.ps1") -Server:(-not $devMode)
+}
