@@ -13,8 +13,8 @@ Datei 272/274, Abschnitt 144/149; Antworten 261/274 im End-to-End-Lauf (Ø 7,2 s
 der Vault-Inhalt nachgezogen (Schattenorden „vier Pfade“, Fundort des Heimkehrpfennigs beim
 Kultpriester, 19 Bilder eingebettet) und indiziert; Golden Set danach 272 · 144, Platz 1 134, Suche
 274/274 exakt; Regressionsprüfung (12) ohne Rückschritt. Handprüfungen im Browser und System-Punkt vom
-Nutzer erledigt. UI-Review 13.6 am 18.10. umgesetzt und live geprüft. Offen nur Nutzer-Inhalt (k001,
-Maskenball-Alias).
+Nutzer erledigt. UI-Review 13.6 am 18.10. umgesetzt und live geprüft; Maskenball-Alias eingetragen.
+Offen nur Nutzer-Inhalt (k001).
 
 **Regressionsprüfung** nach größeren Inhaltsänderungen (Regelbuch, Vault): Golden Set + Suchgenauigkeit
 + End-to-End-Lauf + Holdout ([evaluation.md](docs/evaluation.md)), kein Tuning. Weicht die
@@ -61,17 +61,18 @@ Erledigtes (Vault-Inhalt, System, Handprüfungen im Browser) steht unter „Erle
   ist das Beispiel „meisterlich 75 Gold“, die Antwort nennt 75. Vorschlag: „Ein Langschwert (schwere
   Waffe) kostet 15 Gold, meisterlich 75.“ Danach das Regelbuch neu indizieren, Golden Set + k001 3×
   (Regressionsprüfung wie in 12).
-- [ ] **Vault, Maskenball-Bilder** (18.10., aus 12): im Chat erscheinen die 15 Raum-Bilder nur, wenn die
-  Frage den ganzen Notiznamen „Der Maskenball des Winterkönigs“ enthält — „Wie sieht der Ballsaal im
-  Maskenball des Winterkönigs aus?“ zeigt keins (Bilder nur von Notizen, deren Name oder Alias in Frage
-  oder Antwort steht, 13.4/9). Vorschlag: `aliases: [Maskenball, Maskenball des Winterkönigs]` im
-  Frontmatter der Notiz, danach Vault neu indizieren. Gegenprobe mit vollem Namen: 7 Bilder gefunden.
 - [ ] **Simulationsberichte** (z001, z003, z006, z009, z012) — **später, eigenes Thema** (18.10.): die
   Berichte erzeugt der Generator im Repo PnP_Simulation, Überschriften also dort ändern. Die
   Berichts-Chunks sagen weder „Schwierigkeit“ noch „Simulation“; fragenahe Überschriften und „Kosten je
   Effekt“ statt „Preis“ (3.15).
 
 ---
+## Offene Punkte
+
+### Feedback durchgehen für verbesserung des Outputs
+
+### Bug: Anfrage ans LLM und gleichzeitig die Antwort davor bewerten mit einem kommentar bricht die Anfrage ans LLM ab
+
 
 ## Pausierte Punkte
 
@@ -167,7 +168,7 @@ Datei auf dem Streamlit-Server liest (auch im Heimnetz).
 | 15 | Desktop-Verknüpfungen (Idee des Nutzers): `scripts/create-shortcuts.ps1` legt **LoreKeeper starten** (`start.ps1 -Server -Browser`) und **LoreKeeper beenden** (`stop.ps1`) auf den Desktop; `start.ps1 -Browser` öffnet die UI auch im Server-Modus und bei schon laufendem LoreKeeper. Fenster bleibt 15/8 s für LAN-URLs und Warnungen offen. Per Doppelklick geprüft: Start nach 14 s, zweiter Klick startet nichts doppelt, Beenden sauber nach 2 s | 18.10. | `docs/operations.md`, `README.md` |
 | 7 | Deckel je PDF-Kapitel **verworfen**: Golden Set 272 · 144 unverändert, E2E 260/274 wie die Grundlinie, aber p092 (Tränke je Rang) reproduzierbar verloren — Rang-Tabelle ist der 4. Chunk ihres Kapitels; Deckel bleibt je Datei. Nebenbei: Antwortzeit Ø 7,3 s auf freier GPU | 18.10. | `docs/embedding-strategy.md` |
 | 7b | VRAM-Warnung: der Health-Loop misst alle 5 min, wie viel des lokalen LLM im geteilten GPU-Speicher liegt (Windows-Leistungsindikator `Shared Usage` der Ollama-Prozesse, ein PowerShell-Aufruf, keine neue Abhängigkeit, `src/gpu_memory.py`); über 1 GB WARNING im Log (nur beim Wechsel, mutationsgeprüft), `llm_shared_gb` in `/health` und eine Warnung in der Sidebar. Anlass 17./18.10.: 2,65 GB im geteilten Speicher, 16,9 statt ~54 tok/s bei „100% GPU“. Unit-, Route-, Log- und UI-Tests. Live 18.10.: 0,0 GB bei freiem VRAM, Tempo normal; der Warnfall selbst nicht nachgestellt | 18.10. | `docs/operations.md`, `docs/ui-ux.md`, `ARCHITECTURE.md` |
-| Nutzer | Inhalt und Prüfungen 18.10.: **Vault** — `Schattenorden.md` auf „vier Magiepfade“ (Nutzer-Entscheid; passt zu `Meister der Pfade.md`), Fundort des Heimkehrpfennigs (vorher erfand das LLM einen Gegner) — erst als neue Notiz `Gegenstände/Heimkehrpfennig.md`, am selben Tag wieder gelöscht (die Notiz war früher bewusst entfernt worden, Regeltext steht nur im Regelbuch 7.2.4) und durch eine Loot-Zeile in `Gegner/Kultpriester.md` ersetzt, 19 von 20 Bildern eingebettet (15 Maskenball-Räume unter ihren Szenen, Lagerhaus, Artefaktraum, Lysander-Anwesen, Morgenstern-Karte; Zuordnung vom Nutzer bestätigt, kein Bild ohne Einbettung, keine Einbettung ins Leere). **System**: alte Autostart-Aufgabe und Firewall-Regeln geprüft. **Handprüfungen im Browser**: Beenden/Neustarten, Desktop-Verknüpfung, Indizierungs-Fortschritt, Tabs Feedback/Chunks, Bilder per Alias. Indiziert und geprüft in 12 | 18.10. | `docs/testing.md` |
+| Nutzer | Inhalt und Prüfungen 18.10.: **Vault** — `Schattenorden.md` auf „vier Magiepfade“ (Nutzer-Entscheid; passt zu `Meister der Pfade.md`), Fundort des Heimkehrpfennigs (vorher erfand das LLM einen Gegner) — erst als neue Notiz `Gegenstände/Heimkehrpfennig.md`, am selben Tag wieder gelöscht (die Notiz war früher bewusst entfernt worden, Regeltext steht nur im Regelbuch 7.2.4) und durch eine Loot-Zeile in `Gegner/Kultpriester.md` ersetzt, 19 von 20 Bildern eingebettet (15 Maskenball-Räume unter ihren Szenen, Lagerhaus, Artefaktraum, Lysander-Anwesen, Morgenstern-Karte; Zuordnung vom Nutzer bestätigt, kein Bild ohne Einbettung, keine Einbettung ins Leere). **System**: alte Autostart-Aufgabe und Firewall-Regeln geprüft. **Handprüfungen im Browser**: Beenden/Neustarten, Desktop-Verknüpfung, Indizierungs-Fortschritt, Tabs Feedback/Chunks, Bilder per Alias. Indiziert und geprüft in 12. **Maskenball-Alias** (aus 12, mit Freigabe des Nutzers): `aliases: [Maskenball, Maskenball des Winterkönigs]` im Frontmatter von `Der Maskenball des Winterkönigs.md`, inkrementell indiziert (nur diese Notiz, 45 Chunks); Golden Set 272 · 144 unverändert. Offline-Probe (Retrieval + Bildregel des Chats): „Ballsaal im Maskenball des Winterkönigs“ 7 Bilder (vorher 0), „Thronsaal beim Maskenball“ 9, „Küche beim Maskenball“ 5 | 18.10. | `docs/testing.md` |
 | 13.4 | Zwei Chat-Bugs vom 15.10.: 👎-Kommentar wurde bei jedem Verlassen des Felds halb gespeichert (`st.text_input` speichert beim Fokusverlust) → Feld in `st.form`, nur Enter/Knopf speichert; fremdes Porträt unter der Antwort (Liora Veylan als schwache Quelle Nr. 6) → Bilder nur von Notizen, deren Name in Frage oder Antwort steht (Entscheidung des Nutzers). Beide UI-Tests gegen den alten Code rot. Live und Vor-/Spitzname erledigt 18.10. (9, Handprüfung des Nutzers) | 17.10. | `docs/ui-ux.md` |
 | 3.15 (Teil) | Golden-Set-Stichwörter aus 13.3 (k015, a014, a005, m015, p026): Antworten richtig, ohne den Namen aus der Frage — je eine Tatsache, die alle drei Läufe nennen und die in der Quelle steht. Dritter Lauf neu ausgewertet 245 → 250/274 (0,912), nur diese fünf kippen; die Läufe vom 14.10. speicherten nur 200 Zeichen je Antwort und lassen sich nicht neu auswerten | 17.10. | `docs/evaluation.md` |
 | 3.10 (Teil) | Rerank-Paar mit Notizname: Markdown-Chunks gehen mit Identitätszeile (Dateiname \| Aliase) in den Cross-Encoder, PDF-Paare unverändert (Regelbuch-Name ist Rauschen, verlor k006). Golden Set 272/274 · 143/149, Platz-1-Abschnitt 118 → 120; Holdout 9/10, 51/53; E2E 250 → **253/274** (8 gewonnen, darunter m048 „Deckname: Solmar“, 5 verloren — alle Formulierung/Rauschen, gesichtet); Regelbuch-Anteil an den Quellen steigt leicht, `min_score` −4 bleibt. Kein Re-Index nötig. a005-Stichwort „Reaktor“ → „Carath“ (zu eng gewählt am selben Tag) | 17.10. | `docs/embedding-strategy.md`, `docs/evaluation.md` |
