@@ -26,11 +26,11 @@ End-to-End-Lauf ~35 min (🟡).
 
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 3.17 | PDF-Parser: `1W8 Ergebnis` als oberste Überschrift (aus dem Eingang) | Gering–Mittel | Gering–Mittel | 🔴 | Alchemisten-Tabellen hängen unter falschem Kapitel, vermutlich Ursache von p091; Regelbuch-Re-Index + Golden Set |
-| 8 | 3.10 Monolith-Sektion in fremden Regelfragen (p011, p101) | Gering | Mittel | 🟡 | 22 Chunks, landet in den Top 3; Antworten bisher trotzdem richtig |
+| 3.18 | PDF-Parser: Kopf-/Fußzeilen im Chunk-Text (`_5 Fähigkeiten und Klassen_ _60_`) | Gering–Mittel | Gering | 🔴 | 18.10. gefunden: 104 von 458 Regelbuch-Chunks tragen Kapitel-Kopfzeile und Seitenzahl im Text — Rauschen in Embedding und BM25; Regelbuch-Re-Index + Golden Set |
+| 3.19 | Simulationsbericht über die Section Expansion in Regelfragen | Gering | Mittel | 🟡 | 18.10. bei p011 (Ass-Regel) gesehen: 1 Regelbuch-Chunk, aber 12 Chunks „Metriken-Erklärung“ aus `llm_report.md`; Antwort trotzdem richtig. Erst zählen, wie viele Regelfragen das betrifft |
 | 9 | 2 Bilder — Rest (Vor-/Spitzname, Dateiname-Rückfall, PDF-Bilder, neues Bild ohne Notiz-Änderung) | Gering | Gering–Mittel | 🟢–🔴 | Einbettungen laufen. Vor-/Spitzname (13.4) über `aliases` der Notiz wäre klein (🟢); Dateiname-Rückfall braucht Spy-Test, PDF-Bilder dauerhafte Ablage + Re-Index (🔴) |
-| 10 | 3.10/3.15 übrige Einzelfälle: AP-Pool „50 AP“, p009 (Abschnitt-Miss, Antwort richtig), „Wer ist Arkenfeld?“, k001 Preis-Spalte, p091 Tränke-Tabelle, x008 Heimkehrpfennig | Gering | je Gering | 🟡 | Nur bei Anlass im Spiel; Antworten teils schon richtig |
-| 11 | Beim nächsten Re-Index: Suchgenauigkeit prüfen (m039) | Gering | Gering | 🔴 | Nach zwei In-place-Re-Indizes 273/274 exakt; bei weiteren Abweichungen Vault einmal komplett neu aufbauen (3.10) |
+| 10 | 3.10/3.15 übrige Einzelfälle: AP-Pool „50 AP“, p009 (Abschnitt-Miss, Antwort richtig), „Wer ist Arkenfeld?“, k001 Preis-Spalte, x008 Heimkehrpfennig | Gering | je Gering | 🟡 | Nur bei Anlass im Spiel; Antworten teils schon richtig |
+| 11 | Beim nächsten Re-Index: Suchgenauigkeit prüfen | Gering | Gering | 🔴 | 18.10. nach dem Regelbuch-Re-Index (3.17) 274/274 exakt, auch m039 wieder; bei Abweichungen nach weiteren In-place-Re-Indizes den Vault einmal komplett neu aufbauen (3.10) |
 | — | 3.10 Simulationsberichte z001, z003, z006, z009, z012 | Gering | — | 🟢 | Liegt beim Nutzer: Überschriften in den Berichten (siehe „Offen beim Nutzer“), danach Golden Set |
 | — | 7c Auto-Reload/Stopp hing bei laufendem E2E-Lauf ⏸ (nicht nachstellbar) | Gering | — | 🟡 | 18.10. 00:00: Änderung unter `src/` ohne Neustart, `stop.ps1` musste nach 20 s hart beenden. In beiden Fällen fehlt „Shutting down“ im Log, der Worker beantwortete noch 19 s lang Fragen — er hat das Strg+C nicht verarbeitet (Prozessbaum war intakt, `GenerateConsoleCtrlEvent` erfolgreich); offene Verbindungen erklären es nicht, die werden erst nach „Shutting down“ abgewartet. Rechner war in der Nacht überlastet (Modell im geteilten GPU-Speicher, wenig RAM). Nachgestellt 18.10. 11:33 auf freiem Rechner: Reload während E2E nach 39 s fertig (wartet die laufende Frage ab), `stop.ps1` während E2E sauber nach 8 s — 12.3 hält. **Falls es wieder passiert**: im Log nach „Shutting down“ suchen, im Backend-Fenster nach „WatchFiles detected changes“ (steht nur dort, nicht in der Datei), Fenster-Titel auf „Auswählen“ prüfen (Markiermodus hält Konsolen-Ausgaben an) |
 | — | 3.5 Wikilink-Expansion ⏸ | Gering | Mittel | 🔴 | Gemessen 14.10.: kein Gewinn, −1/−2 Dateien; nur bei konkreten Link-Fragen neu prüfen |
@@ -109,7 +109,7 @@ prüfen, bei weiteren Abweichungen den Vault einmal komplett neu aufbauen. Umges
 - **p009** Zauberpunkte — Abschnitt-Miss im Golden Set, die Antwort ist seit dem Regelkern richtig.
 - **Name in fremder Identität** — „Wer ist Arkenfeld?“ holt vor allem „Der Armdrücker von Arkenfeld“;
   Antwort trotzdem richtig.
-- **Monolith-Sektion** (22 Chunks) landet bei fremden Regelfragen in den Top 3 (p011, p101).
+- ~~**Monolith-Sektion**~~ — 18.10. erledigt ohne Änderung (Roadmap 8, siehe „Erledigt“).
 - **Tabellen**: „Unterschied Dolch und Kurzschwert“ seit 17.10. gelöst (Rerank auf die genannten Zeilen,
   siehe „Erledigt“). „Wie viel Schaden macht ein Langbogen?“ nennt 18.10. die Waffentabelle (7.1.1).
   „Dolch, STÄ 4, Wurfzahl 12“ bleibt falsch gerechnet — Rechenfrage (3.14); ein Deckel je PDF-Kapitel
@@ -148,7 +148,7 @@ Offen:
   der Tippfehler „üebrschaden“ ist seit 17.10. behoben (siehe „Erledigt“ 3.15 Teil, Tippfehler).
 - **Fakten** (Priorität 10, nur bei Anlass): k001 Langschwert „20,5 Gold“ (Spalte „Preis“ der Simulations-Rangliste statt Preistabelle
   7.4);
-  p091 Tränke-Fehlwurf (1W8-Tabelle fehlt); x008 Heimkehrpfennig („Kultpriester“ gilt, Antwort nennt
+  ~~p091 Tränke-Fehlwurf~~ (seit 3.17 3/3); x008 Heimkehrpfennig („Kultpriester“ gilt, Antwort nennt
   Thalion).
 
 ### 3.14 Rechenfragen zum Regelwerk ⏸
@@ -172,15 +172,6 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 
 - (keine offenen — 14.1 erledigt 17.10.)
 
-### 3.17 PDF-Parser: `1W8 Ergebnis` als oberste Überschrift
-
-18.10. gefunden: Die Patzer-Tabelle und „Wurfgemisch“ (Chunks 243–245) gehören zu 5.4.6 Alchemist, stehen
-im Index aber unter einer eigenen Kapitel-Überschrift `**1W8 Ergebnis**`. Section Expansion und
-Überschriften-Pfad sehen sie dadurch nicht als Teil des Alchemisten; vermutlich auch die Ursache von p091
-(3.15, „1W8-Tabelle fehlt“). Erst klären, woher die Überschrift kommt (Inhaltsverzeichnis-Abgleich oder
-fette Tabellenkopfzeile, [parsing.md](docs/parsing.md)), dann Regelbuch-Re-Index, Golden Set, p091 je 3 Läufe.
-Weitere solche Überschriften im Regelbuch mit suchen.
-
 ## Eingang (neue Bugs und Ideen, noch nicht bewertet)
 - —
 
@@ -190,6 +181,8 @@ Weitere solche Überschriften im Regelbuch mit suchen.
 
 | Nr | Was | Wann | Wo dokumentiert |
 |---|---|---|---|
+| 3.17 | PDF-Parser: Tabellenkopf `**1W8 Ergebnis**` galt als Kapitel 1 — die Regex für nummerierte Überschriften verlangte kein Leerzeichen nach der Nummer; Patzer-Tabelle und „Wurfgemisch“ hingen dadurch nicht unter 5.4.6 Alchemist. Fix + Unit-Test (schlägt mit der alten Regex fehl), Regelbuch neu indiziert (80 s): Golden Set unverändert 272 · 144, Rang 1 136, 8 Fragen mit anderen Chunks, keine kippt; p091 und p092 je 3/3 inhaltlich richtig (p092 morgens 0/3); Suche 274/274 exakt. `Talente`/`Eigenheiten` als oberste Überschrift bleiben (Kapitel-Einleitungen ohne Nummer im PDF-Text, richtig benannt) | 18.10. | `docs/parsing.md` |
+| 8 | Monolith-Sektion in fremden Regelfragen — **ohne Änderung erledigt**: Monolithon (7.3, 21 Chunks) ist sauber gegliedert, kein Parser-Fehler. p011 hat es nur noch auf Platz 14 von 17; p101 (Zauberspeicher) auf 4–6 — dort passend, die Würfel sind „beliebte Träger für Zauberspeicher“. Das eigentliche Rauschen in p011 ist der Simulationsbericht (neu 3.19) | 18.10. | — |
 | 16 | Neustart-Knopf (Idee des Nutzers): **🔄 LoreKeeper neu starten** unter „⏻ beenden“ (gleiche Rückfrage, gesperrt während einer Indizierung) startet `stop.ps1 -Restart` — beendet sauber und startet `start.ps1` im Modus, der lief; räumt den VRAM (Ollama wird mit beendet), die 7b-Warnung verweist darauf. Stolperstein: die eigene Prozessgruppe des Buttons schaltet Strg+C ab, Kinder erben das — das Skript schaltet es vor dem Start wieder ein (mutationsgeprüft live: ohne wurde das neue Backend beim nächsten Stopp nach 20 s hart beendet). Live: Server- und Entwicklungsmodus je ~25 s, nächster Stopp sauber ~2 s; UI-Tests mutationsgeprüft | 18.10. | `docs/ui-ux.md`, `docs/operations.md` |
 | 15 | Desktop-Verknüpfungen (Idee des Nutzers): `scripts/create-shortcuts.ps1` legt **LoreKeeper starten** (`start.ps1 -Server -Browser`) und **LoreKeeper beenden** (`stop.ps1`) auf den Desktop; `start.ps1 -Browser` öffnet die UI auch im Server-Modus und bei schon laufendem LoreKeeper. Fenster bleibt 15/8 s für LAN-URLs und Warnungen offen. Per Doppelklick geprüft: Start nach 14 s, zweiter Klick startet nichts doppelt, Beenden sauber nach 2 s | 18.10. | `docs/operations.md`, `README.md` |
 | 7 | Deckel je PDF-Kapitel **verworfen**: Golden Set 272 · 144 unverändert, E2E 260/274 wie die Grundlinie, aber p092 (Tränke je Rang) reproduzierbar verloren — Rang-Tabelle ist der 4. Chunk ihres Kapitels; Deckel bleibt je Datei. Nebenbei: Antwortzeit Ø 7,3 s auf freier GPU | 18.10. | `docs/embedding-strategy.md` |

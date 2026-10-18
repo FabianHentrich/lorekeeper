@@ -67,6 +67,12 @@ class TestNormalizePdfHeadings:
         assert result.count("# **1. Rassen**") == 1
         assert result.count("# **1.1 Elfen**") == 1
 
+    def test_dice_expression_is_no_section_number(self):
+        """Roadmap 3.17 (18.10.): the alchemist's mishap table header "1W8 Ergebnis" became a chapter of its
+        own and took the table and "Wurfgemisch" out of 5.4.6 Alchemist — a section number ends at a space."""
+        for heading in ("## **1W8 Ergebnis**", "## 2W6 Tabelle", "## **3x Angriff**"):
+            assert _normalize_pdf_headings(heading) == heading
+
 
 class TestJoinCellHyphenation:
     """Rejoining words that pymupdf4llm split across <br> line breaks inside table cells."""

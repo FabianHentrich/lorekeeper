@@ -171,7 +171,13 @@ Korrektur in drei Schritten:
 1. **Inhaltsverzeichnis** (am zuverlässigsten) — hat das PDF eins, liefert `toc_items`
    `[Ebene, Titel, Seite]`; Überschriften werden per Titel zugeordnet und neu eingestuft.
 2. **Regex für nummerierte Überschriften** (Fallback) — `## **5.4.5 Mönch**` wird hochgestuft, weil
-   nummerierte Titel auf Struktur hindeuten, die `pymupdf4llm` übersehen hat.
+   nummerierte Titel auf Struktur hindeuten, die `pymupdf4llm` übersehen hat. Die Nummer endet an
+   einem Leerzeichen (`5.4.5 Mönch`, `1. Rassen`): Bis 18.10. reichte eine Ziffer am Anfang, und der
+   Tabellenkopf `**1W8 Ergebnis**` der Patzer-Tabelle wurde ein eigenes Kapitel — Patzer-Tabelle und
+   „Wurfgemisch“ (3 Chunks) hingen nicht mehr unter 5.4.6 Alchemist, die Section Expansion des
+   Alchemisten ließ sie weg (Roadmap 3.17). Nach dem Fix und Regelbuch-Re-Index: Golden Set unverändert
+   272 · 144 (8 Fragen mit anderen Chunks, keine kippt), p091 (Patzer) und p092 (Tränke je Rang) je 3/3
+   inhaltlich richtig, Suche 274/274 exakt.
 
 3. **Beschriftungen sind keine Überschriften** — steht eine Beschriftung allein auf ihrer Zeile
    („Nachteil:“, „Legendär (Rang 6):“, „Effekt:“), macht `pymupdf4llm` daraus eine Überschrift. Damit

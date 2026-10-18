@@ -20,7 +20,9 @@ from .markdown import MarkdownParser
 
 logger = logging.getLogger(__name__)
 
-_NUMBERED_HEADING = re.compile(r'^(#{1,6})(\s+)(\*{0,2}\d+[\d.]*\s*.+)', re.MULTILINE)
+# The section number ends at a space: without it "**1W8 Ergebnis**" (a dice table header) counted as
+# chapter 1 and split 5.4.6 Alchemist (roadmap 3.17)
+_NUMBERED_HEADING = re.compile(r'^(#{1,6})(\s+)(\*{0,2}\d+(?:\.\d+)*\.?\s+.+)', re.MULTILINE)
 _ANY_HEADING = re.compile(r'^#{1,6}[ \t]+(.+?)[ \t]*$', re.MULTILINE)  # \s would eat the line break
 _SECTION_NUMBER = re.compile(r'^\d+(\.\d+)*\s')
 _IMAGE_REF = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
