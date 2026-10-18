@@ -6,14 +6,14 @@ Hier steht **offene Arbeit**. Erledigtes ist unten eine Zeile mit Verweis; Entsc
 und Begründungen stehen in der zuständigen Doku (Tabelle in `CLAUDE.md` → „Documentation“), die
 Umsetzung im `git log`. Die Nummern bleiben stabil — die Doku verweist auf sie.
 
-**Qualitätsphase 13.–14.10. abgeschlossen**, Nacharbeit 13.1–13.4 (Ultrareview, leere Chunks,
-Regressionsprüfung, zwei Chat-Bugs) am 17.10. ebenfalls. Stand 18.10.: Retrieval Datei 272/274, Abschnitt
-144/149; Antworten 260/274 im End-to-End-Lauf (Ø 7,3 s je Frage); Holdout-Listen 9/10 · 51/53.
-**Regressionsprüfung** nach größeren Inhaltsänderungen (Regelbuch, Vault): Golden Set +
-End-to-End-Lauf + Holdout ([evaluation.md](docs/evaluation.md)), kein Tuning.
+**Stand 18.10.**: Qualitätsphase (13.–18.10.) abgeschlossen, **keine offene Code-Arbeit**. Retrieval
+Datei 272/274, Abschnitt 144/149; Antworten 260/274 im End-to-End-Lauf (Ø 7,3 s je Frage); Holdout-Listen
+9/10 · 51/53; Suche 274/274 exakt. Die naheliegenden Retrieval-Ideen sind gemessen — drei davon am
+18.10. verworfen (Deckel je PDF-Kapitel, Kopfzeilen entfernen, Bilder per Dateiname). Der nächste
+Hebel ist **Inhalt** (siehe „Offen beim Nutzer“), danach eine Regressionsprüfung.
 
-Neu priorisiert am 18.10. (zwei Ideen des Nutzers für den Betrieb vorn): **jeder offene Punkt unten
-steht in der Tabelle** — auch die Einzelfälle aus 3.10/3.15, als eigene Zeile oder in einer Sammelzeile.
+**Regressionsprüfung** nach größeren Inhaltsänderungen (Regelbuch, Vault): Golden Set + End-to-End-Lauf
++ Holdout ([evaluation.md](docs/evaluation.md)), kein Tuning.
 
 ---
 
@@ -26,69 +26,82 @@ End-to-End-Lauf ~35 min (🟡).
 
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 11 | Beim nächsten Re-Index: Suchgenauigkeit prüfen | Gering | Gering | 🔴 | 18.10. nach dem Regelbuch-Re-Index (3.17) 274/274 exakt, auch m039 wieder; bei Abweichungen nach weiteren In-place-Re-Indizes den Vault einmal komplett neu aufbauen (3.10) |
-| — | 3.10 Simulationsberichte z001, z003, z006, z009, z012 | Gering | — | 🟢 | Liegt beim Nutzer: Überschriften in den Berichten (siehe „Offen beim Nutzer“), danach Golden Set |
-| — | 7c Auto-Reload/Stopp hing bei laufendem E2E-Lauf ⏸ (nicht nachstellbar) | Gering | — | 🟡 | 18.10. 00:00: Änderung unter `src/` ohne Neustart, `stop.ps1` musste nach 20 s hart beenden. In beiden Fällen fehlt „Shutting down“ im Log, der Worker beantwortete noch 19 s lang Fragen — er hat das Strg+C nicht verarbeitet (Prozessbaum war intakt, `GenerateConsoleCtrlEvent` erfolgreich); offene Verbindungen erklären es nicht, die werden erst nach „Shutting down“ abgewartet. Rechner war in der Nacht überlastet (Modell im geteilten GPU-Speicher, wenig RAM). Nachgestellt 18.10. 11:33 auf freiem Rechner: Reload während E2E nach 39 s fertig (wartet die laufende Frage ab), `stop.ps1` während E2E sauber nach 8 s — 12.3 hält. **Falls es wieder passiert**: im Log nach „Shutting down“ suchen, im Backend-Fenster nach „WatchFiles detected changes“ (steht nur dort, nicht in der Datei), Fenster-Titel auf „Auswählen“ prüfen (Markiermodus hält Konsolen-Ausgaben an) |
-| — | 3.5 Wikilink-Expansion ⏸ | Gering | Mittel | 🔴 | Gemessen 14.10.: kein Gewinn, −1/−2 Dateien; nur bei konkreten Link-Fragen neu prüfen |
-| — | 4.2 Internet-Zugriff (Tailscale) ⏸ | Mittel | Gering | 🟢 | Nur zusammen mit einem Login für die API |
-| — | 3.14 Rechenfragen ⏸ | Mittel | Mittel-Hoch | 🟡 | Nur mit Denken zuverlässig (14–41 s); später mit größerem Modell neu prüfen |
-| — | 11.0 P8 Dienste-/Reranker-Modul | Gering | Mittel | 🟢 | Nur zusammen mit Feature-Arbeit an diesen Stellen (Punkt 2 berührt das Reranker-Modul — dann mitprüfen) |
+| 12 | Regressionsprüfung nach den Inhaltsänderungen des Nutzers | Mittel | Gering | 🔴 | Sobald „Offen beim Nutzer → Inhalt“ erledigt ist: betroffene Quellen neu indizieren, Golden Set, Suchgenauigkeit (11), End-to-End-Lauf gegen 260/274, Holdout; k001 und x008 je 3 Läufe. Bestätigt nebenbei den Regelbuch-Re-Index aus 3.17 im E2E |
+| 11 | Nach jedem Re-Index: Suchgenauigkeit prüfen | Gering | Gering | 🔴 | 18.10. 274/274 exakt (auch m039 wieder). Bei Abweichungen nach weiteren In-place-Re-Indizes den Vault einmal komplett neu aufbauen (3.10) |
+
+**Pausiert** (Begründung je Abschnitt unten):
+
+| # | Punkt | Impact | Aufwand | Wieder aufnehmen, wenn … |
+|---|---|---|---|---|
+| 3.14 | Rechenfragen zum Regelwerk | Mittel | Mittel–Hoch | ein größeres Modell passt oder „Denken nur für Rechenfragen“ angegangen wird — größte bekannte Qualitätslücke |
+| 4.2 | Internet-Zugriff (Tailscale) | Mittel | Gering | es einen Login für die API gibt |
+| 3.5 | Wikilink-Expansion | Gering | Mittel | Fragen über einen Link (NPC → Gegenstand) nachweislich scheitern |
+| 7c | Auto-Reload/Stopp hing bei laufendem E2E-Lauf | Gering | — | es wieder passiert (Prüfliste unten) |
+| 11.0 P8 | Dienste-/Reranker-Modul | Gering | Mittel | Feature-Arbeit diese Stellen ohnehin anfasst |
 
 **Entschieden 14.10.**: 3.2 Session-History gestrichen (Nutzer) — Sessions bleiben im RAM; bei einem
-Wissenstool steht die Antwort im Regelbuch/Vault, nicht im Verlauf. Der Fähigkeitsbericht bleibt für Spieler freigegeben (Entscheidungshilfe).
-`Spielleiter-Tools/potenzielle_anpassungen.md` wird nicht indiziert — Vorschläge sind keine geltenden
-Regeln. `HF_HUB_OFFLINE=1` (in `src/__init__.py`): Modelle nur aus dem lokalen Cache, Downloads mit
-`HF_HUB_OFFLINE=0` ([operations.md](docs/operations.md#modelle-fehlen-beim-ersten-start)).
-
-**Offen beim Nutzer**:
-- **Gaming-PC**: alte Autostart-Aufgabe „LoreKeeper Server“ einmal in einer Admin-PowerShell prüfen
-  (`Get-ScheduledTask -TaskName "LoreKeeper*"`); Inbound-Allow-Regeln für `python.exe` im Profil
-  „Öffentlich“ gehören zu anderen Python-Installationen — ggf. aufräumen. (DHCP-Reservierung
-  `192.168.178.34` eingestellt, 14.10.)
-- **Vault**: `Organisationen/Schattenorden/Schattenorden.md` nennt noch „fünf Magiepfade“ (Einleitung,
-  Grundsatz 6, Hierarchie-Tabelle), `Meister der Pfade.md` hat vier — das LLM sagt „fünf“ und zählt
-  vier auf. Optional: Simulationsberichte mit fragenahen Überschriften und „Kosten je Effekt“ statt
-  „Preis“ (3.15).
-- **Browser (Handprüfung)**: **⏻ LoreKeeper beenden** einmal klicken — `logs/stop.log` muss nach
-  Sekunden mit „stopped … (clean)“ enden (12.0); bei der nächsten Indizierung über die UI den
-  Fortschritt durchklicken (Job starten, Seite wechseln und zurück — 3.8/3.9); 👍/👎 und die Tabs
-  „Feedback“/„Chunks“ einmal von Hand bedienen (👍/👎 und Bilder vom Nutzer am 14./15.10. getestet).
-  Neu zu sehen (13.4): „wer ist lady lilith?“ zeigt nur noch Lyssaras Bilder, nicht Lioras; der
-  Kommentar wird erst mit Enter oder „Kommentar speichern“ gespeichert — Wegklicken speichert nichts.
-  Neu (18.10., 9): „Wer ist Lilith?“ zeigt eine Box „🖼️ Bilder“ mit Lyssaras Bildern.
-- **Inhalt statt Code (18.10., aus 10)**: **k001** „Wie viel kostet ein Langschwert?“ — das Regelbuch nennt
-  den Normalpreis nirgends direkt (Langschwert = schwere Waffe in 7.1.1, schwere Waffe = 15 G in 7.4), der
-  einzige Satz mit „Langschwert“ ist das Beispiel „meisterlich 75 Gold“ — die Antwort nennt 75. Ein Satz
-  wie „Ein Langschwert (schwere Waffe) kostet 15 Gold, meisterlich 75“ im Beispiel löst es.
-  **x008** Heimkehrpfennig — die Fundstelle ist nur die Loot-Tabelle in „Im Namen der Reinheit“
-  (`[[Kultpriester]] | [[Heimkehrpfennig]]`, Link in der 2. Spalte, für die Suche unerreichbar); das LLM
-  erfindet dann einen Gegner („Eisscherben-Wächter“, 3/3). Eine Notiz `Heimkehrpfennig.md` mit
-  „Erbeutet bei: Kultpriester (I-2)“ löst es (der Link existiert schon, die Notiz fehlt).
-- **Bilder einbetten (18.10., aus 9)**: 20 von 40 Bildern im Vault sind nirgends eingebettet und erscheinen
-  deshalb nie im Chat — 15 davon die Räume des Weihnachts-One-Shots (`Der Maskenball des Winterkönigs -
-  Festsaal.webp`, `- Küche.webp`, …), dazu `Lagerhaus.png`, `Anwesen Lilith von Lysander.png`,
-  `Artefaktraum.png`, `Schatten_unter_Morgenstern_map.png` und ein Bildschirmfoto. `![[…]]` unter der
-  passenden Überschrift reicht: Der Chat zeigt das Bild dann zu genau diesem Abschnitt, die Notiz-Änderung
-  bringt es beim nächsten Indizieren mit.
+Wissenstool steht die Antwort im Regelbuch/Vault, nicht im Verlauf. Der Fähigkeitsbericht bleibt für
+Spieler freigegeben (Entscheidungshilfe). `Spielleiter-Tools/potenzielle_anpassungen.md` wird nicht
+indiziert — Vorschläge sind keine geltenden Regeln. `HF_HUB_OFFLINE=1` (in `src/__init__.py`): Modelle
+nur aus dem lokalen Cache, Downloads mit `HF_HUB_OFFLINE=0`
+([operations.md](docs/operations.md#modelle-fehlen-beim-ersten-start)).
 
 ---
 
-## Offene Punkte
+## Offen beim Nutzer
 
-### 2 Bilder im Chat
+### Inhalt (danach Punkt 12)
 
-Geschlossen 18.10. (siehe „Erledigt“ 2 und 9). Verworfen: Vision-Beschreibungen beim Ingest,
-CLIP-Embeddings, manuelle Captions, Dateiname als Rückfall (siehe 9); ein Endpunkt `/files/{path}` ist
-unnötig, weil `st.image` die Datei auf dem Streamlit-Server liest (auch im Heimnetz).
+- [ ] **Regelbuch 7.4, k001** „Wie viel kostet ein Langschwert?“ — der Normalpreis steht nirgends direkt
+  (Langschwert = schwere Waffe in 7.1.1, schwere Waffe = 15 G in 7.4); der einzige Satz mit „Langschwert“
+  ist das Beispiel „meisterlich 75 Gold“, die Antwort nennt 75. Vorschlag: „Ein Langschwert (schwere
+  Waffe) kostet 15 Gold, meisterlich 75.“
+- [ ] **Vault, x008 Heimkehrpfennig** — einzige Fundstelle ist die Loot-Tabelle in „Im Namen der Reinheit“
+  (`[[Kultpriester]] | [[Heimkehrpfennig]]`, 2. Spalte, für die Suche unerreichbar); das LLM erfindet
+  dann einen Gegner („Eisscherben-Wächter“, 3/3). Vorschlag: Notiz `Heimkehrpfennig.md` mit „Erbeutet
+  bei: Kultpriester (I-2)“ — der Link existiert schon, die Notiz fehlt.
+- [ ] **Vault, Schattenorden** — `Organisationen/Schattenorden/Schattenorden.md` nennt „fünf Magiepfade“
+  (Einleitung, Grundsatz 6, Hierarchie-Tabelle), `Meister der Pfade.md` hat vier — das LLM sagt „fünf“
+  und zählt vier auf.
+- [ ] **Vault, Bilder einbetten** — 20 von 40 Bildern sind nirgends eingebettet und erscheinen nie im
+  Chat: 15 Räume des Weihnachts-One-Shots (`Der Maskenball des Winterkönigs - Festsaal.webp`,
+  `- Küche.webp`, …), dazu `Lagerhaus.png`, `Anwesen Lilith von Lysander.png`, `Artefaktraum.png`,
+  `Schatten_unter_Morgenstern_map.png` und ein Bildschirmfoto. `![[…]]` unter der passenden Überschrift
+  reicht — der Chat zeigt das Bild dann zu genau diesem Abschnitt.
+- [ ] **Simulationsberichte** (z001, z003, z006, z009, z012) — die Berichts-Chunks sagen weder
+  „Schwierigkeit“ noch „Simulation“; fragenahe Überschriften und „Kosten je Effekt“ statt „Preis“ (3.15).
 
-### 3.5 Wikilink-Expansion ⏸
+### System
 
-Gemessen am 14.10. (Index-Kopie, Golden Set + Holdout, Messung und Begründung in
-[embedding-strategy.md](docs/embedding-strategy.md#warum-keine-wikilink-expansion)): Die verlinkten
-Notizen der besten Treffer im Rerank-Pool bringen nichts — Golden Set Datei 272 → 270/271, Abschnitt
-unverändert 143/149, Holdout unverändert. Alle sechs Fehlschläge liegen in Regelbuch und
-Simulationsberichten ohne Links. **Nicht umgesetzt.** Neu prüfen nur, wenn Fragen über einen Link
-(NPC → Gegenstand) nachweislich scheitern — dann mit Links je Abschnitt statt je Notiz.
+- [ ] **Gaming-PC**: alte Autostart-Aufgabe „LoreKeeper Server“ einmal in einer Admin-PowerShell prüfen
+  (`Get-ScheduledTask -TaskName "LoreKeeper*"`); Inbound-Allow-Regeln für `python.exe` im Profil
+  „Öffentlich“ gehören zu anderen Python-Installationen — ggf. aufräumen. (DHCP-Reservierung
+  `192.168.178.34` eingestellt, 14.10.)
+
+### Handprüfung im Browser (noch nicht von Hand gesehen)
+
+- [ ] **⏻ LoreKeeper beenden** und **🔄 LoreKeeper neu starten** je einmal klicken — `logs/stop.log` endet
+  mit „stopped … (clean)“, beim Neustart verbindet sich die Seite nach ~30 s von selbst wieder (12.0, 16).
+- [ ] **Desktop-Verknüpfung** „LoreKeeper starten“ öffnet den Browser mit der UI (15).
+- [ ] **Indizierung über die UI**: Job starten, Seite wechseln und zurück — der Fortschritt läuft weiter (3.8/3.9).
+- [ ] Tabs **„Feedback“/„Chunks“** einmal bedienen; ein 👎-Kommentar wird erst mit Enter oder „Kommentar
+  speichern“ gespeichert — Wegklicken speichert nichts (13.4).
+- [ ] **Bilder**: „wer ist lady lilith?“ und „Wer ist Lilith?“ zeigen Lyssaras Bilder, nicht Lioras (13.4, 9).
+
+---
+
+## Pausierte Punkte
+
+### 3.14 Rechenfragen zum Regelwerk ⏸
+
+Fragen, bei denen das Modell Regeln **anwenden und rechnen** muss (höchste Wurfzahl mit Rang 1,
+Dolch-Schaden bei Wurfzahl 12, Schattenklinge auf Rang 6), beantwortet qwen3:14b ohne Denken oft
+falsch, auch wenn Regel und Werte im Prompt stehen (18.10. live: Dolch STÄ 4, Wurfzahl 12 → „18“).
+Mit Qwen3-Denken richtiger, aber 14–41 s pro Antwort und teils leere Antworten (Token-Budget) — als
+Standard ungeeignet. Messungen: [prompts.md](docs/prompts.md#regelkern). **Entschieden 14.10.: vorerst
+so lassen.** Später: Denken nur für Rechenfragen (braucht eine Erkennung und mehr `max_tokens`) oder ein
+größeres Modell (VRAM: qwen3:14b belegt 11,4 von 16 GB); vorher eine feste Liste von Rechenfragen mit
+Sollwerten anlegen.
 
 ### 4.2 Internet-Zugriff ⏸
 
@@ -99,77 +112,51 @@ Rolle des Aufrufers und hat keinen eigenen Login ([ARCHITECTURE.md](ARCHITECTURE
 → „Bewusste Grenze“) — solange nur Streamlit sie erreicht, reicht das; Tailscale ändert daran
 nichts, eine direkt erreichbare API schon.
 
-### 3.10 Restliche Abschnitt-Misses — Einzelfälle
+### 3.5 Wikilink-Expansion ⏸
 
-Golden Set 14.10. abends: Datei 272/274, Abschnitt 143/149. Suche 273/274 exakt — nach zwei
-In-place-Re-Indizes des Vaults weicht m039 ab (Treffer unverändert); nach dem nächsten Re-Index erneut
-prüfen, bei weiteren Abweichungen den Vault einmal komplett neu aufbauen. Umgesetzt und verworfen: Tabelle
-„Erledigt“ und [embedding-strategy.md](docs/embedding-strategy.md). Offen, nur bei Anlass:
-- **Simulationsberichte** z003, z006, z009, z012 (und z001 mit richtiger Antwort) — die Berichts-Chunks
-  sagen weder „Schwierigkeit“ noch „Simulation“; besser in den Berichten selbst lösen (Überschriften).
-- **p009** Zauberpunkte — Abschnitt-Miss im Golden Set, die Antwort ist seit dem Regelkern richtig.
-- **Name in fremder Identität** — „Wer ist Arkenfeld?“ holt vor allem „Der Armdrücker von Arkenfeld“;
-  Antwort trotzdem richtig.
-- ~~**Monolith-Sektion**~~ — 18.10. erledigt ohne Änderung (Roadmap 8, siehe „Erledigt“).
-- **Tabellen**: „Unterschied Dolch und Kurzschwert“ seit 17.10. gelöst (Rerank auf die genannten Zeilen,
-  siehe „Erledigt“). „Wie viel Schaden macht ein Langbogen?“ nennt 18.10. die Waffentabelle (7.1.1).
-  „Dolch, STÄ 4, Wurfzahl 12“ bleibt falsch gerechnet — Rechenfrage (3.14); ein Deckel je PDF-Kapitel
-  half nicht (7, verworfen).
-- ~~**AP-Pool**~~ — 18.10. 3/3 richtig, die Antwort erklärt den gemeinsamen AP/MP-Pool (Roadmap 10).
+Gemessen am 14.10. (Index-Kopie, Golden Set + Holdout, Messung und Begründung in
+[embedding-strategy.md](docs/embedding-strategy.md#warum-keine-wikilink-expansion)): Die verlinkten
+Notizen der besten Treffer im Rerank-Pool bringen nichts — Golden Set Datei 272 → 270/271, Abschnitt
+unverändert 143/149, Holdout unverändert. Alle sechs Fehlschläge liegen in Regelbuch und
+Simulationsberichten ohne Links. **Nicht umgesetzt.** Neu prüfen nur, wenn Fragen über einen Link
+(NPC → Gegenstand) nachweislich scheitern — dann mit Links je Abschnitt statt je Notiz.
 
-### 3.15 Antwortfehler aus dem End-to-End-Lauf — Einzelfälle
+### 7c Auto-Reload/Stopp hing bei laufendem E2E-Lauf ⏸
 
-Feintuning beendet (14.10.): zwischen zwei gleichen Läufen kippen ~15 Fragen, die übrigen Fehler haben
-je eine eigene Ursache, und der Holdout zeigt, dass Listen allgemein funktionieren (9/10). Messungen,
-Gründe und die angepassten Golden-Set-Stichwörter: [evaluation.md](docs/evaluation.md#evaluatepy--end-to-end).
-Offen:
-- **Aufzählungen über große Kapitel** (Priorität 4) — der richtige Abschnitt wird gefunden, aber nur 8 Chunks
-  erreichen das LLM: p008 Klassen, p036 Basis-Skills, p037 Basis-Zauber, p114 Eigenheiten Magie, p014
-  Benchmark, a030 Beweis-Tabelle, p049 Überheilung.
-  **Analyse 17.10.**: p008 ist seit der Klassenübersicht im Regelbuch (14.10.) richtig. Zwei Ursachen
-  gefunden: **(1)** `pymupdf4llm` machte Beschriftungen („Nachteil:“, 62× „Legendär (Rang 6):“) zu
-  Überschriften — 109 von 543 Regelbuch-Chunks; „Manaschwäche“ war dadurch unauffindbar, 5.3 hatte
-  26 Chunks (> 25, keine Expansion). **(2)** Die Section Expansion zählt den Einleitungs-Chunk eines
-  Abschnitts („5.2 Basis-Skills“ ohne Unterüberschrift) nicht als Treffer dieses Abschnitts (p036:
-  Rang 1, aber bester gezählter Treffer Rang 5; p014: nur eine Unterüberschrift). a030 (Tabelle im
-  Vault) und p049 (Regel in 4.11, Zauber in 5.5.6) haben andere Ursachen.
-  **Schritt 1 umgesetzt (17.10.)**: Überschriften auf „:“ im PDF-Parser wieder fetter Text
-  ([parsing.md](docs/parsing.md)), Regelbuch neu indiziert (81 s): 543 → 458 Chunks, 0 Beschriftungs-
-  Überschriften. Golden Set unverändert 272/274 · 143/149 (keine Frage kippt), Holdout 9/10 · 51/53;
-  je 3 Läufe: p037 0 → 3/3, p114 0 → 3/3, p036 findet jetzt „Erholen“ (fehlt noch „Verbände“), p014,
-  a030, p049 unverändert.
-  **Schritt 2 umgesetzt (17.10.)**: Einleitungs-Chunk zählt als Treffer seiner Sektion
-  ([embedding-strategy.md](docs/embedding-strategy.md#warum-section-expansion)). Golden Set Abschnitt
-  143 → 144/149, Chunks Ø 11,7 → 12,6; p036 und p014 0 → 3/3. E2E beider Schritte **253 → 260/274**.
-  ✅ Erledigt bis auf a030 (Beweis-Tabelle im Vault) und p049 (Regel 4.11 + Zauber 5.5.6) — eigene
-  Ursachen, Einzelfälle. Antwortzeit mit dem längeren Kontext auf freiem Rechner (E2E 18.10.):
-  Ø 7,3 s, Median 6,3 s je Frage (13.3: Ø 7,1 s) — kein spürbarer Aufpreis.
-- **👎 aus dem Chat (14.10.)** — 5 Bewertungen, 4 Fälle: drei behoben (siehe „Erledigt“ 3.15 Teil, Feedback);
-  der Tippfehler „üebrschaden“ ist seit 17.10. behoben (siehe „Erledigt“ 3.15 Teil, Tippfehler).
-- **Fakten** — 18.10. geschlossen (Roadmap 10): ~~p091 Tränke-Fehlwurf~~ (seit 3.17 3/3); k001 Langschwert
-  (jetzt „75 Gold“ aus dem Meisterlich-Beispiel) und x008 Heimkehrpfennig (erfundener Gegner) liegen als
-  Inhaltsvorschlag unter „Offen beim Nutzer“.
-
-### 3.14 Rechenfragen zum Regelwerk ⏸
-
-Fragen, bei denen das Modell Regeln **anwenden und rechnen** muss (höchste Wurfzahl mit Rang 1,
-Dolch-Schaden bei Wurfzahl 12, Schattenklinge auf Rang 6), beantwortet qwen3:14b ohne Denken oft
-falsch, auch wenn Regel und Werte im Prompt stehen. Mit Qwen3-Denken richtiger, aber 14–41 s pro
-Antwort und teils leere Antworten (Token-Budget) — als Standard ungeeignet. Messungen:
-[prompts.md](docs/prompts.md#regelkern). **Entschieden 14.10.: vorerst so lassen.** Später: Denken nur
-für Rechenfragen (braucht eine Erkennung und mehr `max_tokens`) oder ein größeres Modell; vorher eine
-feste Liste von Rechenfragen mit Sollwerten anlegen.
+18.10. 00:00: eine Änderung unter `src/` löste keinen Neustart aus, `stop.ps1` musste nach 20 s hart
+beenden. In beiden Fällen fehlt „Shutting down“ im Log, der Worker beantwortete noch 19 s lang Fragen —
+er hat das Strg+C nicht verarbeitet (Prozessbaum intakt, `GenerateConsoleCtrlEvent` erfolgreich); offene
+Verbindungen erklären es nicht, die werden erst nach „Shutting down“ abgewartet. Der Rechner war in der
+Nacht überlastet (Modell im geteilten GPU-Speicher, wenig RAM). Nachgestellt 18.10. 11:33 auf freiem
+Rechner: Reload während E2E nach 39 s fertig (wartet die laufende Frage ab), `stop.ps1` während E2E
+sauber nach 8 s — 12.3 hält. **Falls es wieder passiert**: im Log nach „Shutting down“ suchen, im
+Backend-Fenster nach „WatchFiles detected changes“ (steht nur dort, nicht in der Datei), Fenster-Titel
+auf „Auswählen“ prüfen (Markiermodus hält Konsolen-Ausgaben an).
 
 ### 11.0 P8 — optional
 
 Dienste-Modul `src/services.py` (Globale, `install_llm`, Health-Loop; beseitigt die Lazy-Imports
-und vereinfacht die Test-Fixtures) und Reranker + GPU-Rückfall als `src/retrieval/reranker.py`. Nur
-zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
+`import src.main as main_module` und vereinfacht die Test-Fixtures) und Reranker + GPU-Rückfall als
+`src/retrieval/reranker.py`. Nur zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 
+---
 
-### 14.0 UX
+## Bekannte Restfehler (ohne Handlungsbedarf)
 
-- (keine offenen — 14.1 erledigt 17.10.)
+Golden Set und End-to-End-Lauf haben Fehler mit je eigener Ursache; zwischen zwei gleichen E2E-Läufen
+kippen ~15 Fragen (Rauschen, [evaluation.md](docs/evaluation.md#evaluatepy--end-to-end)). Feintuning ist
+seit 14.10. beendet. Bekannt und bewusst offen:
+- **p009** Zauberpunkte — Abschnitt-Miss im Golden Set, die Antwort ist seit dem Regelkern richtig.
+- **„Wer ist Arkenfeld?“** — holt vor allem „Der Armdrücker von Arkenfeld“; Antwort trotzdem richtig.
+- **a030** (Beweis-Tabelle im Vault) und **p049** (Regel in 4.11, Zauber in 5.5.6) — Aufzählungen über
+  zwei Stellen, Einzelfälle.
+- **Rechenfragen** wie „Dolch, STÄ 4, Wurfzahl 12“ → 3.14.
+- **z001, z003, z006, z009, z012** (Simulationsberichte) → Überschriften beim Nutzer.
+- **k001, x008** → Inhalt beim Nutzer.
+
+**Verworfene Ansätze für Bilder** (Roadmap 2/9): Vision-Beschreibungen beim Ingest, CLIP-Embeddings,
+manuelle Captions, Dateiname als Rückfall; ein Endpunkt `/files/{path}` ist unnötig, weil `st.image` die
+Datei auf dem Streamlit-Server liest (auch im Heimnetz).
 
 ## Eingang (neue Bugs und Ideen, noch nicht bewertet)
 - —
