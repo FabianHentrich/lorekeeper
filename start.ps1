@@ -3,11 +3,13 @@
 #   .\start.ps1           Development: auto-reload on code changes, UI only on this PC (127.0.0.1)
 #   .\start.ps1 -Server   Home-network server: no auto-reload, UI reachable in the LAN, no browser
 #                         (one-time firewall rule: scripts\setup-lan.ps1, see roadmap 4.1; no autostart)
+#   .\start.ps1 -Server -Browser   Same, but opens the UI in the browser — also when LoreKeeper already
+#                         runs (what the desktop shortcut does, scripts\create-shortcuts.ps1, roadmap 15)
 #   .\stop.ps1            Stop both cleanly (see there)
 #
 # The backend always stays on 127.0.0.1 — the UI talks to it server-side, so only port 8501 is exposed.
 
-param([switch]$Server)
+param([switch]$Server, [switch]$Browser)
 
 $ErrorActionPreference = "Stop"
 
@@ -102,14 +104,15 @@ if (-not $skipUI) {
         -ArgumentList "-m", "streamlit", "run", "ui/LoreKeeper.py", "--server.headless", "true", "--server.address", $uiAddress `
         -WorkingDirectory $ROOT `
         -WindowStyle $(if ($Server) { "Minimized" } else { "Normal" })
-
-    if (-not $Server) {
-        # Wait briefly for Streamlit to bind, then open browser
-        Start-Sleep -Seconds 3
-        Start-Process $UI_URL
-    }
 } else {
     Write-Host "UI already running on port $UI_PORT." -ForegroundColor Green
+}
+
+# Development opens the browser on a fresh UI; -Browser always — a second double-click on the shortcut
+# then just brings the page up again
+if ((-not $Server -and -not $skipUI) -or $Browser) {
+    if (-not $skipUI) { Start-Sleep -Seconds 3 }  # let Streamlit bind first
+    Start-Process $UI_URL
 }
 
 # --- Summary ----------------------------------------------------------

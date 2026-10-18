@@ -206,7 +206,8 @@ lorekeeper/
 ├── evaluation/                    # Golden Set (274 Fragen), evaluate_retrieval.py, evaluate.py
 ├── tests/                         # unit · integration · ui · perf (-m perf) · live (-m live)
 ├── scripts/setup-lan.ps1          # Firewall-Regel für den Heimnetz-Betrieb
-├── start.ps1                      # Start von Backend + UI (Entwicklung / -Server)
+├── scripts/create-shortcuts.ps1   # Desktop-Verknüpfungen „LoreKeeper starten/beenden“
+├── start.ps1                      # Start von Backend + UI (Entwicklung / -Server, -Browser)
 ├── stop.ps1                       # sauberes Beenden (Strg+C an beide Fenster, nach Timeout hart)
 ├── chroma_data/                   # ChromaDB-Persistenz (nicht versioniert)
 └── logs/                          # lorekeeper.log (+ lorekeeper.<Datum>.log je Tag), ollama.log, feedback.jsonl (nicht versioniert)

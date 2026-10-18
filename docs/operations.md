@@ -110,6 +110,7 @@ Netz bedient. Erreichbar ist nur die Streamlit-UI (Port 8501); das Backend bleib
 |---|---|---|---|
 | `.\start.ps1` | `127.0.0.1`, Auto-Reload | nur `127.0.0.1`, öffnet den Browser | Entwicklung auf diesem PC |
 | `.\start.ps1 -Server` | `127.0.0.1`, kein Reload | `0.0.0.0` (LAN), minimierte Fenster | Heimnetz-Server; gibt die LAN-URLs aus |
+| `.\start.ps1 -Server -Browser` | wie `-Server` | wie `-Server`, öffnet zusätzlich den Browser — auch wenn LoreKeeper schon läuft | Desktop-Verknüpfung |
 
 Dann am Laptop oder Handy `http://<ip-des-gaming-pcs>:8501` öffnen. Fragt Windows, ob Python
 Verbindungen annehmen darf, nur **Private Netzwerke** erlauben — „Abbrechen“ legt eine Blockregel
@@ -119,6 +120,13 @@ an, die die Port-Freigabe überstimmt.
 
 - **Starten** (kein Autostart — Absicht): `.\start.ps1 -Server` im Projektordner. Backend und UI
   öffnen sich als zwei minimierte Fenster, die Konsole zeigt die LAN-URLs.
+- **Desktop-Verknüpfungen** (18.10., Roadmap 15): einmalig
+  `powershell -ExecutionPolicy Bypass -File scripts\create-shortcuts.ps1` legt **LoreKeeper starten**
+  (`start.ps1 -Server -Browser`) und **LoreKeeper beenden** (`stop.ps1`) auf den Desktop. Doppelklick
+  genügt — keine Konsole, keine venv. Das Fenster der Verknüpfung bleibt 15 s (Beenden: 8 s) offen, damit
+  LAN-URLs und Warnungen (kein Admin-Passwort, Indizierung läuft) lesbar sind. Läuft LoreKeeper schon,
+  öffnet „starten“ nur die Seite. Die Verknüpfungen enthalten absolute Pfade — nach einem Umzug des
+  Projektordners das Skript erneut ausführen; `-Uninstall` entfernt sie.
 - **Stoppen**: `.\stop.ps1` im Projektordner oder in der UI **⏻ LoreKeeper beenden** (Sidebar,
   nur Admin). Beides schickt Strg+C an das Backend- und das UI-Fenster (wie ein Tastendruck dort),
   wartet bis zu 20 s (`-Timeout`) und beendet dann hart, was noch läuft — samt einem Ollama, das

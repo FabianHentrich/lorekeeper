@@ -170,5 +170,6 @@ Ollama-Autostart in `src/main.py` und `stop.ps1` (brauchen echte Prozesse; `stop
 von Hand geprüft: Dev- und Server-Modus, Ingest-Sperre, `-Force`, fremder Server auf 8000 bleibt
 unberührt, ein Strg+C ignorierender Prozess wird nach 20 s beendet; Button-Startweg mit dem Skript
 als Kind des UI-Prozesses — `logs/stop.log` endet nach Sekunden mit „stopped … (clean)“, nicht mit
-„Still running … powershell“), das Übernehmen von Feedback per Häkchen im Data-Editor (AppTest kann keine Zellen anklicken; die Logik in `ui/feedback.py` ist getestet) und
+„Still running … powershell“; Desktop-Verknüpfungen am 18.10. per Doppelklick: Start im Server-Modus
+nach 14 s, zweiter Klick startet nichts doppelt, Beenden sauber nach 2 s), das Übernehmen von Feedback per Häkchen im Data-Editor (AppTest kann keine Zellen anklicken; die Logik in `ui/feedback.py` ist getestet) und
 die CLI-Einstiegspunkte (`main()`).

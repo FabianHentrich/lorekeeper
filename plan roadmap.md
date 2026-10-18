@@ -26,7 +26,6 @@ End-to-End-Lauf ~35 min (🟡).
 
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 15 | Desktop-Verknüpfung zum Starten (Idee des Nutzers) | Mittel | Gering | 🟢 | Doppelklick statt Konsole + venv + `start.ps1`; vor allem für den Server-Betrieb. Kein Autostart — Start bleibt Handarbeit |
 | 16 | Neustart-Knopf neben „⏻ LoreKeeper beenden“ (Idee des Nutzers) | Mittel | Gering–Mittel | 🟢 (Live-Prüfung 🟡) | Behebt hängende Zustände ohne Konsole, gibt den VRAM frei (Modell im geteilten Speicher, 7b-Warnung) |
 | 3.17 | PDF-Parser: `1W8 Ergebnis` als oberste Überschrift (aus dem Eingang) | Gering–Mittel | Gering–Mittel | 🔴 | Alchemisten-Tabellen hängen unter falschem Kapitel, vermutlich Ursache von p091; Regelbuch-Re-Index + Golden Set |
 | 8 | 3.10 Monolith-Sektion in fremden Regelfragen (p011, p101) | Gering | Mittel | 🟡 | 22 Chunks, landet in den Top 3; Antworten bisher trotzdem richtig |
@@ -65,18 +64,6 @@ Regeln. `HF_HUB_OFFLINE=1` (in `src/__init__.py`): Modelle nur aus dem lokalen C
 ---
 
 ## Offene Punkte
-
-### 15 LoreKeeper-Verknüpfung auf dem Desktop
-
-Idee des Nutzers (18.10.): anstatt immer erst python und dann die start.ps1 starten zu müssen wäre es gut
-wenn man einfach doppelklick auf eine verknüfung machen könnte und es dann von selbst startet. So könnte man
-den Server besser/einfacher starten da es da ja nicht um Entwicklung geht.
-
-**Ansatz**: kleines Skript legt eine `.lnk` auf dem Desktop an (`powershell -ExecutionPolicy Bypass -File
-start.ps1 -Server`, Arbeitsordner = Repo, Symbol); `start.ps1` aktiviert die venv schon selbst. Offen beim
-Umsetzen: im Server-Modus trotzdem den Browser öffnen? Eine zweite Verknüpfung „LoreKeeper beenden“
-(`stop.ps1`)? Kein Autostart (4.1) — die Verknüpfung startet nur auf Doppelklick. Doku in
-`docs/operations.md`.
 
 ### 16 Neustart-Knopf
 
@@ -217,6 +204,7 @@ Weitere solche Überschriften im Regelbuch mit suchen.
 
 | Nr | Was | Wann | Wo dokumentiert |
 |---|---|---|---|
+| 15 | Desktop-Verknüpfungen (Idee des Nutzers): `scripts/create-shortcuts.ps1` legt **LoreKeeper starten** (`start.ps1 -Server -Browser`) und **LoreKeeper beenden** (`stop.ps1`) auf den Desktop; `start.ps1 -Browser` öffnet die UI auch im Server-Modus und bei schon laufendem LoreKeeper. Fenster bleibt 15/8 s für LAN-URLs und Warnungen offen. Per Doppelklick geprüft: Start nach 14 s, zweiter Klick startet nichts doppelt, Beenden sauber nach 2 s | 18.10. | `docs/operations.md`, `README.md` |
 | 7 | Deckel je PDF-Kapitel **verworfen**: Golden Set 272 · 144 unverändert, E2E 260/274 wie die Grundlinie, aber p092 (Tränke je Rang) reproduzierbar verloren — Rang-Tabelle ist der 4. Chunk ihres Kapitels; Deckel bleibt je Datei. Nebenbei: Antwortzeit Ø 7,3 s auf freier GPU | 18.10. | `docs/embedding-strategy.md` |
 | 1 | PDF-Parsing: OCR (RapidOCR), Bildextraktion, Überschriften aus dem Inhaltsverzeichnis | 14.04. | `docs/parsing.md` |
 | 3.1 | Hybrid-Suche (BM25 + Vektor, RRF), Schwelle vor der Fusion | 14.04. | `docs/embedding-strategy.md` |
