@@ -174,5 +174,6 @@ als Kind des UI-Prozesses — `logs/stop.log` endet nach Sekunden mit „stopped
 nach 14 s, zweiter Klick startet nichts doppelt, Beenden sauber nach 2 s; `stop.ps1 -Restart` am 18.10.
 über den Startweg des Buttons: Server- und Entwicklungsmodus bleiben erhalten, ~25 s, Modell aus dem VRAM,
 der nächste Stopp sauber nach ~2 s — mutationsgeprüft: ohne das Wiedereinschalten von Strg+C wurde das
-neue Backend nach 20 s hart beendet), das Übernehmen von Feedback per Häkchen im Data-Editor (AppTest kann keine Zellen anklicken; die Logik in `ui/feedback.py` ist getestet) und
+neue Backend nach 20 s hart beendet; vom Nutzer am 18.10. im Browser: beide Knöpfe, Browserstart der
+Verknüpfung, Indizierungs-Fortschritt beim Seitenwechsel, Tabs „Feedback“/„Chunks“, Bilder per Alias), das Übernehmen von Feedback per Häkchen im Data-Editor (AppTest kann keine Zellen anklicken; die Logik in `ui/feedback.py` ist getestet) und
 die CLI-Einstiegspunkte (`main()`).
