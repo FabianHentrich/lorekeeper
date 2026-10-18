@@ -219,10 +219,11 @@ keine Backend-Anfrage — die Ingest-Prüfung läuft erst beim Bestätigen.
 - **🖼️ Bilder (n)** (zugeklappt, vor den Quellen): die Bilder, die die gefundenen Abschnitte in
   ihrer Notiz einbetten (`images` je Quelle, Roadmap 2) — jedes Bild einmal, in Quellen-Reihenfolge,
   höchstens 6, nur existierende Dateien, 300 px breit mit Dateiname. Nur Notizen, deren Name
-  (Dateiname ohne `.md`, ganzes Wort, Groß-/Kleinschreibung egal) in Frage oder Antwort vorkommt —
-  sonst zeigte eine schwach passende Quelle ein fremdes Porträt (15.10.: „wer ist lady lilith?“ bekam
-  Liora Veylans Bild, Quelle Nr. 6, in der Antwort nicht erwähnt). Spricht die Antwort jemanden nur
-  mit Vornamen oder Spitznamen an, fehlt dessen Bild. `st.image` liest die Datei auf
+  (Dateiname ohne `.md`) oder einer ihrer `aliases` aus dem Frontmatter (ganzes Wort, Groß-/Kleinschreibung
+  egal) in Frage oder Antwort vorkommt — sonst zeigte eine schwach passende Quelle ein fremdes Porträt
+  (15.10.: „wer ist lady lilith?“ bekam Liora Veylans Bild, Quelle Nr. 6, in der Antwort nicht erwähnt).
+  Die Aliase decken Vor- und Spitznamen ab („Lyssara“, „Lilith“, „Malek“; seit 18.10., Roadmap 9 — 7 der
+  11 Notizen mit Bildern haben welche); fehlt ein Name dort, fehlt auch das Bild. `st.image` liest die Datei auf
   dem Streamlit-Server, daher klappt es auch von einem anderen Gerät im Heimnetz. Im Spieler-Modus
   kommen nur Bilder freigegebener Quellen an (Auflösung je Quelle, siehe [parsing.md](parsing.md)).
 - Quellen im Ausklapper **📎 Quellen**, nach Datei gruppiert (siehe unten).

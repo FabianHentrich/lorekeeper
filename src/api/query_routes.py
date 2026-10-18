@@ -177,6 +177,8 @@ def _chunk_to_source_dict(c) -> dict:
         "chunk_preview": c.content[:_SOURCE_PREVIEW_CHARS],
         "content": c.content,
         "images": [p for p in c.metadata.get("images", "").split(IMAGE_PATH_SEPARATOR) if p],
+        # ChromaDB keeps the alias list comma-joined (flattened metadata)
+        "aliases": [a.strip() for a in c.metadata.get("aliases", "").split(",") if a.strip()],
         "score": c.score,
     }
 

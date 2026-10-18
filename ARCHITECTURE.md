@@ -539,7 +539,9 @@ data: {"type": "error", "content": "..."}                       (bei Abbruch)
 - `sources`: je Chunk `file`, `source_path`, `document_type`, `heading`, `score`, `chunk_preview` (100
   Zeichen), `content` (ganzer Chunk-Text, den das LLM bekam — der Chat zeigt ihn unter der Quelle,
   Roadmap 3.16) und `images` (Pfade der Bilder, die der Abschnitt in seiner Notiz einbettet, aufgelöst
-  in derselben Quelle — der Chat zeigt sie unter „🖼️ Bilder“, Roadmap 2). Gleich bei `/query`.
+  in derselben Quelle — der Chat zeigt sie unter „🖼️ Bilder“, Roadmap 2) sowie `aliases` (Frontmatter-Aliase
+  der Notiz; der Chat zeigt die Bilder einer Notiz, wenn Frage oder Antwort ihren Namen oder einen Alias
+  nennt, Roadmap 9). Gleich bei `/query`.
 - `model_used` ist das Modell, das tatsächlich geantwortet hat (nach Fallback das Fallback-Modell).
 - `timings`: Dauer je Stufe in ms (`condense_ms`, `retrieval_ms` mit Stufen embed/search/bm25/entry/rerank/expand,
   `first_token_ms`, `total_ms`), Chunk-Anzahl, Prompt-Größe — auch als Log-Zeile `Query timings: …`.

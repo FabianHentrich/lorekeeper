@@ -26,7 +26,7 @@ End-to-End-Lauf ~35 min (🟡).
 
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 9 | 2 Bilder — Rest (Vor-/Spitzname, Dateiname-Rückfall, PDF-Bilder, neues Bild ohne Notiz-Änderung) | Gering | Gering–Mittel | 🟢–🔴 | Einbettungen laufen. Vor-/Spitzname (13.4) über `aliases` der Notiz wäre klein (🟢); Dateiname-Rückfall braucht Spy-Test, PDF-Bilder dauerhafte Ablage + Re-Index (🔴) |
+| 9 | 2 Bilder — Rest (Dateiname-Rückfall, PDF-Bilder, neues Bild ohne Notiz-Änderung) | Gering | Gering–Mittel | 🟡–🔴 | Vor-/Spitzname erledigt 18.10. (siehe „Erledigt“). Dateiname-Rückfall braucht Spy-Test, PDF-Bilder dauerhafte Ablage + Re-Index (🔴) |
 | 10 | 3.10/3.15 übrige Einzelfälle: AP-Pool „50 AP“, p009 (Abschnitt-Miss, Antwort richtig), „Wer ist Arkenfeld?“, k001 Preis-Spalte, x008 Heimkehrpfennig | Gering | je Gering | 🟡 | Nur bei Anlass im Spiel; Antworten teils schon richtig |
 | 11 | Beim nächsten Re-Index: Suchgenauigkeit prüfen | Gering | Gering | 🔴 | 18.10. nach dem Regelbuch-Re-Index (3.17) 274/274 exakt, auch m039 wieder; bei Abweichungen nach weiteren In-place-Re-Indizes den Vault einmal komplett neu aufbauen (3.10) |
 | — | 3.10 Simulationsberichte z001, z003, z006, z009, z012 | Gering | — | 🟢 | Liegt beim Nutzer: Überschriften in den Berichten (siehe „Offen beim Nutzer“), danach Golden Set |
@@ -70,8 +70,7 @@ Einbettungen in Notizen laufen seit 14.10. (siehe „Erledigt“ 2). Offen, nur 
   Filter der Anfrage, Spy-Test).
 - **Bilder aus PDFs** liegen nur in einem temporären Ordner, der nach dem Parsen gelöscht wird — zum
   Anzeigen müssten sie dauerhaft abgelegt werden.
-- **Vor-/Spitzname** (13.4): Bilder erscheinen nur, wenn Frage oder Antwort den vollen Notiznamen
-  nennt — „Lyssara“ allein reicht nicht. Weg: die `aliases` der Notiz mitprüfen.
+- ~~**Vor-/Spitzname**~~ — 18.10. erledigt über die `aliases` (siehe „Erledigt“ 9).
 - Ein neu abgelegtes Bild erscheint erst nach einer Änderung der Notiz oder einem vollen Re-Index der
   Quelle (der Inhalts-Hash deckt nur die Notiz ab).
 
@@ -179,6 +178,7 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 
 | Nr | Was | Wann | Wo dokumentiert |
 |---|---|---|---|
+| 9 (Teil) | Bilder auch bei Vor-/Spitznamen: `sources` liefern die Frontmatter-`aliases` der Notiz, der Chat zeigt ihre Bilder, wenn Frage oder Antwort den Namen **oder** einen Alias nennt („Wer ist Lilith?“ → Lyssara Vaydris). 7 der 11 Notizen mit Bildern haben Aliase (Vornamen, Spitznamen). Fremde Porträts bleiben draußen (UI-Test mit Liora, mutationsgeprüft); live: Aliase kommen mit den Quellen an. Kein Re-Index nötig | 18.10. | `docs/ui-ux.md`, `ARCHITECTURE.md` |
 | 3.19 | Simulationsbericht in Regelfragen — **ohne Änderung erledigt**: 42 von 129 Regelfragen bekommen Chunks aus `llm_report.md`, zusammen 93 von 1.576 (5,9 %), fast immer 1–3 aus der normalen Rangfolge; meist „Kontext > Metriken-Erklärung“ (21 Fragen), die die Regeln für die LLM-Analyse nacherzählt. Section Expansion nur bei p011 (12 Chunks) — Antwort trotzdem 3/3 richtig. Den Abschnitt auszuschließen kostete z002 (Simulationsfrage, braucht ihn); gezieltes Tuning für eine richtige Antwort lohnt nicht. Neu prüfen, wenn Regelantworten Werte aus dem Bericht statt aus dem Regelbuch nennen | 18.10. | — |
 | 3.18 | Kopfzeilen im Regelbuch-Text entfernen **verworfen**: Kopfzeile (Kapitel + Seitenzahl) steht an jedem Seitenumbruch, in 104 von 458 Chunks. Entfernt → Abschnitt 144 → 143, p024 (Krieger-Fähigkeiten) 0/3 — der Kapitelname hatte das Regelbuch vor NSC-Notizen gehalten; Variante „Kapitel einmal vorn im Embed-Text“ → 142, Platz 1 136 → 134, Alchemist/Dunkle Magie/Zeitmagie verlieren die Section Expansion. Zurückgebaut, Regelbuch neu indiziert: wieder genau 272 · 144 · 136, Suche 274/274 exakt | 18.10. | `docs/parsing.md` |
 | 3.17 | PDF-Parser: Tabellenkopf `**1W8 Ergebnis**` galt als Kapitel 1 — die Regex für nummerierte Überschriften verlangte kein Leerzeichen nach der Nummer; Patzer-Tabelle und „Wurfgemisch“ hingen dadurch nicht unter 5.4.6 Alchemist. Fix + Unit-Test (schlägt mit der alten Regex fehl), Regelbuch neu indiziert (80 s): Golden Set unverändert 272 · 144, Rang 1 136, 8 Fragen mit anderen Chunks, keine kippt; p091 und p092 je 3/3 inhaltlich richtig (p092 morgens 0/3); Suche 274/274 exakt. `Talente`/`Eigenheiten` als oberste Überschrift bleiben (Kapitel-Einleitungen ohne Nummer im PDF-Text, richtig benannt) | 18.10. | `docs/parsing.md` |

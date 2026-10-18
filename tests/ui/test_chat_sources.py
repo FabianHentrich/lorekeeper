@@ -74,6 +74,27 @@ def test_images_of_the_sources_show_under_the_answer(fake_backend, monkeypatch, 
     assert "🖼️ Bilder (2)" in [e.label for e in at.expander]
 
 
+def test_an_alias_in_the_question_brings_the_note_images(fake_backend, monkeypatch, tmp_path):
+    """Roadmap 9: "Lilith" is an alias of Lyssara Vaydris — her portrait shows although neither question nor
+    answer says the full name; Liora's alias is not named, so her portrait still stays out (15.10.)."""
+    import base64
+    png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
+    lyssara, liora = tmp_path / "Lyssara.png", tmp_path / "Liora.png"
+    lyssara.write_bytes(png)
+    liora.write_bytes(png)
+    with_images = [{**SOURCES[1], "file": r"NPCs\Lyssara Vaydris.md", "images": [str(lyssara)],
+                    "aliases": ["Lyssara", "Lilith"]},
+                   {**SOURCES[1], "file": r"NPCs\Liora Veylan.md", "images": [str(liora)],
+                    "aliases": ["Sanfte Hexe", "Liora"]}]
+    monkeypatch.setattr(conftest, "_STREAM_EVENTS",
+                        [*conftest._STREAM_EVENTS[:-1], {**conftest._STREAM_EVENTS[-1], "sources": with_images}])
+    at = open_page("chat").run()
+    at.chat_input[0].set_value("Wer ist Lady Lilith?").run()
+
+    assert not at.exception, [e.message for e in at.exception]
+    assert "🖼️ Bilder (1)" in [e.label for e in at.expander]
+
+
 def test_no_image_box_without_images(fake_backend, monkeypatch):
     assert not any(e.label.startswith("🖼️") for e in _ask(monkeypatch).expander)
 

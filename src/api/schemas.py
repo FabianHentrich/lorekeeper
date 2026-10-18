@@ -40,6 +40,9 @@ class SourceReference(BaseModel):
     # Images the note embeds in this section (absolute paths on the server) — shown under the answer
     # (roadmap 2). Only ever from chunks the role may see.
     images: list[str] = []
+    # Frontmatter aliases of the note ("Lyssara", "Lilith") — the chat shows a note's images when the question
+    # or answer names the note or one of these (roadmap 9). Same chunk the role may see, nothing new exposed.
+    aliases: list[str] = []
     score: float
 
 

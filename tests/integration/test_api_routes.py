@@ -417,6 +417,20 @@ def test_sources_list_the_images_the_section_embeds():
     assert _chunk_to_source_dict(chunk)["images"] == paths
 
 
+def test_sources_carry_the_note_aliases_as_a_list():
+    """Roadmap 9: ChromaDB holds the aliases comma-joined; the chat needs them as names to match."""
+    from types import SimpleNamespace
+
+    from src.api.query_routes import _chunk_to_source_dict
+
+    def chunk(meta):
+        return SimpleNamespace(source_file="Lyssara Vaydris.md", document_type="markdown", heading="",
+                               content="…", score=0.9, metadata={"source_path": "", **meta})
+    assert _chunk_to_source_dict(chunk({"aliases": "Lyssara, Lilith, Lilith von Lysander"}))["aliases"] == \
+        ["Lyssara", "Lilith", "Lilith von Lysander"]
+    assert _chunk_to_source_dict(chunk({}))["aliases"] == []
+
+
 def test_query_returns_stage_timings(client, fake_services):
     """Ensure /query reports retrieval stages, chunk count and prompt size for performance tracking."""
     timings = client.post("/query", json={"question": "Wo liegt Arkenfeld?"}).json()["timings"]

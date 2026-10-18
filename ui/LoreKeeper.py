@@ -35,14 +35,16 @@ _MAX_ANSWER_IMAGES = 6
 
 def _answer_images(sources: list[dict], text: str) -> list[str]:
     """Images the notes behind this answer embed (roadmap 2), in source order, each once, at most
-    ``_MAX_ANSWER_IMAGES``. Only notes whose name occurs in ``text`` (question + answer) count: a
-    weakly matched source showed a stranger's portrait under the answer (15.10., "Lady Lilith" got
-    Liora Veylan's). The paths are on this machine — the UI runs where the vault is, and Streamlit
-    sends the image itself to the browser, also for players in the LAN. Missing files are skipped."""
+    ``_MAX_ANSWER_IMAGES``. Only notes whose name or one of whose ``aliases`` occurs in ``text`` (question +
+    answer) count: a weakly matched source showed a stranger's portrait under the answer (15.10., "Lady
+    Lilith" got Liora Veylan's), and the full name alone missed "Wer ist Lyssara?" (roadmap 9). The paths
+    are on this machine — the UI runs where the vault is, and Streamlit sends the image itself to the
+    browser, also for players in the LAN. Missing files are skipped."""
     seen: list[str] = []
     for src in sources:
         name = PureWindowsPath(src.get("file", "")).stem   # "file" is vault-relative, backslashes
-        if not name or not re.search(rf"(?<!\w){re.escape(name)}(?!\w)", text, re.IGNORECASE):
+        names = [n for n in (name, *src.get("aliases", [])) if n]
+        if not any(re.search(rf"(?<!\w){re.escape(n)}(?!\w)", text, re.IGNORECASE) for n in names):
             continue
         for path in src.get("images", []):
             if path not in seen and Path(path).is_file():
