@@ -229,12 +229,15 @@ with col_reindex:
         try:
             r = requests.post(f"{API_URL}/sources/recategorize", timeout=60)
             raise_for_status(r)
-            st.success(f"Recategorize: {r.json()}")
+            stats = r.json()
+            st.success(f"Recategorize: **{stats.get('chunks_updated', 0)}** Chunks aktualisiert · "
+                       f"{stats.get('chunks_skipped', 0)} unverändert · "
+                       f"{stats.get('chunks_unmatched', 0)} ohne passende Quelle")
         except Exception as e:
             st.error(f"Fehler: {e}")
     st.caption(
-        "⏱ Dauer hängt stark von Anzahl und Größe der Dokumente ab "
-        "(Richtwert: ~220 Markdown-Dateien ≈ 5 Minuten; PDFs mit OCR deutlich länger)."
+        "⏱ Richtwerte (18.10.): Vault mit ~170 Notizen komplett neu ≈ 8 Minuten, nur Änderungen meist "
+        "unter einer Minute; Regelbuch-PDF neu ≈ 1–2 Minuten."
     )
 
 _render_ingest_result()
@@ -351,7 +354,7 @@ for s in sources:
         with col_a:
             if st.button("🔄 Reindex", key=f"reindex_{s['id']}", disabled=_job_running,
                          help="Liest alle Dateien dieser Source neu ein, auch unveränderte; die Source "
-                              "bleibt währenddessen durchsuchbar. Nötig nach geänderten Chunking-"
+                              "bleibt währenddessen durchsuchbar. Nötig nach geänderten Chunking- "
                               "oder Parser-Einstellungen."):
                 _start_ingest(f"/sources/{sid_url}/reindex", f"Reindex '{s['id']}'")
         with col_c:
@@ -553,7 +556,7 @@ if st.button("🔥 Collection komplett leeren", type="secondary", disabled=_job_
             r = requests.post(f"{API_URL}/admin/wipe", json={"confirm": "DELETE"}, timeout=10)
             raise_for_status(r)
             st.success("Collection geleert.")
-            _fetch_stats.clear()
+            st.cache_data.clear()   # every page caches index-derived data (chunk lists, eval files, stats)
             _render_chunk_metric()
         except Exception as e:
             st.error(f"Fehler: {e}")

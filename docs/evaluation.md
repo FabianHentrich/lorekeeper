@@ -173,6 +173,13 @@ Golden Sets und das Speichern der Berichte (`evaluation/evaluate_retrieval.py`).
 `retrieval_<zeit>.json` bzw. `e2e_<zeit>.json`; die Evaluation-Seite behält je Typ die letzten 3.
 Der End-to-End-Lauf kann `expected_source_ids` nicht prüfen — `/query` liefert keine Quellen-IDs.
 
+Über die Evaluation-Seite meldet der End-to-End-Lauf seinen Fortschritt je Frage (seit 18.10. — vorher
+stand dort bis zum Ende „0 / 274“) und läuft bei Seitenwechseln weiter; die Wartezeit je Frage folgt dem
+LLM-Timeout des aktiven Providers (2 × Timeout + 60 s wie im Chat, Standard 660 s — die CLI behält
+120 s). Gespeicherte Läufe lassen sich unter „Ergebnisse“ wieder öffnen und vergleichen; bei zwei
+E2E-Läufen zeigt der Vergleich Answer Contains und die Fragen, deren Antwort gekippt ist (Roadmap 13.6,
+Bedienung: [ui-ux.md](ui-ux.md#evaluation-seite-uipages2_evaluationpy)).
+
 **Erster End-to-End-Lauf (14.10.)**, nach jina-Reranker, Regelkern und Eintrags-Slot: Answer Contains
 0,905 (248 von 274), Datei 0,993, Antwort Ø 6,8 s. Je Fragentyp: Lore (m) 96 %, kombiniert (k) 95 %,
 Regelbuch (p) 90 %, Entität + Regel (x) 88 %, Abenteuer (a) 87 %, Simulation (z) 82 %, Bilder (i) 70 %.
@@ -253,7 +260,9 @@ inhaltlich richtig, nur anders formuliert; Einzelheiten in
 (261/274), Datei 0,996 (273), Ø 7,2 s (p50 6,3 s, p95 13,8 s). Gegen den fünften Lauf 4 gewonnen
 (x008 nach der Loot-Zeile beim Kultpriester, p055, p096, p107), 3 verloren (p035, m056, z004 — gleiche
 Quellen, LLM-Streuung). Holdout 9/10, 51/53. Das ist die Basis für die nächsten Vergleiche
-(`e2e_20261018_152757.json`).
+(`e2e_20261018_152757.json`). Ein siebter Lauf am selben Tag (nach der UI-Korrektur 13.6, erster Lauf
+mit Fortschrittsanzeige): wieder 261/274, 2 gewonnen, 2 verloren — die Streuung zweier Läufe ohne
+Änderung.
 
 **Holdout für Aufzählungsfragen** (`evaluation/holdout_lists.yaml`, 14.10.): zehn Listenfragen aus
 Kapiteln ohne Listenfrage im Golden Set, vor jedem Tuning geschrieben, erwartet werden **alle**

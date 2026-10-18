@@ -352,8 +352,14 @@ def _render_sidebar():
         }
         selected_groups = []
         selected_labels = []
+        # Streamlit drops widget state when the user opens another page — the filter silently went back
+        # to "everything" (roadmap 13.6). The _keep_* copies are plain state and survive; they only seed
+        # the start value, an existing widget keeps its own.
         for label, (group_id, _help) in _SOURCE_GROUPS.items():
-            if st.checkbox(label, value=True, key=f"src_{label}", help=_help):
+            checked = st.checkbox(label, value=st.session_state.get(f"_keep_src_{label}", True),
+                                  key=f"src_{label}", help=_help)
+            st.session_state[f"_keep_src_{label}"] = checked
+            if checked:
                 selected_groups.append(group_id)
                 selected_labels.append(label)
 
@@ -372,12 +378,15 @@ def _render_sidebar():
         st.session_state["_content_category_filter"] = None
         if available_cats:
             with st.expander("Kategorie-Filter (optional)"):
+                kept = [c for c in st.session_state.get("_keep_cats", available_cats) if c in available_cats]
                 selected_cats = st.multiselect(
                     "Kategorien",
                     options=available_cats,
-                    default=available_cats,
+                    default=kept,
                     help="Schränkt die Suche zusätzlich auf bestimmte Inhaltskategorien ein.",
+                    key="_cats",
                 )
+                st.session_state["_keep_cats"] = selected_cats
                 if selected_cats and set(selected_cats) != set(available_cats):
                     st.session_state["_content_category_filter"] = {"$in": selected_cats}
                     st.caption(f"🏷 Kategorie: {', '.join(selected_cats)}")
@@ -392,13 +401,16 @@ def _render_sidebar():
     st.divider()
 
     st.subheader("Suche")
+    # Starts at retrieval.hybrid.enabled and is always sent: a box that started off and sent only "on"
+    # could not switch a configured hybrid default off (roadmap 13.6)
     _hybrid = st.checkbox(
         "🔍 Hybrid Search (BM25 + Vektor)",
-        value=False,
-        help="Kombiniert Keyword-Suche mit Vektor-Suche. Besser für exakte Begriffe (Namen, Regeln).",
+        value=st.session_state.get("_keep_hybrid", (_sidebar or {}).get("hybrid_default", False)),
+        help="Kombiniert Keyword-Suche mit Vektor-Suche. Besser für exakte Begriffe (Namen, Regeln). "
+             "Startet mit dem Default aus Settings → Retrieval.",
         key="_hybrid_search_cb",
     )
-    st.session_state["_hybrid_search"] = _hybrid
+    st.session_state["_hybrid_search"] = st.session_state["_keep_hybrid"] = _hybrid
 
     st.divider()
 
@@ -439,9 +451,12 @@ _MAX_COMMENT_CHARS = 1000
 def _send_feedback(msg: dict, comment_only: bool = False):
     """Post the rating of one answer; withdrawing it is sent as rating None (the last entry counts).
     Every entry carries the current rating *and* comment — the last one per answer replaces the
-    earlier ones, so neither may get lost when only the other changes."""
-    rating = {1: "up", 0: "down"}.get(st.session_state.get(f"fb_{msg['id']}"))
+    earlier ones, so neither may get lost when only the other changes. Both are also kept in the message:
+    the widgets' state is gone after a page change (roadmap 13.6)."""
+    msg["fb"] = st.session_state.get(f"fb_{msg['id']}")
+    rating = {1: "up", 0: "down"}.get(msg["fb"])
     comment = (st.session_state.get(f"fbc_{msg['id']}") or "").strip() if rating else ""
+    msg["fb_comment"] = comment
     try:
         r = requests.post(f"{API_URL}/feedback", json={
             "message_id": msg["id"],
@@ -470,6 +485,11 @@ def _render_feedback(msg: dict):
     an optional comment field appears; Enter or the button saves it (roadmap 3.4). The field sits in
     a form: a bare text_input commits on every focus loss, which saved half-written comments."""
     if msg.get("id"):
+        # Back from another page the widgets start empty: re-rating would then have sent an empty comment,
+        # which replaced the stored one (roadmap 13.6) — seed them from the message
+        if f"fb_{msg['id']}" not in st.session_state and msg.get("fb") is not None:
+            st.session_state[f"fb_{msg['id']}"] = msg["fb"]
+            st.session_state[f"fbc_{msg['id']}"] = msg.get("fb_comment", "")
         st.feedback("thumbs", key=f"fb_{msg['id']}", on_change=_send_feedback, args=(msg,))
         if st.session_state.get(f"fb_{msg['id']}") is not None:
             with st.form(key=f"fbf_{msg['id']}", border=False, enter_to_submit=True):
@@ -549,6 +569,12 @@ for i, msg in enumerate(_visible):
             if (i == len(_visible) - 1 and not st.session_state.get("_chat_question")
                     and "_retry_prompt" not in st.session_state):
                 _render_retry(msg)
+        elif (i == len(_visible) - 1 and not st.session_state.get("_chat_question")
+                and "_retry_prompt" not in st.session_state):
+            # The answer was interrupted (page change or a click while streaming stops the script before it
+            # stored anything) — the question stood there without answer or retry (roadmap 13.6)
+            st.caption("⚠️ Keine Antwort — die Anfrage wurde unterbrochen.")
+            _render_retry({"retry": msg["content"]})
 
 # ─── Chat Input ───────────────────────────────────────────
 _placeholder = "Frag nach den Regeln..." if _ROLE == roles.PLAYER else "Stelle eine Frage über deine Welt..."
@@ -575,8 +601,7 @@ if prompt:
     _filters = roles.query_filters(_ROLE, _player_source_ids, _category_filter, _content_category_filter)
     if _filters:
         request_body["metadata_filters"] = _filters
-    if st.session_state.get("_hybrid_search"):
-        request_body["hybrid_search"] = True
+    request_body["hybrid_search"] = bool(st.session_state.get("_hybrid_search", False))
 
     # Read timeout follows the configured LLM timeout: condense + answer can each
     # take up to that long before the first token arrives. From the cached
@@ -601,6 +626,7 @@ if prompt:
             search_query = ""
             model_used = ""
             error_message = None
+            done = False
             placeholder = st.empty()
 
             for line in response.iter_lines(decode_unicode=True):
@@ -622,6 +648,7 @@ if prompt:
                     break
 
                 elif data["type"] == "done":
+                    done = True
                     st.session_state.session_id = data.get("session_id")
                     sources = data.get("sources", [])
                     model_used = data.get("model_used", "")
@@ -637,6 +664,11 @@ if prompt:
             if error_message:
                 placeholder.empty()
                 _fail(prompt, f"Fehler vom LLM-Provider: {error_message}")
+            elif not done:
+                # The stream ended without its done event (backend restarted mid-answer): the text is cut
+                # off and the backend stored nothing — not an answer to keep and rate (roadmap 13.6)
+                placeholder.empty()
+                _fail(prompt, "Antwort abgebrochen — die Verbindung zum Backend endete mitten in der Antwort.")
             else:
                 placeholder.markdown(full_response)
                 answer = {

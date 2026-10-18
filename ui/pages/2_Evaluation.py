@@ -7,7 +7,6 @@ end-to-end eval, and result comparison — all from the UI.
 import hashlib
 import math
 import statistics
-import time
 from pathlib import Path
 
 import pandas as pd
@@ -44,7 +43,11 @@ def _fetch_retrieval_config(api_url: str) -> dict:
 
 def _render_tuning_sliders(prefix: str) -> tuple[int, int, int]:
     """Shared retrieval-parameter sliders, reused across tabs; they start at the configured values,
-    so a run with untouched sliders measures what the chat uses."""
+    so a run with untouched sliders measures what the chat uses.
+
+    Fixed maxima: a max that follows another slider makes a new widget, which jumped back to its default
+    when "Kandidaten" changed — the run then measured other values than the ones picked (roadmap 13.6).
+    ``_params_error`` checks the combination before a run instead."""
     try:
         cfg = _fetch_retrieval_config(API_URL)
     except Exception:
@@ -57,17 +60,25 @@ def _render_tuning_sliders(prefix: str) -> tuple[int, int, int]:
     )
     top_k_rerank = st.slider(
         "Finale Chunks (nach Reranking)",
-        min_value=1, max_value=top_k, value=min(cfg["reranking"]["top_k_rerank"], top_k),
+        min_value=1, max_value=_TOP_K_MAX, value=min(cfg["reranking"]["top_k_rerank"], _TOP_K_MAX),
         help="Wie viele Chunks der Cross-Encoder am Ende auswählt.",
         key=f"{prefix}_top_k_rerank",
     )
     max_per_source = st.slider(
         "Max. Chunks pro Quelle (Soft-Cap)",
-        min_value=0, max_value=top_k_rerank, value=min(cfg["reranking"]["max_per_source"], top_k_rerank),
+        min_value=0, max_value=_TOP_K_MAX, value=min(cfg["reranking"]["max_per_source"], _TOP_K_MAX),
         help="Soft-Cap pro Datei. 0 = kein Cap.",
         key=f"{prefix}_max_per_source",
     )
     return top_k, top_k_rerank, max_per_source
+
+
+def _params_error(top_k: int, top_k_rerank: int, max_per_source: int) -> str | None:
+    """Why a slider combination makes no sense, or None."""
+    if top_k_rerank > top_k or max_per_source > top_k_rerank:
+        return ("Finale Chunks dürfen nicht über den Kandidaten liegen, Max. pro Quelle nicht über den "
+                "finalen Chunks.")
+    return None
 
 
 _HYBRID_LABELS = ["Config-Default", "Vektor only", "Hybrid (BM25 + Vektor)"]
@@ -112,76 +123,196 @@ def _show_eval_error(e: Exception):
         st.error(f"Fehler: {e}")
 
 
-def _flipped(res_a: dict, res_b: dict, label_a: str, label_b: str) -> list[dict]:
-    """Questions whose hit/miss differs between two eval results (matched by id, else question)."""
+def _flipped(res_a: dict, res_b: dict, label_a: str, label_b: str, field: str = "hit") -> list[dict]:
+    """Questions whose ``field`` (``hit``, or ``answer_contains_match`` for e2e) differs between two
+    eval results (matched by id, else question)."""
     details_a = {d.get("id", d.get("question", "")): d for d in res_a.get("details", [])}
     details_b = {d.get("id", d.get("question", "")): d for d in res_b.get("details", [])}
     return [
         {
             "ID": qid,
             "Frage": (details_a[qid].get("question") or "")[:60],
-            label_a: "✅" if details_a[qid].get("hit") else "❌",
-            label_b: "✅" if details_b[qid].get("hit") else "❌",
+            label_a: "✅" if details_a[qid].get(field) else "❌",
+            label_b: "✅" if details_b[qid].get(field) else "❌",
         }
         for qid in sorted(details_a.keys() & details_b.keys())
-        if details_a[qid].get("hit") != details_b[qid].get("hit")
+        if bool(details_a[qid].get(field)) != bool(details_b[qid].get(field))
     ]
 
 
-_POLL_MAX_FAILURES = 45  # ~45 s of unreachable backend before giving up (like the Sources page)
+def _summary_line(r: dict) -> str:
+    """One stored report in the results list: its main figures, the retrieval config if it has one."""
+    parts = [f"**{r['filename']}** — {r['eval_type']}"]
+    if r.get("answer_contains_rate") is not None:
+        parts.append(f"Answer Contains: {r['answer_contains_rate']:.1%}")
+    parts += [f"Hit Rate: {r['hit_rate']:.1%}", f"{r['total_questions']} Fragen"]
+    if cfg := r.get("config"):
+        parts.append(f"K={cfg.get('top_k', '?')} R={cfg.get('top_k_rerank', '?')} "
+                     f"C={cfg.get('max_per_source', '?')} H={_hybrid_label(cfg.get('hybrid'))}")
+    return " · ".join(parts)
 
 
-def _poll_eval_job(job_id: str, label: str = "Evaluation"):
+def _render_comparison(res_a: dict, res_b: dict):
+    """Two stored reports side by side: hit rate (and Answer Contains for e2e) plus the flipped questions.
+
+    E2E reports differ mostly in their answers — comparing only hit/miss showed "no differences"
+    between two runs with different Answer Contains (roadmap 13.6).
     """
-    Poll an active background evaluation job.
-    Monitors progress percentage out of the total question pool and blocks
-    the UI until the final results artifact is ready. Gives up after
-    ``_POLL_MAX_FAILURES`` failed status requests in a row instead of spinning forever.
+    rows = [("Hit Rate", "hit_rate", "hit", "Datei-Treffer")]
+    if res_a.get("answer_contains_rate") is not None and res_b.get("answer_contains_rate") is not None:
+        rows.insert(0, ("Answer Contains", "answer_contains_rate", "answer_contains_match", "Antwort"))
+    st.markdown("**Metriken**")
+    for label, rate_key, _, _ in rows:
+        mc1, mc2, mc3 = st.columns(3)
+        rate_a, rate_b = res_a.get(rate_key, 0), res_b.get(rate_key, 0)
+        mc1.metric(f"{label} A", f"{rate_a:.1%}")
+        mc2.metric(f"{label} B", f"{rate_b:.1%}")
+        mc3.metric("Differenz", f"{rate_b - rate_a:+.1%}")
+    for _, _, field, what in rows:
+        flipped = _flipped(res_a, res_b, "A", "B", field=field)
+        if flipped:
+            st.markdown(f"**{len(flipped)} Fragen mit geändertem Ergebnis ({what}):**")
+            st.dataframe(pd.DataFrame(flipped), hide_index=True, width="stretch")
+        else:
+            st.success(f"Keine Unterschiede ({what}).")
+
+
+# Eval jobs are tracked like ingest jobs on the Sources page: the job lives in session state and a
+# fragment polls it, so the run survives clicks and page changes. The old blocking loop in the page
+# script lost the job on every rerun, and nothing could attach to it again (roadmap 13.6).
+_POLL_INTERVAL_S = 1.5
+_POLL_MAX_FAILURES = 30  # ~45 s of unreachable backend before giving up (like the Sources page)
+_JOB_KEY = "_eval_job"        # {id, kind, label, failures[, params, first]} of the job tracked by this session
+_RESULT_KEY = "_eval_result"  # {kind, label, state[, file, first, error]} of the last finished job
+_VIEW_KEY = "_eval_view"      # stored report opened in the "Ergebnisse" tab
+
+
+@st.cache_data(ttl=15, show_spinner=False)
+def _fetch_eval_results(api_url: str):
+    """Fetch history references for saved evaluation runs."""
+    return get_json(f"{api_url}/eval/results", timeout=5)
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _fetch_result(api_url: str, filename: str) -> dict:
+    """A stored report — immutable once written, so a result shown in a tab costs no request per rerun."""
+    return get_json(f"{api_url}/eval/results/{filename}", timeout=10)
+
+
+def _attached(active: dict) -> dict:
+    """Tracking entry for a job this session did not start, named after its type (an A/B step is
+    a retrieval job — only that step is followed)."""
+    kind = active.get("eval_type", "retrieval")
+    label = "End-to-End Evaluation" if kind == "e2e" else "Retrieval Evaluation"
+    return {"id": active["job_id"], "kind": kind, "label": f"{label} (schon laufend)", "failures": 0}
+
+
+def _post_eval(body: dict, kind: str, label: str, **extra) -> dict:
+    """POST an eval job and return its tracking entry; on 409 the entry of the job already running.
+
+    ``kind`` decides where the result is shown: ``retrieval``, ``e2e``, or ``ab_vec``/``ab_hyb`` for the two
+    steps of an A/B run (``extra`` carries the A/B parameters and the first report across the steps).
+    Raises ``BackendError`` (e.g. the 409 of a running ingest) or a ``requests`` error.
     """
-    with st.status(f"{label} läuft...", expanded=True) as status:
-        progress_line = st.empty()
-        failures = 0
-        while True:
-            try:
-                info = get_json(f"{API_URL}/eval/status/{job_id}", timeout=5)
-                failures = 0
-            except BackendError as e:
-                # e.g. 404: job registry gone after a backend restart — final, not "unreachable"
-                progress_line.empty()
-                status.update(label=f"{label}: Job nicht mehr bekannt", state="error", expanded=True)
-                st.error(f"{e} — wurde das Backend neu gestartet?")
-                return None
-            except Exception as e:
-                failures += 1
-                if failures >= _POLL_MAX_FAILURES:
-                    progress_line.empty()
-                    status.update(label=f"{label}: Backend nicht erreichbar", state="error", expanded=True)
-                    st.error(f"Status konnte nicht abgefragt werden ({e}). Läuft das Backend noch, "
-                             "erscheint das Ergebnis später unter „Ergebnisse“.")
-                    return None
-                time.sleep(1)
-                continue
+    r = requests.post(f"{API_URL}/eval/run", json=body, timeout=10)
+    if r.status_code == 409:
+        active = get_json(f"{API_URL}/eval/active", timeout=5)
+        if not active:   # an ingest is running, or the eval finished in between
+            raise_for_status(r)
+        return _attached(active)
+    raise_for_status(r)
+    return {"id": r.json()["job_id"], "kind": kind, "label": label, "failures": 0, **extra}
 
-            state = info.get("status", "unknown")
-            progress = info.get("progress", 0)
-            total = info.get("total", 0)
 
-            if state in ("queued", "running"):
-                if total > 0:
-                    progress_line.markdown(f"Frage **{progress}** / {total}")
-                else:
-                    progress_line.markdown("Vorbereitung …")
-                time.sleep(1)
-                continue
+def _start_eval(body: dict, kind: str, label: str, **extra) -> None:
+    """Start (or attach to) an eval job from a button and track it; errors are shown in place."""
+    try:
+        job = _post_eval(body, kind, label, **extra)
+    except Exception as e:
+        _show_eval_error(e)
+        return
+    st.session_state.pop(_RESULT_KEY, None)
+    st.session_state[_JOB_KEY] = job
+    st.rerun()
 
-            progress_line.empty()
-            if state == "done":
-                status.update(label=f"{label} abgeschlossen", state="complete", expanded=True)
-                return info.get("result_file")
-            else:
-                status.update(label=f"{label} fehlgeschlagen", state="error", expanded=True)
-                st.error(info.get("error", "Unbekannter Fehler"))
-                return None
+
+def _attach_to_running_job() -> None:
+    """Once per browser session: pick up a job started elsewhere (another tab, before a reload)."""
+    if _JOB_KEY in st.session_state or st.session_state.get("_eval_attach_checked"):
+        return
+    st.session_state["_eval_attach_checked"] = True
+    try:
+        active = get_json(f"{API_URL}/eval/active", timeout=5)
+    except Exception:
+        return   # the page shows the backend error elsewhere; attaching is a convenience
+    if active:
+        st.session_state[_JOB_KEY] = _attached(active)
+
+
+def _finish_job(job: dict, info: dict) -> None:
+    """Terminal state of the tracked job: start the second A/B step, or store the result for its tab."""
+    state = info.get("status", "unknown")
+    if state == "done" and job["kind"] == "ab_vec":
+        try:
+            st.session_state[_JOB_KEY] = _post_eval({**job["params"], "hybrid": True}, "ab_hyb", "A/B — Hybrid",
+                                                    params=job["params"], first=info.get("result_file"))
+            st.rerun()
+        except requests.RequestException as e:
+            info = {"status": "error", "error": f"Hybrid-Lauf nicht gestartet: {e}"}
+        except BackendError as e:
+            info = {"status": "error", "error": f"Hybrid-Lauf nicht gestartet: {e.detail}"}
+    st.session_state[_RESULT_KEY] = {
+        "kind": "ab" if job["kind"].startswith("ab_") else job["kind"], "label": job["label"], "state": state,
+        "file": info.get("result_file"), "first": job.get("first"), "error": info.get("error"),
+    }
+    del st.session_state[_JOB_KEY]
+    _fetch_eval_results.clear()
+    st.rerun()
+
+
+@st.fragment(run_every=_POLL_INTERVAL_S)
+def _eval_progress():
+    """Live progress of the tracked eval job; reruns on its own, the rest of the page stays usable.
+
+    Gives up after ``_POLL_MAX_FAILURES`` failed status requests in a row. A 404 is final: the job
+    registry lives in backend memory and is gone after a restart.
+    """
+    job = st.session_state.get(_JOB_KEY)
+    if not job:
+        return
+    try:
+        info = get_json(f"{API_URL}/eval/status/{job['id']}", timeout=5)
+        job["failures"] = 0
+    except Exception as e:
+        if isinstance(e, BackendError) and e.status_code == 404:
+            info = {"status": "error", "error": f"{e} — wurde das Backend neu gestartet?"}
+        else:
+            job["failures"] += 1
+            if job["failures"] < _POLL_MAX_FAILURES:
+                st.info(f"{job['label']}: Status wird abgefragt …")
+                return
+            info = {"status": "error", "error": f"Status konnte nicht abgefragt werden ({e}). Läuft das "
+                                                "Backend noch, erscheint das Ergebnis später unter „Ergebnisse“."}
+
+    if info.get("status") in ("queued", "running"):
+        progress, total = info.get("progress", 0), info.get("total", 0)
+        with st.status(f"{job['label']} läuft...", expanded=True):
+            st.markdown(f"Frage **{progress}** / {total}" if total else "Vorbereitung …")
+        return
+    _finish_job(job, info)
+
+
+def _render_finished(kind: str) -> dict | None:
+    """Status line of the last finished job if it belongs to ``kind``; returns the result entry when done."""
+    res = st.session_state.get(_RESULT_KEY)
+    if not res or res["kind"] != kind:
+        return None
+    if res["state"] != "done" or not res.get("file"):
+        with st.status(f"{res['label']} fehlgeschlagen", state="error", expanded=True):
+            st.error(res.get("error") or "Unbekannter Fehler")
+        return None
+    st.status(f"{res['label']} abgeschlossen", state="complete")
+    return res
 
 
 def _load_stats(details: list[dict]) -> str:
@@ -279,6 +410,44 @@ def _render_retrieval_result(result: dict):
             st.code(f"[{e.get('id', '?')}] {e.get('error', '')}", language=None)
 
 
+def _render_e2e_result(result: dict):
+    """End-to-end result: hit rate, Answer Contains, latency, and per question the whole answer.
+
+    A question whose request failed carries only ``error`` (evaluation/evaluate.py) — shown as such
+    instead of an empty answer that looked like a wrong one.
+    """
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Hit Rate", f"{result.get('hit_rate', 0):.1%}")
+    c2.metric("Answer Contains", f"{result.get('answer_contains_rate', 0):.1%}")
+    c3.metric("Ø Latenz", f"{result.get('avg_latency_ms', 0):.0f} ms")
+
+    details = result.get("details", [])
+    if not details:
+        return
+    st.markdown("**Details**")
+    for d in details:
+        head = f"[{d.get('id') or '?'}] {d.get('question', '')[:80]}"
+        if d.get("error"):
+            with st.expander(f"💥 {head} — Anfrage fehlgeschlagen"):
+                st.error(d["error"])
+            continue
+        ac_icon = "✅" if d.get("answer_contains_match") else "⚠️"
+        hit_icon = "✅" if d.get("hit") else "❌"
+        with st.expander(f"{ac_icon} {head} — Datei {hit_icon}"):
+            st.markdown(f"**Antwort:** {d.get('answer', '')}")
+            if expected := d.get("expected_answer_contains"):
+                st.caption("Erwartete Stichwörter: " + " · ".join(expected))
+            col_exp, col_ret = st.columns(2)
+            with col_exp:
+                st.markdown("**Erwartet:**")
+                for s in d.get("expected_sources", []):
+                    st.code(s, language=None)
+            with col_ret:
+                st.markdown("**Gefunden:**")
+                for s in d.get("sources_retrieved", [])[:5]:
+                    st.code(s, language=None)
+
+
 # Short in-app guide, kept as Markdown next to the pages (tables can't be wrapped in code);
 # the full reference is docs/evaluation.md in the repo
 _GUIDE = (Path(__file__).resolve().parents[1] / "evaluation_guide.md").read_text(encoding="utf-8")
@@ -292,6 +461,12 @@ st.caption("Golden Set verwalten, Retrieval testen und tunen, Ergebnisse verglei
 with st.expander("ℹ️ Anleitung: Was die Tabs prüfen und wann man sie braucht"):
     st.markdown(_GUIDE)
 
+# Above the tabs, so the progress is visible whichever tab is open
+_attach_to_running_job()
+if _JOB_KEY in st.session_state:
+    _eval_progress()
+_job_running = _JOB_KEY in st.session_state
+
 tab_gs, tab_test, tab_ret, tab_e2e, tab_results, tab_fb, tab_chunks = st.tabs([
     "Golden Set", "Frage testen", "Retrieval Eval", "End-to-End", "Ergebnisse", "Feedback", "Chunks",
 ])
@@ -303,12 +478,6 @@ tab_gs, tab_test, tab_ret, tab_e2e, tab_results, tab_fb, tab_chunks = st.tabs([
 def _fetch_qa_pairs(api_url: str):
     """Fetch the active pool of Golden Set test questions targeting expected metadata."""
     return get_json(f"{api_url}/eval/qa-pairs", timeout=5)
-
-
-@st.cache_data(ttl=15, show_spinner=False)
-def _fetch_eval_results(api_url: str):
-    """Fetch history references for saved evaluation runs."""
-    return get_json(f"{api_url}/eval/results", timeout=5)
 
 
 with tab_gs:
@@ -420,7 +589,10 @@ with tab_test:
 
     # The preview lives in session_state: the "➕ Hinzufügen" click below reruns the page, and a
     # result shown only inside `if st.button("🔍 Testen")` would be gone by then (the add never ran).
-    if st.button("🔍 Testen", key="test_run", disabled=not test_question.strip()):
+    test_clicked = st.button("🔍 Testen", key="test_run", disabled=not test_question.strip())
+    if test_clicked and (err := _params_error(t_top_k, t_top_k_rerank, t_max_per_source)):
+        st.error(err)
+    elif test_clicked:
         try:
             resp = requests.post(
                 f"{API_URL}/eval/preview",
@@ -505,22 +677,36 @@ with tab_test:
 
 # ═══ Tab 3: Retrieval Evaluation ═════════════════════════════════════
 
-def _start_retrieval_eval(top_k, top_k_rerank, max_per_source, hybrid, label):
-    """POST a retrieval-eval job, poll it to completion, and return the saved result file."""
-    resp = requests.post(
-        f"{API_URL}/eval/run",
-        json={
-            "top_k": top_k,
-            "top_k_rerank": top_k_rerank,
-            "max_per_source": max_per_source,
-            "eval_type": "retrieval",
-            "hybrid": hybrid,
-        },
-        timeout=10,
-    )
-    raise_for_status(resp)
-    job_id = resp.json()["job_id"]
-    return _poll_eval_job(job_id, label=label)
+def _render_ab_result(res_a: dict, res_b: dict):
+    """Vector-only vs. hybrid: hit rates, the questions that flip, and both full results."""
+    hr_a = res_a.get("hit_rate", 0)
+    hr_b = res_b.get("hit_rate", 0)
+
+    st.subheader("A/B-Vergleich")
+    mc1, mc2, mc3 = st.columns(3)
+    mc1.metric("Vektor only", f"{hr_a:.1%}")
+    mc2.metric("Hybrid", f"{hr_b:.1%}", delta=f"{(hr_b - hr_a):+.1%}")
+    mc3.metric("Fragen", res_a.get("total_questions", 0))
+
+    flipped = _flipped(res_a, res_b, "Vektor", "Hybrid")
+
+    if flipped:
+        wins = sum(1 for f in flipped if f["Hybrid"] == "✅")
+        losses = len(flipped) - wins
+        st.markdown(
+            f"**{len(flipped)} Fragen geändert** — "
+            f"Hybrid gewinnt: **{wins}**, verliert: **{losses}**"
+        )
+        st.dataframe(pd.DataFrame(flipped), hide_index=True, width="stretch")
+    else:
+        st.info("Keine Unterschiede bei Hit/Miss zwischen Vektor und Hybrid.")
+
+    with st.expander("Einzelergebnisse einsehen"):
+        st.markdown("**Vektor only**")
+        _render_retrieval_result(res_a)
+        st.divider()
+        st.markdown("**Hybrid**")
+        _render_retrieval_result(res_b)
 
 
 with tab_ret:
@@ -533,79 +719,37 @@ with tab_ret:
     col_single, col_ab = st.columns([1, 1])
 
     with col_single:
-        run_single = st.button("▶ Evaluation starten", type="primary", key="ret_run")
+        run_single = st.button("▶ Evaluation starten", type="primary", key="ret_run", disabled=_job_running)
 
     with col_ab:
         run_ab = st.button(
             "⚖ A/B starten (Vektor vs. Hybrid)",
             key="ret_ab",
+            disabled=_job_running,
             help="Führt die Evaluation zweimal aus — einmal ohne, einmal mit Hybrid — "
                  "und zeigt den Vergleich direkt an.",
         )
 
+    ret_params = {"eval_type": "retrieval", "top_k": r_top_k, "top_k_rerank": r_top_k_rerank,
+                  "max_per_source": r_max_per_source}
+    if (run_single or run_ab) and (err := _params_error(r_top_k, r_top_k_rerank, r_max_per_source)):
+        st.error(err)
+        run_single = run_ab = False
     if run_single:
-        try:
-            result_file = _start_retrieval_eval(
-                r_top_k, r_top_k_rerank, r_max_per_source, r_hybrid,
-                label="Retrieval Evaluation",
-            )
-            _fetch_eval_results.clear()
-            if result_file:
-                result = get_json(f"{API_URL}/eval/results/{result_file}", timeout=10)
-                _render_retrieval_result(result)
-        except Exception as e:
-            _show_eval_error(e)
-
+        _start_eval({**ret_params, "hybrid": r_hybrid}, "retrieval", "Retrieval Evaluation")
     if run_ab:
-        try:
-            # Sequential runs — backend enforces a single running job at a time.
-            file_vec = _start_retrieval_eval(
-                r_top_k, r_top_k_rerank, r_max_per_source, hybrid=False,
-                label="A/B — Vektor only",
-            )
-            file_hyb = None
-            if file_vec:
-                file_hyb = _start_retrieval_eval(
-                    r_top_k, r_top_k_rerank, r_max_per_source, hybrid=True,
-                    label="A/B — Hybrid",
-                )
-            _fetch_eval_results.clear()
+        # Two jobs in a row (the backend runs one at a time); the second starts when the first is done
+        _start_eval({**ret_params, "hybrid": False}, "ab_vec", "A/B — Vektor only", params=ret_params)
 
-            if file_vec and file_hyb:
-                res_a = get_json(f"{API_URL}/eval/results/{file_vec}", timeout=10)
-                res_b = get_json(f"{API_URL}/eval/results/{file_hyb}", timeout=10)
-
-                hr_a = res_a.get("hit_rate", 0)
-                hr_b = res_b.get("hit_rate", 0)
-
-                st.subheader("A/B-Vergleich")
-                mc1, mc2, mc3 = st.columns(3)
-                mc1.metric("Vektor only", f"{hr_a:.1%}")
-                mc2.metric("Hybrid", f"{hr_b:.1%}", delta=f"{(hr_b - hr_a):+.1%}")
-                mc3.metric("Fragen", res_a.get("total_questions", 0))
-
-                flipped = _flipped(res_a, res_b, "Vektor", "Hybrid")
-
-                if flipped:
-                    wins = sum(1 for f in flipped if f["Hybrid"] == "✅")
-                    losses = len(flipped) - wins
-                    st.markdown(
-                        f"**{len(flipped)} Fragen geändert** — "
-                        f"Hybrid gewinnt: **{wins}**, verliert: **{losses}**"
-                    )
-                    st.dataframe(pd.DataFrame(flipped), hide_index=True, width="stretch")
+    for kind in ("retrieval", "ab"):
+        if res := _render_finished(kind):
+            try:
+                if kind == "retrieval":
+                    _render_retrieval_result(_fetch_result(API_URL, res["file"]))
                 else:
-                    st.info("Keine Unterschiede bei Hit/Miss zwischen Vektor und Hybrid.")
-
-                with st.expander("Einzelergebnisse einsehen"):
-                    st.markdown("**Vektor only**")
-                    _render_retrieval_result(res_a)
-                    st.divider()
-                    st.markdown("**Hybrid**")
-                    _render_retrieval_result(res_b)
-
-        except Exception as e:
-            _show_eval_error(e)
+                    _render_ab_result(_fetch_result(API_URL, res["first"]), _fetch_result(API_URL, res["file"]))
+            except Exception as e:
+                st.error(f"Ergebnis konnte nicht geladen werden: {e}")
 
     # Search exactness: is hnsw_ef_search still large enough for the index? (roadmap 5.5)
     st.divider()
@@ -637,54 +781,14 @@ with tab_e2e:
     st.markdown("Führt das Golden Set durch die komplette Pipeline inkl. LLM.")
     st.warning("Langsam und verbraucht LLM-Tokens. Backend muss laufen.")
 
-    if st.button("▶ End-to-End Evaluation starten", type="primary", key="e2e_run"):
+    if st.button("▶ End-to-End Evaluation starten", type="primary", key="e2e_run", disabled=_job_running):
+        _start_eval({"eval_type": "e2e"}, "e2e", "End-to-End Evaluation")
+
+    if res := _render_finished("e2e"):
         try:
-            resp = requests.post(
-                f"{API_URL}/eval/run",
-                json={"eval_type": "e2e"},
-                timeout=10,
-            )
-            raise_for_status(resp)
-            job_id = resp.json()["job_id"]
-            result_file = _poll_eval_job(job_id, label="End-to-End Evaluation")
-            _fetch_eval_results.clear()
-
-            if result_file:
-                result = get_json(f"{API_URL}/eval/results/{result_file}", timeout=10)
-
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Hit Rate", f"{result.get('hit_rate', 0):.1%}")
-                c2.metric("Answer Contains", f"{result.get('answer_contains_rate', 0):.1%}")
-                c3.metric("Ø Latenz", f"{result.get('avg_latency_ms', 0):.0f} ms")
-
-                details = result.get("details", [])
-                if details:
-                    st.markdown("**Details**")
-                    for d in details:
-                        hit = d.get("hit", False)
-                        ac = d.get("answer_contains_match", False)
-                        icon = "✅" if hit else "❌"
-                        ac_icon = "✅" if ac else "⚠️"
-
-                        with st.expander(
-                            f"{icon} {d.get('question', '')[:80]} — "
-                            f"Retrieval: {icon} Answer: {ac_icon}"
-                        ):
-                            st.markdown(f"**Antwort:** {d.get('answer', '')}")
-                            if expected := d.get("expected_answer_contains"):
-                                st.caption("Erwartete Stichwörter: " + " · ".join(expected))
-                            col_exp, col_ret = st.columns(2)
-                            with col_exp:
-                                st.markdown("**Erwartet:**")
-                                for s in d.get("expected_sources", []):
-                                    st.code(s, language=None)
-                            with col_ret:
-                                st.markdown("**Gefunden:**")
-                                for s in d.get("sources_retrieved", [])[:5]:
-                                    st.code(s, language=None)
-
+            _render_e2e_result(_fetch_result(API_URL, res["file"]))
         except Exception as e:
-            _show_eval_error(e)
+            st.error(f"Ergebnis konnte nicht geladen werden: {e}")
 
 
 # ═══ Tab 5: Ergebnisse ═══════════════════════════════════════════════
@@ -701,14 +805,12 @@ with tab_results:
         # List results
         st.markdown("**Gespeicherte Ergebnisse** (max. 3 pro Typ)")
         for r in results_list:
-            col_info, col_del = st.columns([5, 1])
+            col_info, col_view, col_del = st.columns([5, 1, 1])
             with col_info:
-                st.markdown(
-                    f"**{r['filename']}** — {r['eval_type']} · "
-                    f"Hit Rate: {r['hit_rate']:.1%} · "
-                    f"{r['total_questions']} Fragen · "
-                    f"Config: {r.get('config', {})}"
-                )
+                st.markdown(_summary_line(r))
+            with col_view:
+                if st.button("🔍", key=f"view_{r['filename']}", help="Details anzeigen"):
+                    st.session_state[_VIEW_KEY] = r["filename"]
             with col_del:
                 if st.button("🗑", key=f"del_{r['filename']}"):
                     try:
@@ -719,11 +821,28 @@ with tab_results:
                     except Exception as e:
                         st.error(f"Fehler: {e}")
 
+        # Details of one stored report — kept in session state, so it stays open across reruns
+        filenames = [r["filename"] for r in results_list]
+        if (view := st.session_state.get(_VIEW_KEY)) in filenames:
+            st.divider()
+            col_title, col_close = st.columns([6, 1])
+            col_title.subheader(f"Details: {view}")
+            if col_close.button("✖ Schließen", key="view_close"):
+                st.session_state.pop(_VIEW_KEY, None)
+                st.rerun()
+            try:
+                report = _fetch_result(API_URL, view)
+                if view.startswith("retrieval_"):
+                    _render_retrieval_result(report)
+                else:
+                    _render_e2e_result(report)
+            except Exception as e:
+                st.error(f"Ergebnis konnte nicht geladen werden: {e}")
+
         # Compare two results
         st.divider()
         st.subheader("Ergebnisse vergleichen")
 
-        filenames = [r["filename"] for r in results_list]
         if len(filenames) < 2:
             st.caption("Mindestens 2 Ergebnisse nötig für einen Vergleich.")
         else:
@@ -737,28 +856,7 @@ with tab_results:
             if sel_a and sel_b and sel_a != sel_b:
                 if st.button("Vergleichen", key="cmp_run"):
                     try:
-                        res_a = get_json(f"{API_URL}/eval/results/{sel_a}", timeout=10)
-                        res_b = get_json(f"{API_URL}/eval/results/{sel_b}", timeout=10)
-
-                        # Metric comparison
-                        st.markdown("**Metriken**")
-                        mc1, mc2, mc3 = st.columns(3)
-                        hr_a = res_a.get("hit_rate", 0)
-                        hr_b = res_b.get("hit_rate", 0)
-                        mc1.metric("Hit Rate A", f"{hr_a:.1%}")
-                        mc2.metric("Hit Rate B", f"{hr_b:.1%}")
-                        diff = hr_b - hr_a
-                        mc3.metric("Differenz", f"{diff:+.1%}")
-
-                        flipped = _flipped(res_a, res_b, "A", "B")
-
-                        if flipped:
-                            st.markdown(f"**{len(flipped)} Fragen mit geändertem Ergebnis:**")
-                            st.dataframe(pd.DataFrame(flipped), hide_index=True,
-                                         width="stretch")
-                        else:
-                            st.success("Keine Unterschiede bei Hit/Miss.")
-
+                        _render_comparison(_fetch_result(API_URL, sel_a), _fetch_result(API_URL, sel_b))
                     except Exception as e:
                         st.error(f"Fehler: {e}")
             elif sel_a == sel_b:

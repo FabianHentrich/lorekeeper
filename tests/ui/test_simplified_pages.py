@@ -69,14 +69,15 @@ def test_folder_mapping_saves_only_entries_that_differ_from_the_source_defaults(
 
 
 def test_recategorize_is_one_button_for_all_sources(fake_backend, monkeypatch):
-    monkeypatch.setitem(conftest.PAYLOADS, "/sources/recategorize", {"updated": 3})
+    monkeypatch.setitem(conftest.PAYLOADS, "/sources/recategorize",
+                        {"chunks_updated": 3, "chunks_skipped": 10, "chunks_unmatched": 0})
     at = _ok(open_page("sources").run())
     buttons = [b for b in at.button if "Recategorize" in b.label]
     assert len(buttons) == 1
 
     _ok(buttons[0].click().run())
     assert fake_backend.calls.count("POST /sources/recategorize") == 1
-    assert any("updated" in s.value for s in at.success)
+    assert "Recategorize: **3** Chunks aktualisiert · 10 unverändert · 0 ohne passende Quelle" in         [s.value for s in at.success]   # was the raw response dict
 
 
 def test_compare_lists_only_questions_whose_hit_changed(fake_backend, monkeypatch):

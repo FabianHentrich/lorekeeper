@@ -13,6 +13,7 @@ Usage:
 
 import argparse
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 import requests
@@ -20,7 +21,8 @@ import requests
 from evaluation.evaluate_retrieval import load_qa_pairs, save_report, source_hit
 
 
-def evaluate(api_url: str, qa_pairs: list[dict]) -> dict:
+def evaluate(api_url: str, qa_pairs: list[dict],
+             progress_callback: Callable[[int, int], None] | None = None, timeout: float = 120) -> dict:
     """Run an end-to-end evaluation against a live API endpoint.
 
     Sends each question as a POST request to `/query`, measuring latency and
@@ -29,6 +31,10 @@ def evaluate(api_url: str, qa_pairs: list[dict]) -> dict:
     denominator of both rates) and is listed with its error. Each detail keeps the whole answer, the
     question id and the expected keywords — a 200-character excerpt couldn't show why a list answer
     failed (roadmap 3.15).
+
+    ``progress_callback(done, total)`` is called after every question, failed ones included — the backend
+    job mirrors it into its status; without it the UI showed "0 / 274" for the whole run (roadmap 13.6).
+    ``timeout`` is per question in seconds; the backend passes one derived from the LLM timeout.
     """
     results = []
     hits = 0
@@ -36,7 +42,7 @@ def evaluate(api_url: str, qa_pairs: list[dict]) -> dict:
     total_latency = 0.0
     answered = 0
 
-    for pair in qa_pairs:
+    for done, pair in enumerate(qa_pairs, 1):
         question = pair["question"]
         expected_contains = pair.get("expected_answer_contains", [])
         expected_sources = pair.get("expected_sources", [])
@@ -46,12 +52,14 @@ def evaluate(api_url: str, qa_pairs: list[dict]) -> dict:
             resp = requests.post(
                 f"{api_url}/query",
                 json={"question": question},
-                timeout=120,
+                timeout=timeout,
             )
             resp.raise_for_status()
             data = resp.json()
         except Exception as e:
             results.append({"id": pair.get("id", ""), "question": question, "error": str(e)})
+            if progress_callback:
+                progress_callback(done, len(qa_pairs))
             continue
 
         latency = (time.time() - start) * 1000
@@ -81,6 +89,8 @@ def evaluate(api_url: str, qa_pairs: list[dict]) -> dict:
             "answer_contains_match": contains_all,
             "latency_ms": latency,
         })
+        if progress_callback:
+            progress_callback(done, len(qa_pairs))
 
     total = len(qa_pairs)
     return {

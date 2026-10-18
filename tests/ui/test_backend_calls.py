@@ -19,7 +19,8 @@ ROOT = Path(__file__).resolve().parents[2]
 BUDGETS = {
     "chat": (1, 0),         # /sidebar-state, cached afterwards
     "sources": (3, 0),      # /sources, /stats, 1x /folders per source — all cached afterwards
-    "evaluation": (5, 0),   # /eval/qa-pairs, /eval/results, /config (slider defaults), /feedback, /sources
+    "evaluation": (6, 0),   # /eval/qa-pairs, /eval/results, /config (slider defaults), /feedback, /sources,
+                            # /eval/active (once per session: attach to a running job, 13.6)
     "prompts": (3, 0),      # /prompts/active, /prompts/variants, /prompts/variants/{name}
     "settings": (1, 0),     # /config
 }

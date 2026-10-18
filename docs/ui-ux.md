@@ -111,8 +111,9 @@ Ohne Passwort ist alles offen (lokaler Einzelbetrieb).
 Auswahlfeld zum Wechsel zwischen Ollama und Gemini zur Laufzeit (mit Passwort nur für Admins).
 Schlägt der Wechsel fehl, springt die Auswahl zurück und es erscheint eine Fehlermeldung.
 
-**Gemini-Key:** Direkt darunter. `GET /provider/gemini/status` sagt nur, ob ein Key da ist
-(`{has_key, source: env|runtime|none}`), nie den Key selbst.
+**Gemini-Key:** Direkt darunter. `gemini_status` aus `/sidebar-state` sagt nur, ob ein Key da ist
+(`{has_key, source: env|runtime|none}`), nie den Key selbst (dasselbe liefert einzeln
+`GET /provider/gemini/status`).
 
 | Zustand im Backend | Anzeige |
 |---|---|
@@ -140,10 +141,12 @@ verweist auf **🔄 LoreKeeper neu starten** (lädt das Modell neu, nachdem der 
 
 ### Hybrid Search
 
-Eine Checkbox „🔍 Hybrid Search (BM25 + Vektor)“ unter **Suche**. Setzt `hybrid_search` in der
-nächsten Anfrage und überschreibt `retrieval.hybrid.enabled` **nur für diese Session** — nützlich
-bei exakten Namen oder Regel-IDs. Die Standardwerte der Suche stehen auf der Settings-Seite,
-A/B-Läufe auf der Evaluation-Seite; die Sidebar bleibt bewusst schlank.
+Eine Checkbox „🔍 Hybrid Search (BM25 + Vektor)“ unter **Suche**. Sie startet beim Default
+`retrieval.hybrid.enabled` (`hybrid_default` aus `/sidebar-state`) und schickt ihren Wert **immer** als
+`hybrid_search` mit — so überschreibt sie den Default **nur für diese Session** in beide Richtungen.
+Bis 18.10. startete sie immer aus und schickte nur „an“: Mit Hybrid als Default ließ sie sich nicht
+abschalten (Roadmap 13.6). Nützlich bei exakten Namen oder Regel-IDs. Die Standardwerte der Suche
+stehen auf der Settings-Seite, A/B-Läufe auf der Evaluation-Seite; die Sidebar bleibt bewusst schlank.
 
 ### Quellen-Filter (Lore / Abenteuer / Regelwerk / Simulation)
 
@@ -168,6 +171,10 @@ im Regelwerk.
 | Keine | Eingabe blockiert mit Fehlermeldung (kein API-Aufruf) |
 
 Der Retriever verknüpft das mit dem festen Filter `document_type != "image"` per `$and`.
+
+Filter, Kategorie-Auswahl und Hybrid-Checkbox **überleben einen Seitenwechsel**: Streamlit verwirft den
+Zustand der Widgets, sobald man eine andere Seite öffnet — vorher stand der Filter danach still wieder
+auf „alles“. Die Werte liegen zusätzlich in `_keep_*`-Schlüsseln und geben den Startwert vor (13.6).
 
 ### Links und Neue Session
 
@@ -214,8 +221,11 @@ keine Backend-Anfrage — die Ingest-Prüfung läuft erst beim Bestätigen.
     einem `st.form`, weil ein freies `st.text_input` schon beim Verlassen des Felds speichert — so
     kamen am 15.10. halbe Kommentare an, sobald man zwischendurch woanders hinklickte; jede
     Zeile trägt Bewertung und Kommentar zusammen, sodass eine spätere Änderung des einen das andere
-    nicht verliert, Zurücknehmen löscht den Kommentar mit. Fehlermeldungen und ausgeblendete ältere
-    Nachrichten haben keine Daumen. Anzeigen kostet keinen Backend-Aufruf — nur Klick und Enter.
+    nicht verliert, Zurücknehmen löscht den Kommentar mit. Bewertung und Kommentar stehen zusätzlich in
+    der Nachricht (`fb`, `fb_comment`) und füllen die Widgets nach einem Seitenwechsel wieder — vorher
+    wirkte die Antwort danach unbewertet, und ein erneutes 👎 überschrieb den Kommentar mit einem leeren
+    (13.6). Fehlermeldungen und ausgeblendete ältere Nachrichten haben keine Daumen. Anzeigen kostet
+    keinen Backend-Aufruf — nur Klick und Enter.
 - **🖼️ Bilder (n)** (zugeklappt, vor den Quellen): die Bilder, die die gefundenen Abschnitte in
   ihrer Notiz einbetten (`images` je Quelle, Roadmap 2) — jedes Bild einmal, in Quellen-Reihenfolge,
   höchstens 6, nur existierende Dateien, 300 px breit mit Dateiname. Nur Notizen, deren Name
@@ -245,6 +255,13 @@ dann „🔁 Erneut senden“: Frage und Fehlermeldung verschwinden aus dem Verl
 einmal raus, ohne sie neu zu tippen (gedacht für Timeout, ladendes Ollama, Backend-Neustart). Ältere
 Fehler im Verlauf haben keinen Knopf, ebenso während schon eine neue Frage unterwegs ist. Kostet
 keine zusätzliche Backend-Anfrage — erst der Klick schickt die Frage.
+
+Zwei Fälle ohne Fehler-Event behandelt der Chat seit 18.10. ebenso (Roadmap 13.6): Endet der Stream
+**ohne `done`** (Backend mitten in der Antwort neu gestartet), ist das „⚠️ Antwort abgebrochen …“ mit
+„🔁 Erneut senden“ — vorher blieb der abgeschnittene Text als bewertbare Antwort stehen. Wird eine
+Antwort **unterbrochen** (Seitenwechsel oder Klick während des Streamings beendet das Skript), steht die
+Frage ohne Antwort da; als letzte Nachricht bekommt sie „⚠️ Keine Antwort — die Anfrage wurde
+unterbrochen.“ und „🔁 Erneut senden“.
 
 ```mermaid
 sequenceDiagram
@@ -315,7 +332,7 @@ Quellen aus `config/sources.yaml` verwalten, ohne YAML zu öffnen. Seitenauswahl
 | — (Kennzahl) | `GET /stats` | Gesamtzahl der Chunks; nach jedem Indizieren/Löschen aktualisiert |
 | ⚡ **Nur Änderungen indizieren** | `POST /ingest` | Inkrementell, unveränderte Dateien werden übersprungen — der Normalfall |
 | 🔄 **Alle Dokumente neu indizieren** | `POST /ingest?full=true` | Jede Datei; nötig nach Chunking-Änderungen |
-| 🏷 **Recategorize** | `POST /sources/recategorize` | Schreibt nur `group` / `content_category` / `source_id` neu (Sekunden, kein Embedding) — für **alle** Quellen; nach geänderter `category_map` / `group` |
+| 🏷 **Recategorize** | `POST /sources/recategorize` | Schreibt nur `group` / `content_category` / `source_id` neu (Sekunden, kein Embedding) — für **alle** Quellen; nach geänderter `category_map` / `group`. Meldet „N Chunks aktualisiert · M unverändert · K ohne passende Quelle“ |
 
 Alle Indizier-Vorgänge zeigen **nicht-blockierenden Fortschritt**: die Job-ID steht in
 `st.session_state["_ingest_job"]`, das Fragment `_ingest_progress()`
@@ -326,7 +343,9 @@ Backend lehnt diese Aktionen während eines Ingests ohnehin mit 409 ab). Am Ende
 Dokumente indiziert · Y unverändert übersprungen · N s“, erzeugte/aktualisierte/gelöschte Chunks,
 Fehler als Warnungen. Ist das Backend ~45 s am Stück nicht erreichbar, endet die Anzeige mit
 „Backend nicht erreichbar“ (der Job läuft im Backend weiter). Bei `409` (Job aus einer anderen
-Browser-Session) hängt sich die Seite über `GET /ingest/active` an.
+Browser-Session) hängt sich die Seite über `GET /ingest/active` an. Unter den Knöpfen stehen
+Richtwerte für die Dauer (18.10.: Vault mit ~170 Notizen komplett neu ≈ 8 min, nur Änderungen meist
+unter 1 min, Regelbuch-PDF ≈ 1–2 min).
 
 ### 2. Konfigurierte Quellen
 
@@ -373,7 +392,8 @@ des Backends.
 
 ### 5. ⚠ Danger Zone
 
-`POST /admin/wipe` (Body `{"confirm": "DELETE"}`) nach Eingabe von `DELETE` — leert die Collection.
+`POST /admin/wipe` (Body `{"confirm": "DELETE"}`) nach Eingabe von `DELETE` — leert die Collection
+und danach alle UI-Caches (Chunk-Listen, Eval-Dateien, Statistik).
 
 **Welche Aktion wann:** Tippfehler in `category_map` → Tabelle/Zuordnung speichern →
 Recategorize. Pfad oder Inhalt geändert → speichern → Reindex. Quelle überflüssig → Source
@@ -396,22 +416,40 @@ ergänzen).
 
 Die Parameter-Regler (Kandidaten, finale Chunks, Max. pro Quelle) in „Frage testen“ und „Retrieval
 Eval“ starten bei den Werten aus `settings.yaml` (`GET /config`, 60 s gecacht) — ein Lauf mit
-unberührten Reglern misst also, was der Chat nutzt. Ist `/config` nicht erreichbar, gelten 15/8/3.
+unberührten Reglern misst also, was der Chat nutzt. Ist `/config` nicht erreichbar, gelten 20/8/3.
 
 | Tab | Inhalt |
 |---|---|
-| **1 Golden Set** | Bearbeitbare Tabelle aller Fragen aus `evaluation/qa_pairs.yaml` (ID, Frage, Typ, Kategorie, erwartete Quellen, Antwort-Stichwörter, Notizen); **💾 Golden Set speichern** über `PUT /eval/qa-pairs`, Zeilen ohne ID oder Frage werden übersprungen |
+| **1 Golden Set** | Bearbeitbare Tabelle aller Fragen aus `evaluation/qa_pairs.yaml` (ID, Frage, Typ, Kategorie, erwartete Quellen, Antwort-Stichwörter, Abschnitt, Source-IDs, Notizen); **💾 Golden Set speichern** über `PUT /eval/qa-pairs`, Zeilen ohne ID oder Frage werden übersprungen |
 | **2 Frage testen** | Eine Frage gegen den Retriever (`POST /eval/preview`, ohne LLM) mit einstellbaren Parametern; Tabelle der Chunks (Score, Quelle, Überschrift, Vorschau) + Latenz. Das Ergebnis bleibt im Session-State stehen, sodass sich die Frage danach ins Golden Set übernehmen lässt (erwartete Quellen vorbelegt, eine schon vergebene ID wird abgelehnt) |
 | **3 Retrieval Eval** | Ganzes Golden Set ohne LLM als Hintergrund-Job (`POST /eval/run`, `GET /eval/status/{id}`); Trefferquote, Abschnitt-Trefferquote, Aufschlüsselung nach Typ, Details je Frage (⚠️ = richtige Datei, falscher Abschnitt); **⚖ A/B starten (Vektor vs. Hybrid)**; unter den Kennzahlen eine Zeile **Latenz p50/p95 · Chunks pro Frage Ø/max** (aus den Details berechnet, auch für alte Ergebnisse; Chunks inkl. Section Expansion); **🎯 Suchgenauigkeit prüfen** (`POST /eval/search-exactness`): „Exakt: N/N Golden-Fragen …“ oder eine Warnung mit den Fragen, bei denen die Vektorsuche Chunks der exakten Top-K verpasst, und dem Hinweis, `hnsw_ef_search` zu erhöhen |
-| **4 End-to-End** | Golden Set mit LLM: Trefferquote, Answer-Contains-Quote, mittlere Latenz, je Frage die ganze Antwort und darunter die erwarteten Stichwörter (seit 14.10.; ältere Berichte haben nur 200 Zeichen und keine Stichwörter). Langsam |
-| **5 Ergebnisse** | Gespeicherte Läufe (max. 3 je Typ) mit Kennzahlen und Config, löschen; zwei Läufe vergleichen (Differenz + Fragen, deren Treffer sich geändert hat) |
+| **4 End-to-End** | Golden Set mit LLM: Trefferquote, Answer-Contains-Quote, mittlere Latenz, je Frage `✅/⚠️ [ID] Frage — Datei ✅/❌` mit der ganzen Antwort und den erwarteten Stichwörtern (seit 14.10.; ältere Berichte haben nur 200 Zeichen und keine Stichwörter); eine fehlgeschlagene Anfrage als „💥 … — Anfrage fehlgeschlagen“ mit ihrem Fehler. Langsam (~35 min) |
+| **5 Ergebnisse** | Gespeicherte Läufe (max. 3 je Typ): je Lauf Answer Contains (E2E), Hit Rate, Fragen und Retrieval-Config (K/R/C/H); **🔍** öffnet die Details (wie nach einem Lauf, bleibt offen bis „✖ Schließen“), **🗑** löscht. Zwei Läufe vergleichen: Hit Rate und bei zwei E2E-Läufen auch Answer Contains (mit Differenz), dazu je eine Tabelle der Fragen, deren Datei-Treffer bzw. Antwort gekippt ist. Bis 18.10. verglich die Seite nur Treffer — zwei E2E-Läufe mit anderer Answer-Contains-Quote zeigten „Keine Unterschiede“ (13.6) |
 | **6 Feedback** | Aktuelle 👍/👎 je Chat-Antwort (`GET /feedback`, letzte Bewertung je `message_id`, zurückgenommene ausgelassen). Standard nur 👎, 👍 per Schalter; Spalte „Kommentar“ mit dem Freitext. Ausgewählte Zeilen werden zu Golden-Set-Fragen `f###` (`ui/feedback.py`): 👍 behält die Quellen der Antwort, 👎 bleibt leer mit Notiz zum Nachtragen; der Kommentar steht in der Notiz; umgeschriebene Folgefragen gehen in ihrer eigenständigen Form ein; Fragen, die schon im Golden Set stehen, werden übersprungen. Ändert sich die angezeigte Liste (👍-Schalter, neue Bewertungen), werden die Häkchen zurückgesetzt, damit keins auf eine andere Antwort rutscht |
 | **7 Chunks** | Chunk-Inspector: Quelle wählen (`GET /sources`, 60 s gecacht), dann Datei (`GET /eval/chunks/files`), dann alle Chunks der Datei in Dokumentreihenfolge (`GET /eval/chunks`). Anzahl und min/Ø/max-Länge (unter 100 Zeichen markiert), Tabelle (Index, Überschriftenpfad, Länge, Textanfang), voller Text + Metadaten eines gewählten Chunks. Dateien und Chunks werden erst nach der Auswahl geladen; ein ChromaDB-Fehler erscheint als Fehlermeldung, nicht als leere Liste |
 
-**Gemeinsame Bausteine:** `_render_tuning_sliders(prefix)` — drei gekoppelte Regler (Kandidaten,
-Finale Chunks, Max pro Quelle; `top_k_rerank ≤ top_k`, `max_per_source ≤ top_k_rerank`) für „Frage
-testen“ und „Retrieval Eval“, dazu die Auswahl Config / nur Vektor / Hybrid.
-`_poll_eval_job(job_id)` fragt `GET /eval/status/{id}` jede Sekunde in einem `st.status` ab und gibt nach ~45 s ohne erreichbares Backend mit Hinweis auf; die Evaluation läuft im Backend ggf. weiter und erscheint dann unter „Ergebnisse“.
+**Gemeinsame Bausteine:** `_render_tuning_sliders(prefix)` — drei Regler (Kandidaten, Finale Chunks,
+Max pro Quelle, je bis 50) für „Frage testen“ und „Retrieval Eval“, dazu die Auswahl Config / nur
+Vektor / Hybrid. Die Maxima sind fest: Hingen sie am Nachbarregler, war jede Änderung von „Kandidaten“
+ein neues Widget, und die beiden anderen sprangen auf ihren Startwert zurück — gemessen wurde dann
+etwas anderes als eingestellt (13.6). Stattdessen prüft `_params_error` vor dem Start
+`top_k_rerank ≤ top_k` und `max_per_source ≤ top_k_rerank`; sonst Fehlermeldung, kein Lauf.
+
+**Eval-Jobs** (Retrieval, A/B, End-to-End) laufen wie die Indizierung auf der Sources-Seite: Die Job-ID
+steht in `st.session_state["_eval_job"]`, das Fragment `_eval_progress()` (`st.fragment(run_every=1.5)`,
+oberhalb der Tabs) fragt `GET /eval/status/{id}` ab und zeigt „Frage N / 274“ — für E2E seit 18.10.
+fortlaufend (vorher stand dort den ganzen Lauf „0 / 274“, `evaluate()` meldete keinen Fortschritt).
+Klicks, Tab- und Seitenwechsel verlieren den Job nicht, die Start-Knöpfe sind solange gesperrt, alle
+Tabs bleiben bedienbar. Vorher hing der Lauf an einer blockierenden Schleife im Seitenskript: Nach einem
+Seitenwechsel war er weg, ein neuer Start scheiterte mit 409, und die Tabs hinter dem laufenden wurden
+gar nicht gezeichnet. Bei `409` hängt sich die Seite über `GET /eval/active` an den laufenden Job; eine
+neue Browser-Session (neu geladen, anderer Tab) fragt das einmal beim ersten Aufruf. A/B sind zwei Jobs
+nacheinander — der Hybrid-Lauf startet, wenn der Vektor-Lauf fertig ist (hängt sich eine Session an
+einen laufenden A/B-Lauf an, verfolgt sie nur den gerade laufenden Job). Das Ergebnis (`_eval_result`)
+erscheint in seinem Tab und bleibt bis zum nächsten Lauf stehen; Berichte lädt `_fetch_result`
+(10 min gecacht — ein Bericht ändert sich nicht). Ein 404 (Backend neu gestartet) beendet die Anzeige
+sofort; ist das Backend ~45 s am Stück nicht erreichbar, endet sie mit Hinweis auf „Ergebnisse“ — der
+Lauf geht im Backend ggf. weiter.
 
 ---
 
@@ -423,7 +461,7 @@ Templates: [prompts.md](prompts.md).
 | Tab | Inhalt |
 |---|---|
 | **Aktive Prompts** | Vier Textfelder (System, QA, Condense, No-Context) mit Variablen-Hilfe und **Vorschau** (`POST /prompts/preview`); **💾 Aktive Prompts speichern** schreibt `config/prompts.yaml` und lädt den `PromptManager` neu |
-| **Varianten** | Aktive Prompts als benannte Variante speichern; je Variante Textfelder, Beschreibung, **💾 Speichern**, **Aktivieren** (überschreibt `prompts.yaml` + Neuladen), **🗑 Löschen**. Aktive Variante mit ✅ — aktiv heißt: die vier Templates stimmen mit `prompts.yaml` überein |
+| **Varianten** | Aktive Prompts als benannte Variante speichern; je Variante Textfelder, Beschreibung, **💾 Speichern**, **Aktivieren** (überschreibt `prompts.yaml` + Neuladen), **🗑 Löschen**. Aktive Variante mit ✅ — aktiv heißt: die vier Templates stimmen mit `prompts.yaml` überein. Nach **Aktivieren** zeigt „Aktive Prompts“ die neue Variante, nach **Kopie speichern** unter einem vorhandenen Namen zeigt die Variante die neuen Texte: Die betroffenen Textfelder werden verworfen und neu gefüllt — ein Textfeld mit `key` behält sonst seinen alten Inhalt, bis 18.10. setzte Speichern in „Aktive Prompts“ danach die alte Variante zurück (13.6). Die Erfolgsmeldung kommt über `_flash` |
 | **Vergleichen** | Zwei Varianten (oder „(Aktiv)“) nebeneinander; Templates mit ⚠ unterschiedlich / ✅ gleich |
 
 Alle Abrufe sind 10 s gecacht und werden nach Änderungen geleert.
@@ -450,8 +488,14 @@ Aufruf, eine laufende Anfrage bricht nicht ab. Alle Tabs speichern über dasselb
 die Differenz wird geschickt (ohne Änderung erscheint **Keine Änderungen** und es gibt keinen
 Aufruf), danach lädt die Seite neu und zeigt **„Gespeichert.“** über `_flash` (ein `st.success`
 direkt vor dem Neuladen wäre sofort wieder weg). Lehnt das Backend einen Wert ab (422, z.B.
-Overlap ≥ Chunk-Größe), steht die Begründung in der Fehlermeldung. LLM-Änderungen leeren alle
-Caches, weil der Chat das LLM-Timeout aus dem gecachten `/sidebar-state` liest.
+Overlap ≥ Chunk-Größe), steht die Begründung in der Fehlermeldung. LLM- und Retrieval-Änderungen leeren
+alle Caches, weil der Chat LLM-Timeout und Hybrid-Default aus dem gecachten `/sidebar-state` liest.
+
+Die Regler haben feste Bereiche (Finale Chunks und Max. pro Quelle bis 50, unabhängig von „Kandidaten“ —
+Grund wie auf der Evaluation-Seite, 13.6); „💾 Retrieval speichern“ lehnt `top_k_rerank > top_k` oder
+`max_per_source > top_k_rerank` mit einer Meldung ab. Steht in `settings.yaml` ein Wert außerhalb eines
+Reglerbereichs (von Hand gesetzt, z.B. `top_k: 60`), zeigt die Seite ihn begrenzt mit einer Warnung
+über dem Regler — vorher brach die ganze Seite ab; Speichern übernimmt den angezeigten Wert.
 
 ---
 
@@ -493,5 +537,16 @@ beenden die Fortschrittsanzeigen sofort mit dieser Meldung statt ~45 s „nicht 
 | `_confirm_power` | `str` | Offene Rückfrage von **⏻ LoreKeeper beenden** (`"stop"`) oder **🔄 neu starten** (`"restart"`) |
 | `_provider_switch_ok` / `_provider_switch_error` | `bool` / `str` | Kurzzeit-Flags nach einem Provider-Wechsel |
 | `_ingest_job` | `dict \| None` | Sources-Seite: verfolgter Indizier-Job `{id, label, failures}` |
-| `_flash` | `str` | Sources-Seite: Erfolgsmeldung, die ein Neuladen überlebt |
+| `_ingest_result` | `dict` | Sources-Seite: Endstand des letzten Indizier-Jobs, einmal angezeigt |
+| `_flash` | `str` | Sources-, Settings- und Prompts-Seite: Erfolgsmeldung, die ein Neuladen überlebt |
+| `_eval_job` | `dict` | Evaluation-Seite: verfolgter Eval-Job `{id, kind, label, failures[, params, first]}` (`kind`: `retrieval`, `e2e`, `ab_vec`/`ab_hyb`) |
+| `_eval_result` | `dict` | Evaluation-Seite: Ergebnis des letzten Eval-Jobs für seinen Tab `{kind, label, state, file, first, error}` |
+| `_eval_attach_checked` | `bool` | Evaluation-Seite: `GET /eval/active` in dieser Session schon gefragt |
+| `_eval_view` | `str` | Evaluation-Seite: im Tab „Ergebnisse“ geöffneter Bericht |
+| `_preview` | `dict` | Evaluation-Seite: Ergebnis von „Frage testen“ (bleibt für „➕ Hinzufügen“ stehen) |
+| `_category_filter` / `_content_category_filter` | `dict \| str \| None` | Chat: Gruppen- bzw. Kategorie-Filter aus der Sidebar (`"__BLOCKED__"` = keine Gruppe gewählt) |
+| `_hybrid_search` | `bool` | Chat: Hybrid-Checkbox, geht als `hybrid_search` mit jeder Frage |
+| `_keep_src_*` / `_keep_cats` / `_keep_hybrid` | `bool` / `list` / `bool` | Chat: Kopien der Sidebar-Filter, die einen Seitenwechsel überleben (13.6) |
+| `_retry_prompt` | `str` | Chat: von „🔁 Erneut senden“ vorgemerkte Frage |
+| `_gemini_key_msg` | `str` | Chat-Sidebar: Bestätigung nach Setzen/Entfernen des Gemini-Keys |
 | `_scan_result` / `_scanned_path` | `dict \| None` / `str` | Sources-Seite: Ergebnis von `POST /sources/scan` und der gescannte Pfad |

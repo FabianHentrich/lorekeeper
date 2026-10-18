@@ -98,7 +98,7 @@ def test_comparing_two_stored_results_lists_the_flipped_questions(fake_backend, 
 
     metrics = {m.label: m.value for m in at.metric}
     assert (metrics["Hit Rate A"], metrics["Hit Rate B"], metrics["Differenz"]) == ("100.0%", "50.0%", "-50.0%")
-    assert "**1 Fragen mit geändertem Ergebnis:**" in [m.value for m in at.markdown]
+    assert "**1 Fragen mit geändertem Ergebnis (Datei-Treffer):**" in [m.value for m in at.markdown]
 
 
 
@@ -142,3 +142,64 @@ def test_retrieval_result_shows_latency_percentiles_and_chunks_per_question(jobs
     _ok(at.button(key="ret_run").click().run())
 
     assert "Latenz p50 50 ms · p95 60 ms · Chunks pro Frage Ø 14.0 / max 20" in [c.value for c in at.caption]
+
+
+E2E_SUMMARY = {"timestamp": "t", "eval_type": "e2e", "hit_rate": 1.0, "total_questions": 2, "config": {}}
+
+
+def test_stored_e2e_result_opens_with_answers_and_request_errors(fake_backend, monkeypatch):
+    """Ergebnisse → 🔍: a finished run can be read again; a failed request shows its error (13.6)."""
+    report = {**E2E_REPORT, "details": [
+        {**E2E_REPORT["details"][0], "id": "p001"}, {"id": "p002", "question": "Was ist Überschaden?", "error": "timeout"},
+    ]}
+    monkeypatch.setitem(conftest.PAYLOADS, "/eval/results",
+                        [{**E2E_SUMMARY, "filename": "e2e_1.json", "answer_contains_rate": 0.5}])
+    monkeypatch.setitem(conftest.PAYLOADS, "/eval/results/e2e_1.json", report)
+    at = _ok(open_page("evaluation").run())
+    assert "**e2e_1.json** — e2e · Answer Contains: 50.0% · Hit Rate: 100.0% · 2 Fragen" in \
+        [m.value for m in at.markdown]   # no "Config: {}" any more
+
+    _ok(at.button(key="view_e2e_1.json").click().run())
+
+    labels = [e.label for e in at.expander]
+    assert "⚠️ [p001] Was ist eine Marke? — Datei ✅" in labels
+    assert "💥 [p002] Was ist Überschaden? — Anfrage fehlgeschlagen" in labels
+    assert "timeout" in [e.value for e in at.error]
+
+
+def test_comparing_two_e2e_runs_lists_flipped_answers(fake_backend, monkeypatch):
+    """Same hits, different answers: the comparison used to say "no differences" (13.6)."""
+    run_b = {**E2E_REPORT, "answer_contains_rate": 1.0,
+             "details": [{**E2E_REPORT["details"][0], "answer_contains_match": True}]}
+    monkeypatch.setitem(conftest.PAYLOADS, "/eval/results", [
+        {**E2E_SUMMARY, "filename": "e2e_1.json"}, {**E2E_SUMMARY, "filename": "e2e_2.json"},
+    ])
+    monkeypatch.setitem(conftest.PAYLOADS, "/eval/results/e2e_1.json", E2E_REPORT)
+    monkeypatch.setitem(conftest.PAYLOADS, "/eval/results/e2e_2.json", run_b)
+    at = _ok(open_page("evaluation").run())
+    _ok(at.button(key="cmp_run").click().run())
+
+    metrics = {m.label: m.value for m in at.metric}
+    assert (metrics["Answer Contains A"], metrics["Answer Contains B"]) == ("50.0%", "100.0%")
+    assert "**1 Fragen mit geändertem Ergebnis (Antwort):**" in [m.value for m in at.markdown]
+    assert "Keine Unterschiede (Datei-Treffer)." in [s.value for s in at.success]
+
+
+def test_eval_sliders_keep_their_values_when_top_k_changes(jobs):
+    """The run must measure what was picked — the dependent max reset the sliders (13.6)."""
+    at = _ok(open_page("evaluation").run())
+    at.slider(key="ret_top_k_rerank").set_value(5).run()
+    at.slider(key="ret_top_k").set_value(30).run()
+    _ok(at.button(key="ret_run").click().run())
+
+    [body] = jobs.bodies["POST /eval/run"]
+    assert (body["top_k"], body["top_k_rerank"], body["max_per_source"]) == (30, 5, 3)
+
+
+def test_eval_with_more_final_chunks_than_candidates_does_not_start(jobs):
+    at = _ok(open_page("evaluation").run())
+    at.slider(key="ret_top_k_rerank").set_value(20).run()   # candidates 15
+    _ok(at.button(key="ret_run").click().run())
+
+    assert "POST /eval/run" not in jobs.calls
+    assert any("Finale Chunks dürfen nicht über den Kandidaten" in e.value for e in at.error)

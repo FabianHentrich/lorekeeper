@@ -86,10 +86,27 @@ def _fetch_variant(api_url: str, name: str):
     return get_json(f"{api_url}/prompts/variants/{quote(name, safe='')}", timeout=5)
 
 
+def _reload_with(message: str, widget_keys: list[str]) -> None:
+    """Rerun with fresh text areas and a success message.
+
+    A keyed ``text_area`` keeps its own value across reruns and ignores a new ``value=`` — after
+    "Aktivieren" the active tab still showed the old prompts, and saving there put them back
+    (roadmap 13.6). Dropping the widget keys makes the areas start again from the backend's text.
+    The message goes through ``_flash``: an ``st.success`` right before ``st.rerun()`` is never seen.
+    """
+    for key in widget_keys:
+        st.session_state.pop(key, None)
+    st.session_state["_flash"] = message
+    st.rerun()
+
+
 # ─── Page ─────────────────────────────────────────────────────────────
 
 st.title("✏ Prompts")
 st.caption("Prompt-Templates bearbeiten, Varianten verwalten und vergleichen.")
+
+if _flash := st.session_state.pop("_flash", None):
+    st.success(_flash)
 
 tab_active, tab_variants, tab_compare = st.tabs([
     "Aktive Prompts", "Varianten", "Vergleichen",
@@ -209,9 +226,12 @@ with tab_variants:
                     raise_for_status(resp)
                     _fetch_variants.clear()
                     _fetch_variant.clear()
-                    st.success(f"Variante '{var_name}' gespeichert.")
                 except Exception as e:
                     st.error(f"Fehler: {e}")
+                else:
+                    # An existing variant of that name was overwritten — its open text areas must reload
+                    _reload_with(f"Variante '{var_name.strip()}' gespeichert.",
+                                 [f"var_{var_name.strip()}_{k}" for k in (*_TEMPLATE_KEYS, "desc")])
 
     st.divider()
 
@@ -285,10 +305,10 @@ with tab_variants:
                             raise_for_status(resp)
                             _fetch_active.clear()
                             _fetch_variants.clear()
-                            st.success(f"Variante '{v['name']}' aktiviert.")
-                            st.rerun()
                         except Exception as e:
                             st.error(f"Fehler: {e}")
+                        else:
+                            _reload_with(f"Variante '{v['name']}' aktiviert.", [f"active_{k}" for k in _TEMPLATE_KEYS])
                 with col_del:
                     if st.button("🗑 Löschen", key=f"del_{v['name']}"):
                         try:

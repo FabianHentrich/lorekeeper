@@ -225,7 +225,7 @@ async def start_eval(req: EvalJobRequest, request: Request):
             raise HTTPException(status_code=409, detail="Es läuft bereits eine Evaluation")
 
         job_id = str(uuid.uuid4())
-        job = EvalJobStatus(job_id=job_id, status="queued", total=len(qa_pairs))
+        job = EvalJobStatus(job_id=job_id, eval_type=req.eval_type, status="queued", total=len(qa_pairs))
         _eval_jobs[job_id] = job
 
         logger.info(
@@ -280,15 +280,23 @@ async def _run_retrieval_eval(job: EvalJobStatus, qa_pairs: list[dict], req: Eva
 
 async def _run_e2e_eval(job: EvalJobStatus, qa_pairs: list[dict], api_url: str):
     """Execute an end-to-end evaluation including the LLM answer generation."""
+    import src.main as main_module
     from evaluation.evaluate import evaluate
 
     job.status = "running"
+    # Per question like the chat's read timeout: condense and answer may each take the LLM timeout.
+    # A fixed 120 s turned slow but valid answers (cold model, long lists) into silent misses (13.6).
+    llm_timeout = getattr(main_module.config.settings.llm, main_module.provider.provider).timeout
 
     try:
         # Blocking HTTP calls per question, against this very server. A daemon thread, not to_thread:
         # after a reload or stop nobody answers them any more (120 s per question), and a pool thread
-        # would keep the old process alive — the dev reloader then never starts the new one (12.3)
-        report = await run_in_daemon_thread(evaluate, api_url, qa_pairs)
+        # would keep the old process alive — the dev reloader then never starts the new one (12.3).
+        # The callback runs in that thread; a plain int write is all it does.
+        def _progress(done: int, total: int) -> None:
+            job.progress = done
+
+        report = await run_in_daemon_thread(evaluate, api_url, qa_pairs, _progress, 2 * llm_timeout + 60)
 
         filename = save_report(report, _RESULTS_DIR, "e2e").name
         _cleanup_results("e2e")
@@ -302,6 +310,13 @@ async def _run_e2e_eval(job: EvalJobStatus, qa_pairs: list[dict], api_url: str):
         logger.exception("E2E eval job %s failed", job.job_id)
         job.status = "error"
         job.error = str(e)
+
+
+@eval_router.get("/active", response_model=EvalJobStatus | None)
+async def eval_active():
+    """The queued or running eval job, or null — lets a client attach to it (after a 409, or from a new
+    browser session) instead of losing track of a run it can't start again."""
+    return next((j for j in _eval_jobs.values() if j.status in ("queued", "running")), None)
 
 
 @eval_router.get("/status/{job_id}", response_model=EvalJobStatus)
@@ -330,6 +345,7 @@ async def list_results():
                 timestamp=data.get("timestamp", ""),
                 eval_type=eval_type,
                 hit_rate=data.get("hit_rate", 0),
+                answer_contains_rate=data.get("answer_contains_rate"),
                 total_questions=data.get("total_questions", 0),
                 config=data.get("config", {}),
             ))

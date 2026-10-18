@@ -188,6 +188,7 @@ async def sidebar_state():
         available_categories=sorted(cats),
         player_source_ids=player_source_ids(main_module.config.settings.ingestion.sources),
         llm_timeout=getattr(main_module.config.settings.llm, prov.provider).timeout,
+        hybrid_default=main_module.config.settings.retrieval.hybrid.enabled,
     )
 
 

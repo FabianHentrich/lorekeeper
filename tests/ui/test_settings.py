@@ -38,3 +38,39 @@ def test_rejected_value_shows_the_reason(fake_backend):
     assert not at.exception, [e.message for e in at.exception]
     assert any("muss kleiner als max_chunk_size" in e.value for e in at.error)
     assert not any("Gespeichert" in s.value for s in at.success)
+
+
+def test_changing_top_k_keeps_the_other_retrieval_sliders(fake_backend):
+    """A max that followed "Kandidaten" reset "Finale Chunks"/"Max. pro Quelle" — the save then
+    silently dropped them (roadmap 13.6)."""
+    at = _open(fake_backend)
+    at.slider(key="ret_top_k_rerank").set_value(5).run()
+    at.slider(key="ret_max_per_source").set_value(2).run()
+    at.slider(key="ret_top_k").set_value(30).run()
+
+    assert (at.slider(key="ret_top_k_rerank").value, at.slider(key="ret_max_per_source").value) == (5, 2)
+    at.button(key="save_retrieval").click().run()
+    assert fake_backend.bodies["PUT /config"] == [
+        {"retrieval": {"top_k": 30, "reranking": {"top_k_rerank": 5, "max_per_source": 2}}}]
+
+
+def test_more_final_chunks_than_candidates_is_refused(fake_backend):
+    at = _open(fake_backend)
+    at.slider(key="ret_top_k_rerank").set_value(20).run()   # candidates stay at 15
+    at.button(key="save_retrieval").click().run()
+
+    assert "PUT /config" not in fake_backend.calls
+    assert any("Finale Chunks dürfen nicht über den Kandidaten" in e.value for e in at.error)
+    assert at.number_input(key="chunk_max").value == 256    # the tabs after it still render
+
+
+def test_value_outside_the_slider_range_is_shown_clamped_with_a_warning(fake_backend, monkeypatch):
+    """A hand-set top_k: 60 made the slider raise — the whole Settings page failed (roadmap 13.6)."""
+    from tests.ui import conftest
+    cfg = conftest.PAYLOADS["/config"]
+    monkeypatch.setitem(conftest.PAYLOADS, "/config", {**cfg, "retrieval": {**cfg["retrieval"], "top_k": 60}})
+    at = _open(fake_backend)
+
+    assert at.slider(key="ret_top_k").value == 50
+    assert any(w.value.startswith("`retrieval.top_k` = 60 aus `settings.yaml` liegt außerhalb von 1–50")
+               for w in at.warning)

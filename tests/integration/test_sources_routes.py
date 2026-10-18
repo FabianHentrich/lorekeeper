@@ -224,6 +224,15 @@ def test_sidebar_state_carries_the_active_providers_timeout(client, env, monkeyp
     assert client.get("/sidebar-state").json()["llm_timeout"] == 45
 
 
+def test_sidebar_state_carries_the_hybrid_default(client, env, monkeypatch):
+    """The chat's hybrid checkbox starts at the configured default — it used to start off and could
+    not switch a configured hybrid default off (roadmap 13.6)."""
+    monkeypatch.setattr(main_module, "provider", SimpleNamespace(provider="ollama", model="qwen3:14b"))
+    env.config.settings.retrieval.hybrid.enabled = True
+
+    assert client.get("/sidebar-state").json()["hybrid_default"] is True
+
+
 def test_put_sources_missing_field_400(client, env):
     assert client.put("/sources", json={}).status_code == 400
 

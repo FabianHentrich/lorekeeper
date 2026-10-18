@@ -92,6 +92,7 @@ class EvalJobResponse(BaseModel):
 class EvalJobStatus(BaseModel):
     """Progress of an eval job; ``result_file`` is set once the report is saved."""
     job_id: str
+    eval_type: str = "retrieval"   # lets a client that attaches via /eval/active render the right result
     status: str = "queued"
     progress: int = 0
     total: int = 0
@@ -123,5 +124,6 @@ class EvalResultSummary(BaseModel):
     timestamp: str
     eval_type: str
     hit_rate: float
+    answer_contains_rate: float | None = None   # e2e only — its main figure
     total_questions: int
     config: dict

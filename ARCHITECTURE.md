@@ -501,7 +501,7 @@ Das Backend lauscht nur auf `127.0.0.1:8000`; der Browser spricht ausschließlic
 | GET/POST | `/provider`               | Aktiver Provider / zur Laufzeit wechseln (`provider`: `ollama` oder `gemini`, sonst 422) |
 | GET    | `/provider/gemini/status`   | Ob ein Gemini-Key da ist (ohne den Key) |
 | POST   | `/provider/gemini/key`      | Gemini-Key zur Laufzeit setzen (nur im Prozess) |
-| GET    | `/sidebar-state`            | Gebündelter Status für die Chat-Sidebar |
+| GET    | `/sidebar-state`            | Gebündelter Status für die Chat-Sidebar (Health, Provider, Gemini-Key, Kategorien, Spieler-Quellen, LLM-Timeout, Hybrid-Default) |
 | GET    | `/health`                   | API + ChromaDB + LLM, dazu `reranker`: `gpu` · `cpu` · `cpu_fallback` (DirectML konfiguriert, läuft aber auf der CPU) · `not_loaded` · `off` ; `llm_shared_gb`: Anteil des lokalen LLM im geteilten GPU-Speicher in GB (`null` = unbekannt/Gemini), alle 5 min gemessen ([operations.md](docs/operations.md#häufige-probleme)) |
 | GET/DELETE | `/sessions/{id}`        | Session-Verlauf lesen / löschen |
 | GET    | `/stats`                    | Chunk-Anzahl |
@@ -512,8 +512,9 @@ Das Backend lauscht nur auf `127.0.0.1:8000`; der Browser spricht ausschließlic
 | GET    | `/eval/chunks`              | Alle Chunks einer Datei in Dokumentreihenfolge |
 | POST   | `/eval/search-exactness`    | Vektorsuche gegen exakte Suche über alle Golden-Fragen (gleicher Filter und `top_k` wie im Chat; nur lesend; 409 während eines Ingests) |
 | POST   | `/eval/run`                 | Retrieval- oder End-to-End-Eval als Job (`eval_type`: `retrieval` oder `e2e`, sonst 422; Parameter wie `/eval/preview`) |
-| GET    | `/eval/status/{job_id}`     | Fortschritt eines Eval-Jobs |
-| GET/DELETE | `/eval/results[/{file}]` | Ergebnisse auflisten / lesen / löschen |
+| GET    | `/eval/status/{job_id}`     | Fortschritt eines Eval-Jobs (`eval_type`, `progress`/`total` — auch E2E je Frage) |
+| GET    | `/eval/active`              | Der laufende Eval-Job oder `null` — zum Wiederanhängen nach 409 oder aus einer neuen Browser-Session |
+| GET/DELETE | `/eval/results[/{file}]` | Ergebnisse auflisten (mit `answer_contains_rate` bei E2E) / lesen / löschen |
 | GET/PUT | `/prompts/active`          | Aktive Prompts lesen / speichern (Hot-Reload) |
 | GET/PUT/DELETE | `/prompts/variants[/{name}]` | Varianten |
 | POST   | `/prompts/activate/{name}`  | Variante aktivieren |

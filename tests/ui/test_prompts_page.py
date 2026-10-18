@@ -66,6 +66,30 @@ def test_editing_and_activating_a_variant(page, fake_backend):
     assert "POST /prompts/activate/Variante" in fake_backend.calls
 
 
+
+def test_activating_a_variant_shows_its_prompts_in_the_active_tab(page, fake_backend, monkeypatch):
+    """The keyed text areas kept the old text; saving there then undid the activation (13.6)."""
+    assert page.text_area(key="active_system").value == "S"
+    monkeypatch.setitem(conftest.PAYLOADS, "/prompts/active", {"name": "active", "description": "",
+                                                               "prompts": VARIANT["prompts"]})
+    _ok(page.button(key="activate_Variante").click().run())
+
+    assert page.text_area(key="active_system").value == "Sei knapp."
+    assert "Variante 'Variante' aktiviert." in [s.value for s in page.success]
+    _ok(page.button(key="save_active").click().run())
+    assert fake_backend.bodies["PUT /prompts/active"][-1]["prompts"]["system"] == "Sei knapp."
+
+
+def test_overwriting_a_variant_by_name_reloads_its_text_areas(page, fake_backend, monkeypatch):
+    page.text_area(key="var_Variante_system").input("ungespeichert")
+    page.run()
+    page.text_input(key="var_save_name").input("Variante")
+    monkeypatch.setitem(conftest.PAYLOADS, "/prompts/variants/Variante", {**VARIANT, "prompts": conftest._PROMPTS})
+    _ok(page.button(key="var_save_btn").click().run())
+
+    assert page.text_area(key="var_Variante_system").value == "S"   # the copy of the active prompts
+
+
 def test_deleting_a_variant(page, fake_backend):
     _ok(page.button(key="del_Variante").click().run())
     assert "DELETE /prompts/variants/Variante" in fake_backend.calls

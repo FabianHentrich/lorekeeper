@@ -51,8 +51,9 @@ def _save(section: str, current: dict, edited: dict, done_msg: str = "Gespeicher
     """Send only the changed keys of one section, then reload the page with a success message.
 
     The message goes through ``_flash`` — an ``st.success`` right before ``st.rerun()`` would be
-    wiped by the rerun. LLM changes clear every cache (the chat's cached /sidebar-state holds the
-    LLM timeout); the other sections only need the page's own config cache cleared.
+    wiped by the rerun. LLM and retrieval changes clear every cache (the chat's cached /sidebar-state
+    holds the LLM timeout and the hybrid default); the other sections only need the page's own config
+    cache cleared.
     """
     delta = _diff(current, edited)
     if not delta:
@@ -86,6 +87,20 @@ def _diff(section_current: dict, section_edited: dict) -> dict:
     return out
 
 
+def _in(value, lo, hi, name: str):
+    """``value`` clamped to the widget's range, with a warning when it was outside.
+
+    The config has no range checks, so a value set by hand in ``settings.yaml`` (e.g. ``top_k: 60``)
+    made the slider raise and the whole page fail (roadmap 13.6). Saving the section writes the shown value.
+    """
+    if lo <= value <= hi:
+        return value
+    shown = min(max(value, lo), hi)
+    st.warning(f"`{name}` = {value} aus `settings.yaml` liegt außerhalb von {lo}–{hi} — hier als {shown} "
+               "angezeigt; Speichern übernimmt diesen Wert.")
+    return shown
+
+
 if _flash := st.session_state.pop("_flash", None):
     st.success(_flash)
 
@@ -113,12 +128,13 @@ with tab_retrieval:
     col1, col2 = st.columns(2)
     with col1:
         new_top_k = st.slider(
-            "Kandidaten (Top-K)", 1, 50, value=r["top_k"],
+            "Kandidaten (Top-K)", 1, 50, value=_in(r["top_k"], 1, 50, "retrieval.top_k"),
             help="Wie viele Chunks der Vectorstore liefert (Bi-Encoder Recall).",
             key="ret_top_k",
         )
         new_score_threshold = st.slider(
-            "Score-Threshold (Cosine)", 0.0, 0.9, value=r["score_threshold"], step=0.05,
+            "Score-Threshold (Cosine)", 0.0, 0.9, step=0.05,
+            value=_in(r["score_threshold"], 0.0, 0.9, "retrieval.score_threshold"),
             help="Chunks unter diesem Score werden verworfen. Default 0.5. "
                  "Unter 0.3 landet viel Rauschen im Kontext.",
             key="ret_score_threshold",
@@ -130,14 +146,17 @@ with tab_retrieval:
                  "Deaktivieren beschleunigt, verschlechtert aber die Präzision.",
             key="ret_rerank_enabled",
         )
+        # Fixed maxima: a max that follows another slider makes a new widget, which jumped back to its
+        # default when "Kandidaten" changed — and the save then sent only top_k (roadmap 13.6)
         new_top_k_rerank = st.slider(
-            "Finale Chunks (nach Reranking)", 1, new_top_k, value=min(rr["top_k_rerank"], new_top_k),
+            "Finale Chunks (nach Reranking)", 1, 50,
+            value=_in(rr["top_k_rerank"], 1, 50, "retrieval.reranking.top_k_rerank"),
             help="Wie viele Chunks der Cross-Encoder am Ende auswählt.",
             key="ret_top_k_rerank", disabled=not new_rerank_enabled,
         )
         new_max_per_source = st.slider(
-            "Max. Chunks pro Quelle (Soft-Cap)", 0, new_top_k_rerank,
-            value=min(rr["max_per_source"], new_top_k_rerank),
+            "Max. Chunks pro Quelle (Soft-Cap)", 0, 50,
+            value=_in(rr["max_per_source"], 0, 50, "retrieval.reranking.max_per_source"),
             help="Soft-Cap pro Datei. 0 = kein Cap.",
             key="ret_max_per_source", disabled=not new_rerank_enabled,
         )
@@ -153,32 +172,37 @@ with tab_retrieval:
         )
     with col4:
         new_bm25_weight = st.slider(
-            "BM25-Anteil (RRF)", 0.0, 1.0, value=rh["bm25_weight"], step=0.05,
+            "BM25-Anteil (RRF)", 0.0, 1.0, step=0.05,
+            value=_in(rh["bm25_weight"], 0.0, 1.0, "retrieval.hybrid.bm25_weight"),
             help="0.0 = rein Vektor · 1.0 = rein BM25 · 0.3 = leicht Vektor-dominiert.",
             key="ret_bm25_weight", disabled=not new_hybrid_enabled,
         )
     with col5:
         new_bm25_top_k = st.slider(
-            "BM25-Kandidaten", 1, 50, value=rh["bm25_top_k"],
+            "BM25-Kandidaten", 1, 50, value=_in(rh["bm25_top_k"], 1, 50, "retrieval.hybrid.bm25_top_k"),
             help="Wie viele BM25-Treffer in die RRF-Fusion eingehen.",
             key="ret_bm25_top_k", disabled=not new_hybrid_enabled,
         )
 
     if st.button("💾 Retrieval speichern", type="primary", key="save_retrieval"):
-        _save("retrieval", r, {
-            "top_k": new_top_k,
-            "score_threshold": new_score_threshold,
-            "reranking": {
-                "enabled": new_rerank_enabled,
-                "top_k_rerank": new_top_k_rerank,
-                "max_per_source": new_max_per_source,
-            },
-            "hybrid": {
-                "enabled": new_hybrid_enabled,
-                "bm25_weight": new_bm25_weight,
-                "bm25_top_k": new_bm25_top_k,
-            },
-        })
+        if new_top_k_rerank > new_top_k or new_max_per_source > new_top_k_rerank:
+            st.error("Finale Chunks dürfen nicht über den Kandidaten liegen, Max. pro Quelle nicht über "
+                     "den finalen Chunks.")
+        else:
+            _save("retrieval", r, {
+                "top_k": new_top_k,
+                "score_threshold": new_score_threshold,
+                "reranking": {
+                    "enabled": new_rerank_enabled,
+                    "top_k_rerank": new_top_k_rerank,
+                    "max_per_source": new_max_per_source,
+                },
+                "hybrid": {
+                    "enabled": new_hybrid_enabled,
+                    "bm25_weight": new_bm25_weight,
+                    "bm25_top_k": new_bm25_top_k,
+                },
+            }, clear_all_caches=True)
 
 
 # ─── LLM ───────────────────────────────────────────────────────────────
@@ -201,27 +225,35 @@ with tab_llm:
         st.markdown("**🖥️ Ollama**")
         ol = cfg["llm"]["ollama"]
         st.caption(f"Modell: `{ol['model']}`")
-        new_ol_temp = st.slider("Temperature", 0.0, 2.0, value=ol["temperature"], step=0.05,
+        new_ol_temp = st.slider("Temperature", 0.0, 2.0, step=0.05,
+                                value=_in(ol["temperature"], 0.0, 2.0, "llm.ollama.temperature"),
                                 key="llm_ol_temp")
-        new_ol_top_p = st.slider("Top-P", 0.0, 1.0, value=ol["top_p"], step=0.05,
+        new_ol_top_p = st.slider("Top-P", 0.0, 1.0, step=0.05,
+                                 value=_in(ol["top_p"], 0.0, 1.0, "llm.ollama.top_p"),
                                  key="llm_ol_top_p")
         new_ol_max_tokens = st.number_input("Max Tokens", min_value=64, max_value=32768,
-                                            value=ol["max_tokens"], step=64, key="llm_ol_maxtok")
+                                            value=_in(ol["max_tokens"], 64, 32768, "llm.ollama.max_tokens"),
+                                            step=64, key="llm_ol_maxtok")
         new_ol_timeout = st.number_input("Timeout (s)", min_value=10, max_value=3600,
-                                         value=ol["timeout"], step=10, key="llm_ol_timeout")
+                                         value=_in(ol["timeout"], 10, 3600, "llm.ollama.timeout"),
+                                         step=10, key="llm_ol_timeout")
 
     with col_g:
         st.markdown("**☁️ Gemini**")
         ge = cfg["llm"]["gemini"]
         st.caption(f"Modell: `{ge['model']}`")
-        new_ge_temp = st.slider("Temperature", 0.0, 2.0, value=ge["temperature"], step=0.05,
+        new_ge_temp = st.slider("Temperature", 0.0, 2.0, step=0.05,
+                                value=_in(ge["temperature"], 0.0, 2.0, "llm.gemini.temperature"),
                                 key="llm_ge_temp")
-        new_ge_top_p = st.slider("Top-P", 0.0, 1.0, value=ge["top_p"], step=0.05,
+        new_ge_top_p = st.slider("Top-P", 0.0, 1.0, step=0.05,
+                                 value=_in(ge["top_p"], 0.0, 1.0, "llm.gemini.top_p"),
                                  key="llm_ge_top_p")
         new_ge_max_tokens = st.number_input("Max Tokens", min_value=64, max_value=32768,
-                                            value=ge["max_tokens"], step=64, key="llm_ge_maxtok")
+                                            value=_in(ge["max_tokens"], 64, 32768, "llm.gemini.max_tokens"),
+                                            step=64, key="llm_ge_maxtok")
         new_ge_timeout = st.number_input("Timeout (s)", min_value=5, max_value=600,
-                                         value=ge["timeout"], step=5, key="llm_ge_timeout")
+                                         value=_in(ge["timeout"], 5, 600, "llm.gemini.timeout"),
+                                         step=5, key="llm_ge_timeout")
 
     if st.button("💾 LLM-Parameter speichern", type="primary", key="save_llm"):
         _save("llm", cfg["llm"], {
@@ -244,7 +276,7 @@ with tab_conv:
 
     c = cfg["conversation"]
     new_window = st.slider(
-        "Context-Window (QA-Paare)", 1, 20, value=c["window_size"],
+        "Context-Window (QA-Paare)", 1, 20, value=_in(c["window_size"], 1, 20, "conversation.window_size"),
         help="Wie viele letzte Q&A-Paare beim Umschreiben von Folgefragen (Condense) "
              "berücksichtigt werden. Der Antwort-Prompt sieht nur das letzte Paar "
              "(answer_history_pairs, nur per settings.yaml).",
@@ -258,7 +290,8 @@ with tab_conv:
         key="conv_condense",
     )
     new_timeout = st.slider(
-        "Session-Timeout (Minuten)", 5, 240, value=c["session_timeout_minutes"],
+        "Session-Timeout (Minuten)", 5, 240,
+        value=_in(c["session_timeout_minutes"], 5, 240, "conversation.session_timeout_minutes"),
         help="Idle-Sessions werden nach dieser Zeit vom GC entfernt.",
         key="conv_timeout",
     )
@@ -294,20 +327,20 @@ with tab_ingest:
     )
     new_max = st.number_input(
         "Max Chunk-Size (Tokens)", min_value=50, max_value=2048,
-        value=ch["max_chunk_size"], step=16,
+        value=_in(ch["max_chunk_size"], 50, 2048, "chunking.max_chunk_size"), step=16,
         help="Obere Grenze pro Chunk. e5-base hat 512-Token-Limit — darunter bleiben.",
         key="chunk_max",
     )
     new_overlap = st.number_input(
         "Chunk-Overlap (Tokens)", min_value=0, max_value=200,
-        value=ch["chunk_overlap"], step=5,
+        value=_in(ch["chunk_overlap"], 0, 200, "chunking.chunk_overlap"), step=5,
         help="Überlappung zwischen aufeinanderfolgenden Chunks. Nur für Fließtext, "
              "Tabellen erhalten kein Overlap. Muss kleiner als die Max Chunk-Size sein.",
         key="chunk_overlap",
     )
     new_min = st.number_input(
         "Min Chunk-Size (Tokens)", min_value=1, max_value=200,
-        value=ch["min_chunk_size"], step=1,
+        value=_in(ch["min_chunk_size"], 1, 200, "chunking.min_chunk_size"), step=1,
         help="Kleinere Chunks werden mit dem vorigen zusammengelegt (nur unter derselben Überschrift).",
         key="chunk_min",
     )

@@ -76,3 +76,10 @@ def test_average_latency_ignores_failed_requests(fake_query, monkeypatch):
 def test_empty_golden_set_gives_zero_rates():
     report = ev.evaluate("http://x", [])
     assert (report["hit_rate"], report["answer_contains_rate"], report["avg_latency_ms"]) == (0, 0, 0)
+
+
+def test_progress_callback_counts_answered_and_failed_questions(fake_query):
+    """The backend job mirrors this into /eval/status — failed questions count as done too (13.6)."""
+    calls = []
+    ev.evaluate("http://x", PAIRS, progress_callback=lambda done, total: calls.append((done, total)))
+    assert calls == [(1, 3), (2, 3), (3, 3)]

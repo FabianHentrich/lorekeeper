@@ -80,7 +80,9 @@ def client(tmp_eval_dir, fake_retriever, monkeypatch):
         ingestion=SimpleNamespace(sources=[
             SourceConfig(id="regelbuch", path="C:/regeln.pdf", group="rules", player_visible=True),
             SourceConfig(id="vault", path="C:/vault", group="lore"),
-        ]))), raising=False)
+        ]),
+        llm=SimpleNamespace(ollama=SimpleNamespace(timeout=300)))), raising=False)
+    monkeypatch.setattr(main_module, "provider", SimpleNamespace(provider="ollama"), raising=False)
     _eval_jobs.clear()
     app = FastAPI()
     app.include_router(eval_router)
@@ -231,6 +233,19 @@ def test_reject_concurrent_eval(client, tmp_eval_dir):
     _eval_jobs.clear()
 
 
+def test_active_job_lets_a_client_attach(client):
+    """/eval/active returns the running job (with its type), null once nothing runs."""
+    from src.api.eval_schemas import EvalJobStatus
+    _eval_jobs["old"] = EvalJobStatus(job_id="old", status="done")
+    assert client.get("/eval/active").json() is None
+
+    _eval_jobs["run"] = EvalJobStatus(job_id="run", eval_type="e2e", status="running", progress=3, total=274)
+    active = client.get("/eval/active").json()
+
+    assert (active["job_id"], active["eval_type"], active["progress"]) == ("run", "e2e", 3)
+    _eval_jobs.clear()
+
+
 # ─── Results ────────────────────────────────────────────────────────────────────
 
 def test_list_results_empty(client):
@@ -351,8 +366,11 @@ def test_e2e_eval_saves_report_against_the_same_server(client, tmp_eval_dir, mon
     import evaluation.evaluate as ev
     seen = {}
 
-    def fake_evaluate(api_url, qa_pairs):
-        seen["url"], seen["n"] = api_url, len(qa_pairs)
+    def fake_evaluate(api_url, qa_pairs, progress_callback, timeout):
+        seen["url"], seen["n"], seen["timeout"] = api_url, len(qa_pairs), timeout
+        progress_callback(1, len(qa_pairs))
+        [job] = _eval_jobs.values()
+        seen["mid"] = (job.status, job.progress, job.total)   # what /eval/status shows during the run
         return {"timestamp": "t", "hit_rate": 0.5, "total_questions": 2, "config": {}}
 
     monkeypatch.setattr(ev, "evaluate", fake_evaluate)
@@ -361,8 +379,11 @@ def test_e2e_eval_saves_report_against_the_same_server(client, tmp_eval_dir, mon
     status = _wait(client, client.post("/eval/run", json={"eval_type": "e2e"}).json()["job_id"])
 
     assert status["status"] == "done"
+    assert seen["mid"] == ("running", 1, 2)   # was 0 until the end: the UI showed "0 / 274" (13.6)
     assert status["progress"] == status["total"] == 2
-    assert seen == {"url": "http://testserver", "n": 2}
+    assert status["eval_type"] == "e2e"
+    assert (seen["url"], seen["n"]) == ("http://testserver", 2)
+    assert seen["timeout"] == 2 * 300 + 60   # from the active provider's LLM timeout, not a fixed 120 s
     assert status["result_file"].startswith("e2e_")
     listed = client.get("/eval/results").json()
     assert [(r["eval_type"], r["hit_rate"]) for r in listed] == [("e2e", 0.5)]
@@ -371,7 +392,7 @@ def test_e2e_eval_saves_report_against_the_same_server(client, tmp_eval_dir, mon
 def test_e2e_eval_failure_marks_job_as_error(client, tmp_eval_dir, monkeypatch):
     import evaluation.evaluate as ev
 
-    def boom(api_url, qa_pairs):
+    def boom(api_url, qa_pairs, progress_callback, timeout):
         raise ConnectionError("backend down")
 
     monkeypatch.setattr(ev, "evaluate", boom)

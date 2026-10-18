@@ -82,6 +82,7 @@ PAYLOADS: dict[str, object] = {
     "/prompts/variants": [{"name": "Variante", "description": "", "is_active": False}],
     "/prompts/variants/Variante": {"name": "Variante", "description": "", "prompts": _PROMPTS},
     "/eval/results": [],
+    "/eval/active": None,   # no eval job running
     "/feedback": [],
     "/eval/chunks/files": {"files": ["Arkenfeld.md", "Regeln.md"]},
     "/eval/chunks": {"source_id": "vault", "source_file": "Arkenfeld.md", "chunks": [
