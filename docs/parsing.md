@@ -190,6 +190,27 @@ Korrektur in drei Schritten:
 Die Nummern in den Überschriften nutzt die Evaluation für die Abschnittsprüfung
 (`expected_section`).
 
+### Kopfzeilen bleiben im Text (bewusst)
+
+Jede Regelbuch-Seite beginnt mit einer Kopfzeile aus Kapitel und Seitenzahl (`_5 Fähigkeiten und
+Klassen_` + `_60_`); an Seitenumbrüchen steht sie mitten im Abschnitt, in 104 von 458 Chunks. Sie
+**bleibt drin** — gemessen und verworfen am 18.10. (Roadmap 3.18, Golden Set je ein Re-Index des
+Regelbuchs, Suche jeweils 274/274 exakt):
+
+| Variante | Abschnitt | Platz 1 | Fragen mit anderen Chunks |
+|---|---|---|---|
+| **Kopfzeilen im Text** (bleibt) | **144/149** | **136** | — |
+| Kopfzeile am Seitenanfang entfernt | 143 | 136 | 63 |
+| entfernt + Kapitel einmal vorn im Embed-Text | 142 | 134 | 127 |
+
+Ohne Kopfzeile fiel p024 „Welche Fähigkeiten hat die Klasse Krieger?“ von der ganzen Krieger-Sektion auf
+einen Chunk, NSC-Notizen mit „⚔️ Rolle: Krieger“ rückten nach — Antwort 0/3 statt richtig; der Kapitelname
+„Fähigkeiten und Klassen“ hatte das Regelbuch vorn gehalten. Mit dem Kapitel vor **jedem** der 240
+Chunks aus Kapitel 5 kam p024 zurück, aber die Klassen-Chunks wurden einander ähnlicher: p091/p092
+(Alchemist), p069, p102, p108 verloren ihre Section Expansion. Die Kopfzeile steht nur in Chunks an einem
+Seitenumbruch und trennt sie dadurch zufällig besser. Neu prüfen nur zusammen mit einer anderen
+Unterscheidung der Klassen (z. B. Klassenname im Embed-Text).
+
 ### Bildextraktion
 
 Mit `extract_images: true` (Standard) landen eingebettete Bilder in einem temporären Ordner. Für
