@@ -27,7 +27,6 @@ End-to-End-Lauf ~35 min (🟡).
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
 | 9 | 2 Bilder — Rest (Dateiname-Rückfall, PDF-Bilder, neues Bild ohne Notiz-Änderung) | Gering | Gering–Mittel | 🟡–🔴 | Vor-/Spitzname erledigt 18.10. (siehe „Erledigt“). Dateiname-Rückfall braucht Spy-Test, PDF-Bilder dauerhafte Ablage + Re-Index (🔴) |
-| 10 | 3.10/3.15 übrige Einzelfälle: AP-Pool „50 AP“, p009 (Abschnitt-Miss, Antwort richtig), „Wer ist Arkenfeld?“, k001 Preis-Spalte, x008 Heimkehrpfennig | Gering | je Gering | 🟡 | Nur bei Anlass im Spiel; Antworten teils schon richtig |
 | 11 | Beim nächsten Re-Index: Suchgenauigkeit prüfen | Gering | Gering | 🔴 | 18.10. nach dem Regelbuch-Re-Index (3.17) 274/274 exakt, auch m039 wieder; bei Abweichungen nach weiteren In-place-Re-Indizes den Vault einmal komplett neu aufbauen (3.10) |
 | — | 3.10 Simulationsberichte z001, z003, z006, z009, z012 | Gering | — | 🟢 | Liegt beim Nutzer: Überschriften in den Berichten (siehe „Offen beim Nutzer“), danach Golden Set |
 | — | 7c Auto-Reload/Stopp hing bei laufendem E2E-Lauf ⏸ (nicht nachstellbar) | Gering | — | 🟡 | 18.10. 00:00: Änderung unter `src/` ohne Neustart, `stop.ps1` musste nach 20 s hart beenden. In beiden Fällen fehlt „Shutting down“ im Log, der Worker beantwortete noch 19 s lang Fragen — er hat das Strg+C nicht verarbeitet (Prozessbaum war intakt, `GenerateConsoleCtrlEvent` erfolgreich); offene Verbindungen erklären es nicht, die werden erst nach „Shutting down“ abgewartet. Rechner war in der Nacht überlastet (Modell im geteilten GPU-Speicher, wenig RAM). Nachgestellt 18.10. 11:33 auf freiem Rechner: Reload während E2E nach 39 s fertig (wartet die laufende Frage ab), `stop.ps1` während E2E sauber nach 8 s — 12.3 hält. **Falls es wieder passiert**: im Log nach „Shutting down“ suchen, im Backend-Fenster nach „WatchFiles detected changes“ (steht nur dort, nicht in der Datei), Fenster-Titel auf „Auswählen“ prüfen (Markiermodus hält Konsolen-Ausgaben an) |
@@ -57,6 +56,15 @@ Regeln. `HF_HUB_OFFLINE=1` (in `src/__init__.py`): Modelle nur aus dem lokalen C
   „Feedback“/„Chunks“ einmal von Hand bedienen (👍/👎 und Bilder vom Nutzer am 14./15.10. getestet).
   Neu zu sehen (13.4): „wer ist lady lilith?“ zeigt nur noch Lyssaras Bilder, nicht Lioras; der
   Kommentar wird erst mit Enter oder „Kommentar speichern“ gespeichert — Wegklicken speichert nichts.
+  Neu (18.10., 9): „Wer ist Lilith?“ zeigt eine Box „🖼️ Bilder“ mit Lyssaras Bildern.
+- **Inhalt statt Code (18.10., aus 10)**: **k001** „Wie viel kostet ein Langschwert?“ — das Regelbuch nennt
+  den Normalpreis nirgends direkt (Langschwert = schwere Waffe in 7.1.1, schwere Waffe = 15 G in 7.4), der
+  einzige Satz mit „Langschwert“ ist das Beispiel „meisterlich 75 Gold“ — die Antwort nennt 75. Ein Satz
+  wie „Ein Langschwert (schwere Waffe) kostet 15 Gold, meisterlich 75“ im Beispiel löst es.
+  **x008** Heimkehrpfennig — die Fundstelle ist nur die Loot-Tabelle in „Im Namen der Reinheit“
+  (`[[Kultpriester]] | [[Heimkehrpfennig]]`, Link in der 2. Spalte, für die Suche unerreichbar); das LLM
+  erfindet dann einen Gegner („Eisscherben-Wächter“, 3/3). Eine Notiz `Heimkehrpfennig.md` mit
+  „Erbeutet bei: Kultpriester (I-2)“ löst es (der Link existiert schon, die Notiz fehlt).
 
 ---
 
@@ -111,8 +119,7 @@ prüfen, bei weiteren Abweichungen den Vault einmal komplett neu aufbauen. Umges
   siehe „Erledigt“). „Wie viel Schaden macht ein Langbogen?“ nennt 18.10. die Waffentabelle (7.1.1).
   „Dolch, STÄ 4, Wurfzahl 12“ bleibt falsch gerechnet — Rechenfrage (3.14); ein Deckel je PDF-Kapitel
   half nicht (7, verworfen).
-- **AP-Pool**: „Wie viele Aktionspunkte habe ich?“ → „50 AP“ — die 50 sind ein gemeinsamer Pool für AP
-  und MP (2.5).
+- ~~**AP-Pool**~~ — 18.10. 3/3 richtig, die Antwort erklärt den gemeinsamen AP/MP-Pool (Roadmap 10).
 
 ### 3.15 Antwortfehler aus dem End-to-End-Lauf — Einzelfälle
 
@@ -143,10 +150,9 @@ Offen:
   Ø 7,3 s, Median 6,3 s je Frage (13.3: Ø 7,1 s) — kein spürbarer Aufpreis.
 - **👎 aus dem Chat (14.10.)** — 5 Bewertungen, 4 Fälle: drei behoben (siehe „Erledigt“ 3.15 Teil, Feedback);
   der Tippfehler „üebrschaden“ ist seit 17.10. behoben (siehe „Erledigt“ 3.15 Teil, Tippfehler).
-- **Fakten** (Priorität 10, nur bei Anlass): k001 Langschwert „20,5 Gold“ (Spalte „Preis“ der Simulations-Rangliste statt Preistabelle
-  7.4);
-  ~~p091 Tränke-Fehlwurf~~ (seit 3.17 3/3); x008 Heimkehrpfennig („Kultpriester“ gilt, Antwort nennt
-  Thalion).
+- **Fakten** — 18.10. geschlossen (Roadmap 10): ~~p091 Tränke-Fehlwurf~~ (seit 3.17 3/3); k001 Langschwert
+  (jetzt „75 Gold“ aus dem Meisterlich-Beispiel) und x008 Heimkehrpfennig (erfundener Gegner) liegen als
+  Inhaltsvorschlag unter „Offen beim Nutzer“.
 
 ### 3.14 Rechenfragen zum Regelwerk ⏸
 
@@ -178,6 +184,7 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 
 | Nr | Was | Wann | Wo dokumentiert |
 |---|---|---|---|
+| 10 | Übrige Einzelfälle 3.10/3.15 — **geschlossen**: AP-Pool 3/3 richtig (Antwort erklärt den gemeinsamen AP/MP-Pool), p009 und „Wer ist Arkenfeld?“ waren schon richtig. k001 (Langschwert-Preis, zwei Schritte Kategorie → Preistabelle) und x008 (Heimkehrpfennig nur in einer Loot-Tabellenspalte; LLM erfindet den Gegner) brauchen Inhalt statt Code → „Offen beim Nutzer“. Tabellenzeilen-Suche für Obsidian-Tabellen war 14.10. schon verworfen | 18.10. | — |
 | 9 (Teil) | Bilder auch bei Vor-/Spitznamen: `sources` liefern die Frontmatter-`aliases` der Notiz, der Chat zeigt ihre Bilder, wenn Frage oder Antwort den Namen **oder** einen Alias nennt („Wer ist Lilith?“ → Lyssara Vaydris). 7 der 11 Notizen mit Bildern haben Aliase (Vornamen, Spitznamen). Fremde Porträts bleiben draußen (UI-Test mit Liora, mutationsgeprüft); live: Aliase kommen mit den Quellen an. Kein Re-Index nötig | 18.10. | `docs/ui-ux.md`, `ARCHITECTURE.md` |
 | 3.19 | Simulationsbericht in Regelfragen — **ohne Änderung erledigt**: 42 von 129 Regelfragen bekommen Chunks aus `llm_report.md`, zusammen 93 von 1.576 (5,9 %), fast immer 1–3 aus der normalen Rangfolge; meist „Kontext > Metriken-Erklärung“ (21 Fragen), die die Regeln für die LLM-Analyse nacherzählt. Section Expansion nur bei p011 (12 Chunks) — Antwort trotzdem 3/3 richtig. Den Abschnitt auszuschließen kostete z002 (Simulationsfrage, braucht ihn); gezieltes Tuning für eine richtige Antwort lohnt nicht. Neu prüfen, wenn Regelantworten Werte aus dem Bericht statt aus dem Regelbuch nennen | 18.10. | — |
 | 3.18 | Kopfzeilen im Regelbuch-Text entfernen **verworfen**: Kopfzeile (Kapitel + Seitenzahl) steht an jedem Seitenumbruch, in 104 von 458 Chunks. Entfernt → Abschnitt 144 → 143, p024 (Krieger-Fähigkeiten) 0/3 — der Kapitelname hatte das Regelbuch vor NSC-Notizen gehalten; Variante „Kapitel einmal vorn im Embed-Text“ → 142, Platz 1 136 → 134, Alchemist/Dunkle Magie/Zeitmagie verlieren die Section Expansion. Zurückgebaut, Regelbuch neu indiziert: wieder genau 272 · 144 · 136, Suche 274/274 exakt | 18.10. | `docs/parsing.md` |
