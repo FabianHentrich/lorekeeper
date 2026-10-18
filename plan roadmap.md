@@ -7,13 +7,13 @@ und Begründungen stehen in der zuständigen Doku (Tabelle in `CLAUDE.md` → �
 Umsetzung im `git log`. Die Nummern bleiben stabil — die Doku verweist auf sie.
 
 **Qualitätsphase 13.–14.10. abgeschlossen**, Nacharbeit 13.1–13.4 (Ultrareview, leere Chunks,
-Regressionsprüfung, zwei Chat-Bugs) am 17.10. ebenfalls. Retrieval Datei 272/274, Abschnitt 143/149;
-Antworten 245/274 im dritten End-to-End-Lauf (im Rauschen der ersten beiden); Holdout-Listen 9/10.
+Regressionsprüfung, zwei Chat-Bugs) am 17.10. ebenfalls. Stand 18.10.: Retrieval Datei 272/274, Abschnitt
+144/149; Antworten 260/274 im End-to-End-Lauf (Ø 7,3 s je Frage); Holdout-Listen 9/10 · 51/53.
 **Regressionsprüfung** nach größeren Inhaltsänderungen (Regelbuch, Vault): Golden Set +
 End-to-End-Lauf + Holdout ([evaluation.md](docs/evaluation.md)), kein Tuning.
 
-Neu priorisiert am 17.10.: **jeder offene Punkt unten steht in der Tabelle** — auch die Einzelfälle
-aus 3.10/3.15, als eigene Zeile oder in einer Sammelzeile.
+Neu priorisiert am 18.10. (zwei Ideen des Nutzers für den Betrieb vorn): **jeder offene Punkt unten
+steht in der Tabelle** — auch die Einzelfälle aus 3.10/3.15, als eigene Zeile oder in einer Sammelzeile.
 
 ---
 
@@ -26,6 +26,9 @@ End-to-End-Lauf ~35 min (🟡).
 
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
+| 15 | Desktop-Verknüpfung zum Starten (Idee des Nutzers) | Mittel | Gering | 🟢 | Doppelklick statt Konsole + venv + `start.ps1`; vor allem für den Server-Betrieb. Kein Autostart — Start bleibt Handarbeit |
+| 16 | Neustart-Knopf neben „⏻ LoreKeeper beenden“ (Idee des Nutzers) | Mittel | Gering–Mittel | 🟢 (Live-Prüfung 🟡) | Behebt hängende Zustände ohne Konsole, gibt den VRAM frei (Modell im geteilten Speicher, 7b-Warnung) |
+| 3.17 | PDF-Parser: `1W8 Ergebnis` als oberste Überschrift (aus dem Eingang) | Gering–Mittel | Gering–Mittel | 🔴 | Alchemisten-Tabellen hängen unter falschem Kapitel, vermutlich Ursache von p091; Regelbuch-Re-Index + Golden Set |
 | 8 | 3.10 Monolith-Sektion in fremden Regelfragen (p011, p101) | Gering | Mittel | 🟡 | 22 Chunks, landet in den Top 3; Antworten bisher trotzdem richtig |
 | 9 | 2 Bilder — Rest (Vor-/Spitzname, Dateiname-Rückfall, PDF-Bilder, neues Bild ohne Notiz-Änderung) | Gering | Gering–Mittel | 🟢–🔴 | Einbettungen laufen. Vor-/Spitzname (13.4) über `aliases` der Notiz wäre klein (🟢); Dateiname-Rückfall braucht Spy-Test, PDF-Bilder dauerhafte Ablage + Re-Index (🔴) |
 | 10 | 3.10/3.15 übrige Einzelfälle: AP-Pool „50 AP“, p009 (Abschnitt-Miss, Antwort richtig), „Wer ist Arkenfeld?“, k001 Preis-Spalte, p091 Tränke-Tabelle, x008 Heimkehrpfennig | Gering | je Gering | 🟡 | Nur bei Anlass im Spiel; Antworten teils schon richtig |
@@ -63,11 +66,30 @@ Regeln. `HF_HUB_OFFLINE=1` (in `src/__init__.py`): Modelle nur aus dem lokalen C
 
 ## Offene Punkte
 
-### Neustart Button
-analog zum Beendenbottun sollte es einen neustartbutton geben, welcher einmal alle ressourcen aufräumt/leert und dann den lorekeeper neustartet. 
+### 15 LoreKeeper-Verknüpfung auf dem Desktop
 
-### Lorekeeper-Verknüpfung auf dem Desktop 
-anstatt immer erst python und dann die start.ps1 starten zu müssen wäre es gut wenn man einfach doppelklick auf eine verknüfung machen könnte und es dann von selbst startet. So könnte man den Server besser/einfacher starten da es da ja nicht um Entwicklung geht
+Idee des Nutzers (18.10.): anstatt immer erst python und dann die start.ps1 starten zu müssen wäre es gut
+wenn man einfach doppelklick auf eine verknüfung machen könnte und es dann von selbst startet. So könnte man
+den Server besser/einfacher starten da es da ja nicht um Entwicklung geht.
+
+**Ansatz**: kleines Skript legt eine `.lnk` auf dem Desktop an (`powershell -ExecutionPolicy Bypass -File
+start.ps1 -Server`, Arbeitsordner = Repo, Symbol); `start.ps1` aktiviert die venv schon selbst. Offen beim
+Umsetzen: im Server-Modus trotzdem den Browser öffnen? Eine zweite Verknüpfung „LoreKeeper beenden“
+(`stop.ps1`)? Kein Autostart (4.1) — die Verknüpfung startet nur auf Doppelklick. Doku in
+`docs/operations.md`.
+
+### 16 Neustart-Knopf
+
+Idee des Nutzers (18.10.): analog zum Beenden-Button sollte es einen Neustart-Button geben, welcher einmal
+alle Ressourcen aufräumt/leert und dann den LoreKeeper neu startet.
+
+**Ansatz**: `ui/shutdown.py` startet heute `stop.ps1` losgelöst (eigene Prozessgruppe, kein Fenster). Neustart
+= dasselbe, danach `start.ps1` im **gleichen Modus** (Server oder Entwicklung — aus der Kommandozeile des
+laufenden Backends, `--reload` ja/nein). „Aufräumen“ leistet `stop.ps1` schon: Ollama samt `llama-server`
+beendet (VRAM frei), Waisen auf den Ports werden beendet. Während einer Indizierung gesperrt wie das
+Beenden. Die Browser-Seite verliert kurz die Verbindung — Hinweis „startet neu, Seite in ~20 s neu laden“.
+Tests: UI-Test (Knopf, Sperre, Aufruf), Budget in `test_backend_calls.py` falls nötig; live einmal im
+Server-Modus. Doku: `docs/ui-ux.md`, `docs/operations.md`.
 
 ### 2 Bilder im Chat — Rest
 
@@ -116,8 +138,9 @@ prüfen, bei weiteren Abweichungen den Vault einmal komplett neu aufbauen. Umges
   Antwort trotzdem richtig.
 - **Monolith-Sektion** (22 Chunks) landet bei fremden Regelfragen in den Top 3 (p011, p101).
 - **Tabellen**: „Unterschied Dolch und Kurzschwert“ seit 17.10. gelöst (Rerank auf die genannten Zeilen,
-  siehe „Erledigt“). Offen: „Wie viel Schaden macht ein Langbogen?“ (Tabelle −1,5 hinter Simulationsbericht
-  und Krit-Regel) und „Dolch, STÄ 4, Wurfzahl 12“ (Deckel pro Datei, Priorität 7).
+  siehe „Erledigt“). „Wie viel Schaden macht ein Langbogen?“ nennt 18.10. die Waffentabelle (7.1.1).
+  „Dolch, STÄ 4, Wurfzahl 12“ bleibt falsch gerechnet — Rechenfrage (3.14); ein Deckel je PDF-Kapitel
+  half nicht (7, verworfen).
 - **AP-Pool**: „Wie viele Aktionspunkte habe ich?“ → „50 AP“ — die 50 sind ein gemeinsamer Pool für AP
   und MP (2.5).
 
@@ -176,11 +199,17 @@ zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 
 - (keine offenen — 14.1 erledigt 17.10.)
 
+### 3.17 PDF-Parser: `1W8 Ergebnis` als oberste Überschrift
+
+18.10. gefunden: Die Patzer-Tabelle und „Wurfgemisch“ (Chunks 243–245) gehören zu 5.4.6 Alchemist, stehen
+im Index aber unter einer eigenen Kapitel-Überschrift `**1W8 Ergebnis**`. Section Expansion und
+Überschriften-Pfad sehen sie dadurch nicht als Teil des Alchemisten; vermutlich auch die Ursache von p091
+(3.15, „1W8-Tabelle fehlt“). Erst klären, woher die Überschrift kommt (Inhaltsverzeichnis-Abgleich oder
+fette Tabellenkopfzeile, [parsing.md](docs/parsing.md)), dann Regelbuch-Re-Index, Golden Set, p091 je 3 Läufe.
+Weitere solche Überschriften im Regelbuch mit suchen.
+
 ## Eingang (neue Bugs und Ideen, noch nicht bewertet)
-- **PDF-Parser: `**1W8 Ergebnis**` als oberste Überschrift** (18.10.) — die Patzer-Tabelle und
-  „Wurfgemisch“ (Chunks 243–245) gehören zu 5.4.6 Alchemist, stehen im Index aber unter einer eigenen
-  Kapitel-Überschrift. Section Expansion und Überschriften-Pfad sehen sie dadurch nicht als Teil des
-  Alchemisten; vermutlich auch die Ursache von p091 (3.15, „1W8-Tabelle fehlt“). Braucht Regelbuch-Re-Index.
+- —
 
 ---
 
