@@ -1,6 +1,6 @@
 # LoreKeeper — Roadmap
 
-Stand: 17.10.2026
+Stand: 18.10.2026
 
 Hier steht **offene Arbeit**. Erledigtes ist unten eine Zeile mit Verweis; Entscheidungen, Messwerte
 und Begründungen stehen in der zuständigen Doku (Tabelle in `CLAUDE.md` → „Documentation“), die
@@ -26,7 +26,6 @@ End-to-End-Lauf ~35 min (🟡).
 
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 7 | Deckel je PDF-Kapitel — **End-to-End-Lauf offen** | Mittel (ungewiss) | Gering | 🟡 | Umgesetzt 17./18.10., nicht committet (Ablauf unten unter „7 Deckel je PDF-Kapitel“). Golden Set unverändert 272 · 144, Regelfragen Ø 8,3 → 10,6 Regelbuch-Chunks, Holdout 9/10 · 51/53; fehlt nur der E2E-Lauf gegen 260/274 |
 | 7c | Auto-Reload/Stopp hängt bei laufendem E2E-Lauf (Regression von 12.3?) | Mittel | Gering-Mittel | 🟡 | Neu 18.10.: Änderung unter `src/` um 00:00 — kein Neustart; `stop.ps1` musste nach 20 s hart beenden (samt Ollama). 12.3 hatte genau das behoben (Daemon-Thread); nachstellen mit einem kurzen E2E-Lauf |
 | 8 | 3.10 Monolith-Sektion in fremden Regelfragen (p011, p101) | Gering | Mittel | 🟡 | 22 Chunks, landet in den Top 3; Antworten bisher trotzdem richtig |
 | 9 | 2 Bilder — Rest (Vor-/Spitzname, Dateiname-Rückfall, PDF-Bilder, neues Bild ohne Notiz-Änderung) | Gering | Gering–Mittel | 🟢–🔴 | Einbettungen laufen. Vor-/Spitzname (13.4) über `aliases` der Notiz wäre klein (🟢); Dateiname-Rückfall braucht Spy-Test, PDF-Bilder dauerhafte Ablage + Re-Index (🔴) |
@@ -63,6 +62,12 @@ Regeln. `HF_HUB_OFFLINE=1` (in `src/__init__.py`): Modelle nur aus dem lokalen C
 ---
 
 ## Offene Punkte
+
+### Neustart Button
+analog zum Beendenbottun sollte es einen neustartbutton geben, welcher einmal alle ressourcen aufräumt/leert und dann den lorekeeper neustartet. 
+
+### Lorekeeper-Verknüpfung auf dem Desktop 
+anstatt immer erst python und dann die start.ps1 starten zu müssen wäre es gut wenn man einfach doppelklick auf eine verknüfung machen könnte und es dann von selbst startet. So könnte man den Server besser/einfacher starten da es da ja nicht um Entwicklung geht
 
 ### 2 Bilder im Chat — Rest
 
@@ -141,7 +146,8 @@ Offen:
   ([embedding-strategy.md](docs/embedding-strategy.md#warum-section-expansion)). Golden Set Abschnitt
   143 → 144/149, Chunks Ø 11,7 → 12,6; p036 und p014 0 → 3/3. E2E beider Schritte **253 → 260/274**.
   ✅ Erledigt bis auf a030 (Beweis-Tabelle im Vault) und p049 (Regel 4.11 + Zauber 5.5.6) — eigene
-  Ursachen, Einzelfälle. **Offen**: Antwortzeit mit längerem Kontext auf freiem Rechner messen.
+  Ursachen, Einzelfälle. Antwortzeit mit dem längeren Kontext auf freiem Rechner (E2E 18.10.):
+  Ø 7,3 s, Median 6,3 s je Frage (13.3: Ø 7,1 s) — kein spürbarer Aufpreis.
 - **👎 aus dem Chat (14.10.)** — 5 Bewertungen, 4 Fälle: drei behoben (siehe „Erledigt“ 3.15 Teil, Feedback);
   der Tippfehler „üebrschaden“ ist seit 17.10. behoben (siehe „Erledigt“ 3.15 Teil, Tippfehler).
 - **Fakten** (Priorität 10, nur bei Anlass): k001 Langschwert „20,5 Gold“ (Spalte „Preis“ der Simulations-Rangliste statt Preistabelle
@@ -166,35 +172,15 @@ und vereinfacht die Test-Fixtures) und Reranker + GPU-Rückfall als `src/retriev
 zusammen mit Feature-Arbeit, die diese Stellen ohnehin anfasst.
 
 
-### 7 Deckel je PDF-Kapitel — End-to-End-Lauf offen
-
-**Umgesetzt (17./18.10., nicht committet):** `max_per_source` zählt bei PDFs je (Quelle, Datei,
-oberste Überschrift) statt je Datei (`_cap_key` in `retriever.py`, Unit-Test mutationsgeprüft). Messung
-und Begründung: [embedding-strategy.md](docs/embedding-strategy.md#warum-ein-deckel-pro-datei). Doku,
-`settings.yaml`-Kommentar und Token-Rate im Log (`tokens_in/tokens_out/tok/s` in `Query timings`) sind
-schon nachgezogen.
-
-**Ablauf des offenen End-to-End-Laufs:**
-1. VRAM frei machen: `Get-Counter '\GPU Process Memory(*)\Shared Usage'` — `llama-server` darf keinen
-   geteilten Speicher belegen; sonst Programm schließen bzw. ab-/anmelden, `ollama stop qwen3:14b`
-   ([operations.md](docs/operations.md#häufige-probleme)).
-2. `.\start.ps1`, eine Probefrage stellen: `Query timings` muss ~50 tok/s zeigen; die Sidebar darf keine
-   Warnung „geteilter Speicher“ zeigen (7b — dabei auch prüfen, dass sie im Fehlerfall erscheint).
-3. Evaluation-Seite → End-to-End-Lauf (oder `POST /eval/run` mit `{"eval_type": "e2e"}`), ~30 min;
-   währenddessen nichts unter `src/` ändern.
-4. Vergleich mit `e2e_20261017_213213.json` (260/274, gleiche Stichwörter): gekippte Fragen sichten.
-   Zusätzlich die Dolch-Rechenfrage, „Wie viel Schaden macht ein Langbogen?“ und „Unterschied Dolch und
-   Kurzschwert“ im Chat stellen.
-5. Kein Rückschritt → committen, Zeile 7 nach „Erledigt“. Rückschritt → `_cap_key` auf je Datei
-   zurück und die Doku-Absätze wieder entfernen.
-6. Nebenbei liefert der Lauf die Antwortzeit mit den längeren Kontexten aus 3.15 (offen seit 17.10.).
-
 ### 14.0 UX
 
 - (keine offenen — 14.1 erledigt 17.10.)
 
 ## Eingang (neue Bugs und Ideen, noch nicht bewertet)
-- —
+- **PDF-Parser: `**1W8 Ergebnis**` als oberste Überschrift** (18.10.) — die Patzer-Tabelle und
+  „Wurfgemisch“ (Chunks 243–245) gehören zu 5.4.6 Alchemist, stehen im Index aber unter einer eigenen
+  Kapitel-Überschrift. Section Expansion und Überschriften-Pfad sehen sie dadurch nicht als Teil des
+  Alchemisten; vermutlich auch die Ursache von p091 (3.15, „1W8-Tabelle fehlt“). Braucht Regelbuch-Re-Index.
 
 ---
 
@@ -202,6 +188,7 @@ schon nachgezogen.
 
 | Nr | Was | Wann | Wo dokumentiert |
 |---|---|---|---|
+| 7 | Deckel je PDF-Kapitel **verworfen**: Golden Set 272 · 144 unverändert, E2E 260/274 wie die Grundlinie, aber p092 (Tränke je Rang) reproduzierbar verloren — Rang-Tabelle ist der 4. Chunk ihres Kapitels; Deckel bleibt je Datei. Nebenbei: Antwortzeit Ø 7,3 s auf freier GPU | 18.10. | `docs/embedding-strategy.md` |
 | 1 | PDF-Parsing: OCR (RapidOCR), Bildextraktion, Überschriften aus dem Inhaltsverzeichnis | 14.04. | `docs/parsing.md` |
 | 3.1 | Hybrid-Suche (BM25 + Vektor, RRF), Schwelle vor der Fusion | 14.04. | `docs/embedding-strategy.md` |
 | 3.3 | Chunk-Inspector (Tab „Chunks“) | 12.10. | `docs/ui-ux.md` |

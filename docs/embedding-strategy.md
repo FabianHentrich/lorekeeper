@@ -272,6 +272,24 @@ Chunks. Verdrängt wird auf Dateiebene, also wirkt der Deckel dort.
 - `5+` — wenn einzelne Dateien groß und maßgeblich sind (z.B. ein Regelwerk-PDF).
 - `0` — kein Deckel, reine Reranker-Reihenfolge.
 
+**Verworfen (18.10., Roadmap 7): Deckel bei PDFs je Kapitel** (oberste Überschrift) statt je Datei —
+gedacht, damit Regelfragen mehr als 3 Regelbuch-Chunks bekommen (Waffentabelle bei „Dolch, STÄ 4,
+Wurfzahl 12“ lag nach Score auf Platz 7). Golden Set (ein Prozess):
+
+| Deckel | Golden Set | Fragen mit anderen Chunks | Regelbuch-Chunks je Regelfrage (Ø) |
+|---|---|---|---|
+| **3 je Datei** (bleibt) | 272 · 144 | — | 8,3 |
+| 3 je PDF-Kapitel | 272 · 144 | 101 | 10,6 |
+| 4 je Datei | 272 · 144 | 116 | 8,7 |
+| 5 je Datei | 271 · 144 (verliert m058) | 137 | 9,3 |
+
+End-to-End mit „3 je PDF-Kapitel“: 260/274 wie die Grundlinie, kein echter Gewinn (4 gewonnene Fragen
+nur Wortlaut/Rauschen), aber p092 „Welche Tränke kann ein Alchemist auf welchem Rang herstellen?“
+reproduzierbar verloren (0/3): Die Rang-Tabelle ist der 4. Chunk aus Kapitel 5.4.6 (Score 0,859) und
+fällt unter den Kapitel-Deckel, die freien Plätze gehen an schwächere Chunks anderer Kapitel (0,83–0,85).
+Beim Deckel je Datei holt das Nachfüllen sie zurück. Die Dolch-Rechenfrage blieb auch mit Tabelle
+falsch (Rechnen, Roadmap 3.14).
+
 ### Warum ein Regelwerk-Slot?
 
 Fragen, die eine Vault-Entität **und** einen Regelbegriff nennen — „Was bewirkt Ritterlichkeit bei
