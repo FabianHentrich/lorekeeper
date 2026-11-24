@@ -5,6 +5,7 @@ The prompt routes replace the whole instance on hot reload. Variables per templa
 from pathlib import Path
 
 import yaml
+from jinja2 import Template
 from jinja2.sandbox import SandboxedEnvironment
 
 
@@ -22,13 +23,18 @@ class PromptManager:
 
         # Sandboxed like the preview: templates are editable on the Prompts page
         self.jinja_env = SandboxedEnvironment()
+        # Compiled once per template: compiling took ~3 ms per question on the event loop, rendering 0.1 ms
+        # (review 13.7 C5). Safe because a hot reload replaces the whole instance.
+        self._compiled: dict[str, Template] = {}
 
     def render(self, template_name: str, **kwargs) -> str:
         """Render the named template with the given Jinja2 variables. Raises ``KeyError`` if unknown."""
-        raw = self.templates.get(template_name)
-        if raw is None:
-            raise KeyError(f"Prompt template '{template_name}' not found")
-        template = self.jinja_env.from_string(raw)
+        template = self._compiled.get(template_name)
+        if template is None:
+            raw = self.templates.get(template_name)
+            if raw is None:
+                raise KeyError(f"Prompt template '{template_name}' not found")
+            template = self._compiled[template_name] = self.jinja_env.from_string(raw)
         return template.render(**kwargs)
 
     def get_system_prompt(self) -> str:

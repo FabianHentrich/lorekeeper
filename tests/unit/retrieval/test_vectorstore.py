@@ -522,6 +522,21 @@ class TestGetTableEntries:
         assert service.get_table_entries([], [1.0]) == []
         mock_collection.get.assert_not_called()
 
+    def test_writes_of_the_store_refresh_the_entry_map(self, store):
+        """The bold-cell map is cached (review 13.7 C1). A delete is safe even with a stale map (chunks are
+        fetched by id, a deleted one doesn't come back); a new chunk must show up on the next lookup, not
+        after a restart — that part is mutation-checked."""
+        assert [h["id"] for h in store.get_table_entries(["Gruft"], [0.0, 0.0, 1.0])] == ["loot"]
+
+        store._delete_where({"source_id": "gm"}, "test")
+        assert store.get_table_entries(["Gruft"], [0.0, 0.0, 1.0]) == []
+
+        store.embedding_service.embed_texts_sync = lambda texts: [[0.0, 0.0, 1.0] for _ in texts]
+        store.upsert_chunks([Chunk(content=self.NOT_FIRST, source_file="loot.pdf", source_path="loot.pdf",
+                                   document_type="pdf", heading_hierarchy=["Loot"], chunk_index=0,
+                                   total_chunks=1, metadata={"source_id": "gm"})])
+        assert len(store.get_table_entries(["Gruft"], [0.0, 0.0, 1.0])) == 1
+
 
 def test_list_metadata_reads_back_the_same_from_both_forms():
     """One decoder for list fields: the ingest-time list and ChromaDB's comma-joined string give the same

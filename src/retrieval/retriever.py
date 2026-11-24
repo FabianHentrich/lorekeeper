@@ -20,7 +20,13 @@ from src.config.manager import RetrievalConfig
 from src.retrieval.bm25_index import BM25Index
 from src.retrieval.embeddings import EmbeddingService
 from src.retrieval.truecase import TrueCaser
-from src.retrieval.vectorstore import _TABLE_SEPARATOR, VectorStoreService, identity_line
+from src.retrieval.vectorstore import (
+    _CELL_BREAK,
+    _TABLE_SEPARATOR,
+    VectorStoreService,
+    identity_line,
+    table_body_rows,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -59,15 +65,15 @@ def _focus_table(text: str, names: set[str]) -> str | None:
     whole weapon table below unrelated sections. The caller keeps the better of both scores, so a table can
     only rise: scoring the focused text alone moved the Glücksstein table from rank 1 to 4 and cost p086
     (golden set 144 → 143); with the maximum the golden set is unchanged (roadmap 3.10, 17.10.).
+    Rows come from ``table_body_rows`` like the embed text's, so the header of a second table in the chunk
+    is no row (it was until review 13.7 B4).
     """
     lines = text.split("\n")
-    table = [i for i, line in enumerate(lines) if line.lstrip().startswith("|")]
-    rows = [i for i in table[1:] if not _TABLE_SEPARATOR.match(lines[i].strip())   # table[0] is the header
-            and {p.replace("*", "").strip() for p in re.split(r"<br\s*/?>", lines[i].strip().strip("|").split("|")[0])}
-            & names]
+    rows = [i for i, cell in table_body_rows(text)
+            if {p.replace("*", "").strip() for p in _CELL_BREAK.split(cell)} & names]
     if not rows:
         return None
-    first = table[0]
+    first = next(i for i, line in enumerate(lines) if line.lstrip().startswith("|"))   # first table's header
     keep = [*range(first), first]
     if first + 1 < len(lines) and _TABLE_SEPARATOR.match(lines[first + 1].strip()):
         keep.append(first + 1)
@@ -239,6 +245,22 @@ class Retriever:
                 self._reranker = self._load_cpu_reranker()
         return self._reranker
 
+    async def warm_up(self) -> None:
+        """Build the caches every question needs now, off the event loop: truecasing vocabulary, entry map
+        and — when hybrid search is the default — the BM25 index. Called at startup and after every index
+        change; otherwise the first question paid 1.3 s (vocabulary) + 0.9 s (map) on 24.11. (review 13.7 C3).
+        A failure is only logged: the next question builds them as before."""
+        def build() -> None:
+            self.truecaser.ensure_built(self.vectorstore)
+            self.vectorstore.warm_up()
+            if self.config.hybrid.enabled:
+                self.bm25_index.ensure_built(self.vectorstore)
+        try:
+            await run_in_threadpool(build)
+        except Exception as e:
+            logger.warning("Warm-up of the retrieval caches failed (%s: %s); the next question builds them",
+                           type(e).__name__, e)
+
     def _load_cpu_reranker(self):
         """The cross-encoder on the CPU (ONNX Runtime, fp32 export) — ``cpu`` backend and the DirectML fallback."""
         from src.retrieval.onnx_reranker import CPU_ONNX_FILE, OnnxCrossEncoder
@@ -288,7 +310,8 @@ class Retriever:
         row of. The rerank picks ``top_k_rerank`` chunks with the per-file cap and the rules slot, then
         section expansion may replace fragments with their whole section. Parameters left at None take the
         config value. ``metadata_filters`` is applied to every search path. When ``timings`` is given,
-        per-stage durations in ms are written into it (embed, search, bm25, entry, rerank, expand).
+        per-stage durations in ms are written into it (embed, search, rules, bm25, entry, rerank, expand);
+        search, rules, bm25 and entry run at the same time, so their durations overlap.
         """
         stage_ms = timings if timings is not None else {}
         top_k = top_k or self.config.top_k
@@ -314,15 +337,40 @@ class Retriever:
             f"score_threshold={self.config.score_threshold} | where={where}"
         )
 
-        # 1. Vector search (always)
-        t0 = time.perf_counter()
-        vector_results = await run_in_threadpool(
-            self.vectorstore.query,
-            query_embedding=query_embedding,
-            top_k=top_k,
-            where=where,
+        async def timed(stage: str, fn, *args, **kwargs):
+            """One blocking search in the threadpool; records its own duration (the searches overlap)."""
+            t0 = time.perf_counter()
+            result = await run_in_threadpool(fn, *args, **kwargs)
+            stage_ms[stage] = (time.perf_counter() - t0) * 1000
+            return result
+
+        async def skipped() -> list:
+            return []
+
+        def bm25_search() -> list[dict[str, Any]]:
+            self.bm25_index.ensure_built(self.vectorstore)  # lazy; logs its build
+            return self.bm25_index.query(query_text=query, top_k=self.config.hybrid.bm25_top_k, where=where)
+
+        # Rules slot candidates: a separate search inside the rulebook, same filters (player mode included),
+        # kept apart from the main pool — at most one of them enters the result (see _rerank). Entry slot:
+        # tables with a row the question names (same filter); both only with the reranker, which decides.
+        slot = self.config.rules_slot
+        final_k = top_k_rerank or self.config.reranking.top_k_rerank
+        use_rules = bool(slot.enabled and slot.candidates and self.config.reranking.enabled
+                         and final_k >= _SLOT_MIN_PLACES)
+        entry = self.config.entry_slot
+        names = _entry_names(query) if entry.enabled and entry.max_chunks and self.config.reranking.enabled else []
+
+        # 1. Vector search (always), rules slot, BM25 and entry slot need only the embedding and the filter —
+        # run together instead of one after another (review 13.7 C2). Every one carries ``where``.
+        vector_results, rules_hits, bm25_results, entry_hits = await asyncio.gather(
+            timed("search", self.vectorstore.query, query_embedding=query_embedding, top_k=top_k, where=where),
+            timed("rules", self.vectorstore.query, query_embedding=query_embedding, top_k=slot.candidates,
+                  where={"$and": [where, {"group": RULES_GROUP}]}) if use_rules else skipped(),
+            timed("bm25", bm25_search) if use_hybrid else skipped(),
+            timed("entry", self.vectorstore.get_table_entries, names, query_embedding, where,
+                  entry.max_chunks) if names else skipped(),
         )
-        stage_ms["search"] = (time.perf_counter() - t0) * 1000
 
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f"Vectorstore returned {len(vector_results)} candidates (pre-threshold):")
@@ -343,33 +391,11 @@ class Retriever:
             if r["score"] >= self.config.score_threshold
         ]
 
-        # 1b. Rules slot candidates: a separate search inside the rulebook, same filters (player mode
-        # included). Kept apart from the main pool — at most one of them enters the result (see _rerank).
-        slot = self.config.rules_slot
-        rules_extra: list[dict[str, Any]] = []
-        final_k = top_k_rerank or self.config.reranking.top_k_rerank
-        if slot.enabled and slot.candidates and self.config.reranking.enabled and final_k >= _SLOT_MIN_PLACES:
-            rules_hits = await run_in_threadpool(
-                self.vectorstore.query,
-                query_embedding=query_embedding,
-                top_k=slot.candidates,
-                where={"$and": [where, {"group": RULES_GROUP}]},
-            )
-            known = {r["id"] for r in vector_results}
-            rules_extra = [r for r in rules_hits if r["id"] not in known and r["score"] >= self.config.score_threshold]
+        known = {r["id"] for r in vector_results}
+        rules_extra = [r for r in rules_hits if r["id"] not in known and r["score"] >= self.config.score_threshold]
 
-        # 2. BM25 search + RRF fusion (if hybrid enabled)
+        # 2. RRF fusion with the BM25 hits (if hybrid enabled)
         if use_hybrid:
-            t0 = time.perf_counter()
-            await run_in_threadpool(self.bm25_index.ensure_built, self.vectorstore)  # lazy; logs its build
-
-            bm25_results = await run_in_threadpool(
-                self.bm25_index.query,
-                query_text=query,
-                top_k=self.config.hybrid.bm25_top_k,
-                where=where,
-            )
-
             vector_ids = {v["id"] for v in vector_results}
             bm25_only = sum(1 for r in bm25_results if r["id"] not in vector_ids)
             logger.debug(
@@ -381,26 +407,17 @@ class Retriever:
                 vector_results, bm25_results,
                 bm25_weight=self.config.hybrid.bm25_weight,
             )
-            stage_ms["bm25"] = (time.perf_counter() - t0) * 1000
         else:
             results = vector_results
 
         chunks = [_to_chunk(item) for item in results]
 
-        # 2b. Entry slot: tables with a row the question names join the rerank pool (same filter as the
-        # request — player mode included). Only with the reranker, which decides whether they stay. No
-        # score_threshold on purpose: these tables are looked up by name *because* their vector is weak —
-        # the reranker is the only gate (roadmap 3.10/13.0).
-        entry = self.config.entry_slot
-        if entry.enabled and entry.max_chunks and self.config.reranking.enabled and (names := _entry_names(query)):
-            t0 = time.perf_counter()
-            entry_hits = await run_in_threadpool(
-                self.vectorstore.get_table_entries, names, query_embedding, where, entry.max_chunks,
-            )
+        # 2b. Entry slot hits join the rerank pool. No score_threshold on purpose: these tables are looked
+        # up by name *because* their vector is weak — the reranker is the only gate (roadmap 3.10/13.0).
+        if entry_hits:
             known = {r["id"] for r in results}
             added = [_to_chunk(h) for h in entry_hits if h["id"] not in known]
             chunks += added
-            stage_ms["entry"] = (time.perf_counter() - t0) * 1000
             if added:
                 logger.debug("Entry slot: %s", ", ".join(f"{c.source_file} > {c.heading}" for c in added))
 
@@ -459,6 +476,7 @@ class Retriever:
                 best_rank[own] = min(best_rank[own], rank)
 
         expanded: dict[tuple[str, str, str], list[RetrievedChunk]] = {}
+        file_items: dict[tuple[str, str], list[dict[str, Any]]] = {}
         for (source_id, source_file, parent), headings in siblings.items():
             if len(headings) < 2:
                 continue
@@ -468,7 +486,11 @@ class Retriever:
                     f"{best_rank[(source_id, source_file, parent)] + 1} > {top_rank}"
                 )
                 continue
-            items = await run_in_threadpool(self.vectorstore.get_chunks_for_file, source_id, source_file, where)
+            # One fetch per file — two sections of the same file used to load it twice (review 13.7 C5)
+            if (source_id, source_file) not in file_items:
+                file_items[(source_id, source_file)] = await run_in_threadpool(
+                    self.vectorstore.get_chunks_for_file, source_id, source_file, where)
+            items = file_items[(source_id, source_file)]
             section = [
                 it for it in items
                 if (h := it["metadata"].get("heading_hierarchy", "")) == parent or h.startswith(parent + " > ")
@@ -550,14 +572,14 @@ class Retriever:
         extra = rules_candidates or []
         pairs = [[query, _rerank_text(c)] for c in chunks + extra]
 
-        all_scores = await self._predict(pairs)
-        # Tables with a row the question names also get scored on just those rows; the better score counts
+        # Tables with a row the question names also get scored on just those rows; the better score counts.
+        # One cross-encoder call for both (review 13.7 C4): a second call cost one more GPU batch.
         names = set(_entry_names(query))
         focused = {n: f for n, (_, text) in enumerate(pairs) if (f := _focus_table(text, names))}
-        if focused:
-            row_scores = await self._predict([[query, f] for f in focused.values()])
-            for n, score in zip(focused, row_scores, strict=True):
-                all_scores[n] = max(all_scores[n], score)
+        predicted = await self._predict(pairs + [[query, f] for f in focused.values()])
+        all_scores = predicted[:len(pairs)]
+        for n, score in zip(focused, predicted[len(pairs):], strict=True):
+            all_scores[n] = max(all_scores[n], score)
         scores, extra_scores = all_scores[:len(chunks)], all_scores[len(chunks):]
 
         ranked = sorted(zip(scores, chunks, strict=True), key=lambda x: x[0], reverse=True)

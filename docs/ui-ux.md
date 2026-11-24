@@ -507,7 +507,7 @@ Reglerbereichs (von Hand gesetzt, z.B. `top_k: 60`), zeigt die Seite ihn begrenz
 | Frage mit Ollama qwen3:14b (warm) | erster Token ~2 s, gesamt je nach Länge 2,6–18 s, lange Listen bis ~34 s (Messwerte: [ARCHITECTURE.md](../ARCHITECTURE.md) → Hardware) |
 | Erste Frage nach > 1 h Pause | +~16 s (Ollama lädt das Modell neu, `OLLAMA_KEEP_ALIVE`) |
 | Frage mit Gemini 2.5 Flash | 3–8 s gesamt |
-| Retrieval | p50 ~0,27 s, p95 ~0,36 s (Embedding ~0,04 s, Suche ~0,02 s, Eintrags-Slot 0,03–0,13 s, Reranking 0,07–0,16 s auf der GPU; CPU-Rückfall Sekunden — 14.10.) |
+| Retrieval | p50 ~0,18 s (Embedding ~0,03 s, Vektor-/Regelwerk-/Eintragssuche parallel ~0,03 s, Reranking ~0,11 s auf der GPU; CPU-Rückfall Sekunden — 24.11., [embedding-strategy.md](embedding-strategy.md#warum-ein-eintrags-slot)) |
 | Backend-Start | ~18 s bis `/health` |
 
 Embedding-Modell und Reranker werden beim Start geladen — die erste Frage ist nicht langsamer als

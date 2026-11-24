@@ -8,6 +8,7 @@ explicitly and a mismatch with an existing collection is logged.
 import hashlib
 import logging
 import re
+import threading
 from typing import Any
 
 import chromadb
@@ -25,6 +26,9 @@ _CHROMA_BATCH = 5000
 # Cosine scores closer than this count as tied (float32 noise) in the exactness check
 _TIE_EPS = 1e-6
 _TABLE_SEPARATOR = re.compile(r"^\|?(\s*:?-{2,}:?\s*\|)+\s*:?-*:?\s*\|?$")
+# A bold table cell "|**Name**|" — the key of the entry-slot map. No "|" inside, so every occurrence is
+# found even next to other cells; the trailing "|" stays unconsumed for the following cell.
+_BOLD_CELL = re.compile(r"\|\*\*([^|]+?)\*\*(?=\|)")
 
 
 def split_meta_list(raw: Any) -> list[str]:
@@ -48,15 +52,16 @@ def identity_line(source_file: str, aliases_raw: Any) -> str:
     return " | ".join([stem, *(a for a in split_meta_list(aliases_raw) if a != stem)])
 
 
-def _table_row_names(content: str) -> list[str]:
-    """First cell of every body row of the Markdown tables in ``content`` (header and separator rows skipped).
+_CELL_BREAK = re.compile(r"<br\s*/?>")
 
-    Rows with an empty first cell are continuations of the row above (PDF tables wrap long cells) and are
-    left out. ``**``/``<br>`` are removed so the names read as plain words.
-    """
-    names: list[str] = []
+
+def table_body_rows(content: str) -> list[tuple[int, str]]:
+    """(line index, raw first cell) of every body row of the Markdown tables in ``content`` — the one
+    definition of "table row" for the embed text, the entry slot and the rerank focus. Each table's header
+    row and all separator rows are skipped; a non-table line ends a table."""
+    rows: list[tuple[int, str]] = []
     header_pending = True
-    for line in content.split("\n"):
+    for i, line in enumerate(content.split("\n")):
         stripped = line.strip()
         if not stripped.startswith("|"):
             header_pending = True   # a new table starts with its own header row
@@ -66,11 +71,19 @@ def _table_row_names(content: str) -> list[str]:
         if header_pending:
             header_pending = False
             continue
-        first = stripped[1:].split("|", 1)[0]
-        first = re.sub(r"<br\s*/?>", " ", first).replace("**", "").strip()
-        if first:
-            names.append(first)
-    return names
+        rows.append((i, stripped[1:].split("|", 1)[0]))
+    return rows
+
+
+def _table_row_names(content: str) -> list[str]:
+    """First cell of every body row of the Markdown tables in ``content``, as plain words.
+
+    Rows with an empty first cell are continuations of the row above (PDF tables wrap long cells) and are
+    left out. ``**``/``<br>`` are removed so the names read as plain words. Feeds the embedded text — a
+    changed output changes vectors and needs a full re-index.
+    """
+    names = (_CELL_BREAK.sub(" ", cell).replace("**", "").strip() for _, cell in table_body_rows(content))
+    return [name for name in names if name]
 
 
 class VectorStoreService:
@@ -86,6 +99,11 @@ class VectorStoreService:
         self.embedding_service = embedding_service
         self._client: chromadb.ClientAPI | None = None
         self._collection = None
+        # Bold table cell → chunk ids (entry slot), built lazily from a full scan. Every write of this class
+        # drops it; the generation lets a build that raced with a write discard its result.
+        self._entry_map: dict[str, list[str]] | None = None
+        self._entry_gen = 0
+        self._entry_lock = threading.Lock()
 
     def _get_client(self) -> chromadb.ClientAPI:
         """Return the embedded ChromaDB client, connecting on first call."""
@@ -214,6 +232,7 @@ class VectorStoreService:
 
             metadatas.append(meta)
 
+        self._invalidate_entries()
         for i in range(0, len(ids), _CHROMA_BATCH):
             end = i + _CHROMA_BATCH
             collection.upsert(
@@ -222,6 +241,7 @@ class VectorStoreService:
                 embeddings=embedding_list[i:end],
                 metadatas=metadatas[i:end],
             )
+        self._invalidate_entries()   # again: a build during the upsert may have seen half of it
 
         logger.info(f"Upserted {len(ids)} chunks to ChromaDB")
 
@@ -273,14 +293,18 @@ class VectorStoreService:
         Chunks naming more of ``names`` come first. ``score`` is the real cosine similarity to
         ``query_embedding``, so these hits read like any other. ``where`` is AND-ed in — the
         request's filter (player restriction included) applies like on every other search path.
+
+        The bold cells come from an in-memory map (``_table_entries_map``), the chunks by id: the
+        ``$contains`` scan over every stored text it replaces took 81 ms per question on average over
+        the golden set (24.11., 4,050 chunks; review 13.7 C1), with the same hits.
         """
         if not names or limit <= 0:
             return []
-        patterns: list[dict[str, Any]] = [{"$contains": f"|**{n}**|"} for n in names]
-        params: dict[str, Any] = {
-            "where_document": patterns[0] if len(patterns) == 1 else {"$or": patterns},
-            "include": ["documents", "metadatas", "embeddings"],
-        }
+        entry_map = self._table_entries_map()
+        ids = sorted({cid for n in names for cid in entry_map.get(n, ())})
+        if not ids:
+            return []
+        params: dict[str, Any] = {"ids": ids, "include": ["documents", "metadatas", "embeddings"]}
         if where:
             params["where"] = where
         data = self._get_collection().get(**params)
@@ -299,6 +323,36 @@ class VectorStoreService:
                          "_matched": len(matched)})
         hits.sort(key=lambda h: (h["_matched"], h["score"]), reverse=True)
         return [{k: v for k, v in h.items() if k != "_matched"} for h in hits[:limit]]
+
+    def _table_entries_map(self) -> dict[str, list[str]]:
+        """Bold table cell (``|**x**|`` → ``x``) → ids of the chunks containing it; built on first use from one
+        full scan (0.9 s at 4,050 chunks, 24.11.), then reused until a write of this class drops it. Holds no
+        filter: the caller fetches the ids with the request's ``where``. Blocks — worker threads only."""
+        entry_map = self._entry_map
+        if entry_map is not None:
+            return entry_map
+        with self._entry_lock:
+            if self._entry_map is not None:
+                return self._entry_map
+            generation = self._entry_gen
+            data = self._get_collection().get(include=["documents"])
+            built: dict[str, list[str]] = {}
+            for doc_id, doc in zip(data.get("ids") or [], data.get("documents") or [], strict=True):
+                for name in set(_BOLD_CELL.findall(doc or "")):
+                    built.setdefault(name, []).append(doc_id)
+            if generation == self._entry_gen:   # else a write came in meanwhile — use it once, keep nothing
+                self._entry_map = built
+            logger.info("Table entry map built: %d cell names", len(built))
+            return built
+
+    def _invalidate_entries(self) -> None:
+        """Drop the entry map after a write (rebuilt on the next entry lookup)."""
+        self._entry_gen += 1
+        self._entry_map = None
+
+    def warm_up(self) -> None:
+        """Build the entry map now instead of in the next question — after startup and every index change."""
+        self._table_entries_map()
 
     def get_content_hashes_for_source(self, source_id: str) -> dict[str, str]:
         """Return ``{source_file: content_hash}`` for one source, used by ingestion to skip unchanged files.
@@ -393,6 +447,7 @@ class VectorStoreService:
         count = len(existing["ids"]) if existing and existing.get("ids") else 0
         if count:
             collection.delete(where=where)
+            self._invalidate_entries()   # hygiene only: deleted ids would just not be found by the id fetch
         logger.info(f"Deleted {count} chunks: {label}")
         return count
 
@@ -424,6 +479,7 @@ class VectorStoreService:
         except NotFoundError:
             pass  # nothing to wipe — any other error must reach the caller, not end in "Wiped"
         self._collection = None
+        self._invalidate_entries()
         logger.warning(f"Wiped collection: {self.config.collection_name}")
 
     def count(self) -> int:

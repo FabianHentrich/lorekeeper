@@ -339,8 +339,10 @@ Ablauf in `Retriever.retrieve()` — alle Parameter in [docs/configuration.md](d
    Kandidaten, derselbe Filter) für Fragen wie „Was bewirkt Ritterlichkeit bei Escanor?“, bei denen
    die NPC-Datei alle Kandidaten belegt.
    **Eintrags-Slot** (`entry_slot`): nennt die Frage eine Tabellenzeile („Dolch-Angriff“), kommt die
-   Tabelle per Namenssuche im gespeicherten Text dazu (derselbe Filter, max. 3) — der Reranker
-   entscheidet.
+   Tabelle per Namenssuche dazu (Map der fetten Tabellenzellen im Store, derselbe Filter, max. 3) — der
+   Reranker entscheidet. Vektorsuche, BM25, Regelwerk- und Eintrags-Suche laufen gleichzeitig.
+   Tippfehler-Vokabular und Zellen-Map baut `Retriever.warm_up` beim Start und nach jeder Änderung der
+   Collection im Hintergrund.
 5. **Reranking** mit dem Cross-Encoder `jina-reranker-v2-base-multilingual` — auf der GPU über ONNX
    Runtime + DirectML (`reranking.backend: directml`, 70–160 ms pro Frage), sonst mit Warnung auf der CPU. Fällt
    die GPU im Betrieb aus, wechselt der Retriever mit Warnung dauerhaft auf die CPU. Das Laden des

@@ -28,11 +28,13 @@ router = APIRouter()
 
 
 def _collection_changed() -> None:
-    """Drop the caches built from the whole collection: the BM25 index and the truecasing vocabulary.
-    Both rebuild on the next question."""
+    """Drop the caches built from the whole collection — the BM25 index and the truecasing vocabulary (the
+    store drops its entry map itself on every write) — and rebuild them in the background, so the next
+    question doesn't pay for it. Needs the running event loop (called from routes and jobs)."""
     import src.main as main_module
     main_module.bm25_index.invalidate()
     main_module.retriever.truecaser.invalidate()
+    spawn_background(main_module.retriever.warm_up())
 
 
 # Ingestion job storage (in-memory)

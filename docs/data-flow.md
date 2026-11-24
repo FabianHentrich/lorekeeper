@@ -83,7 +83,7 @@ flowchart TD
     RET --> VEC[("Vektorsuche\ne5-base 'query: '\nCosine top_k=20, ≥ 0,5")]
     RET -.->|"wenn hybrid"| BM25[("BM25\nrank_bm25 top_k=15\n(lazy gebaut)")]
     RET -.->|"wenn rules_slot"| RULES[("Regelwerk-Suche\ngroup = rules UND gleicher Filter\ntop 5, eigener Pool")]
-    RET -.->|"wenn entry_slot"| ENTRY[("Eintrags-Suche\nTabellenzeile |**Name**| aus der Frage\nUND gleicher Filter, max. 3")]
+    RET -.->|"wenn entry_slot"| ENTRY[("Eintrags-Suche\nTabellenzeile |**Name**| aus der Frage\n(Zellen-Map → IDs) UND gleicher Filter, max. 3")]
 
     VEC --> RRF["Reciprocal Rank Fusion\n(nur bei hybrid)"]
     BM25 -.->|"Treffer"| RRF

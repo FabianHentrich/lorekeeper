@@ -26,6 +26,7 @@ def patched_lifespan():
 
     fake_retriever = MagicMock()
     fake_retriever.get_reranker = MagicMock()
+    fake_retriever.warm_up = AsyncMock()
 
     fake_provider = MagicMock()
     fake_provider.model = "fake-model"

@@ -14,8 +14,9 @@ der Vault-Inhalt nachgezogen (Schattenorden „vier Pfade“, Fundort des Heimke
 Kultpriester, 19 Bilder eingebettet) und indiziert; Golden Set danach 272 · 144, Platz 1 134, Suche
 274/274 exakt; Regressionsprüfung (12) ohne Rückschritt. Handprüfungen im Browser und System-Punkt vom
 Nutzer erledigt. UI-Review 13.6 am 18.10. umgesetzt und live geprüft; Maskenball-Alias eingetragen.
-Offen nur Nutzer-Inhalt (k001). **24.11.**: Review `src/` (13.7) — A/B/D umgesetzt, Rest (Retrieval-Tempo,
-Tabellenzeilen, Bild-Stubs, Listenformat) offen.
+Offen nur Nutzer-Inhalt (k001). **24.11.**: Review `src/` (13.7) — A–D umgesetzt, Retrieval p50 312 → 182 ms
+bei unverändertem Golden Set (270 · 144; m043/m044 nennen den umbenannten Gerrit noch „Aldric“). Offen:
+Bild-Stubs und Listenformat (beide mit Re-Index).
 
 **Regressionsprüfung** nach größeren Inhaltsänderungen (Regelbuch, Vault): Golden Set + Suchgenauigkeit
 + End-to-End-Lauf + Holdout ([evaluation.md](docs/evaluation.md)), kein Tuning. Weicht die
@@ -32,7 +33,7 @@ End-to-End-Lauf ~35 min (🟡).
 
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| 13.7 | Rest aus Review `src/`: B4 Tabellenzeilen · C Retrieval-Tempo · E Entscheidungen · B3 Listenformat | Mittel | Gering–Mittel | 🟡 B4/C · 🔴 E1/B3 | A, B (ohne B4) und D am 24.11. erledigt; C spart ~0,1–0,2 s je Frage (geschätzt) |
+| 13.7 | Rest aus Review `src/`: E Entscheidungen (Bild-Stubs, Tabellen-Fokus) · B3 Listenformat | Gering | Gering | 🔴 E1/B3 (Re-Index) | A–D am 24.11. erledigt; offen nur, was einen Re-Index oder eine Entscheidung braucht |
 
 **Pausiert** (Begründung je Abschnitt unten):
 
@@ -57,6 +58,11 @@ nur aus dem lokalen Cache, Downloads mit `HF_HUB_OFFLINE=0`
 
 Erledigtes (Vault-Inhalt, System, Handprüfungen im Browser) steht unter „Erledigt“ → „Nutzer 18.10.“.
 
+- [ ] **Golden Set, m043/m044** (24.11., aus 13.7): die Notiz heißt jetzt `Gegner/Bossgegner/Siegel-Duelist
+  Gerrit.md`, beide Fragen fragen nach „Siegel-Duelist Aldric“ und erwarten die alte Datei — darum Datei
+  270 statt 272. Fragen und erwartete Quelle auf Gerrit umstellen (oder `Aldric` als Alias der Notiz,
+  falls der Name im Spiel noch vorkommt).
+
 - [ ] **Regelbuch 7.4, k001** „Wie viel kostet ein Langschwert?“ — der Normalpreis steht nirgends direkt
   (Langschwert = schwere Waffe in 7.1.1, schwere Waffe = 15 G in 7.4); der einzige Satz mit „Langschwert“
   ist das Beispiel „meisterlich 75 Gold“, die Antwort nennt 75. Vorschlag: „Ein Langschwert (schwere
@@ -80,8 +86,9 @@ Erledigtes (Vault-Inhalt, System, Handprüfungen im Browser) steht unter „Erle
 markierten Befunde im Code nachgeprüft, der Rest vom Reviewer per Code/Skript belegt. Retrieval-Punkte
 (C) nur mit unverändertem Golden Set (272 · 144).
 
-**✅ A, B (ohne B4) und D erledigt 24.11.** (Freigabe des Nutzers) — „Umgesetzt“ steht unter „Erledigt“
-(13.7 Teil). **Offen:** B4, C, E und das Listenformat aus B3 (siehe dort).
+**✅ A, B, C und D erledigt 24.11.** (Freigabe des Nutzers) — „Umgesetzt“ steht unter „Erledigt“
+(13.7 Teil, 13.7 B4/C). **Offen:** E und das Listenformat aus B3 (siehe dort); aus C bewusst nicht gemacht:
+gebündeltes Löschen beim Ingest (~3 % der Ingest-Zeit) und `.env`-Cache (< 1 ms).
 
 **A — Verstöße gegen Invarianten / echte Abweichungen** (🟢, je Gering)
 - **A1** ✔ Blockierende ChromaDB-Aufrufe auf dem Event-Loop: `delete_by_source_id`, `wipe_collection`,
@@ -229,6 +236,7 @@ Datei auf dem Streamlit-Server liest (auch im Heimnetz).
 
 | Nr | Was | Wann | Wo dokumentiert |
 |---|---|---|---|
+| 13.7 B4/C | Retrieval-Teil des Reviews, Golden Set bei gestopptem Backend. **Grundlinie zuerst**: Stand vor dem Review (`bf18e48`) und danach (`e69a3ec`) gleich — Datei 270/274, Abschnitt 144/149, Platz 1 119; zwei Läufe desselben Stands unterscheiden sich in bis zu 6 Fragen nur in der Reihenfolge fast gleich bewerteter Chunks (Rauschen). Gegenüber 18.10. (272) fehlen m043/m044: die Notiz heißt jetzt `Siegel-Duelist Gerrit.md`, die Fragen nennen noch „Aldric“ → Golden Set beim Nutzer. **B4** ein Zeilen-Iterator `table_body_rows` für Embed-Text und Rerank-Fokus; Embed-Zeilennamen über alle 4.050 Chunks byte-gleich (kein Re-Index), Fokus anders in 9 von 1.829 Tabellen-Chunks (Kopfzeile einer zweiten Tabelle zählt nicht mehr als Zeile); Golden Set ohne eine geänderte Frage. `<br>`-Fall („l Langbogen“) bleibt — der Eintrags-Slot findet nur fette Zellen `|**Langbogen**|`. **C1** Zellen-Map statt `$contains`: 548 Abfragen (Chat- und Spieler-Filter) ohne Abweichung, 59 → 0,6 ms; Store verwirft die Map bei jedem Schreiben (Upsert mutationsgeprüft; Löschen ist auch mit alter Map richtig). **C2** Vektor-, Regelwerk-, BM25-, Eintragssuche parallel, neue Stufe `rules` im Log. **C3** `Retriever.warm_up` (Vokabular 1,3 s + Map 0,9 s) beim Start und nach jeder Index-Änderung im Hintergrund. **C4** ein Cross-Encoder-Aufruf statt zwei. **C5** Templates einmal kompiliert, Section Expansion holt jede Datei einmal. **Gemessen** (274 Fragen, echter Index): Retrieval p50 **312 → 182 ms**, Mittel 318 → 186; Golden Set unverändert 270 · 144, Platz 1 119, keine Frage mit anderen Chunks. Suite 928 → 930, `pytest -m perf` 7 grün (3 brauchen das Backend) | 24.11. | `docs/embedding-strategy.md`, `ARCHITECTURE.md`, `docs/ui-ux.md`, `docs/data-flow.md` |
 | 13.7 (Teil) | Review `src/` (vier Subagents: Wiederverwendung, Vereinfachung, Effizienz, Ebene), A/B/D nach Freigabe. **A1** Löschen/Leeren/Neu-Kategorisieren, `/stats` und Ordner-Scans liefen auf dem Event-Loop (ein großes Löschen fror alle Streams ein) → Worker-Thread; dabei eine neue Lücke geschlossen: ohne Event-Loop-Sperre hätte ein Ingest mitten im Löschen starten können → `_exclusive_index_op` (409 „… läuft gerade“ für Ingest, Eval und andere Index-Schreiber). **A2** fehlgeschlagener Ingest invalidiert BM25/Truecasing jetzt auch (`finally`; der alte Test prüfte das Gegenteil). **A3** `/query` zählt Tokens in die Session (wie der Stream), eine Zeitmessung statt zwei. **A4** Merkmal `local` am Provider statt `== "ollama"`; Ollama startet für jeden lokalen Provider (Haupt, Condense, Fallback) beim Start und nach jedem `install_llm`. **B** Filter-Fehler 403/422 einmal (`access.request_filters`; ein App-Exception-Handler hätte die Test-Apps ohne `main.app` nicht erreicht), `IMAGE_EXTENSIONS`, `get_args(SourceGroup)`, `_TEMPLATE_KEYS` aus `PromptSet`, `HEADING_PATTERN` im PDF-Parser, `_read_yaml`, `safe_dump` fürs Golden Set, `provider=self.provider`, `split_meta_list` (B3 nur Lesen). **D** `orchestrator.run` ohne `vectorstore=None`-Pfad, tote `source_id`-Prüfung in recategorize, `where`-Aufbau in `retrieve`, doppeltes BM25-Log, Paare `delete_by_source_*` und `embed_*_sync`. **Nicht übernommen**: `config_manager`/`get_default_config` entfernen (Fehlbefund — Eval-CLI und Orchestrator-Tests nutzen es), `torch`-Shim (ändert, welche Configs gelten), `prov.config.timeout` statt `getattr` (gleiches Objekt, nur Umbau), `final_k` an `_rerank` (Testfläche), `get_history`-Paar (eines ruft das andere), `try` um `resolve()` (Dateisystem-Grenze). Suite 921 → 928 grün; sechs Mutationen (Threadpool, Sperre, `finally`, `add_usage`, Condense-Start, Start beim Wechsel) machen ihre Tests rot. Golden Set nicht nötig: kein Retrieval-Ergebnis geändert (nur Umbau von `where`, gleiche Bedingungen) | 24.11. | `ARCHITECTURE.md`, `docs/provider-strategy.md` |
 | 13.6 | UI-Review (Subagent, Fokus „full“, Scope `ui/` + aufgerufene Endpunkte) und Durchgang durch alle Seiten/Tabs (AppTest gegen das laufende Backend, keine Exceptions); Korrekturen A–F nach Freigabe des Nutzers. **A — Eval-Jobs** (Meldung des Nutzers): E2E zeigte den ganzen Lauf „0 / 274“ (`evaluate()` ohne Fortschritts-Callback; der alte Test prüfte nur den Endstand) → Callback je Frage; der Lauf hing an einer blockierenden Schleife im Seitenskript und war nach Seitenwechsel weg (409 ohne Wiederanhängen, Tabs dahinter nie gezeichnet) → Job in `session_state` + Fragment wie bei der Indizierung, `GET /eval/active` (409 und neue Browser-Session hängen sich an), Ergebnis bleibt im Tab, gespeicherte Läufe per 🔍 wieder öffnen, E2E-Fehler je Frage sichtbar. **B** — Ergebnisse/Vergleich mit Answer Contains und gekippten Antworten (261 gegen 260 hieß vorher „Keine Unterschiede“), zwei alte `eval_202604*.json` gelöscht (Nutzer). **C — Eingaben gingen still verloren**: Prompts nach „Aktivieren“ (Textfelder mit `key` behielten den alten Text, Speichern setzte die Variante zurück), Settings/Evaluation-Regler sprangen bei geändertem „Kandidaten“ zurück (feste Maxima + Prüfung beim Speichern/Start), 👎-Kommentar nach Seitenwechsel überschrieben, Sidebar-Filter nach Seitenwechsel auf „alles“. **D** — Hybrid-Checkbox startet beim Default und sendet immer `bool` (`hybrid_default` in `/sidebar-state`); Stream ohne `done` und unterbrochene Frage bekommen „Erneut senden“. **E** — Texte: E2E-Streuung in der Anleitung, Indizier-Richtwerte (Vault ~8 min), Recategorize-Meldung, E2E-Expander, 404 vs. andere Fehler beim Abfragen; `ui-ux.md` (Fallback 20/8/3, Spalten, Session-State). **F** — Settings-Werte außerhalb des Reglerbereichs begrenzt mit Warnung statt Absturz; E2E-Wartezeit je Frage 2 × LLM-Timeout + 60 s statt 120 s; Wipe leert alle UI-Caches. Suite 900 → 921 grün; jeder neue Test gegen den alten Code rot (mutationsgeprüft). Nicht geändert: `category_map`-Kurztext bricht bei Ordnernamen mit `,`/`→` (Gering, kein Fall im Vault). **Live 18.10.** nach `stop.ps1 -Restart`: Retrieval-Lauf über die echte Seite (AppTest gegen das Backend) — neue Session hängt sich beim ersten Aufruf an, Fortschritt 89 → 272/274 auch über Seitenwechsel, Ergebnis 272 · 144 unverändert; 🔍 und E2E-Vergleich (17.10. gegen 18.10.: 94,9 → 95,3 %, 7 gekippte Antworten — wie von Hand gezählt); E2E-Fortschritt zählt (erste ~40 s 0 — Modell lädt nach dem Neustart). Dabei Beschriftung übernommener Jobs nach Typ statt „Laufende Evaluation“. Siebter E2E-Lauf `e2e_20261018_173927.json`: 261/274 wie der sechste (p027, a013 gewonnen, p043, p091 verloren — Streuung) | 18.10. | `docs/ui-ux.md`, `docs/evaluation.md`, `ARCHITECTURE.md` |
 | 11 | Suchgenauigkeit nach den Re-Indizes vom 13.–18.10. (In-place, Regelbuch 3× neu, Vault-Änderungen 13:16): 18.10. nach Punkt 12 erneut **274/274 exakt** (3.830 Chunks, `ef_search` 2000, 15 s), auch m039 wieder — kein Komplett-Neuaufbau nötig. Kein eigener Punkt mehr: gehört zur Regressionsprüfung (oben) | 18.10. | `docs/evaluation.md` |

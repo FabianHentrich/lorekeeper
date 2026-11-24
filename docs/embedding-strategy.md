@@ -406,6 +406,22 @@ Frage mit ~4.000 Zeichen) die Abfrage scheitern und ~3.000 den Backend-Prozess a
 14.10., Roadmap 13.0); dazu nimmt die API höchstens 4.000 Zeichen pro Frage an. Wächst der Index stark,
 die Zeit neu messen.
 
+**Nachschlagen per Zellen-Map statt `$contains` (24.11., Review 13.7 C1):** Der Store hält eine Map
+fette Zelle `|**x**|` → Chunk-IDs (`_table_entries_map`, einmal aus einem Vollscan gebaut) und holt nur
+diese IDs — mit dem Filter der Anfrage, die Spieler-Einschränkung gilt weiter. Danach dieselbe Prüfung
+auf die erste Zelle wie vorher. Gemessen am echten Index (4.050 Chunks), alle 274 Golden-Fragen mit dem
+Chat-Filter und mit dem Spieler-Filter: **548 Abfragen, 64 mit Treffern, 0 Abweichungen** (IDs,
+Reihenfolge, Scores); pro Abfrage **59 → 0,6 ms**. Der Bau der Map kostet 0,9 s; jede Schreib-Methode
+des Stores verwirft sie, und `Retriever.warm_up` baut sie (mit dem Tippfehler-Vokabular, 1,3 s) beim
+Start und nach jeder Index-Änderung im Hintergrund neu — sonst zahlte die erste Frage danach ~2 s. Die
+Grenze von 60 Namen bleibt als Schutz vor langen Eingaben, kostet aber nichts mehr. Gleichzeitig (C2–C5):
+Vektor-, Regelwerk-, BM25- und Eintragssuche laufen parallel (die Stufen-Zeiten im Log überlappen sich;
+neu ist `rules`), die fokussierten Tabellenzeilen gehen im selben Cross-Encoder-Aufruf mit, die
+Section Expansion holt jede Datei einmal, die Prompt-Templates werden einmal kompiliert. Golden Set
+danach unverändert (270 · 144, Platz 1 119, keine Frage mit anderen Chunks gegenüber dem Lauf davor);
+Retrieval über alle 274 Fragen **p50 312 → 182 ms** (Mittel 318 → 186; Eintrag 81 → 1 ms, Rerank
+126 → 111 ms).
+
 **Tabellen im Rerank auf die genannten Zeilen fokussiert (17.10., Roadmap 3.10):** Der Slot holte die
 Waffentabelle bei „Unterschied Dolch und Kurzschwert“ in den Pool, aber jina bewertete die **ganze**
 Tabelle (Dutzende Zeilen) gegen eine Frage zu **einer** Zeile und gab ihr −1,3 — die Schurken-Sektion

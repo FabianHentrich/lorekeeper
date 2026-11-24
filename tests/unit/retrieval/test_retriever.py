@@ -11,6 +11,7 @@ from src.config.manager import (
 )
 from src.retrieval.bm25_index import BM25Index
 from src.retrieval.retriever import Retriever, _entry_names, _focus_table, _rrf_merge
+from src.retrieval.vectorstore import _table_row_names
 
 
 @pytest.fixture
@@ -403,6 +404,14 @@ class TestFocusTable:
         assert _focus_table(_WEAPONS, {"Hammer", "Waffe"}) is None          # the header is no row
         assert _focus_table("Dolch ist eine leichte Waffe.", {"Dolch"}) is None
 
+    def test_header_of_a_second_table_is_no_row(self):
+        """Same rows as the embed text's ``Einträge:`` line (review 13.7 B4): before, only the first
+        table's header was skipped, so the second header matched like a row."""
+        two = _WEAPONS + "\n\nFernkampf:\n\n|**Rüstung**|**Wert**|\n|---|---|\n|**Kette**|3|"
+        assert _focus_table(two, {"Rüstung"}) is None
+        assert _focus_table(two, {"Kette"}).endswith("|**Kette**|3|")
+        assert _table_row_names(two) == ["Dolch", "Langschwert", "l Langbogen", "Kette"]
+
     @pytest.mark.asyncio
     async def test_the_better_of_both_scores_counts(self, config, embed_service):
         """The whole table scores low against one named row; its focused text high — the table must win."""
@@ -423,7 +432,7 @@ class TestFocusTable:
         results = await retriever.retrieve("Unterschied zwischen Dolch und Kurzschwert?")
 
         assert [r.heading for r in results] == ["Waffen"]
-        assert retriever._reranker.predict.call_count == 2                # one extra batch for the table rows
+        assert retriever._reranker.predict.call_count == 1      # table rows scored in the same call (13.7 C4)
 
 
 class TestRerankerBackend:

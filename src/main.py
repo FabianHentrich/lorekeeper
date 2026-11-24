@@ -185,6 +185,9 @@ async def lifespan(app: FastAPI):
         retriever = Retriever(settings.retrieval, embedding_service, vectorstore, bm25_index)
         if settings.retrieval.reranking.enabled:
             retriever.get_reranker()  # pre-load reranker model at startup
+        # Vocabulary + entry map in the background (~2 s): startup doesn't wait for it, and a question only
+        # does if it arrives within those seconds
+        tasks.append(asyncio.create_task(retriever.warm_up()))
 
         # Start session GC
         tasks.append(asyncio.create_task(conversation_manager.start_gc()))

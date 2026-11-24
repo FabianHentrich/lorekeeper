@@ -10,6 +10,7 @@ import asyncio
 import logging
 import time
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from urllib.parse import quote
 
 import pytest
@@ -76,7 +77,7 @@ def env(tmp_path):
     originals = {n: getattr(main_module, n) for n in names}
     fakes = SimpleNamespace(
         config=config, vectorstore=FakeVectorStore(), bm25_index=FakeBM25(),
-        retriever=SimpleNamespace(reranker_device="gpu", truecaser=TrueCaser()),
+        retriever=SimpleNamespace(reranker_device="gpu", truecaser=TrueCaser(), warm_up=AsyncMock()),
         vault=vault, single=single, sources_path=sources_path,
     )
     for n in names:
