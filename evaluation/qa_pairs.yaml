@@ -1929,18 +1929,18 @@ pairs:
     notes: "Phase 1 geistiger Druck (Berechtigungsprüfung, SP-Schaden), Phase 2 physischer Kampf. Stichwort seit 14.10. 'physisch' (Phase 2) statt 'Berechtigung' — richtige Antworten beschreiben die Phasen ohne das Wort."
 
   - id: m043
-    question: "Wie macht man Siegel-Duelist Aldric schlagbar?"
+    question: "Wie macht man Siegel-Duelist Gerrit schlagbar?"
     source_type: markdown
     category: enemy
-    expected_sources: ["Gegner/Bossgegner/Siegel-Duelist Aldric.md"]
+    expected_sources: ["Gegner/Bossgegner/Siegel-Duelist Gerrit.md"]
     expected_answer_contains: ["Knoten"]
     notes: "Tabelle 'Schwächen & taktische Optionen' — Knoten zurückerobern, Fokuskristall zerstören."
 
   - id: m044
-    question: "Was passiert, wenn Siegel-Duelist Aldric unter 20 Prozent seiner Lebenspunkte fällt?"
+    question: "Was passiert, wenn Siegel-Duelist Gerrit unter 20 Prozent seiner Lebenspunkte fällt?"
     source_type: markdown
     category: enemy
-    expected_sources: ["Gegner/Bossgegner/Siegel-Duelist Aldric.md"]
+    expected_sources: ["Gegner/Bossgegner/Siegel-Duelist Gerrit.md"]
     expected_answer_contains: ["Knoten"]
     notes: "Kampfverlauf-Tabelle — sprengt den Knoten und flieht."
 
