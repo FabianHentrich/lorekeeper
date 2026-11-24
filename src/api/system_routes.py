@@ -53,7 +53,9 @@ async def install_llm(settings: Settings) -> None:
 
     The one place for every change that affects how the LLM objects are built — provider switch, Gemini
     key, fallback toggle. No ``await`` between the three assignments, so a request sees either the old or
-    the new set. The LLM health is refreshed right after, so the sidebar doesn't show the old provider's
+    the new set. Then Ollama is started if any of the three is local and it isn't running — a switch from
+    Gemini, or Gemini with an Ollama condense/fallback model, otherwise had no Ollama (up to 30 s on a cold
+    start). The LLM health is refreshed right after, so the sidebar doesn't show the old provider's
     state for up to a minute. Raises whatever building the active provider raises; nothing is swapped then.
     """
     import src.main as main_module
@@ -61,6 +63,7 @@ async def install_llm(settings: Settings) -> None:
 
     provider, condense, generator = ProviderFactory.build_all(settings)
     main_module.provider, main_module.condense_provider, main_module.generator = provider, condense, generator
+    await main_module.start_local_llm(provider, condense, generator.fallback_provider)
     try:
         update_health(_health_cache["chroma"], await provider.health_check())
     except Exception as e:
@@ -133,7 +136,7 @@ async def _health_loop(interval: float = _HEALTH_INTERVAL_S):
             llm_ok = await main_module.provider.health_check()
             update_health(chroma_ok, llm_ok)
             if passes % _GPU_CHECK_EVERY == 0:
-                local = main_module.provider.provider == "ollama"
+                local = main_module.provider.local
                 update_gpu_memory(await run_in_threadpool(llm_shared_bytes) if local else None)
         except Exception as e:
             logger.warning("Background health check failed (%s: %s)", type(e).__name__, e)

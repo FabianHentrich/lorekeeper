@@ -3,8 +3,8 @@ Main module for the LoreKeeper application.
 
 This module configures and starts the FastAPI application, manages the lifecycle
 of shared resources, and sets up background tasks for health checking and session
-garbage collection. It also handles the auto-start of the Ollama service if
-configured as the LLM provider.
+garbage collection. It also auto-starts Ollama when the active, condense or fallback
+provider is local (``start_local_llm``, also after every LLM rebuild).
 """
 
 import asyncio
@@ -103,6 +103,20 @@ async def _ensure_ollama(base_url: str, timeout: float = 30.0) -> subprocess.Pop
     return None
 
 
+async def start_local_llm(*providers: BaseLLMProvider | None) -> None:
+    """Start Ollama when any of ``providers`` (active, condense, fallback) is local — not only when the
+    active one is: a Gemini setup with an Ollama condense model otherwise condensed nothing ("Condense
+    failed" per follow-up). Called at startup and after every LLM rebuild; when Ollama already runs this
+    is one HTTP check. Keeps the handle of an Ollama started earlier, so shutdown still stops it."""
+    global _ollama_process
+    local = next((p for p in providers if p is not None and p.local), None)
+    if local is None:
+        return
+    proc = await _ensure_ollama(local.config.base_url)  # type: ignore[attr-defined]  # local ⇒ OllamaProvider
+    if proc is not None:
+        _ollama_process = proc
+
+
 async def _shutdown(tasks: list[asyncio.Task]) -> None:
     """Stop the background tasks and an Ollama that LoreKeeper started — also after a failed startup
     (an Ollama started before the crash used to keep running). Cancelled tasks are awaited, so they
@@ -148,9 +162,9 @@ async def lifespan(app: FastAPI):
     # try/finally: a startup that fails halfway (model load, ChromaDB) must still stop what it started
     tasks: list[asyncio.Task] = []
     try:
-        # Auto-start Ollama if provider is ollama
-        if settings.llm.provider == "ollama":
-            _ollama_process = await _ensure_ollama(settings.llm.ollama.base_url)
+        # LLM objects first (cheap, no connection), so Ollama starts for any local one of them
+        provider, condense_provider, generator = ProviderFactory.build_all(settings)
+        await start_local_llm(provider, condense_provider, generator.fallback_provider)
 
         # Conversation
         conversation_manager = ConversationManager(settings.conversation)
@@ -171,9 +185,6 @@ async def lifespan(app: FastAPI):
         retriever = Retriever(settings.retrieval, embedding_service, vectorstore, bm25_index)
         if settings.retrieval.reranking.enabled:
             retriever.get_reranker()  # pre-load reranker model at startup
-
-        # LLM
-        provider, condense_provider, generator = ProviderFactory.build_all(settings)
 
         # Start session GC
         tasks.append(asyncio.create_task(conversation_manager.start_gc()))

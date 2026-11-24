@@ -57,6 +57,7 @@ class FakeLLM:
     """Streams fixed tokens and records the prompts it was given."""
     provider = "fake"
     model = "fake-llm"
+    local = False
 
     def __init__(self) -> None:
         self.prompts: list[str] = []

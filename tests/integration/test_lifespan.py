@@ -108,3 +108,35 @@ def test_failed_startup_stops_the_ollama_it_started(patched_lifespan):
     # Ctrl+Break to its process group, so the llama-server runner stops too (12.3)
     ollama.send_signal.assert_called_once_with(main_module.signal.CTRL_BREAK_EVENT)
     assert main_module._ollama_process is None
+
+
+# ─── Ollama start for every local provider (review 13.7 A4) ────────────────────
+
+def _llm(local: bool, base_url: str = "http://127.0.0.1:11434") -> SimpleNamespace:
+    return SimpleNamespace(local=local, config=SimpleNamespace(base_url=base_url))
+
+
+async def test_ollama_starts_for_a_local_condense_model_behind_gemini(monkeypatch):
+    """Gemini active, condense on Ollama: before, Ollama stayed off and every follow-up logged
+    "Condense failed" and searched with the raw question."""
+    proc = MagicMock(pid=1)
+    ensure = AsyncMock(return_value=proc)
+    monkeypatch.setattr(main_module, "_ensure_ollama", ensure)
+    monkeypatch.setattr(main_module, "_ollama_process", None)
+
+    await main_module.start_local_llm(_llm(False), _llm(True, "http://127.0.0.1:9999"), None)
+
+    ensure.assert_awaited_once_with("http://127.0.0.1:9999")
+    assert main_module._ollama_process is proc   # shutdown stops it
+
+
+async def test_no_local_provider_starts_nothing_and_keeps_the_handle(monkeypatch):
+    started = MagicMock(pid=2)
+    ensure = AsyncMock(return_value=None)
+    monkeypatch.setattr(main_module, "_ensure_ollama", ensure)
+    monkeypatch.setattr(main_module, "_ollama_process", started)
+
+    await main_module.start_local_llm(_llm(False), None, None)
+    ensure.assert_not_awaited()
+    await main_module.start_local_llm(_llm(True))   # already running → _ensure_ollama returns None
+    assert main_module._ollama_process is started

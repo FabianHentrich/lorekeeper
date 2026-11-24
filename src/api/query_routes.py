@@ -15,7 +15,7 @@ from contextlib import contextmanager
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from src.api.access import InvalidFilter, NoPlayerSources, effective_filters
+from src.api.access import request_filters
 from src.api.schemas import (
     QueryRequest,
     QueryResponse,
@@ -24,6 +24,7 @@ from src.api.schemas import (
 from src.conversation.manager import needs_condense
 from src.generation.providers.base import StreamResult
 from src.ingestion.orchestrator import IMAGE_PATH_SEPARATOR
+from src.retrieval.vectorstore import split_meta_list
 
 logger = logging.getLogger(__name__)
 
@@ -49,9 +50,10 @@ def _generating():
         _active_generations -= 1
 
 
-def _queue_notice(provider_name: str) -> str | None:
-    """German chat notice when this answer has to wait for others (Ollama only — Gemini runs in parallel)."""
-    ahead = _active_generations if provider_name == "ollama" else 0
+def _queue_notice(local: bool) -> str | None:
+    """German chat notice when this answer has to wait for others (local provider only — Gemini runs in
+    parallel)."""
+    ahead = _active_generations if local else 0
     if not ahead:
         return None
     others = "eine andere Frage" if ahead == 1 else f"{ahead} andere Fragen"
@@ -98,15 +100,8 @@ async def _prepare_query(request: QueryRequest, timings: dict):
     import src.main as main_module
     cm, gen, pm = main_module.conversation_manager, main_module.generator, main_module.prompt_manager
 
-    try:
-        filters = effective_filters(request.role, main_module.config.settings.ingestion.sources,
-                                    request.metadata_filters)
-    except NoPlayerSources:
-        logger.warning("Refused %s query: no source is released for players", request.role)
-        raise HTTPException(status_code=403, detail="Keine Quelle für Spieler freigegeben") from None
-    except InvalidFilter as e:
-        logger.warning("Refused %s query: invalid metadata_filters (%s)", request.role, e)
-        raise HTTPException(status_code=422, detail=f"Ungültiger metadata_filters: {e}") from None
+    filters = request_filters(request.role, main_module.config.settings.ingestion.sources,
+                              request.metadata_filters, "query")
 
     session = cm.get_or_create_session(request.session_id, access_role=request.role)
     question = request.question
@@ -159,7 +154,6 @@ async def _prepare_query(request: QueryRequest, timings: dict):
         qa_prompt = pm.render_qa(chunks=chunk_dicts, question=question,
                                  history=cm.get_answer_history(session.session_id))
     else:
-        chunk_dicts = []
         system_prompt = ""
         qa_prompt = None
 
@@ -177,16 +171,15 @@ def _chunk_to_source_dict(c) -> dict:
         "chunk_preview": c.content[:_SOURCE_PREVIEW_CHARS],
         "content": c.content,
         "images": [p for p in c.metadata.get("images", "").split(IMAGE_PATH_SEPARATOR) if p],
-        # ChromaDB keeps the alias list comma-joined (flattened metadata)
-        "aliases": [a.strip() for a in c.metadata.get("aliases", "").split(",") if a.strip()],
+        "aliases": split_meta_list(c.metadata.get("aliases", "")),
         "score": c.score,
     }
 
 
 @router.post("/query", response_model=QueryResponse)
 async def query(request: QueryRequest):
-    """Execute a query against the knowledge base and return the generated answer and sources."""
-    start = time.time()
+    """Execute a query against the knowledge base and return the generated answer and sources.
+    Token usage goes into the session totals like in the stream."""
     t_start = time.perf_counter()
     import src.main as main_module
     gen, pm = main_module.generator, main_module.prompt_manager
@@ -213,9 +206,10 @@ async def query(request: QueryRequest):
 
     session.add_message("user", request.question)
     session.add_message("assistant", answer)
+    if usage:
+        session.add_usage(usage)
 
     sources = [SourceReference(**_chunk_to_source_dict(c)) for c in chunks]
-    latency_ms = (time.time() - start) * 1000
     timings["total_ms"] = _ms(t_start)
     _log_timings(timings, _who(session.session_id, request.role), model_used, usage, generate_ms)
 
@@ -225,7 +219,7 @@ async def query(request: QueryRequest):
         session_id=session.session_id,
         retrieval_scores=[c.score for c in chunks],
         model_used=model_used,
-        latency_ms=latency_ms,
+        latency_ms=timings["total_ms"],
         search_query=search_query,
         timings=timings,
     )
@@ -255,7 +249,7 @@ async def query_stream(request: QueryRequest):
 
         try:
             if qa_prompt is not None:
-                if notice := _queue_notice(prov.provider):
+                if notice := _queue_notice(prov.local):
                     yield f"data: {json.dumps({'type': 'status', 'content': notice})}\n\n"
                 with _generating():
                     async for token in gen.generate_stream(

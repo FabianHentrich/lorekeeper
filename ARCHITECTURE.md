@@ -497,7 +497,7 @@ Das Backend lauscht nur auf `127.0.0.1:8000`; der Browser spricht ausschließlic
 | DELETE | `/sources/{id}`             | Quelle und ihre Chunks entfernen |
 | POST   | `/sources/recategorize`     | `group`/`category` neu setzen (ohne Re-Embedding) |
 | POST   | `/admin/wipe`               | Collection leeren (Body `{"confirm": "DELETE"}`) |
-| —      | Sperre während eines Ingests | `DELETE /sources/{id}`, `/admin/wipe`, `/sources/recategorize`, `/eval/run` und `/eval/search-exactness` antworten mit 409 „Eine Indexierung läuft bereits“ |
+| —      | Sperre während eines Ingests | `DELETE /sources/{id}`, `/admin/wipe`, `/sources/recategorize`, `/eval/run` und `/eval/search-exactness` antworten mit 409 „Eine Indexierung läuft bereits“. Löschen, Leeren und Neu-Kategorisieren laufen in einem Worker-Thread und sperren sich gegenseitig sowie neue Ingests/Evals (409 „… läuft gerade“) |
 | GET/POST | `/provider`               | Aktiver Provider / zur Laufzeit wechseln (`provider`: `ollama` oder `gemini`, sonst 422) |
 | GET    | `/provider/gemini/status`   | Ob ein Gemini-Key da ist (ohne den Key) |
 | POST   | `/provider/gemini/key`      | Gemini-Key zur Laufzeit setzen (nur im Prozess) |

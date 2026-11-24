@@ -62,16 +62,14 @@ def recategorize(config: ConfigManager, vectorstore: VectorStoreService | None =
         new_category, new_group = _resolve_category(file_path, source)
 
         # Check if the metadata actually changed. If identical, skip the update to save database ops.
-        if (meta.get("content_category") == new_category
-                and meta.get("group") == new_group
-                and meta.get("source_id") == source.id):
+        # source_id needs no check: _match_source found the source by it.
+        if meta.get("content_category") == new_category and meta.get("group") == new_group:
             stats["chunks_skipped"] += 1
             continue
 
         updated = dict(meta)
         updated["content_category"] = new_category
         updated["group"] = new_group
-        updated["source_id"] = source.id
         new_ids.append(cid)
         new_metas.append(updated)
 

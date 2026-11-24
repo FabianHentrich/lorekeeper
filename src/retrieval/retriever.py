@@ -303,12 +303,8 @@ class Retriever:
         # Build where filter — image chunks are excluded entirely: their content is just a
         # filename stub that pollutes ranking. So no image ever becomes a source today; real
         # image descriptions and their retrieval are roadmap item 2.
-        text_filter: dict = IMAGE_EXCLUSION
-        if metadata_filters:
-            conditions = [text_filter] + [{k: v} for k, v in metadata_filters.items()]
-            where: dict | None = {"$and": conditions}
-        else:
-            where = text_filter
+        where: dict = ({"$and": [IMAGE_EXCLUSION, *({k: v} for k, v in metadata_filters.items())]}
+                       if metadata_filters else IMAGE_EXCLUSION)
 
         # Resolve hybrid flag: per-request override > config default
         use_hybrid = hybrid if hybrid is not None else self.config.hybrid.enabled
@@ -365,9 +361,7 @@ class Retriever:
         # 2. BM25 search + RRF fusion (if hybrid enabled)
         if use_hybrid:
             t0 = time.perf_counter()
-            if not self.bm25_index.is_built:
-                logger.info("Building BM25 index from vectorstore (lazy init)...")
-            await run_in_threadpool(self.bm25_index.ensure_built, self.vectorstore)
+            await run_in_threadpool(self.bm25_index.ensure_built, self.vectorstore)  # lazy; logs its build
 
             bm25_results = await run_in_threadpool(
                 self.bm25_index.query,

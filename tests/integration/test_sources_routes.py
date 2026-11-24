@@ -6,6 +6,7 @@ PUT/DELETE /sources exercise the actual sources.yaml persistence.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from types import SimpleNamespace
@@ -13,7 +14,7 @@ from urllib.parse import quote
 
 import pytest
 import yaml
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 import src.main as main_module
@@ -397,7 +398,9 @@ def test_ingest_job_error_status(client, env, monkeypatch):
     info = _wait_for_job(client, job_id)
     assert info["status"] == "error"
     assert info["errors"] == ["chroma locked"]
-    assert env.bm25_index.invalidated == 0
+    # Invalidated anyway: a run that dies after its first batch has already deleted/upserted chunks
+    # (review 13.7 A2 — before, BM25 and truecasing kept the old corpus until the next good run)
+    assert env.bm25_index.invalidated == 1
     # A failed job must not block the next one with 409
     monkeypatch.setattr(IngestionOrchestrator, "run", lambda self, **kw: _fake_result())
     assert client.post("/ingest").status_code == 200
@@ -497,6 +500,38 @@ def test_admin_changes_invalidate_bm25(client, env, monkeypatch):
     assert env.bm25_index.invalidated == 2
     assert client.post("/admin/wipe", json={"confirm": "DELETE"}).status_code == 200
     assert env.bm25_index.invalidated == 3
+
+
+def test_index_writes_run_off_the_event_loop_and_block_ingests(client, env, monkeypatch):
+    """Delete, wipe and recategorize run in a worker thread (a big delete froze every chat stream) — and
+    while one runs, an ingest or eval gets 409, else a source deleted mid-run came back (review 13.7 A1)."""
+    seen = []
+
+    def delete(source_id: str) -> int:
+        with pytest.raises(RuntimeError):
+            asyncio.get_running_loop()   # no loop in this thread → not on the event loop
+        with pytest.raises(HTTPException) as refused:
+            sources_routes_module.refuse_during_ingest()
+        seen.append((refused.value.status_code, refused.value.detail))
+        return 7
+
+    monkeypatch.setattr(env.vectorstore, "delete_by_source_id", delete)
+    assert client.delete("/sources/vault").json() == {"deleted_chunks": 7}
+
+    assert seen == [(409, "Löschen der Quelle läuft gerade")]
+    sources_routes_module.refuse_during_ingest()   # released afterwards
+
+
+def test_failed_wipe_still_invalidates_and_releases(client, env, monkeypatch):
+    def broken_wipe() -> None:
+        raise RuntimeError("chroma locked")
+
+    monkeypatch.setattr(env.vectorstore, "wipe_collection", broken_wipe)
+    with pytest.raises(RuntimeError, match="chroma locked"):
+        client.post("/admin/wipe", json={"confirm": "DELETE"})
+
+    assert env.bm25_index.invalidated == 1
+    sources_routes_module.refuse_during_ingest()
 
 
 @pytest.mark.parametrize("method, path, body", [

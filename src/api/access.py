@@ -4,9 +4,14 @@ Which sources players may search is configured centrally (``player_visible`` in
 sources.yaml). The UI picks the role; the backend builds the player restriction
 itself, so a request can narrow it with its own ``metadata_filters`` but never widen it.
 """
+import logging
 from typing import Literal
 
+from fastapi import HTTPException
+
 from src.config.manager import SourceConfig
+
+logger = logging.getLogger(__name__)
 
 PLAYER = "player"
 GAME_MASTER = "game_master"
@@ -87,3 +92,17 @@ def effective_filters(role: Role, sources: list[SourceConfig], requested: dict |
     if not requested:
         return restriction
     return {"$and": [restriction] + [{k: v} for k, v in requested.items()]}
+
+
+def request_filters(role: Role, sources: list[SourceConfig], requested: dict | None, what: str) -> dict | None:
+    """``effective_filters`` for a route: 403 when no source is released for players, 422 for an invalid
+    filter, each refusal logged with the role and ``what`` ("query", "preview"). The one place every
+    retrieval route maps these errors — a copy per route could drift on the player path."""
+    try:
+        return effective_filters(role, sources, requested)
+    except NoPlayerSources:
+        logger.warning("Refused %s %s: no source is released for players", role, what)
+        raise HTTPException(status_code=403, detail="Keine Quelle für Spieler freigegeben") from None
+    except InvalidFilter as e:
+        logger.warning("Refused %s %s: invalid metadata_filters (%s)", role, what, e)
+        raise HTTPException(status_code=422, detail=f"Ungültiger metadata_filters: {e}") from None

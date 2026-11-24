@@ -129,7 +129,7 @@ class GeminiProvider(BaseLLMProvider):
         return LLMResponse(
             content=content,
             model=self.model,
-            provider="gemini",
+            provider=self.provider,
             usage=usage,
         )
 

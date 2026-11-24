@@ -16,7 +16,7 @@ import pymupdf4llm
 from src.config.manager import PdfConfig
 
 from .base import BaseParser, ParsedDocument
-from .markdown import MarkdownParser
+from .markdown import HEADING_PATTERN, MarkdownParser
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +127,7 @@ def _apply_toc_headings(md_text: str, toc_items: list[list]) -> str:
             return f"{'#' * target} {rest}"
         return m.group(0)
 
-    return re.compile(r'^(#{1,6})\s+(.+)$', re.MULTILINE).sub(_fix_heading, md_text)
+    return HEADING_PATTERN.sub(_fix_heading, md_text)
 
 
 def _extract_image_docs(md_text: str, image_dir: Path, source_file: str) -> tuple[str, list[ParsedDocument]]:

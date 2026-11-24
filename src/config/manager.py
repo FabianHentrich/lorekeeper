@@ -12,7 +12,7 @@ import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import Literal
+from typing import Literal, get_args
 
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -93,7 +93,7 @@ class SourceConfig(BaseModel):
     @classmethod
     def _validate_category_map(cls, v: dict) -> dict:
         """Reject malformed category_map entries — each value must be a string or a dict with 'category'."""
-        valid_groups = {"lore", "adventure", "rules", "simulation"}
+        valid_groups = set(get_args(SourceGroup))
         for folder, entry in v.items():
             if isinstance(entry, str):
                 continue
@@ -362,14 +362,12 @@ class ConfigManager:
 
         self._load_sources_sidecar()
 
-        self._prompts_raw: dict = {}
-        if prompts_path.exists():
-            self._prompts_raw = yaml.safe_load(prompts_path.read_text(encoding="utf-8")) or {}
+        self._prompts_raw: dict = _read_yaml(prompts_path)
 
     def _load_sources_sidecar(self) -> None:
         """Load config/sources.yaml into settings.ingestion.sources (warns if there is none)."""
         if self._sources_path.exists():
-            raw = yaml.safe_load(self._sources_path.read_text(encoding="utf-8")) or {}
+            raw = _read_yaml(self._sources_path)
             sources_raw = raw.get("sources", []) or []
             self.settings.ingestion.sources = [SourceConfig(**s) for s in sources_raw]
             return

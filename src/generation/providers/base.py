@@ -31,6 +31,9 @@ class BaseLLMProvider(ABC):
 
     provider: str = "unknown"
     model: str  # set by each implementation in __init__ — no default: a missing one raises on first access
+    # Runs on this machine (Ollama): answers one question at a time on our GPU and is auto-started by the
+    # backend. Callers check this instead of comparing provider names.
+    local: bool = False
 
     @abstractmethod
     async def generate(self, prompt: str, **kwargs) -> LLMResponse:

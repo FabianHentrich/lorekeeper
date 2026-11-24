@@ -40,6 +40,7 @@ class OllamaProvider(BaseLLMProvider):
     """LLM provider talking to a local Ollama daemon via its OpenAI-compatible API."""
 
     provider = "ollama"
+    local = True
 
     def __init__(self, config: OllamaConfig):
         """Store the config reference and build the AsyncOpenAI client pointed at Ollama.
@@ -97,7 +98,7 @@ class OllamaProvider(BaseLLMProvider):
         return LLMResponse(
             content=content,
             model=self.model,
-            provider="ollama",
+            provider=self.provider,
             usage=usage,
         )
 

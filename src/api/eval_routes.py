@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 
 from evaluation.evaluate_retrieval import load_qa_pairs, save_report
-from src.api.access import InvalidFilter, NoPlayerSources, effective_filters
+from src.api.access import request_filters
 from src.api.background import run_in_daemon_thread, spawn_background
 from src.api.eval_schemas import (
     ChunkListResponse,
@@ -66,7 +66,8 @@ async def get_qa_pairs():
 async def put_qa_pairs(body: QAPairList):
     """Overwrite the QA pairs golden set file with a new list."""
     data = {"pairs": [p.model_dump() for p in body.pairs]}
-    atomic_write_text(_QA_PATH, yaml.dump(data, allow_unicode=True, default_flow_style=False, sort_keys=False))
+    # safe_dump like every other YAML write: the eval CLI reads this file with safe_load
+    atomic_write_text(_QA_PATH, yaml.safe_dump(data, allow_unicode=True, default_flow_style=False, sort_keys=False))
     logger.info("Golden Set saved: %d QA pairs", len(body.pairs))
     return body
 
@@ -78,14 +79,8 @@ async def retrieval_preview(req: RetrievalPreviewRequest):
     """Run a single question against the retriever and return the raw top chunks without LLM generation."""
     import src.main as main_module
 
-    try:
-        filters = effective_filters(req.role, main_module.config.settings.ingestion.sources, req.metadata_filters)
-    except NoPlayerSources:
-        logger.warning("Refused %s preview: no source is released for players", req.role)
-        raise HTTPException(status_code=403, detail="Keine Quelle für Spieler freigegeben") from None
-    except InvalidFilter as e:
-        logger.warning("Refused %s preview: invalid metadata_filters (%s)", req.role, e)
-        raise HTTPException(status_code=422, detail=f"Ungültiger metadata_filters: {e}") from None
+    filters = request_filters(req.role, main_module.config.settings.ingestion.sources,
+                              req.metadata_filters, "preview")
 
     retriever = main_module.retriever
     start = time.time()

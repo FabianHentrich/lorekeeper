@@ -1,6 +1,6 @@
 # LoreKeeper — Roadmap
 
-Stand: 18.10.2026
+Stand: 24.11.2026
 
 Hier steht **offene Arbeit**. Erledigtes ist unten eine Zeile mit Verweis; Entscheidungen, Messwerte
 und Begründungen stehen in der zuständigen Doku (Tabelle in `CLAUDE.md` → „Documentation“), die
@@ -14,7 +14,8 @@ der Vault-Inhalt nachgezogen (Schattenorden „vier Pfade“, Fundort des Heimke
 Kultpriester, 19 Bilder eingebettet) und indiziert; Golden Set danach 272 · 144, Platz 1 134, Suche
 274/274 exakt; Regressionsprüfung (12) ohne Rückschritt. Handprüfungen im Browser und System-Punkt vom
 Nutzer erledigt. UI-Review 13.6 am 18.10. umgesetzt und live geprüft; Maskenball-Alias eingetragen.
-Offen nur Nutzer-Inhalt (k001).
+Offen nur Nutzer-Inhalt (k001). **24.11.**: Review `src/` (13.7) — A/B/D umgesetzt, Rest (Retrieval-Tempo,
+Tabellenzeilen, Bild-Stubs, Listenformat) offen.
 
 **Regressionsprüfung** nach größeren Inhaltsänderungen (Regelbuch, Vault): Golden Set + Suchgenauigkeit
 + End-to-End-Lauf + Holdout ([evaluation.md](docs/evaluation.md)), kein Tuning. Weicht die
@@ -31,7 +32,7 @@ End-to-End-Lauf ~35 min (🟡).
 
 | # | Punkt | Impact | Aufwand | Last | Begründung |
 |---|---|---|---|---|---|
-| — | keine offenen Punkte (18.10.) | | | | |
+| 13.7 | Rest aus Review `src/`: B4 Tabellenzeilen · C Retrieval-Tempo · E Entscheidungen · B3 Listenformat | Mittel | Gering–Mittel | 🟡 B4/C · 🔴 E1/B3 | A, B (ohne B4) und D am 24.11. erledigt; C spart ~0,1–0,2 s je Frage (geschätzt) |
 
 **Pausiert** (Begründung je Abschnitt unten):
 
@@ -72,6 +73,77 @@ Erledigtes (Vault-Inhalt, System, Handprüfungen im Browser) steht unter „Erle
 ### Feedback durchgehen für verbesserung des Outputs
 
 ### Bug: Anfrage ans LLM und gleichzeitig die Antwort davor bewerten mit einem kommentar bricht die Anfrage ans LLM ab
+
+### 13.7 Review `src/` (Wiederverwendung, Vereinfachung, Effizienz, Ebene) — Korrekturplan
+
+24.11.: vier Subagent-Reviews über ganz `src/` (~6,9 k Zeilen), Suite dabei 921 grün. Die mit ✔
+markierten Befunde im Code nachgeprüft, der Rest vom Reviewer per Code/Skript belegt. Retrieval-Punkte
+(C) nur mit unverändertem Golden Set (272 · 144).
+
+**✅ A, B (ohne B4) und D erledigt 24.11.** (Freigabe des Nutzers) — „Umgesetzt“ steht unter „Erledigt“
+(13.7 Teil). **Offen:** B4, C, E und das Listenformat aus B3 (siehe dort).
+
+**A — Verstöße gegen Invarianten / echte Abweichungen** (🟢, je Gering)
+- **A1** ✔ Blockierende ChromaDB-Aufrufe auf dem Event-Loop: `delete_by_source_id`, `wipe_collection`,
+  `count()` (`/stats`), `_scan_path` in `sources_routes.py` → `run_in_threadpool`. Ein großes Quellen-Löschen
+  friert alle laufenden Streams ein (von drei Reviews gefunden).
+- **A2** ✔ Fehlgeschlagener Ingest ruft `_collection_changed()` nicht auf (`_runner`, nur im Erfolgszweig) —
+  BM25 und Tippfehler-Vokabular bleiben auf dem alten Stand, obwohl `_flush` schon gelöscht/geschrieben hat
+  → `finally`. Allgemeinere Variante (Revisionszähler im `VectorStoreService`) erst nach Messung.
+- **A3** ✔ `/query` zählt `session.add_usage` nicht (der Stream schon); misst die Dauer doppelt
+  (`time.time()` und `perf_counter`); totes `chunk_dicts = []`.
+- **A4** ✔ Ollama wird nur gestartet, wenn es beim Start der Haupt-Provider ist (`main.py:153`) — nicht beim
+  Wechsel Gemini → Ollama zur Laufzeit, nicht für `condense_model`/Fallback bei Gemini (Condense scheitert dann
+  still). Vorschlag: Fähigkeit `local` am Provider statt `== "ollama"` an fünf Stellen, Start für jeden
+  gebauten lokalen Provider; `prov.config.timeout` statt `getattr(settings.llm, prov.provider)`.
+
+**B — Doppelter Code** (🟢 außer B4)
+- **B1** 403/422-Abbildung des Spieler-Filters (`NoPlayerSources`/`InvalidFilter`) in `query_routes` und
+  `eval_routes` kopiert → einmal als Exception-Handler in `main.py` (jeder künftige Retrieval-Pfad bekommt
+  sie mit).
+- **B2** Kleinkram: `IMAGE_EXTENSIONS` statt `_IMAGE_SUFFIXES` im Orchestrator ✔; `get_args(SourceGroup)`
+  statt Gruppenliste im Validator ✔; `_TEMPLATE_KEYS` aus `PromptSet`; `HEADING_PATTERN` im PDF-Parser;
+  `_read_yaml` statt Inline-Kopien; `yaml.safe_dump` für das Golden Set; `provider=self.provider`.
+- **B3** ✔ Listen-Metadaten (`aliases`, `images`) an drei Stellen zurückgeteilt; ein Alias mit Komma
+  („Escanor, der Rote“) wird beim Rerank und in der API zu „der Rote“, das Embedding sieht ihn ganz.
+  Lese-Helfer `split_meta_list` umgesetzt; **die Korrektur selbst geht nicht ohne Re-Index** (anders als
+  im Review behauptet): `", ".join` beim Speichern macht „Vincar, Sternfalter des Chronoversums“ und zwei
+  Aliase ununterscheidbar. Betroffen 24.11.: `Vincar.md`, `Ephraskal.md`, `Nahlith.md` (Rerank-Zeile ohne
+  das Komma-Stück, UI-Bildzuordnung mit dem Rest-Alias). Offen: anderes Format für Listen (z. B. `|` wie
+  bei `images`), danach Vault neu indizieren + Golden Set (🔴).
+- **B4** Tabellenzeilen doppelt geparst (`vectorstore._table_row_names` / `retriever._focus_table`), per
+  Skript abweichend: `<br>` in der ersten Zelle („l Langbogen“ — Eintrags-Slot findet „Langbogen“ nie),
+  Kopfzeile der zweiten Tabelle zählt im Fokus als Zeile. Ein gemeinsamer Zeilen-Iterator, Embed-Text
+  byte-gleich (sonst voller Re-Index). 🟡 Golden Set.
+
+**C — Effizienz im Retrieval** (Schätzwerte des Reviewers aus Logs/synthetischer Sammlung; 🟡 Golden Set)
+- **C1** Eintrags-Slot: `$contains`-Scan über alle Texte, laut Logs 60–170 ms je Frage; Map Zeilenname →
+  Chunk-IDs synthetisch 1,5 statt 321 ms. Mittel; Fall im Spy-Test (Filter beim ID-Abruf).
+- **C2** Vektor-, Regel-Slot-, BM25- und Eintragssuche laufen nacheinander, obwohl unabhängig →
+  `asyncio.gather` (~30–65 ms); Regel-Slot bekommt einen Eintrag in `stage_ms`.
+- **C3** Erste Frage nach Start/Ingest baut das Tippfehler-Vokabular (~0,6 s, Log 07.11.) → im Lifespan und
+  am Ende des Ingests vorwärmen.
+- **C4** Zweiter Cross-Encoder-Aufruf für die Tabellen-Fokussierung → ein Aufruf (~20–40 ms).
+- **C5** Klein: Jinja-Templates einmal kompilieren (~3 ms je Frage), Löschen geänderter Dateien je Flush
+  gebündelt (~10 s je großem Lauf), Sektions-Expansion holt dieselbe Datei doppelt, `.env` je Sidebar-Aufruf.
+
+**D — Toter / redundanter Code** (🟢, je Gering): `orchestrator.run(vectorstore=None)`-Pfad nie genutzt;
+Modul-`__getattr__`/`get_default_config` nur für zwei CLIs; immer wahre `source_id`-Prüfung in
+`recategorize`; `torch`-Migrations-Shim im Reranker-Config; `where`/`final_k`-Aufbau in `retrieve`
+(zweimal berechnet); Paare `delete_by_source_*`, `get_history*`, `embed_*_sync` zusammenlegen.
+
+**E — Entscheidung beim Nutzer**
+- **E1** PDF-Bildextraktion (`extract_images: True` per Default) und `ImageMetaParser`: die Stubs werden
+  eingebettet, aber von jeder Suche ausgeschlossen; die PDF-Stubs zeigen auf ein gelöschtes Temp-Verzeichnis,
+  und `[Bild: …]`-Platzhalter landen im Chunk-Text. Abschalten (Config) oder entfernen (~90 Zeilen) — beides
+  ändert PDF-Chunks → voller Re-Index + Golden Set (🔴).
+- **E2** Tabellen-Fokus im Rerank läuft auch bei `entry_slot.enabled: false` — koppeln oder als unabhängig
+  dokumentieren.
+
+**Nicht übernommen**: zwei Job-Registries, BM25/TrueCaser-Lebenszyklus, `ProviderFactory`-Klasse
+(je nur zwei Kopien bzw. reine Umbenennung); Health-Loop/`install_llm` aus `system_routes` herauslösen
+(= 11.0 P8, pausiert); `category_map`-Modell (Wire-Format bleibt); BM25-Top-k-Vorauswahl (Hybrid ist aus);
+Speicher des Tippfehler-Index (~30 MB); ungenutzte `**kwargs` und nur angezeigte Metadaten.
 
 
 ## Pausierte Punkte
@@ -145,6 +217,10 @@ manuelle Captions, Dateiname als Rückfall; ein Endpunkt `/files/{path}` ist unn
 Datei auf dem Streamlit-Server liest (auch im Heimnetz).
 
 ## Eingang (neue Bugs und Ideen, noch nicht bewertet)
+- **Aus Review 13.7 (24.11., ungeprüft)**: der Sektions-Score in der Expansion (`retriever.py:486`) vergleicht
+  nur `source_file`, nicht `source_id` — zwei Quellen mit gleichem relativen Dateinamen könnten sich Scores
+  leihen. `_merge_small_chunks` (`chunking.py:274`) hängt `chunk.content` samt Überschriften-Präfix an —
+  zusammengelegte Chunks wiederholen evtl. den Überschriften-Pfad.
 - **Vault, Maskenball (18.10.)**: die Überschrift „## Gegner: Eisscherben-Wächter (Traumkonstrukt)“ steht als H2 mitten in Szene 4; alle folgenden Szenen (4.3, 5, 6, 7) hängen dadurch im Überschriften-Pfad unter dem Gegner. Die Suche ordnet sie so dem Gegner zu (x008 holte vor der Kultpriester-Zeile Maskenball-Szenen als „Gegner“). Wäre als „####“ richtig eingeordnet — Inhalt, Entscheidung beim Nutzer.
 
 ---
@@ -153,6 +229,7 @@ Datei auf dem Streamlit-Server liest (auch im Heimnetz).
 
 | Nr | Was | Wann | Wo dokumentiert |
 |---|---|---|---|
+| 13.7 (Teil) | Review `src/` (vier Subagents: Wiederverwendung, Vereinfachung, Effizienz, Ebene), A/B/D nach Freigabe. **A1** Löschen/Leeren/Neu-Kategorisieren, `/stats` und Ordner-Scans liefen auf dem Event-Loop (ein großes Löschen fror alle Streams ein) → Worker-Thread; dabei eine neue Lücke geschlossen: ohne Event-Loop-Sperre hätte ein Ingest mitten im Löschen starten können → `_exclusive_index_op` (409 „… läuft gerade“ für Ingest, Eval und andere Index-Schreiber). **A2** fehlgeschlagener Ingest invalidiert BM25/Truecasing jetzt auch (`finally`; der alte Test prüfte das Gegenteil). **A3** `/query` zählt Tokens in die Session (wie der Stream), eine Zeitmessung statt zwei. **A4** Merkmal `local` am Provider statt `== "ollama"`; Ollama startet für jeden lokalen Provider (Haupt, Condense, Fallback) beim Start und nach jedem `install_llm`. **B** Filter-Fehler 403/422 einmal (`access.request_filters`; ein App-Exception-Handler hätte die Test-Apps ohne `main.app` nicht erreicht), `IMAGE_EXTENSIONS`, `get_args(SourceGroup)`, `_TEMPLATE_KEYS` aus `PromptSet`, `HEADING_PATTERN` im PDF-Parser, `_read_yaml`, `safe_dump` fürs Golden Set, `provider=self.provider`, `split_meta_list` (B3 nur Lesen). **D** `orchestrator.run` ohne `vectorstore=None`-Pfad, tote `source_id`-Prüfung in recategorize, `where`-Aufbau in `retrieve`, doppeltes BM25-Log, Paare `delete_by_source_*` und `embed_*_sync`. **Nicht übernommen**: `config_manager`/`get_default_config` entfernen (Fehlbefund — Eval-CLI und Orchestrator-Tests nutzen es), `torch`-Shim (ändert, welche Configs gelten), `prov.config.timeout` statt `getattr` (gleiches Objekt, nur Umbau), `final_k` an `_rerank` (Testfläche), `get_history`-Paar (eines ruft das andere), `try` um `resolve()` (Dateisystem-Grenze). Suite 921 → 928 grün; sechs Mutationen (Threadpool, Sperre, `finally`, `add_usage`, Condense-Start, Start beim Wechsel) machen ihre Tests rot. Golden Set nicht nötig: kein Retrieval-Ergebnis geändert (nur Umbau von `where`, gleiche Bedingungen) | 24.11. | `ARCHITECTURE.md`, `docs/provider-strategy.md` |
 | 13.6 | UI-Review (Subagent, Fokus „full“, Scope `ui/` + aufgerufene Endpunkte) und Durchgang durch alle Seiten/Tabs (AppTest gegen das laufende Backend, keine Exceptions); Korrekturen A–F nach Freigabe des Nutzers. **A — Eval-Jobs** (Meldung des Nutzers): E2E zeigte den ganzen Lauf „0 / 274“ (`evaluate()` ohne Fortschritts-Callback; der alte Test prüfte nur den Endstand) → Callback je Frage; der Lauf hing an einer blockierenden Schleife im Seitenskript und war nach Seitenwechsel weg (409 ohne Wiederanhängen, Tabs dahinter nie gezeichnet) → Job in `session_state` + Fragment wie bei der Indizierung, `GET /eval/active` (409 und neue Browser-Session hängen sich an), Ergebnis bleibt im Tab, gespeicherte Läufe per 🔍 wieder öffnen, E2E-Fehler je Frage sichtbar. **B** — Ergebnisse/Vergleich mit Answer Contains und gekippten Antworten (261 gegen 260 hieß vorher „Keine Unterschiede“), zwei alte `eval_202604*.json` gelöscht (Nutzer). **C — Eingaben gingen still verloren**: Prompts nach „Aktivieren“ (Textfelder mit `key` behielten den alten Text, Speichern setzte die Variante zurück), Settings/Evaluation-Regler sprangen bei geändertem „Kandidaten“ zurück (feste Maxima + Prüfung beim Speichern/Start), 👎-Kommentar nach Seitenwechsel überschrieben, Sidebar-Filter nach Seitenwechsel auf „alles“. **D** — Hybrid-Checkbox startet beim Default und sendet immer `bool` (`hybrid_default` in `/sidebar-state`); Stream ohne `done` und unterbrochene Frage bekommen „Erneut senden“. **E** — Texte: E2E-Streuung in der Anleitung, Indizier-Richtwerte (Vault ~8 min), Recategorize-Meldung, E2E-Expander, 404 vs. andere Fehler beim Abfragen; `ui-ux.md` (Fallback 20/8/3, Spalten, Session-State). **F** — Settings-Werte außerhalb des Reglerbereichs begrenzt mit Warnung statt Absturz; E2E-Wartezeit je Frage 2 × LLM-Timeout + 60 s statt 120 s; Wipe leert alle UI-Caches. Suite 900 → 921 grün; jeder neue Test gegen den alten Code rot (mutationsgeprüft). Nicht geändert: `category_map`-Kurztext bricht bei Ordnernamen mit `,`/`→` (Gering, kein Fall im Vault). **Live 18.10.** nach `stop.ps1 -Restart`: Retrieval-Lauf über die echte Seite (AppTest gegen das Backend) — neue Session hängt sich beim ersten Aufruf an, Fortschritt 89 → 272/274 auch über Seitenwechsel, Ergebnis 272 · 144 unverändert; 🔍 und E2E-Vergleich (17.10. gegen 18.10.: 94,9 → 95,3 %, 7 gekippte Antworten — wie von Hand gezählt); E2E-Fortschritt zählt (erste ~40 s 0 — Modell lädt nach dem Neustart). Dabei Beschriftung übernommener Jobs nach Typ statt „Laufende Evaluation“. Siebter E2E-Lauf `e2e_20261018_173927.json`: 261/274 wie der sechste (p027, a013 gewonnen, p043, p091 verloren — Streuung) | 18.10. | `docs/ui-ux.md`, `docs/evaluation.md`, `ARCHITECTURE.md` |
 | 11 | Suchgenauigkeit nach den Re-Indizes vom 13.–18.10. (In-place, Regelbuch 3× neu, Vault-Änderungen 13:16): 18.10. nach Punkt 12 erneut **274/274 exakt** (3.830 Chunks, `ef_search` 2000, 15 s), auch m039 wieder — kein Komplett-Neuaufbau nötig. Kein eigener Punkt mehr: gehört zur Regressionsprüfung (oben) | 18.10. | `docs/evaluation.md` |
 | 12 | Regressionsprüfung nach den Inhaltsänderungen vom 18.10.: Die Vault-Änderungen (13:05–13:08) kamen mit der UI-Indizierung des Nutzers um 13:16 in den Index, samt neuer Simulations-Dokumente (Begegnungsbaukasten). `Heimkehrpfennig.md` wieder gelöscht (Nutzer-Entscheid: die Notiz war früher bewusst entfernt, Regeltext nur im Regelbuch 7.2.4) — stattdessen Loot-Zeile in `Gegner/Kultpriester.md`; x008 holt jetzt Kultpriester (Platz 1) + Regelbuch 7.2.4 (Platz 2), im Golden Set als zulässige Quelle ergänzt. **Golden Set**: Datei 272, Abschnitt 144 unverändert, Platz 1 136 → 134 (m005, x008 — Kultpriester vorn, Regelbuch weiter dabei), 37 Fragen mit anderen Chunks (meist Einzeltausch durch die Simulations-Dokumente); Code-Review 13.5 neutral. Suche 274/274 exakt (3.830 Chunks). **E2E** (`e2e_20261018_152757.json`, vom Nutzer gestartet) gegen `e2e_20261017_213213.json`: **261/274** statt 260, Datei 273, Ø 7,2 s (p50 6,3, p95 13,8 s). Gewonnen x008, p055, p096, p107; verloren p035 (Beispielliste weggelassen), m056 (nur einer der zwei Meister), z004 („Trefferquote“ statt „Verlust“) — Quellen gleich, LLM-Streuung. **Holdout** 9/10 · 51/53 unverändert. x008 und „Wie viele Magiepfade hat der Schattenorden?“ je **3/3** („vier Magiepfade“, Kultpriester). **Maskenball-Bilder**: Bilder hängen an den Chunks, erscheinen aber nur mit vollem Notiznamen in der Frage → „Offen beim Nutzer“ (Alias). k001 folgt mit dem Regelbuch-Satz | 18.10. | `docs/evaluation.md` |

@@ -19,13 +19,17 @@ import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from src.config.manager import ConfigManager, SourceConfig
 from src.ingestion.chunking import Chunk, chunk_documents
 from src.ingestion.parsers.base import BaseParser
-from src.ingestion.parsers.image import ImageMetaParser
+from src.ingestion.parsers.image import IMAGE_EXTENSIONS, ImageMetaParser
 from src.ingestion.parsers.markdown import MarkdownParser
 from src.ingestion.parsers.pdf import PDFParser
+
+if TYPE_CHECKING:  # the vectorstore imports ingestion.chunking — a runtime import here would be circular
+    from src.retrieval.vectorstore import VectorStoreService
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +39,6 @@ UPSERT_BATCH_CHUNKS = 500
 # Between the paths in a chunk's ``images`` metadata — ChromaDB keeps only scalars, "|" never occurs in a
 # Windows path
 IMAGE_PATH_SEPARATOR = "|"
-_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
 
 def _image_files(source: SourceConfig, exclude_patterns: list[str]) -> dict[str, str]:
@@ -53,7 +56,7 @@ def _image_files(source: SourceConfig, exclude_patterns: list[str]) -> dict[str,
     if not base.is_dir():
         return found
     for path in sorted(base.rglob("*")):
-        if (path.suffix.lower() in _IMAGE_SUFFIXES and not {".trash", ".obsidian"} & set(path.parts)
+        if (path.suffix.lower() in IMAGE_EXTENSIONS and not {".trash", ".obsidian"} & set(path.parts)
                 and not _is_excluded(path, base, exclude_patterns)):
             resolved = str(path.resolve())
             found[path.relative_to(base).as_posix().lower()] = resolved
@@ -223,7 +226,7 @@ class IngestionOrchestrator:
 
         return files
 
-    def run(self, vectorstore=None, only_source_id: str | None = None,
+    def run(self, vectorstore: "VectorStoreService", only_source_id: str | None = None,
             progress_callback=None, full: bool = False) -> IngestionResult:
         """Execute the ingestion pipeline.
 
@@ -255,12 +258,11 @@ class IngestionOrchestrator:
 
         # Source-scoped existing-hash lookup — unchanged files are skipped before parsing
         existing: dict[tuple[str, str], str] = {}
-        if vectorstore is not None:
-            scope_ids = [only_source_id] if only_source_id else [s.id for s in sources]
-            for sid in scope_ids:
-                for src_file, h in vectorstore.get_content_hashes_for_source(sid).items():
-                    existing[(sid, src_file)] = h
-            logger.info(f"Existing files in scope: {len(existing)}")
+        scope_ids = [only_source_id] if only_source_id else [s.id for s in sources]
+        for sid in scope_ids:
+            for src_file, h in vectorstore.get_content_hashes_for_source(sid).items():
+                existing[(sid, src_file)] = h
+        logger.info(f"Existing files in scope: {len(existing)}")
 
         # Track which (source_id, source_file) pairs we process (orphan detection)
         processed: set[tuple[str, str]] = set()
@@ -270,7 +272,7 @@ class IngestionOrchestrator:
 
         def _flush():
             """Embed + upsert the pending batch. A file's chunks are always in one batch."""
-            if vectorstore is None or not pending:
+            if not pending:
                 return
             result.phase = "embedding"
             _report()
@@ -355,20 +357,19 @@ class IngestionOrchestrator:
 
         _flush()
 
-        if vectorstore is not None:
-            # Orphans: anything in existing that wasn't processed this run
-            for (sid, src_file) in set(existing.keys()) - processed:
-                result.chunks_deleted += vectorstore.delete_by_source_file(sid, src_file)
-            # Chunks of sources that are no longer configured — an entry removed from sources.yaml by hand
-            # instead of DELETE /sources/{id} stayed searchable (13.10.: 36 chunks of two sim sources).
-            # Only on runs over all sources, and never with an empty list: a missing or unreadable
-            # sources.yaml must not wipe the index.
-            if only_source_id is None and sources:
-                for sid in sorted(vectorstore.list_source_ids() - {s.id for s in sources}):
-                    deleted = vectorstore.delete_by_source_id(sid)
-                    result.chunks_deleted += deleted
-                    logger.warning("Deleted %d chunks of source '%s' — it is no longer in sources.yaml",
-                                   deleted, sid)
+        # Orphans: anything in existing that wasn't processed this run
+        for (sid, src_file) in set(existing.keys()) - processed:
+            result.chunks_deleted += vectorstore.delete_by_source_file(sid, src_file)
+        # Chunks of sources that are no longer configured — an entry removed from sources.yaml by hand
+        # instead of DELETE /sources/{id} stayed searchable (13.10.: 36 chunks of two sim sources).
+        # Only on runs over all sources, and never with an empty list: a missing or unreadable
+        # sources.yaml must not wipe the index.
+        if only_source_id is None and sources:
+            for sid in sorted(vectorstore.list_source_ids() - {s.id for s in sources}):
+                deleted = vectorstore.delete_by_source_id(sid)
+                result.chunks_deleted += deleted
+                logger.warning("Deleted %d chunks of source '%s' — it is no longer in sources.yaml",
+                               deleted, sid)
 
         result.end_time = datetime.now(UTC)
         logger.info(

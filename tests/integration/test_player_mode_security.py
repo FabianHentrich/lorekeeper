@@ -160,6 +160,7 @@ class FakeLLM:
     """Records every prompt; condense returns a follow-up full of game-master words."""
     provider = "fake"
     model = "fake-llm"
+    local = False
 
     def __init__(self) -> None:
         self.prompts: list[str] = []

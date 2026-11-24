@@ -2,8 +2,9 @@
 
 Ingestion runs as a background job in a thread, one at a time (409 while one runs); anything that
 writes or reads the whole index (delete, wipe, recategorize, eval runs) is refused during a job — a
-source deleted mid-run came back as orphans. Every change of the collection invalidates the BM25 index and the
-truecasing vocabulary.
+source deleted mid-run came back as orphans. Delete, wipe and recategorize run in a worker thread and
+exclude each other and new ingests the same way (``_exclusive_index_op``). Every change of the collection
+invalidates the BM25 index and the truecasing vocabulary, a failed one too.
 The job registry lives in memory: after a restart the log is the only record of a failed run.
 """
 import asyncio
@@ -45,6 +46,10 @@ _ingest_jobs: dict[str, IngestStatusResponse] = {}
 
 _INGEST_BUSY = "Eine Indexierung läuft bereits"
 
+# Name of the delete/wipe/recategorize running right now. They run in a worker thread (a large delete
+# froze every chat stream on the event loop), so without this an ingest could start in the middle of one.
+_index_op: str | None = None
+
 
 def ingest_running() -> bool:
     """True while an ingest/reindex job is queued or running."""
@@ -54,9 +59,27 @@ def ingest_running() -> bool:
 def refuse_during_ingest() -> None:
     """409 for anything that writes or reads the whole index while a job is filling it: a source
     deleted mid-run came back as orphans (the job upserted it again), a wipe left a silent partial
-    index, an eval measured a half-built index (roadmap 11.0 #5)."""
+    index, an eval measured a half-built index (roadmap 11.0 #5). Also 409 while a delete, wipe or
+    recategorize is running (``_index_op``)."""
     if ingest_running():
         raise HTTPException(status_code=409, detail=_INGEST_BUSY)
+    if _index_op:
+        raise HTTPException(status_code=409, detail=f"{_index_op} läuft gerade")
+
+
+async def _exclusive_index_op(label: str, fn, *args, **kwargs):
+    """Run a blocking whole-index write (``fn``) in the threadpool, refusing ingests, evals and other
+    such writes meanwhile; the BM25 index and truecasing vocabulary are invalidated afterwards, even
+    when ``fn`` failed halfway. Check and claim happen without an ``await`` in between, so two requests
+    can't both pass."""
+    global _index_op
+    refuse_during_ingest()
+    _index_op = label
+    try:
+        return await run_in_threadpool(fn, *args, **kwargs)
+    finally:
+        _index_op = None
+        _collection_changed()
 
 
 def _start_ingest_job(run_sync, label: str) -> str:
@@ -89,12 +112,14 @@ def _start_ingest_job(run_sync, label: str) -> str:
             _update_progress(result)
             _ingest_jobs[job_id].status = "done"
             _ingest_jobs[job_id].errors = result.errors
-            _collection_changed()
             logger.info("Ingest job %s done (%s): %d file errors", job_id, label, len(result.errors))
         except Exception as e:
             logger.exception("Ingest job %s failed (%s)", job_id, label)
             _ingest_jobs[job_id].status = "error"
             _ingest_jobs[job_id].errors.append(str(e))
+        finally:
+            # Also after a failure: the run may already have deleted/upserted chunks before it died
+            _collection_changed()
 
     spawn_background(_runner())
     return job_id
@@ -138,7 +163,7 @@ async def ingest_status(job_id: str):
 async def stats():
     """Get statistics about the vector store, like total chunk count."""
     import src.main as main_module
-    return StatsResponse(chunk_count=main_module.vectorstore.count())
+    return StatsResponse(chunk_count=await run_in_threadpool(main_module.vectorstore.count))
 
 
 @router.get("/sources")
@@ -182,7 +207,7 @@ async def list_source_folders(source_id: str):
         return {"folders": [], "note": "Dateiquelle — keine Unterordner"}
 
     supported = set(main_module.config.settings.ingestion.supported_formats)
-    return {"folders": _scan_path(src_path, supported)}
+    return {"folders": await run_in_threadpool(_scan_path, src_path, supported)}  # may be a network share
 
 
 @router.post("/sources/scan")
@@ -203,7 +228,7 @@ async def scan_path(payload: dict):
         return {"folders": [], "is_file": True}
 
     supported = set(main_module.config.settings.ingestion.supported_formats)
-    return {"folders": _scan_path(p, supported), "is_file": False}
+    return {"folders": await run_in_threadpool(_scan_path, p, supported), "is_file": False}
 
 
 @router.put("/sources")
@@ -270,10 +295,8 @@ async def delete_source(source_id: str):
     sources = main_module.config.settings.ingestion.sources
     if not any(s.id == source_id for s in sources):
         raise HTTPException(status_code=404, detail=f"Unbekannte Quelle: {source_id}")
-    refuse_during_ingest()
-
-    deleted = vs.delete_by_source_id(source_id)
-    _collection_changed()  # else hybrid search keeps finding the deleted chunks
+    # Invalidates BM25 afterwards — else hybrid search keeps finding the deleted chunks
+    deleted = await _exclusive_index_op("Löschen der Quelle", vs.delete_by_source_id, source_id)
     main_module.config.settings.ingestion.sources = [s for s in sources if s.id != source_id]
     main_module.config.save_sources()
     logger.info("Source removed: %s (%d chunks deleted)", source_id, deleted)
@@ -285,10 +308,9 @@ async def recategorize_endpoint():
     """Trigger a recategorization task to update metadata for existing configurations."""
     import src.main as main_module
     from src.ingestion.recategorize import recategorize
-    refuse_during_ingest()
-    stats = await run_in_threadpool(recategorize, config=main_module.config, vectorstore=main_module.vectorstore)
-    _collection_changed()  # BM25 holds its own copy of the metadata the filters check
-    return stats
+    # Invalidates BM25 afterwards — it holds its own copy of the metadata the filters check
+    return await _exclusive_index_op("Neu-Kategorisierung", recategorize,
+                                     config=main_module.config, vectorstore=main_module.vectorstore)
 
 
 @router.post("/admin/wipe")
@@ -297,7 +319,5 @@ async def wipe_collection(payload: dict):
     if payload.get("confirm") != "DELETE":
         raise HTTPException(status_code=400, detail="Zum Löschen confirm='DELETE' mitschicken")
     import src.main as main_module
-    refuse_during_ingest()
-    main_module.vectorstore.wipe_collection()
-    _collection_changed()
+    await _exclusive_index_op("Leeren des Index", main_module.vectorstore.wipe_collection)
     return {"status": "wiped"}

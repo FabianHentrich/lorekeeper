@@ -6,6 +6,7 @@ the log file is the only record of why something failed on a game night.
 import asyncio
 import logging
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import FastAPI
@@ -147,6 +148,7 @@ async def test_gemini_key_change_is_logged_without_the_key(monkeypatch, caplog):
         llm=SimpleNamespace(provider="ollama"))))
     monkeypatch.setattr(ProviderFactory, "build_all", staticmethod(
         lambda settings: (api.FakeProvider(), None, api.FakeGenerator())))
+    monkeypatch.setattr(main_module, "_ensure_ollama", AsyncMock(return_value=None))  # never a real Ollama
     try:
         with caplog.at_level(logging.INFO, logger="src.api.system_routes"):
             await system_routes.set_gemini_key({"api_key": "AIza-SECRET"})

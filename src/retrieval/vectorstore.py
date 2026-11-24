@@ -27,19 +27,25 @@ _TIE_EPS = 1e-6
 _TABLE_SEPARATOR = re.compile(r"^\|?(\s*:?-{2,}:?\s*\|)+\s*:?-*:?\s*\|?$")
 
 
+def split_meta_list(raw: Any) -> list[str]:
+    """A list metadata field as a list: unchanged at ingest time, split again once read back from ChromaDB,
+    which stores lists comma-joined (``upsert_chunks``). The one decoder of that format.
+
+    Known loss: an item that itself contains a comma comes back as two (``Vincar, Sternfalter des
+    Chronoversums`` → ``Vincar`` + ``Sternfalter …``, three vault notes on 24.11.). Fixing it needs another
+    stored format and a re-index (roadmap 13.7 B3)."""
+    if isinstance(raw, list):
+        return [a for a in raw if a]
+    return [a.strip() for a in raw.split(",") if a.strip()] if raw else []
+
+
 def identity_line(source_file: str, aliases_raw: Any) -> str:
     """``"Stem | Alias 1 | Alias 2"`` — who/what a chunk is about. Heads the embedded text and, for
     Markdown, the reranker's input. ``aliases_raw`` is a list at ingest time and a comma-joined string
-    once read back from ChromaDB (flattened metadata); aliases equal to the stem are dropped.
+    once read back (``split_meta_list``); aliases equal to the stem are dropped.
     Changing the format changes every vector — a full re-index is then required."""
     stem = source_file.replace("\\", "/").split("/")[-1].rsplit(".", 1)[0]
-    if isinstance(aliases_raw, list):
-        aliases = [a for a in aliases_raw if a and a != stem]
-    elif aliases_raw:
-        aliases = [a.strip() for a in aliases_raw.split(",") if a.strip() and a.strip() != stem]
-    else:
-        aliases = []
-    return " | ".join([stem, *aliases])
+    return " | ".join([stem, *(a for a in split_meta_list(aliases_raw) if a != stem)])
 
 
 def _table_row_names(content: str) -> list[str]:
@@ -379,32 +385,27 @@ class VectorStoreService:
             for i, doc_id in enumerate(data.get("ids") or [])
         ]
 
-    def delete_by_source_file(self, source_id: str, source_file: str) -> int:
-        """Delete chunks scoped to (source_id, source_file). Avoids cross-source collisions.
-        Returns count before deletion. Raises on DB failure so callers can abort instead
-        of reporting false success."""
+    def _delete_where(self, where: dict, label: str) -> int:
+        """Delete every chunk matching ``where``; returns the count before deletion. Raises on DB failure so
+        callers can abort instead of reporting false success."""
         collection = self._get_collection()
-        where = {"$and": [
-            {"source_id": source_id},
-            {"source_file": source_file},
-        ]}
         existing = collection.get(where=where, include=[])
         count = len(existing["ids"]) if existing and existing.get("ids") else 0
         if count:
             collection.delete(where=where)
-        logger.info(f"Deleted {count} chunks: source_id={source_id} file={source_file}")
+        logger.info(f"Deleted {count} chunks: {label}")
         return count
 
+    def delete_by_source_file(self, source_id: str, source_file: str) -> int:
+        """Delete chunks scoped to (source_id, source_file) — the source keeps two sources with the same
+        relative path apart. Returns the count before deletion; raises on DB failure."""
+        return self._delete_where({"$and": [{"source_id": source_id}, {"source_file": source_file}]},
+                                  f"source_id={source_id} file={source_file}")
+
     def delete_by_source_id(self, source_id: str) -> int:
-        """Delete every chunk that belongs to a source. Returns count before deletion.
-        Raises on DB failure."""
-        collection = self._get_collection()
-        existing = collection.get(where={"source_id": source_id}, include=[])
-        count = len(existing["ids"]) if existing and existing.get("ids") else 0
-        if count:
-            collection.delete(where={"source_id": source_id})
-        logger.info(f"Deleted {count} chunks for source_id={source_id}")
-        return count
+        """Delete every chunk that belongs to a source. Returns the count before deletion; raises on DB
+        failure."""
+        return self._delete_where({"source_id": source_id}, f"source_id={source_id}")
 
     def update_metadata_batch(self, ids: list[str], metadatas: list[dict]) -> None:
         """Update metadata for existing chunks in batches, without re-embedding."""

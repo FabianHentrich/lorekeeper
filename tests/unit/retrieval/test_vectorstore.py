@@ -5,7 +5,7 @@ import pytest
 from src.config.manager import VectorStoreConfig
 from src.ingestion.chunking import Chunk
 from src.retrieval.embeddings import EmbeddingService
-from src.retrieval.vectorstore import VectorStoreService
+from src.retrieval.vectorstore import VectorStoreService, identity_line, split_meta_list
 
 
 @pytest.fixture
@@ -521,3 +521,14 @@ class TestGetTableEntries:
     def test_no_names_no_lookup(self, service, mock_collection):
         assert service.get_table_entries([], [1.0]) == []
         mock_collection.get.assert_not_called()
+
+
+def test_list_metadata_reads_back_the_same_from_both_forms():
+    """One decoder for list fields: the ingest-time list and ChromaDB's comma-joined string give the same
+    identity line and alias list (review 13.7 B3)."""
+    assert split_meta_list(["Lyra", "", "die Weberin"]) == ["Lyra", "die Weberin"]
+    assert split_meta_list("Lyra, die Weberin , ") == ["Lyra", "die Weberin"]
+    assert split_meta_list("") == [] and split_meta_list(None) == []
+    stored = ", ".join(["Arkenfeld", "Lyra"])
+    assert identity_line("NPCs/Arkenfeld.md", ["Arkenfeld", "Lyra"]) == identity_line("NPCs/Arkenfeld.md", stored)
+    assert identity_line("NPCs/Arkenfeld.md", stored) == "Arkenfeld | Lyra"

@@ -59,23 +59,17 @@ class EmbeddingService:
         )
         return embedding.tolist()
 
+    def _encode_sync(self, prefixed: list[str]) -> list[list[float]]:
+        """Batch-encode already prefixed texts as plain lists. Blocks — worker threads only."""
+        embeddings = self._get_model().encode(prefixed, batch_size=self.config.batch_size,
+                                              normalize_embeddings=self.config.normalize)
+        return np.asarray(embeddings).tolist()
+
     def embed_queries_sync(self, texts: list[str]) -> list[list[float]]:
         """Batch-embed questions (``query:`` prefix) synchronously — for eval checks that embed the whole
         golden set at once. Only call from worker threads, never from the event loop."""
-        model = self._get_model()
-        embeddings = model.encode([self._with_query_prefix(t) for t in texts],
-                                  batch_size=self.config.batch_size, normalize_embeddings=self.config.normalize)
-        return np.asarray(embeddings).tolist()
+        return self._encode_sync([self._with_query_prefix(t) for t in texts])
 
     def embed_texts_sync(self, texts: list[str]) -> list[list[float]]:
         """Batch-embed passages synchronously. Only call from worker threads, never from the event loop."""
-        model = self._get_model()
-        prefixed = [self._with_passage_prefix(t) for t in texts]
-        embeddings = model.encode(
-            prefixed,
-            batch_size=self.config.batch_size,
-            normalize_embeddings=self.config.normalize,
-        )
-        if isinstance(embeddings, np.ndarray):
-            return embeddings.tolist()
-        return [e.tolist() for e in embeddings]
+        return self._encode_sync([self._with_passage_prefix(t) for t in texts])

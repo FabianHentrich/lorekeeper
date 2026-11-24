@@ -14,6 +14,7 @@ import json
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import FastAPI
@@ -84,6 +85,7 @@ class FakeLLMResponse:
 
 class FakeGenerator:
     """Mock stub that circumvents real calls to language model providers."""
+    fallback_provider = None
     async def generate(self, system_prompt: str, qa_prompt: str) -> FakeLLMResponse:
         return FakeLLMResponse(content="Das ist eine Testantwort.")
 
@@ -163,6 +165,8 @@ class FakeProvider:
         self._healthy = healthy
         self.provider = provider_name
         self.model = "qwen3:8b"
+        self.local = provider_name == "ollama"
+        self.config = SimpleNamespace(base_url="http://127.0.0.1:11434")
 
     async def health_check(self) -> bool:
         return self._healthy
@@ -338,6 +342,22 @@ def test_query_without_chunks_returns_no_context_message(client, fake_services):
     assert body["answer"] == "Keine relevanten Quellen gefunden."
     assert body["sources"] == []
     assert body["model_used"] == "none"
+
+
+def test_query_counts_token_usage_in_the_session(client, fake_services):
+    """/query adds the provider's token counts to the session totals like the stream does — before, only
+    streamed turns were counted (review 13.7 A3)."""
+    async def _generate(system_prompt: str, qa_prompt: str) -> FakeLLMResponse:
+        response = FakeLLMResponse(content="Antwort")
+        response.usage = {"tokens_in": 120, "tokens_out": 30}
+        return response
+
+    fake_services.generator.generate = _generate  # type: ignore[method-assign]
+    client.post("/query", json={"question": "Wer ist Arkenfeld?"})
+    client.post("/query", json={"question": "Und wo lebt er?", "session_id": "test-session-123"})
+
+    session = fake_services.conversation_manager.get_session("test-session-123")
+    assert session.usage_totals == {"tokens_in": 240, "tokens_out": 60, "tokens_thinking": 0}
 
 
 def test_query_llm_failure_returns_503(client, fake_services):
@@ -865,6 +885,7 @@ def llm_builds(monkeypatch):
     calls = []
     for name in ("provider", "condense_provider", "generator"):   # install_llm swaps these — restore after
         monkeypatch.setattr(main_module, name, getattr(main_module, name))
+    monkeypatch.setattr(main_module, "_ensure_ollama", AsyncMock(return_value=None))  # never a real Ollama
 
     def build_all(settings):
         calls.append(settings.llm.fallback_enabled)
@@ -921,6 +942,7 @@ def switch_env(fake_services, monkeypatch):
     main_module.config.settings.llm = SimpleNamespace(provider="ollama", fallback_enabled=False)
     for name in ("provider", "condense_provider", "generator"):
         monkeypatch.setattr(main_module, name, getattr(main_module, name))
+    monkeypatch.setattr(main_module, "_ensure_ollama", AsyncMock(return_value=None))  # never a real Ollama
     built = []
 
     def build_all(settings):
@@ -939,6 +961,18 @@ def test_switch_provider_installs_the_new_provider(client, switch_env):
     assert r.status_code == 200 and r.json()["provider"] == "gemini"
     assert main_module.provider.provider == "gemini"
     assert main_module.config.settings.llm.provider == "gemini"
+
+
+def test_switch_to_ollama_at_runtime_starts_it(client, switch_env, monkeypatch):
+    """Ollama used to start only when it was the provider at startup — switching from Gemini to Ollama
+    left it stopped (review 13.7 A4). A switch to Gemini starts nothing."""
+    ensure = AsyncMock(return_value=None)
+    monkeypatch.setattr(main_module, "_ensure_ollama", ensure)
+
+    assert client.post("/provider", json={"provider": "gemini"}).status_code == 200
+    ensure.assert_not_awaited()
+    assert client.post("/provider", json={"provider": "ollama"}).status_code == 200
+    ensure.assert_awaited_once_with("http://127.0.0.1:11434")
 
 
 def test_failed_switch_keeps_the_old_provider_and_setting(client, switch_env):

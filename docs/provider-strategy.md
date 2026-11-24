@@ -63,6 +63,13 @@ Deshalb ist Ollama der Hauptweg und Gemini nur Fallback.
 
 `llm.ollama` in `settings.yaml` (Standard: `qwen3:14b`, `base_url` `http://127.0.0.1:11434`).
 
+**Autostart von Ollama:** Läuft Ollama nicht, startet das Backend `ollama serve` selbst, sobald einer
+der gebauten Provider lokal ist — Hauptprovider, Condense-Modell oder Fallback (`start_local_llm` in
+`src/main.py`, Merkmal `local` am Provider). Das passiert beim Start und nach jedem Neuaufbau der
+LLM-Objekte (Provider-Wechsel, Gemini-Key, Fallback-Schalter); ein Kaltstart kann den Wechsel bis zu 30 s
+aufhalten. Bis 24.11. startete Ollama nur, wenn es beim Backend-Start der Hauptprovider war — ein Wechsel
+Gemini → Ollama oder Gemini mit Ollama-Condense-Modell lief ohne Ollama (Review 13.7 A4).
+
 | VRAM | Empfehlung |
 |------|------------|
 | < 8 GB | `qwen3:4b` |
@@ -213,6 +220,8 @@ Antwortlänge).
    (`generate_stream` als `async def` mit `yield`, Tokens in `stream_result.usage`).
 2. Klassenattribut `provider = "mein_provider"` und `self.model` im `__init__` setzen.
 3. In der `ProviderFactory` (`provider_factory.py`) registrieren.
+   Läuft das Modell auf diesem Rechner, `local = True` setzen (Warte-Hinweis im Chat, GPU-Speicher-Prüfung,
+   Autostart); `self.config` braucht dann ein `base_url`.
 4. Config-Klasse in `src/config/manager.py` ergänzen.
 5. `settings.yaml`, `.env.example` und [configuration.md](configuration.md) nachziehen.
 6. Unit-Tests mit gemocktem Client — nie echte API-Aufrufe.

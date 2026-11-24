@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 prompt_router = APIRouter(prefix="/prompts", tags=["prompts"])
 
-_TEMPLATE_KEYS = ("system", "qa", "condense", "no_context")
+_TEMPLATE_KEYS = tuple(PromptSet.model_fields)  # a template added to PromptSet is validated and listed too
 
 
 def _active_path() -> Path:
